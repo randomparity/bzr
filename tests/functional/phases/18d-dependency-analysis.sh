@@ -21,10 +21,15 @@ for _DA_PATH in "$_DA_COLLECT" "$_DA_ANALYZE" "$_DA_RENDER" "$_DA_CYCLE"; do
 done
 _DA_BZR_CANONICAL=$(cd "$(dirname "$BZR_BIN")" && pwd -P)/$(basename "$BZR_BIN")
 _DA_CONFIG="$XDG_CONFIG_HOME/bzr/config.toml"
+_DA_REJECTED_KEY="FuncTestRejected0123456789abcdef01234567"
 printf '\n[servers.dependency-rest-public]\nurl = "%s"\napi_mode = "rest"\n' \
   "$BZ_URL" >>"$_DA_CONFIG"
 printf '\n[servers.dependency-xmlrpc-public]\nurl = "%s"\napi_mode = "xmlrpc"\n' \
   "$BZ_URL" >>"$_DA_CONFIG"
+printf '\n[servers.dependency-rest-rejected]\nurl = "%s"\napi_key = "%s"\nauth_method = "query_param"\napi_mode = "rest"\n' \
+  "$BZ_URL" "$_DA_REJECTED_KEY" >>"$_DA_CONFIG"
+printf '\n[servers.dependency-xmlrpc-rejected]\nurl = "%s"\napi_key = "%s"\nauth_method = "query_param"\napi_mode = "xmlrpc"\n' \
+  "$BZ_URL" "$_DA_REJECTED_KEY" >>"$_DA_CONFIG"
 
 test_begin "123k. live pipeline resolves only installed helpers and release bzr"
 if [[ $_DA_PATHS_OK -eq 1 ]] && [[ -f "$_DA_COLLECT" ]] &&
@@ -272,6 +277,109 @@ else
   test_fail "inaccessible root was conflated, unsanitized, or stopped visible traversal"
 fi
 
+_DA_XMLRPC_INACCESSIBLE_POLICY="$FUNC_CONFIG_DIR/dependency-xmlrpc-inaccessible.policy.json"
+_DA_XMLRPC_INACCESSIBLE_COLLECTION="$FUNC_CONFIG_DIR/dependency-xmlrpc-inaccessible.collection.json"
+jq -n --arg bzr "$_DA_BZR_CANONICAL" --argjson root "${_DA_ROOT:-0}" \
+  --argjson restricted "${RESTRICTED_BUG:-0}" '
+    {
+      bounds: {max_depth: 5, max_nodes: 12, max_relationships: 24},
+      bzr: $bzr,
+      direction: "both",
+      resolved_mode: "include-no-traverse",
+      resolved_statuses: ["RESOLVED"],
+      restriction: null,
+      scopes: [{ids: [$root, $restricted], kind: "bug-ids", server: "dependency-xmlrpc-public"}],
+      servers: ["dependency-xmlrpc-public"],
+      stale_after_days: 14
+    }
+  ' >"$_DA_XMLRPC_INACCESSIBLE_POLICY"
+_DA_XMLRPC_INACCESSIBLE_OK=1
+python3 "$_DA_COLLECT" --policy "$_DA_XMLRPC_INACCESSIBLE_POLICY" \
+  --output "$_DA_XMLRPC_INACCESSIBLE_COLLECTION" || _DA_XMLRPC_INACCESSIBLE_OK=0
+
+test_begin "123o2. XML-RPC inaccessible 102 is resource-scoped after preflight"
+if [[ $_DA_XMLRPC_INACCESSIBLE_OK -eq 1 ]] &&
+  jq -e --argjson root "$_DA_ROOT" --argjson restricted "$RESTRICTED_BUG" '
+      ([.nodes[] | select(
+        .id == $restricted and .state == "unknown" and
+        .error_type == "inaccessible" and .summary == null)] | length) == 1 and
+      ([.nodes[] | select(.id == $root and .state == "known")] | length) == 1 and
+      ([.. | objects | select(has("message"))] | length) == 0
+    ' "$_DA_XMLRPC_INACCESSIBLE_COLLECTION" >/dev/null &&
+  ! grep -Eiq 'does not exist|not authorized|not permitted' \
+    "$_DA_XMLRPC_INACCESSIBLE_COLLECTION"; then
+  test_pass
+else
+  test_fail "XML-RPC did not expose inaccessible 102 after a successful preflight"
+fi
+
+_DA_REJECTED_REST_POLICY="$FUNC_CONFIG_DIR/dependency-rest-rejected.policy.json"
+_DA_REJECTED_REST_COLLECTION="$FUNC_CONFIG_DIR/dependency-rest-rejected.collection.json"
+_DA_REJECTED_REST_ERROR="$FUNC_CONFIG_DIR/dependency-rest-rejected.stderr"
+_DA_REJECTED_XMLRPC_POLICY="$FUNC_CONFIG_DIR/dependency-xmlrpc-rejected.policy.json"
+_DA_REJECTED_XMLRPC_COLLECTION="$FUNC_CONFIG_DIR/dependency-xmlrpc-rejected.collection.json"
+_DA_REJECTED_XMLRPC_ERROR="$FUNC_CONFIG_DIR/dependency-xmlrpc-rejected.stderr"
+for _DA_REJECTED_MODE in rest xmlrpc; do
+  if [[ $_DA_REJECTED_MODE == rest ]]; then
+    _DA_REJECTED_POLICY=$_DA_REJECTED_REST_POLICY
+  else
+    _DA_REJECTED_POLICY=$_DA_REJECTED_XMLRPC_POLICY
+  fi
+  jq -n --arg bzr "$_DA_BZR_CANONICAL" --argjson root "${_DA_ROOT:-0}" \
+    --arg mode "$_DA_REJECTED_MODE" '
+      {
+        bounds: {max_depth: 5, max_nodes: 12, max_relationships: 24},
+        bzr: $bzr,
+        direction: "both",
+        resolved_mode: "include-no-traverse",
+        resolved_statuses: ["RESOLVED"],
+        restriction: null,
+        scopes: [{ids: [$root], kind: "bug-ids", server: ("dependency-" + $mode + "-rejected")}],
+        servers: [("dependency-" + $mode + "-rejected")],
+        stale_after_days: 14
+      }
+    ' >"$_DA_REJECTED_POLICY"
+done
+if python3 "$_DA_COLLECT" --policy "$_DA_REJECTED_REST_POLICY" \
+  --output "$_DA_REJECTED_REST_COLLECTION" 2>"$_DA_REJECTED_REST_ERROR"; then
+  _DA_REJECTED_REST_EXIT=0
+else
+  _DA_REJECTED_REST_EXIT=$?
+fi
+if python3 "$_DA_COLLECT" --policy "$_DA_REJECTED_XMLRPC_POLICY" \
+  --output "$_DA_REJECTED_XMLRPC_COLLECTION" 2>"$_DA_REJECTED_XMLRPC_ERROR"; then
+  _DA_REJECTED_XMLRPC_EXIT=0
+else
+  _DA_REJECTED_XMLRPC_EXIT=$?
+fi
+
+test_begin "123o3. rejected credentials fail sanitized preflight before resource reads"
+if [[ $_DA_REJECTED_REST_EXIT -eq 1 ]] && [[ $_DA_REJECTED_XMLRPC_EXIT -eq 1 ]] &&
+  jq -e '
+      .status == "partial" and .limitations == ["collection-api"] and
+      .nodes == [] and .roots == [] and
+      .cap == {
+        "graph_cap_reached": false,
+        "omitted_discovered_identities": 0,
+        "omitted_relationships_lower_bound": 0,
+        "relationship_cap_reached": false,
+        "scope_truncated": false
+      }
+    ' "$_DA_REJECTED_REST_COLLECTION" >/dev/null &&
+  jq -e '
+      .status == "partial" and .limitations == ["collection-api"] and
+      .nodes == [] and .roots == []
+    ' "$_DA_REJECTED_XMLRPC_COLLECTION" >/dev/null &&
+  grep -Fxq 'collection failed: api' "$_DA_REJECTED_REST_ERROR" &&
+  grep -Fxq 'collection failed: api' "$_DA_REJECTED_XMLRPC_ERROR" &&
+  ! grep -Fq "$_DA_REJECTED_KEY" "$_DA_REJECTED_REST_ERROR" \
+    "$_DA_REJECTED_XMLRPC_ERROR" "$_DA_REJECTED_REST_COLLECTION" \
+    "$_DA_REJECTED_XMLRPC_COLLECTION"; then
+  test_pass
+else
+  test_fail "rejected credential did not stop at a sanitized command-fatal preflight"
+fi
+
 _DA_RELATIONSHIP_POLICY="$FUNC_CONFIG_DIR/dependency-relationship-cap.policy.json"
 _DA_RELATIONSHIP_COLLECTION="$FUNC_CONFIG_DIR/dependency-relationship-cap.collection.json"
 _DA_RELATIONSHIP_ANALYSIS="$FUNC_CONFIG_DIR/dependency-relationship-cap.analysis.json"
@@ -327,6 +435,12 @@ unset _DA_MISSING_POLICY _DA_PATH _DA_PATH_CANONICAL _DA_PATHS_OK _DA_PIPELINE_O
 unset _DA_POLICY _DA_RENDER _DA_REPORT _DA_RESOLVED _DA_RESOLVED_PARENT
 unset _DA_RELATIONSHIP_ANALYSIS _DA_RELATIONSHIP_COLLECTION _DA_RELATIONSHIP_OK
 unset _DA_RELATIONSHIP_POLICY
+unset _DA_REJECTED_KEY _DA_REJECTED_MODE _DA_REJECTED_POLICY
+unset _DA_REJECTED_REST_COLLECTION _DA_REJECTED_REST_ERROR _DA_REJECTED_REST_EXIT
+unset _DA_REJECTED_REST_POLICY _DA_REJECTED_XMLRPC_COLLECTION
+unset _DA_REJECTED_XMLRPC_ERROR _DA_REJECTED_XMLRPC_EXIT _DA_REJECTED_XMLRPC_POLICY
 unset _DA_RIGHT _DA_ROOT _DA_SKILL_ROOT _DA_SKILL_ROOT_CANONICAL
+unset _DA_XMLRPC_INACCESSIBLE_COLLECTION _DA_XMLRPC_INACCESSIBLE_OK
+unset _DA_XMLRPC_INACCESSIBLE_POLICY
 
 echo ""

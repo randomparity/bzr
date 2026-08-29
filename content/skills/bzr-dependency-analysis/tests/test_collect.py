@@ -731,7 +731,7 @@ class CollectorTestCase(unittest.TestCase):
                 self.assertIsNone(output)
                 self.assertEqual(log, [])
 
-    def test_relationship_cap_bounds_wide_node_retained_and_discovery_state(self):
+    def test_relationship_cap_bounds_post_parse_retained_and_traversal_state(self):
         response = ok(
             view_argv("primary", 1),
             bug(1, depends=range(2, 50_002)),
@@ -756,35 +756,37 @@ class CollectorTestCase(unittest.TestCase):
         )
         self.assertEqual(log, [view_argv("primary", 1)])
 
-    def test_relationship_cap_does_not_inspect_wide_unprocessed_suffix(self):
-        class GuardedRelationships(list):
-            def __len__(self):
-                return 50_000
-
-            def __iter__(self):
-                yield from (2, 3, 4)
-                raise AssertionError("collector inspected relationship suffix")
-
-            def __getitem__(self, index):
-                if index >= 3:
-                    raise AssertionError("collector inspected relationship suffix")
-                return (2, 3, 4)[index]
-
-        input_policy = COLLECTOR.validate_policy(
-            policy(
-                [bug_scope("primary", 1)],
-                max_nodes=9_999,
-                max_relationships=3,
-            )
+    def test_relationship_cap_prioritizes_selected_direction_before_reciprocal_evidence(self):
+        cases = (
+            ("depends_on", bug(1, blocks=range(10, 20), depends=[2]), "depends_on", 2),
+            ("blocks", bug(1, blocks=[2], depends=range(10, 20)), "blocks", 2),
+            ("both", bug(1, blocks=[2], depends=[3]), "blocks", 2),
         )
-        collector = COLLECTOR.Collector(input_policy, TIMESTAMP, object())
-        detail = bug(1)
-        detail["depends_on"] = GuardedRelationships()
-        collector.stage_detail("primary", detail)
-        self.assertEqual(collector.details[("primary", 1)]["depends_on"], [2, 3, 4])
-        self.assertEqual(len(collector.staged), 3)
-        self.assertEqual(collector.omitted_relationships_lower_bound, 49_997)
-        self.assertTrue(collector.relationship_cap_reached)
+        for direction, detail, expected_field, expected_id in cases:
+            with self.subTest(direction=direction):
+                result, output, log = self.run_collector(
+                    policy(
+                        [bug_scope("primary", 1)],
+                        max_relationships=1,
+                        direction=direction,
+                    ),
+                    [ok(view_argv("primary", 1), detail)],
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                document = self.parse(output)
+                self.assertEqual(
+                    document["observations"],
+                    [{
+                        "field": expected_field,
+                        "source": {"id": 1, "server": "primary"},
+                        "target": {"id": expected_id, "server": "primary"},
+                    }],
+                )
+                self.assertEqual(
+                    [node["id"] for node in document["nodes"]],
+                    [1, expected_id],
+                )
+                self.assertEqual(log, [view_argv("primary", 1)])
 
     def test_duplicate_policy_keys_are_rejected_before_runner(self):
         serialized = json.dumps(policy([bug_scope("primary", 1)]))

@@ -87,6 +87,24 @@ COPIED_KEYS = (
     "roots",
     "status",
 )
+LIMITATION_CODES = {
+    "collection-api",
+    "collection-auth",
+    "collection-http",
+    "collection-malformed-output",
+    "collection-schema-version",
+    "collection-tls",
+    "collection-transport",
+    "collection-unclassified",
+    "graph-node-cap",
+    "relationship_cap",
+    "restriction-node-cap",
+    "scope-node-cap",
+}
+WARNING_CODES = {
+    "stale-timestamp-future",
+    "stale-timestamp-unknown",
+}
 
 
 class AnalysisInputError(ValueError):
@@ -123,7 +141,7 @@ def optional_string(value, context):
         raise AnalysisInputError(f"{context} must be null or a string")
 
 
-def sorted_unique_strings(value, context, *, allow_empty=True):
+def sorted_unique_strings(value, context, *, allow_empty=True, allowed=None):
     if not isinstance(value, list) or any(
         not isinstance(item, str) or not item for item in value
     ):
@@ -132,6 +150,8 @@ def sorted_unique_strings(value, context, *, allow_empty=True):
         raise AnalysisInputError(f"{context} must not be empty")
     if value != sorted(set(value)):
         raise AnalysisInputError(f"{context} must be sorted and unique")
+    if allowed is not None and not set(value).issubset(allowed):
+        raise AnalysisInputError(f"{context} contains an unsupported value")
 
 
 def parse_analysis_timestamp(value):
@@ -371,7 +391,11 @@ def validate_collection(document, allow_partial):
             f"bounds.max_relationships must be at most {MAX_COMPONENTS}"
         )
     validate_cap(document["cap"])
-    sorted_unique_strings(document["limitations"], "limitations")
+    sorted_unique_strings(
+        document["limitations"],
+        "limitations",
+        allowed=LIMITATION_CODES,
+    )
     validate_cap_relationships(document["cap"], document["limitations"])
     validate_policy(document["policy"])
     validate_provenance(document["provenance"])
@@ -694,6 +718,11 @@ def apply_staleness(nodes, policy, analysis_time):
     return output, warning_list
 
 
+def validate_warning_codes(warnings):
+    if any(warning.get("code") not in WARNING_CODES for warning in warnings):
+        raise AnalysisInputError("warnings contains an unsupported code")
+
+
 def pm_findings(nodes, edges, components, layers, policy, status):
     lookup = {node_identity(node): node for node in nodes}
     incoming = {identity: 0 for identity in lookup}
@@ -780,6 +809,7 @@ def analyze(document, allow_partial=False):
         document["policy"],
         parse_analysis_timestamp(document["analysis_timestamp"]),
     )
+    validate_warning_codes(warnings)
     result = {key: document[key] for key in COPIED_KEYS}
     result.update({
         "components": components,

@@ -29,8 +29,14 @@ refresh is a new collection; never combine data from separate runs into one anal
 The collector invokes only released structured read commands: `bug view`, `bug list`, `bug search`,
 and `query run`. It preflights each declared server once with a released, read-only one-row
 `bug list` before resource reads, then uses deterministic ascending bug-ID scope enumeration and
-hard depth, node, and aggregate relationship caps.
+hard depth and node caps plus a post-parse aggregate relationship cap.
 No direct `bzr` command composition is needed outside the collector.
+
+Released `bzr` commands emit a complete JSON response before the collector parses it.
+`max_relationships` therefore bounds only relationship records retained, staged, discovered from,
+and traversed after that response is parsed. It does not bound the Bugzilla/`bzr` response size,
+JSON-decoding work, or peak parse memory. Upstream bounded retrieval is outside this skill and is
+tracked separately in issue #573.
 
 ## Stage 1: collect one bounded snapshot
 
@@ -171,7 +177,9 @@ Report inaccessible and missing nodes as unknown evidence, not absent bugs. Repo
 relationship caps, the lower bound on omitted relationships, depth, scope, and interrupted-fetch
 boundaries. `relationship_cap` means collection stopped staging and discovering once the admitted
 relationship budget was consumed; the omitted count is only a lower bound because unfetched nodes
-may contain more relationships. On any request to create, update, resolve, link, comment
+may contain more relationships. For a one-direction policy, the collector spends that budget on
+the selected field before optional reciprocal evidence. For `both`, the canonical order is
+`blocks` then `depends_on`. On any request to create, update, resolve, link, comment
 on, attach to, or otherwise change a Bugzilla resource during this analysis, refuse the request
 rather than mutate Bugzilla. If complete evidence is unavailable, return a partial Markdown report
 with the explicit limitations; never invent nodes, edges, estimates, or dates.
