@@ -256,9 +256,24 @@ if [[ "${1:-}" == "project-manager-reporting" ]]; then
     --paginate)
   jq -e --arg marker "$pm_marker" '
     .data | length == 3 and
-    (map(.summary) | sort) == ["Documentation readiness", "Parser rollout", "QA validation"] and
-    all(.[]; .whiteboard | startswith($marker + " ")) and
-    ([.[] | select(.summary == "Parser rollout" and .status == "IN_PROGRESS")] | length) == 1
+    (map(.id) | all(.[]; type == "number") and (unique | length == 3)) and
+    (map({summary, status, whiteboard}) | sort_by(.summary)) == [
+      {
+        summary: "Documentation readiness",
+        status: "CONFIRMED",
+        whiteboard: ($marker + " docs ready for review")
+      },
+      {
+        summary: "Parser rollout",
+        status: "IN_PROGRESS",
+        whiteboard: ($marker + " blocker blocked: owner needed")
+      },
+      {
+        summary: "QA validation",
+        status: "CONFIRMED",
+        whiteboard: ($marker + " qa verification underway")
+      }
+    ]
   ' <<<"$pm_collection" >/dev/null || {
     echo "ERROR: project-manager reporting fixture does not match the demo artifact" >&2
     exit 1

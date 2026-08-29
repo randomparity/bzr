@@ -10,7 +10,7 @@
 | Status | Count | Bugs |
 | --- | ---: | --- |
 | In progress | 1 | {{BLOCKER_ID}} |
-| New | 2 | {{QA_ID}}, {{DOCS_ID}} |
+| Confirmed | 2 | {{QA_ID}}, {{DOCS_ID}} |
 
 ## Needs attention
 
