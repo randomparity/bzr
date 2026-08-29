@@ -25,8 +25,17 @@ cat >"$stub_bin/bzr" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 case " $* " in
-*' bug list '*' --whiteboard '*)
-  printf '%s\n' '{"data":[{"id":1,"product":"ReleaseDemo","whiteboard":"bzr-release-readiness-demo-v1 dependency"},{"id":2,"product":"ReleaseDemo","whiteboard":"bzr-release-readiness-demo-v1 complete"},{"id":3,"product":"ReleaseDemo","whiteboard":"bzr-release-readiness-demo-v1 release-blocker"}]}'
+*' bug list --whiteboard '*)
+  product=ReleaseDemo
+  if [[ -n ${FAKE_DISCOVERY_STATE:-} ]]; then
+    count=0
+    [[ ! -e $FAKE_DISCOVERY_STATE ]] || count=$(<"$FAKE_DISCOVERY_STATE")
+    printf '%s\n' "$((count + 1))" >"$FAKE_DISCOVERY_STATE"
+    if [[ ${FAKE_DISCOVERY_CHANGE:-0} -eq 1 && $count -gt 0 ]]; then
+      product=ChangedDemo
+    fi
+  fi
+  printf '%s\n' "{\"data\":[{\"id\":1,\"product\":\"$product\",\"whiteboard\":\"bzr-release-readiness-demo-v1 dependency\"},{\"id\":2,\"product\":\"$product\",\"whiteboard\":\"bzr-release-readiness-demo-v1 complete\"},{\"id\":3,\"product\":\"$product\",\"whiteboard\":\"bzr-release-readiness-demo-v1 release-blocker\"}]}"
   ;;
 *' bug view '*)
   printf '%s\n' '{"data":{"id":3,"product":"ReleaseDemo","version":"9.0","target_milestone":"9.0","summary":"release root","status":"NEW","priority":"Highest","severity":"major","assigned_to":null,"deadline":"2030-08-31","last_change_time":"2030-07-01T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 release-blocker","depends_on":[1]}}'
@@ -77,7 +86,17 @@ EOF
 cat >"$stub_bin/asciinema" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+command=
+args=("$@")
+for ((i = 0; i < ${#args[@]}; i++)); do
+  if [[ ${args[i]} == -c ]]; then
+    command=${args[i + 1]}
+  fi
+done
 for output; do :; done
+if [[ ${FAKE_ASCIINEMA_RUN_COMMAND:-0} -eq 1 ]]; then
+  bash -c "$command" >"${FAKE_DRIVE_STDOUT:?}"
+fi
 printf '%s\n' "$FAKE_CAST_CONTENT" >"$output"
 EOF
 cat >"$stub_bin/agg" <<'EOF'
@@ -115,9 +134,13 @@ common_env=(
 )
 
 rm -f "$work/date-state"
-env "${common_env[@]}" FAKE_DATE_STATE="$work/date-state" \
-  bash "$sandbox/tools/run-release-readiness-demo.sh" demo \
-  bzr-release-readiness-demo-v1 "$work/timed-report.md" "$work/timed-trace.jsonl"
+(
+  cd "$work"
+  env "${common_env[@]}" FAKE_DATE_STATE="$work/date-state" \
+    bash "$sandbox/tools/run-release-readiness-demo.sh" demo \
+    bzr-release-readiness-demo-v1 3 ReleaseDemo \
+    "$work/timed-report.md" "$work/timed-trace.jsonl"
+)
 grep -Fq 'Generated: 2030-08-30T00:00:00Z' "$work/timed-report.md"
 grep -Fq 'collection started 2030-08-30T00:00:05Z and ended 2030-08-30T00:00:10Z' \
   "$work/timed-report.md"
@@ -127,30 +150,44 @@ grep -Fq '**Fact:** History/regression check: N/A (not selected); no history rea
   "$work/timed-report.md"
 
 jq -e '
-  all(.[]; type == "array" and .[0:4] ==
+  all(.[]; type == "object" and (.label | type) == "string" and
+    (.argv | type) == "array" and .argv[0:4] ==
     ["bzr", "--server", "<server-profile>", "--json"]) and
-  any(.[]; .[4:6] == ["bug", "list"] and
-    any(.[]; . == "bzr-release-readiness-demo-v1")) and
-  ([.[] | select(.[4:6] == ["query", "show"])] | length) == 2 and
-  any(.[]; .[4:7] == ["bug", "list", "--product"] and
-    (index("id,summary,status,priority,severity,keywords,flags,depends_on,last_change_time,whiteboard") != null)) and
-  all(.[]; .[4:6] != ["bug", "history"])
+  ([.[].label] | length) == ([.[].label] | unique | length) and
+  any(.[]; .label == "marker-discovery" and .argv[4:6] == ["bug", "list"] and
+    any(.argv[]; . == "bzr-release-readiness-demo-v1")) and
+  ([.[] | select(.argv[4:6] == ["query", "show"])] | length) == 2 and
+  any(.[]; .label == "product-scope" and
+    .argv[4:7] == ["bug", "list", "--product"] and
+    (.argv | index("id,summary,status,priority,depends_on,last_change_time,whiteboard") != null)) and
+  any(.[]; .label == "dependency-links" and .argv[4:6] == ["bug", "links"]) and
+  all(.[]; .argv[4:6] != ["bug", "history"])
 ' < <(jq -s . "$work/timed-trace.jsonl") >/dev/null
-jq -r 'join(" ")' "$work/timed-trace.jsonl" >"$work/trace-commands"
+jq -r '"[\(.label)] \(.argv | join(" "))"' "$work/timed-trace.jsonl" \
+  >"$work/trace-commands"
 # shellcheck disable=SC2016 # The sed addresses are literal Markdown fences.
 sed -n '/^```text$/,/^```$/p' "$work/timed-report.md" |
   sed '1d;$d' >"$work/report-commands"
 cmp "$work/trace-commands" "$work/report-commands"
+grep -Fq "1/3 visible bugs match a configured blocker. Bounded sample: #3. Source: \`product-scope\`." \
+  "$work/timed-report.md"
+grep -Fq "1/3 visible bugs are stale under the stated assumptions. Bounded sample: #3. Source: \`product-scope\`." \
+  "$work/timed-report.md"
+grep -Fq "1/1 visible outgoing dependencies are unresolved. Bounded sample: #1. Source: \`dependency-links\`." \
+  "$work/timed-report.md"
+grep -Fq 'Blocker IDs: #3. Stale IDs: #3. Dependency-risk IDs: #1.' \
+  "$work/timed-report.md"
 
 cat >"$work/fake-release-helper" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '# test report\n' >"$3"
+printf '# test report\n' >"$5"
 EOF
 chmod +x "$work/fake-release-helper"
 env RELEASE_READINESS_DEMO_HELPER="$work/fake-release-helper" \
   RELEASE_READINESS_DEMO_MARKER=bzr-release-readiness-demo-v1 \
   RELEASE_READINESS_DEMO_REPORT="$work/driver-report.md" \
+  RELEASE_READINESS_DEMO_ROOT=3 \
   RELEASE_READINESS_DEMO_SERVER=demo \
   RELEASE_READINESS_DEMO_PRODUCT=ReleaseDemo \
   BZR_BIN="$stub_bin/bzr" \
@@ -162,6 +199,29 @@ grep -Fq 'Do not run deadline, ownership, milestone, status/resolution, or histo
   "$work/driver.stdout"
 grep -Fq 'Use a maximum of 100 root bugs and return a PM-ready Markdown report.' \
   "$work/driver.stdout"
+
+rm -f "$work/discovery-state" "$work/agg-called"
+if env "${common_env[@]}" FAKE_CAST_CONTENT=verified-cast \
+  FAKE_ASCIINEMA_RUN_COMMAND=1 FAKE_DRIVE_STDOUT="$work/changed-driver.stdout" \
+  FAKE_DISCOVERY_STATE="$work/discovery-state" FAKE_DISCOVERY_CHANGE=1 \
+  FAKE_DATE_STATE="$work/date-state" \
+  bash "$sandbox/tools/record-demo.sh" release-readiness \
+  >"$work/changed.stdout" 2>"$work/changed.stderr"; then
+  printf 'recorder identity failure: changed second discovery was accepted\n' >&2
+  exit 1
+fi
+cmp "$work/cast.before" "$tracked_cast" || {
+  printf 'recorder identity failure: mismatched evidence replaced the cast\n' >&2
+  exit 1
+}
+cmp "$work/gif.before" "$tracked_gif" || {
+  printf 'recorder identity failure: mismatched evidence replaced the GIF\n' >&2
+  exit 1
+}
+[[ ! -e $work/agg-called ]] || {
+  printf 'recorder identity failure: mismatched evidence reached the renderer\n' >&2
+  exit 1
+}
 
 if env "${common_env[@]}" FAKE_CAST_CONTENT='http://127.0.0.1:8089' \
   bash "$sandbox/tools/record-demo.sh" release-readiness \

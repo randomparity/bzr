@@ -160,6 +160,7 @@ if [[ "${1:-}" == "--drive-release-readiness" ]]; then
   : "${RELEASE_READINESS_DEMO_MARKER:?}"
   : "${RELEASE_READINESS_DEMO_PRODUCT:?}"
   : "${RELEASE_READINESS_DEMO_REPORT:?}"
+  : "${RELEASE_READINESS_DEMO_ROOT:?}"
   : "${RELEASE_READINESS_DEMO_SERVER:?}"
 
   prompt=$'\e[1;35m❯\e[0m '
@@ -174,6 +175,7 @@ if [[ "${1:-}" == "--drive-release-readiness" ]]; then
   printf '\n\n'
   BZR_BIN="$BZR_BIN" "$RELEASE_READINESS_DEMO_HELPER" \
     "$RELEASE_READINESS_DEMO_SERVER" "$RELEASE_READINESS_DEMO_MARKER" \
+    "$RELEASE_READINESS_DEMO_ROOT" "$RELEASE_READINESS_DEMO_PRODUCT" \
     "$RELEASE_READINESS_DEMO_REPORT" >/dev/null 2>&1
   sed -n '1,$p' "$RELEASE_READINESS_DEMO_REPORT"
   sleep 3
@@ -225,8 +227,17 @@ if [[ "${1:-}" == "release-readiness" ]]; then
     exit 1
   }
   release_product=$(jq -er --argjson root "$release_root" '
-    .data[] | select(.id == $root) | .product
-  ' <<<"$release_matches")
+    [.data[] | select(.id == $root) | .product] |
+    unique | select(length == 1) | .[0]
+  ' <<<"$release_matches") || {
+    echo "ERROR: release-readiness demo fixture has an ambiguous product." >&2
+    exit 1
+  }
+  if [[ ! $release_root =~ ^[1-9][0-9]*$ ||
+    ! $release_product =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "ERROR: release-readiness demo fixture identity is not portable" >&2
+    exit 1
+  fi
 
   echo "==> Preparing hidden read-only demo inputs"
   "$BZR_BIN" query save release-readiness-demo --product "$release_product" \
@@ -239,6 +250,7 @@ if [[ "${1:-}" == "release-readiness" ]]; then
   export RELEASE_READINESS_DEMO_MARKER="$release_marker"
   export RELEASE_READINESS_DEMO_PRODUCT="$release_product"
   export RELEASE_READINESS_DEMO_REPORT="$release_workdir/release-readiness.md"
+  export RELEASE_READINESS_DEMO_ROOT="$release_root"
   export RELEASE_READINESS_DEMO_SERVER=demo
   release_cast="$REPO_ROOT/docs/assets/bzr-release-readiness-demo.cast"
   release_gif="$REPO_ROOT/docs/assets/bzr-release-readiness-demo.gif"
