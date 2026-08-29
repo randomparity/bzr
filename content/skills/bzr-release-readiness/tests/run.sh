@@ -54,6 +54,7 @@ for projection in \
 done
 grep -Fq -- '--limit 100 --paginate --json --sort bug_id --order asc' "$SKILL"
 grep -Fq -- 'Only non-complete bugs contribute to blocker, stale, and ownership checks.' "$SKILL"
+grep -Fq -- '--server <server-profile>' "$SKILL"
 
 # RR-COMPLETE: a complete row may match every selected predicate, but must not
 # appear in the blocker, stale, or ownership evidence.
