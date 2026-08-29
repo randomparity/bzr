@@ -20,21 +20,23 @@ a choice, it records the resulting assumption in the report.
    milestone, version, and product use `bzr bug list`. The workflow never uses
    `--save-as` or writes local configuration.
 2. Establish rules before assessing data: complete/open statuses, blocker
-   priority/severity/keyword/flag/custom-field values, stale duration, resolved
-   dependency handling, and artifact format.
+   priority/severity/keyword/flag/custom-field values, stale duration, deadline
+   comparison time zone, resolved dependency handling, and artifact format.
 3. Derive the smallest field projection from the selected checks. Every complete
    collection overrides URL and saved-query page sizing with the bounded positive
    page size `--limit 100`, including when the stored value is missing, zero, or
-   greater than 100. It then uses `--paginate --json` with `--sort bug_id --order asc` where
-   that scope command supports ordering. De-duplicate returned IDs and record
+   greater than 100. It then uses `--paginate --json --sort bug_id --order asc`
+   for every complete collection, explicitly overriding ordering stored in a
+   Custom Search URL or saved query. De-duplicate returned IDs and record
    collection start/end. This is a non-transactional rolling snapshot: exhausting
    pagination is complete only for rows the server exposed during that rolling
    read, never a point-in-time or authorization-universe guarantee. Collapse
    only byte-equivalent duplicate records. Preserve divergent observations for
    the same ID and mark every affected check conflicted/unknown; never choose
-   first- or last-wins silently. The base identity fields are `id`,
-   `summary`, `status`, and `resolution`; optional checks add only their required
-   fields. Inspect direct-URL paging values locally and run `bzr query show
+   first- or last-wins silently. The base identity fields are `id`, `summary`,
+   and `status`; optional checks add only their required fields, including
+   `resolution` only when status/resolution consistency is selected. Inspect
+   direct-URL paging and ordering values locally and run `bzr query show
    <name> --json` before a saved query. Reject a
    non-zero offset for a full review; allow it only when the operator explicitly
    defines that window as the intended partial scope, labelled incomplete.
@@ -88,14 +90,28 @@ a check `unknown`; an irrelevant check is `N/A` with its reason.
 | Open work | exact complete statuses | none beyond base | `status` is outside the complete set; unknown status is unknown |
 | Release blocker | exact complete statuses; priority/severity/keyword/flag/custom-field rules | `priority`, `severity`, `keywords`, `flags`, named `cf_*` only when selected | non-complete bug matches any rule: scalar equality for priority/severity; element presence for keywords; flag tuple of name+status and optional requestee; schema-validated scalar equality/list membership/type-aware operator for custom fields |
 | Dependencies | complete statuses, supplementary cap | `depends_on` | unresolved dependencies are non-complete outgoing targets; reconcile raw IDs with `bug links --relation depends_on`, and treat missing target records as unknown |
-| Deadline | `as-of` | `deadline` | non-complete bug deadline is before the UTC date containing `as-of`; blank is N/A |
+| Deadline | `as-of`, named IANA time zone | `deadline` | interpret Bugzilla's date-only deadline in the elicited release-policy time zone; a non-complete bug is overdue when its deadline date is before the calendar date containing `as-of` in that zone; blank is N/A; an absent or invalid zone must be clarified before this check runs |
 | Unowned | exact complete statuses and installation sentinel logins | `assigned_to` | non-complete bug has blank/null or exact sentinel match; absent sentinels mean only blank/null and a limitation |
 | Missing milestone | whether release process uses milestones | `target_milestone` | non-complete bug has blank/null/unset sentinel; otherwise N/A with reason |
 | Stale | duration | `last_change_time` | non-complete bug changed before `as-of - duration`; invalid/missing timestamp is unknown |
 | Reopened/regressed | event rules, baseline/lookback, cap | none | `bug history --since <baseline>` has an operator-named transition strictly after baseline and no later than `as-of`; failed reads are unknown |
-| Status/resolution | allowed exact pairs | none beyond base | observed pair absent from allowlist; without an allowlist the check is N/A |
+| Status/resolution | allowed exact pairs | `resolution` | observed pair absent from allowlist; without an allowlist the check is N/A and `resolution` is not requested |
 | Whiteboard risk | literal or validated regex rules | `whiteboard` | selected rule matches the current snapshot; absent rules make it N/A |
-| Installation field | field, operator, value | named custom field | `equals`, `not-equals`, `contains`, `present`, or schema-valid numeric/date comparison; reject invalid combinations |
+| Installation field | field, operator, value | named custom field | validate the field and operator against the truth table below; reject every unlisted combination before collection |
+
+Custom-field operators are deliberately small and schema-driven:
+
+| Field shape reported by schema | Allowed operators | Operand contract |
+|---|---|---|
+| scalar string, enum, user, or bug ID | `equals`, `not-equals`, `present` | exact scalar value for equality; no operand for `present` |
+| multi-value string, enum, user, or bug ID | `contains`, `present` | one exact element for `contains`; no operand for `present` |
+| integer or decimal | `equals`, `not-equals`, `less-than`, `less-or-equal`, `greater-than`, `greater-or-equal`, `present` | finite number parsed in the field's numeric domain; no operand for `present` |
+| date or date-time | `equals`, `not-equals`, `before`, `on-or-before`, `after`, `on-or-after`, `present` | schema-valid ISO date/date-time; date-time comparisons normalize to UTC while date-only comparisons use the elicited release-policy time zone; no operand for `present` |
+| boolean | `equals`, `not-equals`, `present` | exact `true` or `false`; no operand for `present` |
+
+Unknown schema types, scalar/list mismatches, missing operands, operands supplied
+to `present`, and every operator absent from the applicable row are validation
+errors, not false predicate results.
 
 Every finding records check, observed value, rule, bug ID/link, and
 classification (`fact`, `assumption`, or `assessment`). Aggregates show counts
@@ -112,8 +128,8 @@ HTML generators construct DOM/text nodes through the host artifact API and never
 concatenate remote strings into markup. Document generators likewise insert
 remote values only as text nodes. Links are parsed and canonicalized first;
 userinfo, credentials, controls, protocol-relative forms, and parse errors are
-rejected before allowing exact lowercased `http` or `https` schemes. Displayed
-Before any tool call, parse the supplied scope URL and reject userinfo or an
+rejected before allowing exact lowercased `http` or `https` schemes. Before any
+tool call, parse the supplied scope URL and reject userinfo or an
 authentication parameter name after percent-decoding the name and comparing it
 case-insensitively against this complete Bugzilla alias set: `Bugzilla_login`,
 `login`, `Bugzilla_password`, `password`, `Bugzilla_token`, `token`,
@@ -205,16 +221,10 @@ Markdown/HTML golden fragments. When document capability exists,
 relationships to reject macros, active markup, or external relationships derived
 from remote values; capability absence routes to `RR-NO-ARTIFACT`.
 
-The independent manual agent gate uses exactly Codex CLI 0.150.1,
-`gpt-5.6-terra`, reasoning effort `high`, temperature/default sampling unchanged,
-the committed skill, and the committed isolated mock-tool transcript. Each
-`RR-*` case runs three attempts: the exact committed request plus two committed
-paraphrases. The evaluator retains every prompt, command trace, stdout/stderr,
-artifact, checklist result, CLI/model/reasoning identifiers, and exit status;
-attempts are never retried or discarded. Release requires all attempts to pass
-the deterministic assertions and zero severity-4/5 failures. Any failure blocks
-release; a later run is a new fully retained gate, never retry-until-pass. No
-model grades its own output.
+The committed fixtures exercise each `RR-*` case through deterministic command
+trace and artifact assertions. They test the skill contract without prescribing
+a particular agent model, runtime, sampling policy, trial count, or retained
+evaluation harness.
 
 ## Threat model
 
