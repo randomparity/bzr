@@ -77,6 +77,7 @@ These are optional collaborators, not a required pipeline.
 
 ## Demonstration
 
-From the bzr repository, `tools/record-demo.sh project-manager-reporting` records a workflow whose
-visible narrative begins with an agent prompt and ends with the complete PM-ready report. It uses a
-real local Bugzilla server and the installed skill; setup and helper plumbing stay outside the cast.
+From the bzr repository, `tools/record-demo.sh project-manager-reporting` records a deterministic
+demonstration whose visible narrative begins with an agent prompt and ends with the complete
+PM-ready artifact. Before recording, it installs this skill and verifies the saved Custom Search
+query through the real CLI against a local Bugzilla server. Setup stays outside the cast.

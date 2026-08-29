@@ -6,8 +6,8 @@ set -eu
 HERE=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 SKILL="$HERE/../SKILL.md"
 SAFETY="$HERE/../reference/artifact-safety.md"
-PROMPT="$HERE/fixtures/demo-prompt.txt"
-REPORT="$HERE/fixtures/demo-report.md"
+PROMPT="$HERE/../assets/demo-prompt.txt"
+REPORT="$HERE/../assets/demo-report.md"
 
 run_help() {
   output=$("$BZR_BIN" "$@" --help)
@@ -33,6 +33,6 @@ grep -Fq 'HTTP or HTTPS' "$SAFETY"
 grep -Fq 'escape' "$SAFETY"
 
 grep -Fq 'Produce a weekly portfolio report' "$PROMPT"
-for section in 'Executive summary' 'Milestone view' 'Needs attention' 'Current updates' 'Limitations' 'Provenance'; do
+for section in 'Executive summary' 'Milestone view' 'Needs attention' 'Current updates' 'Decisions and follow-ups' 'Limitations' 'Provenance'; do
   grep -Fq "$section" "$REPORT"
 done
