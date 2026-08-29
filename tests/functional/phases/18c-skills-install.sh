@@ -25,6 +25,7 @@ SKILLS_EXPECTED=(
   bzr-dry-run-confirm
   bzr-file-bug
   bzr-reference
+  bzr-release-readiness
   bzr-release-tracking
   bzr-search-report
   bzr-setup
@@ -67,6 +68,15 @@ DEPENDENCY_ANALYSIS_PAYLOAD=(
   tests/test_render.py
 )
 
+RELEASE_READINESS_PAYLOAD=(
+  SKILL.md
+  reference/eval-cases.md
+  reference/report-template.md
+  tests/fixtures/release-bugs.json
+  tests/fixtures/release-report.expected.md
+  tests/run.sh
+)
+
 test_begin "123a. skills install populates both project layouts"
 run_bzr skills install --agent all --project "$SKILLS_PROJECT"
 if assert_success &&
@@ -104,6 +114,27 @@ if [[ $_DA_INSTALLED_OK -eq 1 ]]; then
   test_pass
 else
   test_fail "installed dependency-analysis payload did not match the embedded contract"
+fi
+
+test_begin "123k. release-readiness installation contains the complete payload"
+_RR_INSTALLED_EXPECTED="$FUNC_CONFIG_DIR/release-readiness-installed-expected.txt"
+printf '%s\n' "${RELEASE_READINESS_PAYLOAD[@]}" | LC_ALL=C sort \
+  >"$_RR_INSTALLED_EXPECTED"
+_RR_INSTALLED_OK=1
+for _RR_LAYOUT in .agents .claude; do
+  _RR_LAYOUT_ROOT="$SKILLS_PROJECT/$_RR_LAYOUT/skills/bzr-release-readiness"
+  _RR_INSTALLED_PATHS="$FUNC_CONFIG_DIR/release-readiness-${_RR_LAYOUT#*.}-paths.txt"
+  (
+    cd "$_RR_LAYOUT_ROOT" || exit 1
+    find . -type f ! -name .bzr-skill-managed -print |
+      sed 's#^\./##' | LC_ALL=C sort
+  ) >"$_RR_INSTALLED_PATHS"
+  cmp -s "$_RR_INSTALLED_EXPECTED" "$_RR_INSTALLED_PATHS" || _RR_INSTALLED_OK=0
+done
+if [[ $_RR_INSTALLED_OK -eq 1 ]]; then
+  test_pass
+else
+  test_fail "installed release-readiness payload did not match the embedded contract"
 fi
 
 test_begin "123b. skills install idempotently replaces an owned skill"
@@ -346,5 +377,7 @@ unset _DA_INSTALLED_OK _DA_INSTALLED_PATHS _DA_INSTALLED_ROOT _DA_LAYOUT _DA_LAY
 unset _DA_REPLAY_ANALYSIS _DA_REPLAY_COLLECTION _DA_REPLAY_DIAGRAM
 unset _DA_REPLAY_EXPECTED _DA_REPLAY_LOG _DA_REPLAY_OK _DA_REPLAY_POLICY
 unset _DA_REPLAY_REPORT _DA_REPLAY_RUNNER _DA_REPLAY_SCENARIO
+unset RELEASE_READINESS_PAYLOAD _RR_INSTALLED_EXPECTED _RR_INSTALLED_OK
+unset _RR_INSTALLED_PATHS _RR_LAYOUT _RR_LAYOUT_ROOT
 
 echo ""
