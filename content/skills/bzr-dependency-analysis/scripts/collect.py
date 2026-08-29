@@ -54,6 +54,7 @@ CUSTOM_PARAMETER_ALLOWLIST = {
     "target_milestone",
     "version",
 }
+CREDENTIAL_PARAMETER_NAMES = {"bugzilla_api_key", "token", "api_key"}
 ERROR_STRING_KEYS = {
     "type",
     "message",
@@ -193,6 +194,16 @@ def validate_custom_url(value, context):
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise PolicyError(f"{context}.url must be an absolute HTTP(S) URL")
+    query_names = {
+        name.casefold()
+        for name, _ in parse_qsl(parsed.query, keep_blank_values=True)
+    }
+    if (
+        parsed.username is not None
+        or parsed.password is not None
+        or query_names & CREDENTIAL_PARAMETER_NAMES
+    ):
+        raise PolicyError(f"{context}.url must not include credentials")
     return url
 
 
@@ -273,10 +284,20 @@ def validate_policy(value):
         raise PolicyError("servers must be unique")
     if not isinstance(value["scopes"], list) or not value["scopes"]:
         raise PolicyError("scopes must be a non-empty array")
-    scopes = [validate_scope(scope, set(servers), index) for index, scope in enumerate(value["scopes"])]
+    server_set = set(servers)
+    scopes = [
+        validate_scope(scope, server_set, index)
+        for index, scope in enumerate(value["scopes"])
+    ]
     alias_servers = [scope["server"] for scope in scopes if scope["kind"] == "alias"]
     if len(alias_servers) != len(set(alias_servers)):
         raise PolicyError("at most one alias scope is allowed per server")
+    restriction = validate_restriction(value["restriction"], server_set)
+    referenced_servers = {scope["server"] for scope in scopes}
+    if restriction is not None:
+        referenced_servers.add(restriction["server"])
+    if server_set != referenced_servers:
+        raise PolicyError("servers must match scope and restriction servers")
     direction = value["direction"]
     if direction not in {"depends_on", "blocks", "both"}:
         raise PolicyError("direction is unsupported")
@@ -289,7 +310,7 @@ def validate_policy(value):
     statuses = sorted(set(nonempty_string(status, "resolved_statuses") for status in statuses))
     unassigned_assignees = validate_unassigned_assignees(
         value.get("unassigned_assignees", {}),
-        set(servers),
+        server_set,
     )
     return {
         "bounds": bounds,
@@ -297,7 +318,7 @@ def validate_policy(value):
         "direction": direction,
         "resolved_mode": resolved_mode,
         "resolved_statuses": statuses,
-        "restriction": validate_restriction(value["restriction"], set(servers)),
+        "restriction": restriction,
         "scopes": scopes,
         "servers": sorted(servers),
         "stale_after_days": positive_integer(value["stale_after_days"], "stale_after_days"),
@@ -347,11 +368,14 @@ class CommandRunner:
 
     def run_json(self, argv, resource_server=None):
         try:
+            child_environment = os.environ.copy()
+            child_environment["RUST_LOG"] = "off"
             result = subprocess.run(
                 [self.executable, *argv],
                 capture_output=True,
                 text=True,
                 check=False,
+                env=child_environment,
             )
         except (OSError, UnicodeError):
             raise FatalCollection("collection-transport", "transport")
@@ -555,12 +579,13 @@ class Collector:
             )
             return
         self.nodes[numeric_key] = known_node(server, detail, 0, [alias])
+        if not self.apply_field_restriction(numeric_key, detail):
+            return
         self.stage_detail(
             server,
             detail,
             selected_eligible=self.selected_adjacency_eligible(detail),
         )
-        self.apply_field_restriction(numeric_key, detail)
 
     def fetch_breadth_first(self):
         frontier = sorted(
@@ -606,12 +631,13 @@ class Collector:
         aliases = self.nodes[key]["requested_aliases"]
         self.nodes[key] = known_node(server, detail, self.nodes[key]["depth"], aliases)
         self.fetched.add(key)
+        if not self.apply_field_restriction(key, detail):
+            return
         self.stage_detail(
             server,
             detail,
             selected_eligible=self.selected_adjacency_eligible(detail),
         )
-        self.apply_field_restriction(key, detail)
 
     def selected_adjacency_eligible(self, detail):
         return not (
@@ -697,11 +723,13 @@ class Collector:
     def apply_field_restriction(self, key, detail):
         restriction = self.policy["restriction"]
         if restriction is None or restriction["kind"] == "saved-query" or restriction["server"] != key[0]:
-            return
+            return True
         field = restriction_field_name(restriction["kind"])
         if detail[field] != restriction["value"]:
             aliases = self.nodes[key]["requested_aliases"]
             self.nodes[key] = boundary_node(key[0], key[1], str(key[1]), self.nodes[key]["depth"], "scope_restriction", aliases)
+            return False
+        return True
 
     def membership_boundary(self, key):
         restriction = self.policy["restriction"]

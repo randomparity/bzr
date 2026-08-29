@@ -30,8 +30,9 @@ defaults to the node bound and may be raised independently. Node and relationshi
 exceed 9,999; the node ceiling preserves the four-digit `cNNNN` namespace. The collector rejects a
 higher bound, duplicate JSON keys, and invalid UTF-8 before invoking `bzr`. If no bounds are
 supplied, the skill proposes depth 5, 200 nodes, and 200 relationships. It preflights each server
-once with a released read-only command before retrieving resources. A minimal policy for one
-configured server and bug-ID root is:
+once with a released read-only command before retrieving resources. `servers` must exactly equal
+the server aliases referenced by scopes and the optional restriction, so unused declarations are
+rejected before preflight. A minimal policy for one configured server and bug-ID root is:
 
 `max_relationships` applies after each released `bzr` command has returned and its complete JSON
 response has been parsed. It bounds selected relationship records retained, staged, and traversed.
@@ -59,6 +60,12 @@ If a server assigns new bugs to a placeholder account, set `unassigned_assignees
 map of sorted exact login lists, such as `{"primary":["nobody@bugs.example"]}`. It defaults to an
 empty map. Use the `assigned_to` string returned through that same server alias. Exact equality is
 required; prefixes and substrings are not inferred as unassigned.
+
+Custom Search URLs may not contain userinfo or the case-insensitive credential query names
+`bugzilla_api_key`, `token`, or `api_key`. The collector rejects them with a generic policy error
+before creating a child command. Child `bzr` commands otherwise inherit the caller's environment,
+including configuration and credential sources, while forcing `RUST_LOG=off` so tracing cannot
+corrupt structured failure output.
 
 Set the artifact paths, then run the installed helpers exactly as shown:
 
@@ -105,6 +112,9 @@ the canonical order is `blocks` then `depends_on`, with numeric order inside eac
 Resolved nodes under `include-no-traverse` keep their incoming edge, but their outgoing selected
 adjacency consumes no relationship budget and drives no discovery. Reciprocal observations only
 corroborate an edge grounded by selected-direction evidence.
+Product, milestone, and version restrictions are applied to each fetched node before either
+adjacency field is staged. An excluded node stays visible as a scope boundary but contributes no
+observation or relationship-budget charge.
 These are properties of the collected graph, not a delivery schedule. The format has no duration
 model, so it does not support weighted critical-path analysis or delivery-date prediction. Members
 of a cyclic component also have no total execution order.
