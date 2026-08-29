@@ -89,7 +89,11 @@ and collection start/end timestamps as provenance.
 
 | Selected checks | Required fields in addition to `id,summary,status` |
 | --- | --- |
-| Blockers | `priority,severity,keywords,flags` and selected `cf_*` fields |
+| Priority blocker rule | `priority` |
+| Severity blocker rule | `severity` |
+| Keyword blocker rule | `keywords` |
+| Flag blocker rule | `flags` |
+| Custom-field blocker rule | selected `cf_*` fields |
 | Dependencies | `depends_on` |
 | Deadline | `deadline` |
 | Unowned | `assigned_to` |

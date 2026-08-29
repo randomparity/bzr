@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2016 # Assertions contain literal Markdown code spans.
 set -eu
 
 : "${BZR_BIN:?set BZR_BIN to the bzr binary under test}"
@@ -43,7 +44,6 @@ fi
 
 for projection in \
   'id,summary,status' \
-  'priority,severity,keywords,flags' \
   'depends_on' \
   'deadline' \
   'assigned_to' \
@@ -53,6 +53,22 @@ for projection in \
   'whiteboard'; do
   grep -Fq -- "$projection" "$SKILL"
 done
+for selective_blocker_projection in \
+  '| Priority blocker rule | `priority` |' \
+  '| Severity blocker rule | `severity` |' \
+  '| Keyword blocker rule | `keywords` |' \
+  '| Flag blocker rule | `flags` |' \
+  '| Custom-field blocker rule | selected `cf_*` fields |'; do
+  grep -Fq -- "$selective_blocker_projection" "$SKILL" || {
+    printf 'release-readiness skill lacks selective projection: %s\n' \
+      "$selective_blocker_projection" >&2
+    exit 1
+  }
+done
+if grep -Fq -- 'priority,severity,keywords,flags' "$SKILL"; then
+  printf 'release-readiness skill still bundles deselected blocker fields\n' >&2
+  exit 1
+fi
 grep -Fq -- '--limit 100 --paginate --json --sort bug_id --order asc' "$SKILL"
 grep -Fq -- 'installation sentinel logins' "$SKILL"
 grep -Fq -- 'unset milestone sentinel' "$SKILL"

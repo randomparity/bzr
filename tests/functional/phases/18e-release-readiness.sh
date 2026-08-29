@@ -207,12 +207,14 @@ if [[ $_RR_REPORT_OK -eq 1 ]] &&
   grep -Fq '**Fact:**' "$_RR_REPORT" &&
   grep -Fq '**Assumption:**' "$_RR_REPORT" &&
   grep -Fq '**Assessment:** not ready' "$_RR_REPORT" &&
-  grep -Fq '1/3 visible bugs match a configured blocker' "$_RR_REPORT" &&
-  grep -Fq '0/3 visible bugs are stale' "$_RR_REPORT" &&
+  grep -Fq '1/3 visible bugs are known to match a configured blocker' "$_RR_REPORT" &&
+  grep -Fq '0/3 visible bugs are known stale' "$_RR_REPORT" &&
   grep -Fq "Bounded sample: (none). Source: \`product-scope\`" "$_RR_REPORT" &&
-  grep -Fq '1/1 visible outgoing dependencies are unresolved' "$_RR_REPORT" &&
+  grep -Fq '1/1 visible outgoing dependencies are known unresolved' "$_RR_REPORT" &&
   grep -Fq "Source: \`dependency-links\`" "$_RR_REPORT" &&
   grep -Fq 'Stale IDs: (none)' "$_RR_REPORT" &&
+  grep -Fq 'Unknown blocker IDs: (none). Unknown stale IDs: (none). Unknown dependency-risk IDs: (none).' "$_RR_REPORT" &&
+  grep -Fq 'No selected blocker, dependency, or stale evidence was unknown' "$_RR_REPORT" &&
   grep -Fq 'Ownership check: N/A (not selected)' "$_RR_REPORT" &&
   grep -Fq 'History/regression check: N/A (not selected)' "$_RR_REPORT" &&
   grep -Fq '## Data limitations' "$_RR_REPORT" &&
