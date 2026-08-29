@@ -1,0 +1,32 @@
+{
+  "bounds": {
+    "max_depth": 3,
+    "max_nodes": 1,
+    "max_relationships": 1
+  },
+  "bzr": "bzr",
+  "direction": "both",
+  "resolved_mode": "include-no-traverse",
+  "resolved_statuses": [
+    "RESOLVED"
+  ],
+  "restriction": null,
+  "scopes": [
+    {
+      "ids": [
+        10
+      ],
+      "kind": "bug-ids",
+      "server": "primary"
+    },
+    {
+      "alias": "delivery",
+      "kind": "alias",
+      "server": "primary"
+    }
+  ],
+  "servers": [
+    "primary"
+  ],
+  "stale_after_days": 14
+}

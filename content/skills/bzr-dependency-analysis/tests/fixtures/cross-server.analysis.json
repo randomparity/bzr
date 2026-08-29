@@ -1,0 +1,175 @@
+{
+  "analysis_timestamp": "2026-08-28T12:00:00Z",
+  "bounds": {
+    "max_depth": 3,
+    "max_nodes": 10,
+    "max_relationships": 10
+  },
+  "cap": {
+    "graph_cap_reached": false,
+    "omitted_discovered_identities": 0,
+    "omitted_relationships_lower_bound": 0,
+    "relationship_cap_reached": false,
+    "scope_truncated": false
+  },
+  "components": [
+    {
+      "cyclic": false,
+      "id": "c0001",
+      "nodes": [
+        {
+          "id": 60,
+          "requested": null,
+          "server": "alpha"
+        }
+      ]
+    },
+    {
+      "cyclic": false,
+      "id": "c0002",
+      "nodes": [
+        {
+          "id": 60,
+          "requested": null,
+          "server": "beta"
+        }
+      ]
+    }
+  ],
+  "edges": [],
+  "findings": {
+    "bottlenecks": [],
+    "execution_order": {
+      "assumptions": [
+        "resolved-include-no-traverse"
+      ],
+      "component_order": [
+        "c0001",
+        "c0002"
+      ],
+      "cycle_impediments": [],
+      "incomplete_boundaries": []
+    },
+    "stale_blockers": [],
+    "structural_leaves": [
+      {
+        "id": 60,
+        "requested": null,
+        "server": "alpha"
+      },
+      {
+        "id": 60,
+        "requested": null,
+        "server": "beta"
+      }
+    ],
+    "structural_roots": [
+      {
+        "id": 60,
+        "requested": null,
+        "server": "alpha"
+      },
+      {
+        "id": 60,
+        "requested": null,
+        "server": "beta"
+      }
+    ],
+    "unassigned_blockers": []
+  },
+  "layers": [
+    [
+      "c0001",
+      "c0002"
+    ]
+  ],
+  "limitations": [],
+  "longest_chain": {
+    "kind": "edge_count",
+    "length": 0,
+    "path": [
+      "c0001"
+    ]
+  },
+  "nodes": [
+    {
+      "assigned_to": "alpha@example.test",
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 60,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "alpha"
+      },
+      "requested": "60",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "alpha",
+      "stale": false,
+      "state": "known",
+      "status": "NEW",
+      "summary": "Alpha 60"
+    },
+    {
+      "assigned_to": "beta@example.test",
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 60,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "beta"
+      },
+      "requested": "60",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "beta",
+      "stale": false,
+      "state": "known",
+      "status": "NEW",
+      "summary": "Beta 60"
+    }
+  ],
+  "policy": {
+    "direction": "both",
+    "duration": null,
+    "resolved_mode": "include-no-traverse",
+    "resolved_statuses": [
+      "RESOLVED"
+    ],
+    "stale_after_days": 14,
+    "unassigned_assignees": {}
+  },
+  "provenance": [
+    {
+      "parameter_names": [],
+      "scope_kind": "bug-ids",
+      "server": "alpha",
+      "source": null
+    },
+    {
+      "parameter_names": [],
+      "scope_kind": "bug-ids",
+      "server": "beta",
+      "source": null
+    }
+  ],
+  "roots": [
+    {
+      "id": 60,
+      "requested": "60",
+      "server": "alpha"
+    },
+    {
+      "id": 60,
+      "requested": "60",
+      "server": "beta"
+    }
+  ],
+  "schema": "bzr-dependency-analysis/v1",
+  "status": "complete",
+  "warnings": []
+}

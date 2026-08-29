@@ -1,0 +1,177 @@
+{
+  "analysis_timestamp": "2026-08-28T12:00:00Z",
+  "bounds": {
+    "max_depth": 3,
+    "max_nodes": 10,
+    "max_relationships": 10
+  },
+  "cap": {
+    "graph_cap_reached": false,
+    "omitted_discovered_identities": 0,
+    "omitted_relationships_lower_bound": 0,
+    "relationship_cap_reached": false,
+    "scope_truncated": false
+  },
+  "components": [
+    {
+      "cyclic": false,
+      "id": "c0001",
+      "nodes": [
+        {
+          "id": 40,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    },
+    {
+      "cyclic": false,
+      "id": "c0002",
+      "nodes": [
+        {
+          "id": 41,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "observations": [
+        "depends_on"
+      ],
+      "predecessor": {
+        "id": 40,
+        "server": "primary"
+      },
+      "successor": {
+        "id": 41,
+        "server": "primary"
+      }
+    }
+  ],
+  "findings": {
+    "bottlenecks": [],
+    "execution_order": {
+      "assumptions": [
+        "resolved-include-no-traverse"
+      ],
+      "component_order": [
+        "c0001",
+        "c0002"
+      ],
+      "cycle_impediments": [],
+      "incomplete_boundaries": [
+        {
+          "id": 41,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    },
+    "stale_blockers": [],
+    "structural_leaves": [
+      {
+        "id": 41,
+        "requested": null,
+        "server": "primary"
+      }
+    ],
+    "structural_roots": [
+      {
+        "id": 40,
+        "requested": null,
+        "server": "primary"
+      }
+    ],
+    "unassigned_blockers": []
+  },
+  "layers": [
+    [
+      "c0001"
+    ],
+    [
+      "c0002"
+    ]
+  ],
+  "limitations": [],
+  "longest_chain": {
+    "kind": "edge_count",
+    "length": 1,
+    "path": [
+      "c0001",
+      "c0002"
+    ]
+  },
+  "nodes": [
+    {
+      "assigned_to": "owner@example.test",
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 40,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "40",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": false,
+      "state": "known",
+      "status": "NEW",
+      "summary": "Visible"
+    },
+    {
+      "assigned_to": null,
+      "boundary_reason": null,
+      "depth": 1,
+      "error_type": "inaccessible",
+      "id": 41,
+      "last_change_time": null,
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "41",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": "unknown",
+      "state": "unknown",
+      "status": null,
+      "summary": null
+    }
+  ],
+  "policy": {
+    "direction": "both",
+    "duration": null,
+    "resolved_mode": "include-no-traverse",
+    "resolved_statuses": [
+      "RESOLVED"
+    ],
+    "stale_after_days": 14,
+    "unassigned_assignees": {}
+  },
+  "provenance": [
+    {
+      "parameter_names": [],
+      "scope_kind": "bug-ids",
+      "server": "primary",
+      "source": null
+    }
+  ],
+  "roots": [
+    {
+      "id": 40,
+      "requested": "40",
+      "server": "primary"
+    }
+  ],
+  "schema": "bzr-dependency-analysis/v1",
+  "status": "complete",
+  "warnings": []
+}
