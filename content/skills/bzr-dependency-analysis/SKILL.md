@@ -12,10 +12,13 @@ snapshot, and renders safe local text artifacts. It does not change Bugzilla.
 ## Resolve the policy before retrieval
 
 Ask for the server and scope, direction (`depends_on`, `blocks`, or `both`), resolved statuses,
-resolved-node mode, optional restriction, staleness threshold, and output format. Both bounds are
-required positive integers. If the user omits them, propose and state the conservative defaults of
-depth 5 and 200 nodes before running any retrieval. The maximum node bound is 9,999 because
-component IDs use the four-digit `cNNNN` namespace. Reject a higher value before any retrieval.
+resolved-node mode, optional restriction, staleness threshold, and output format. Depth and node
+bounds are required positive integers. `max_relationships` is optional and defaults to
+`max_nodes`; set it explicitly only when the user chooses a larger relationship budget. If the user
+omits the bounds, propose and state the conservative defaults of depth 5, 200 nodes, and 200
+relationships before running any retrieval. Node and relationship bounds may not exceed 9,999;
+the node ceiling also preserves the four-digit `cNNNN` namespace. Reject higher values before any
+retrieval.
 State that the fallback can make one `bug view` request per admitted bug and that every
 server-qualified identity is fetched at most once per run.
 
@@ -24,7 +27,9 @@ are installation-specific, so ask which statuses count as resolved or state the 
 refresh is a new collection; never combine data from separate runs into one analysis.
 
 The collector invokes only released structured read commands: `bug view`, `bug list`, `bug search`,
-and `query run`. It uses deterministic ascending bug-ID scope enumeration and hard depth/node caps.
+and `query run`. It preflights each declared server once with a released, read-only one-row
+`bug list` before resource reads, then uses deterministic ascending bug-ID scope enumeration and
+hard depth, node, and aggregate relationship caps.
 No direct `bzr` command composition is needed outside the collector.
 
 ## Stage 1: collect one bounded snapshot
@@ -46,7 +51,7 @@ invoking `bzr`.
 
 ```json
 {
-  "bounds": {"max_depth": 5, "max_nodes": 200},
+  "bounds": {"max_depth": 5, "max_nodes": 200, "max_relationships": 200},
   "bzr": "bzr",
   "direction": "both",
   "resolved_mode": "include-no-traverse",
@@ -90,12 +95,13 @@ Only deterministic fixture replay may add an exact second-precision UTC
 `--analysis-timestamp YYYY-MM-DDTHH:MM:SSZ`. A live analysis lets the collector capture the current
 instant once.
 
-The output is `bzr-dependency-collection/v1`. Missing Bugzilla codes 100/101 remain visible as
-sanitized `not_found` nodes; code 102 remains visible as a sanitized `inaccessible` node. Unknown
-and boundary nodes remain visible with their identifiers and stable error/boundary classes, never
-raw server messages. Any other API, authentication, TLS, HTTP, connection, transport, malformed
-output, or schema failure stops collection, preserves a valid partial inventory when possible, and
-prints a generic class.
+The output is `bzr-dependency-collection/v1`. A structured `not_found` error for a Bugzilla bug and
+Bugzilla codes 100/101 remain visible as sanitized `not_found` nodes. Code 102 is classified as a
+sanitized `inaccessible` node only after that server's preflight succeeded. A failed preflight or
+an ambiguous code 102 without a successful preflight is command-fatal. Unknown and boundary nodes
+remain visible with stable identifiers and classes, never raw server messages. Any other API,
+authentication, TLS, HTTP, connection, transport, malformed output, or schema failure stops
+collection, preserves a valid partial inventory when possible, and prints a generic class.
 
 ## Stage 2: analyze the captured evidence
 
@@ -161,8 +167,11 @@ python3 "$SKILL_ROOT/scripts/analyze.py" \
   --output "$ANALYSIS"
 ```
 
-Report inaccessible and missing nodes as unknown evidence, not absent bugs. Report cap, depth,
-scope, and interrupted-fetch boundaries. On any request to create, update, resolve, link, comment
+Report inaccessible and missing nodes as unknown evidence, not absent bugs. Report node and
+relationship caps, the lower bound on omitted relationships, depth, scope, and interrupted-fetch
+boundaries. `relationship_cap` means collection stopped staging and discovering once the admitted
+relationship budget was consumed; the omitted count is only a lower bound because unfetched nodes
+may contain more relationships. On any request to create, update, resolve, link, comment
 on, attach to, or otherwise change a Bugzilla resource during this analysis, refuse the request
 rather than mutate Bugzilla. If complete evidence is unavailable, return a partial Markdown report
 with the explicit limitations; never invent nodes, edges, estimates, or dates.

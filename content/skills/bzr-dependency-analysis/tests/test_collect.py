@@ -1,6 +1,7 @@
 """Behavioral contract for the dependency-evidence collector."""
 
 import json
+import importlib.util
 import os
 from pathlib import Path
 import subprocess
@@ -19,14 +20,34 @@ SCHEMA_VERSION = "0.6.1"
 DETAIL_FIELDS = (
     "id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on"
 )
+DEFAULT_RELATIONSHIP_LIMIT = object()
+
+COLLECT_SPEC = importlib.util.spec_from_file_location("dependency_collector", COLLECT)
+if COLLECT_SPEC is None or COLLECT_SPEC.loader is None:
+    raise RuntimeError("unable to load dependency collector")
+COLLECTOR = importlib.util.module_from_spec(COLLECT_SPEC)
+COLLECT_SPEC.loader.exec_module(COLLECTOR)
 
 
-def policy(scopes, *, max_nodes=10, max_depth=3, direction="both", restriction=None):
+def policy(
+    scopes,
+    *,
+    max_nodes=10,
+    max_depth=3,
+    max_relationships=DEFAULT_RELATIONSHIP_LIMIT,
+    direction="both",
+    restriction=None,
+):
     servers = sorted({scope["server"] for scope in scopes} | (
         {restriction["server"]} if restriction else set()
     ))
+    bounds = {"max_depth": max_depth, "max_nodes": max_nodes}
+    if max_relationships is DEFAULT_RELATIONSHIP_LIMIT:
+        bounds["max_relationships"] = 9_999
+    elif max_relationships is not None:
+        bounds["max_relationships"] = max_relationships
     return {
-        "bounds": {"max_depth": max_depth, "max_nodes": max_nodes},
+        "bounds": bounds,
         "bzr": "bzr",
         "direction": direction,
         "resolved_mode": "include-no-traverse",
@@ -62,6 +83,10 @@ def list_argv(server, limit, offset, *scope_args):
     ]
 
 
+def preflight_argv(server):
+    return list_argv(server, 1, 0, "bug", "list")
+
+
 def ok(argv, data):
     return {
         "argv": argv,
@@ -70,10 +95,11 @@ def ok(argv, data):
     }
 
 
-def failed(argv, error_type, *, api_code=None, raw="private server detail"):
+def failed(argv, error_type, *, api_code=None, raw="private server detail", **fields):
     error = {"type": error_type, "message": raw, "exit_code": 4 if error_type == "api" else 5}
     if api_code is not None:
         error["api_code"] = api_code
+    error.update(fields)
     return {
         "argv": argv,
         "exit_code": error["exit_code"],
@@ -100,7 +126,15 @@ def bug(bug_id, *, depends=(), blocks=(), status="NEW", summary=None, extra=None
 class CollectorTestCase(unittest.TestCase):
     maxDiff = None
 
-    def run_collector(self, input_policy, responses, *, timestamp=TIMESTAMP):
+    def run_collector(
+        self,
+        input_policy,
+        responses,
+        *,
+        timestamp=TIMESTAMP,
+        auto_preflight=True,
+        include_preflight_log=False,
+    ):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             policy_path = root / "policy.json"
@@ -111,7 +145,14 @@ class CollectorTestCase(unittest.TestCase):
                 policy_path.write_bytes(input_policy)
             else:
                 policy_path.write_text(json.dumps(input_policy), encoding="utf-8")
-            scenario_path.write_text(json.dumps({"responses": responses}), encoding="utf-8")
+            preflights = []
+            if auto_preflight and isinstance(input_policy, dict):
+                for server in sorted(input_policy.get("servers", [])):
+                    preflights.append(ok(preflight_argv(server), []))
+            scenario_path.write_text(
+                json.dumps({"responses": [*preflights, *responses]}),
+                encoding="utf-8",
+            )
             env = os.environ.copy()
             env["BZR_DEPENDENCY_RUNNER_SCENARIO"] = str(scenario_path)
             env["BZR_DEPENDENCY_RUNNER_LOG"] = str(log_path)
@@ -127,6 +168,12 @@ class CollectorTestCase(unittest.TestCase):
             if log_path.exists():
                 log = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
             self.assert_read_only_commands(log)
+            if not include_preflight_log:
+                preflight_commands = {
+                    tuple(preflight_argv(server))
+                    for server in input_policy.get("servers", [])
+                } if isinstance(input_policy, dict) else set()
+                log = [argv for argv in log if tuple(argv) not in preflight_commands]
             return result, output, log
 
     def assert_read_only_commands(self, log):
@@ -177,6 +224,8 @@ class CollectorTestCase(unittest.TestCase):
         self.assertEqual(document["cap"], {
             "graph_cap_reached": True,
             "omitted_discovered_identities": 0,
+            "omitted_relationships_lower_bound": 0,
+            "relationship_cap_reached": False,
             "scope_truncated": False,
         })
         self.assertEqual(document["limitations"], ["graph-node-cap"])
@@ -286,6 +335,58 @@ class CollectorTestCase(unittest.TestCase):
         self.assertEqual(states[4], ("known", None))
         self.assertEqual(len(log), 4)
         self.assertNotIn(b"private server detail", output)
+
+    def test_credentials_are_preflighted_once_per_server_before_resource_access(self):
+        responses = [
+            ok(view_argv("alpha", 1), bug(1)),
+            ok(view_argv("zeta", 2), bug(2)),
+        ]
+        result, output, log = self.run_collector(
+            policy([bug_scope("zeta", 2), bug_scope("alpha", 1)]),
+            responses,
+            include_preflight_log=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIsNotNone(output)
+        self.assertEqual(log[:2], [preflight_argv("alpha"), preflight_argv("zeta")])
+        self.assertEqual(log.count(preflight_argv("alpha")), 1)
+        self.assertEqual(log.count(preflight_argv("zeta")), 1)
+
+    def test_failed_preflight_and_ambiguous_api_102_are_command_fatal(self):
+        response = failed(
+            preflight_argv("primary"),
+            "api",
+            api_code=102,
+            raw="invalid private credential",
+        )
+        result, output, log = self.run_collector(
+            policy([bug_scope("primary", 1)]),
+            [response],
+            auto_preflight=False,
+            include_preflight_log=True,
+        )
+        self.assertEqual(result.returncode, 1)
+        document = self.parse(output)
+        self.assertEqual(document["limitations"], ["collection-api"])
+        self.assertEqual(document["nodes"], [])
+        self.assertEqual(log, [preflight_argv("primary")])
+        self.assertNotIn(b"invalid private credential", output + result.stderr)
+
+    def test_structured_bug_not_found_is_resource_scoped_after_preflight(self):
+        response = failed(
+            view_argv("primary", 1),
+            "not_found",
+            resource="bug",
+            identifier="1",
+        )
+        result, output, log = self.run_collector(
+            policy([bug_scope("primary", 1)]),
+            [response],
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        document = self.parse(output)
+        self.assertEqual(document["nodes"][0]["error_type"], "not_found")
+        self.assertEqual(log, [view_argv("primary", 1)])
 
     def test_da15b_api_102_is_nonfatal_inaccessible_and_continues(self):
         responses = [
@@ -573,6 +674,117 @@ class CollectorTestCase(unittest.TestCase):
         self.assertIsNone(output)
         self.assertEqual(log, [])
         self.assertIn(b"bounds.max_nodes must be at most 9999", result.stderr)
+
+    def test_max_relationships_defaults_to_max_nodes_and_crosses_into_analyzer(self):
+        response = ok(view_argv("primary", 1), bug(1))
+        result, output, log = self.run_collector(
+            policy([bug_scope("primary", 1)], max_nodes=7, max_relationships=None),
+            [response],
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        collection = self.parse(output)
+        self.assertEqual(collection["bounds"]["max_relationships"], 7)
+        self.assertEqual(log, [view_argv("primary", 1)])
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            collection_path = root / "collection.json"
+            analysis_path = root / "analysis.json"
+            collection_path.write_bytes(output)
+            analysis_result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ANALYZE),
+                    "--input",
+                    str(collection_path),
+                    "--output",
+                    str(analysis_path),
+                ],
+                capture_output=True,
+                check=False,
+            )
+            analysis = json.loads(analysis_path.read_bytes()) if analysis_path.exists() else None
+        self.assertEqual(analysis_result.returncode, 0, analysis_result.stderr)
+        self.assertEqual(analysis["bounds"]["max_relationships"], 7)
+
+    def test_max_relationships_accepts_9999_and_rejects_other_invalid_values(self):
+        accepted = policy(
+            [bug_scope("primary", 1)],
+            max_nodes=1,
+            max_relationships=9_999,
+        )
+        result, output, _ = self.run_collector(
+            accepted,
+            [ok(view_argv("primary", 1), bug(1))],
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.parse(output)["bounds"]["max_relationships"], 9_999)
+
+        for invalid in (0, 10_000):
+            with self.subTest(invalid=invalid):
+                rejected = policy(
+                    [bug_scope("primary", 1)],
+                    max_relationships=invalid,
+                )
+                result, output, log = self.run_collector(rejected, [])
+                self.assertEqual(result.returncode, 2)
+                self.assertIsNone(output)
+                self.assertEqual(log, [])
+
+    def test_relationship_cap_bounds_wide_node_retained_and_discovery_state(self):
+        response = ok(
+            view_argv("primary", 1),
+            bug(1, depends=range(2, 50_002)),
+        )
+        result, output, log = self.run_collector(
+            policy(
+                [bug_scope("primary", 1)],
+                max_nodes=9_999,
+                max_relationships=3,
+            ),
+            [response],
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        document = self.parse(output)
+        self.assertEqual([node["id"] for node in document["nodes"]], [1, 2, 3, 4])
+        self.assertEqual(len(document["observations"]), 3)
+        self.assertEqual(document["limitations"], ["relationship_cap"])
+        self.assertEqual(document["cap"]["relationship_cap_reached"], True)
+        self.assertEqual(
+            document["cap"]["omitted_relationships_lower_bound"],
+            49_997,
+        )
+        self.assertEqual(log, [view_argv("primary", 1)])
+
+    def test_relationship_cap_does_not_inspect_wide_unprocessed_suffix(self):
+        class GuardedRelationships(list):
+            def __len__(self):
+                return 50_000
+
+            def __iter__(self):
+                yield from (2, 3, 4)
+                raise AssertionError("collector inspected relationship suffix")
+
+            def __getitem__(self, index):
+                if index >= 3:
+                    raise AssertionError("collector inspected relationship suffix")
+                return (2, 3, 4)[index]
+
+        input_policy = COLLECTOR.validate_policy(
+            policy(
+                [bug_scope("primary", 1)],
+                max_nodes=9_999,
+                max_relationships=3,
+            )
+        )
+        collector = COLLECTOR.Collector(input_policy, TIMESTAMP, object())
+        detail = bug(1)
+        detail["depends_on"] = GuardedRelationships()
+        collector.stage_detail("primary", detail)
+        self.assertEqual(collector.details[("primary", 1)]["depends_on"], [2, 3, 4])
+        self.assertEqual(len(collector.staged), 3)
+        self.assertEqual(collector.omitted_relationships_lower_bound, 49_997)
+        self.assertTrue(collector.relationship_cap_reached)
 
     def test_duplicate_policy_keys_are_rejected_before_runner(self):
         serialized = json.dumps(policy([bug_scope("primary", 1)]))

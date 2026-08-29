@@ -16,6 +16,7 @@ from urllib.parse import parse_qsl, urlparse
 SCHEMA = "bzr-dependency-collection/v1"
 BZR_SCHEMA_VERSION = "0.6.1"
 MAX_NODES = 9_999
+MAX_RELATIONSHIPS = 9_999
 TIMESTAMP_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\Z")
 DETAIL_FIELDS = [
     "id",
@@ -246,14 +247,25 @@ def validate_policy(value):
         },
         "policy",
     )
-    exact_keys(value["bounds"], {"max_depth", "max_nodes"}, "bounds")
+    if not isinstance(value["bounds"], dict) or not set(value["bounds"]).issubset(
+        {"max_depth", "max_nodes", "max_relationships"}
+    ) or not {"max_depth", "max_nodes"}.issubset(value["bounds"]):
+        raise PolicyError("bounds has invalid keys")
     max_nodes = positive_integer(value["bounds"]["max_nodes"], "bounds.max_nodes")
     if max_nodes > MAX_NODES:
         raise PolicyError(f"bounds.max_nodes must be at most {MAX_NODES}")
     bounds = {
         "max_depth": positive_integer(value["bounds"]["max_depth"], "bounds.max_depth"),
         "max_nodes": max_nodes,
+        "max_relationships": positive_integer(
+            value["bounds"].get("max_relationships", max_nodes),
+            "bounds.max_relationships",
+        ),
     }
+    if bounds["max_relationships"] > MAX_RELATIONSHIPS:
+        raise PolicyError(
+            f"bounds.max_relationships must be at most {MAX_RELATIONSHIPS}"
+        )
     if not isinstance(value["servers"], list) or not value["servers"]:
         raise PolicyError("servers must be a non-empty array")
     servers = [nonempty_string(server, "servers") for server in value["servers"]]
@@ -303,8 +315,16 @@ def analysis_timestamp(value):
 class CommandRunner:
     def __init__(self, executable):
         self.executable = executable
+        self.preflighted_servers = set()
 
-    def run_json(self, argv):
+    def preflight(self, server):
+        data, resource_error = self.run_json(preflight_argv(server))
+        if resource_error is not None:
+            raise FatalCollection("collection-unclassified", resource_error)
+        validate_id_page(data)
+        self.preflighted_servers.add(server)
+
+    def run_json(self, argv, resource_server=None):
         try:
             result = subprocess.run(
                 [self.executable, *argv],
@@ -325,9 +345,17 @@ class CommandRunner:
             raise FatalCollection("collection-malformed-output", "malformed-output")
         validate_envelope_version(envelope)
         error = validate_error_envelope(envelope["error"], result.returncode)
-        if error["type"] == "api" and error.get("api_code") in {100, 101, 102}:
-            stable_type = "inaccessible" if error["api_code"] == 102 else "not_found"
-            return None, stable_type
+        if resource_server is not None:
+            if error["type"] == "not_found" and error.get("resource") == "bug":
+                return None, "not_found"
+            if error["type"] == "api" and error.get("api_code") in {100, 101}:
+                return None, "not_found"
+            if (
+                error["type"] == "api"
+                and error.get("api_code") == 102
+                and resource_server in self.preflighted_servers
+            ):
+                return None, "inaccessible"
         error_type = error["type"]
         limitation = FATAL_LIMITATIONS.get(error_type, "collection-unclassified")
         raise FatalCollection(limitation, error_type)
@@ -369,6 +397,7 @@ class Collector:
         self.timestamp = timestamp
         self.runner = runner
         self.max_nodes = policy["bounds"]["max_nodes"]
+        self.max_relationships = policy["bounds"]["max_relationships"]
         self.nodes = {}
         self.details = {}
         self.fetched = set()
@@ -378,11 +407,16 @@ class Collector:
         self.limitations = set()
         self.scope_truncated = False
         self.graph_cap_reached = False
+        self.relationship_cap_reached = False
+        self.relationships_processed = 0
+        self.omitted_relationships_lower_bound = 0
         self.membership = None
         self.provenance = self.build_provenance()
 
     def collect(self):
         try:
+            for server in self.policy["servers"]:
+                self.runner.preflight(server)
             if not self.collect_restriction():
                 return self.document(), 0
             candidates = self.enumerate_scopes()
@@ -479,7 +513,8 @@ class Collector:
         self.nodes[alias_key] = pending_node(server, None, alias, 0)
         self.roots.add((server, None, alias))
         data, resource_error = self.runner.run_json(
-            view_argv(server, alias, self.restriction_field())
+            view_argv(server, alias, self.restriction_field()),
+            resource_server=server,
         )
         if resource_error is not None:
             self.nodes[alias_key] = unknown_node(server, None, alias, 0, resource_error)
@@ -508,12 +543,25 @@ class Collector:
         )
         depth = 0
         while frontier:
-            for key in frontier:
+            unfinished_frontier = False
+            for index, key in enumerate(frontier):
                 if self.nodes[key]["boundary_reason"] == "pending_fetch" and key not in self.fetched:
                     self.fetch_numeric(key)
+                if self.relationship_cap_reached:
+                    unfinished_frontier = index + 1 < len(frontier)
+                    break
+                if self.relationships_processed == self.max_relationships and index + 1 < len(frontier):
+                    self.record_relationship_cap()
+                    unfinished_frontier = True
+                    break
             candidates = self.discovery_candidates(frontier)
             next_frontier = self.admit_discoveries(candidates, depth + 1)
-            if self.graph_cap_reached:
+            if (
+                self.relationships_processed == self.max_relationships
+                and (unfinished_frontier or next_frontier)
+            ):
+                self.record_relationship_cap()
+            if self.graph_cap_reached or self.relationship_cap_reached:
                 break
             frontier = next_frontier
             depth += 1
@@ -521,7 +569,8 @@ class Collector:
     def fetch_numeric(self, key):
         server, bug_id = key
         data, resource_error = self.runner.run_json(
-            view_argv(server, str(bug_id), self.restriction_field())
+            view_argv(server, str(bug_id), self.restriction_field()),
+            resource_server=server,
         )
         if resource_error is not None:
             self.nodes[key] = unknown_node(server, bug_id, str(bug_id), self.nodes[key]["depth"], resource_error)
@@ -572,10 +621,32 @@ class Collector:
 
     def stage_detail(self, server, detail):
         key = (server, detail["id"])
-        self.details[key] = {"blocks": detail["blocks"], "depends_on": detail["depends_on"]}
+        retained = {"blocks": [], "depends_on": []}
         for field in ("blocks", "depends_on"):
-            for target in detail[field]:
+            relationships = detail[field]
+            index = 0
+            while (
+                index < len(relationships)
+                and self.relationships_processed < self.max_relationships
+            ):
+                target = relationships[index]
+                if type(target) is not int or target <= 0:
+                    raise FatalCollection("collection-malformed-output", "malformed-output")
+                self.relationships_processed += 1
+                retained[field].append(target)
                 self.staged.add((field, server, detail["id"], server, target))
+                index += 1
+            if index < len(relationships):
+                self.omitted_relationships_lower_bound += len(relationships) - index
+                self.record_relationship_cap()
+            if self.relationship_cap_reached:
+                later_fields = ("depends_on",) if field == "blocks" else ()
+                for later_field in later_fields:
+                    self.omitted_relationships_lower_bound += len(detail[later_field])
+                break
+        self.details[key] = {
+            field: sorted(set(values)) for field, values in retained.items()
+        }
 
     def apply_field_restriction(self, key, detail):
         restriction = self.policy["restriction"]
@@ -605,6 +676,10 @@ class Collector:
     def record_graph_cap(self):
         self.graph_cap_reached = True
         self.limitations.add("graph-node-cap")
+
+    def record_relationship_cap(self):
+        self.relationship_cap_reached = True
+        self.limitations.add("relationship_cap")
 
     def interrupt_pending_fetches(self):
         for key, node in list(self.nodes.items()):
@@ -643,6 +718,8 @@ class Collector:
             "cap": {
                 "graph_cap_reached": self.graph_cap_reached,
                 "omitted_discovered_identities": len(self.rejected),
+                "omitted_relationships_lower_bound": self.omitted_relationships_lower_bound,
+                "relationship_cap_reached": self.relationship_cap_reached,
                 "scope_truncated": self.scope_truncated,
             },
             "limitations": sorted(self.limitations),
@@ -739,9 +816,8 @@ def validate_bug(value, extra_field):
         if value[field] is not None and not isinstance(value[field], str):
             raise FatalCollection("collection-malformed-output", "malformed-output")
     for field in ("blocks", "depends_on"):
-        if not isinstance(value[field], list) or any(type(item) is not int or item <= 0 for item in value[field]):
+        if not isinstance(value[field], list):
             raise FatalCollection("collection-malformed-output", "malformed-output")
-        value[field] = sorted(set(value[field]))
     if extra_field is not None and not isinstance(value[extra_field], str):
         raise FatalCollection("collection-malformed-output", "malformed-output")
     return value
@@ -771,6 +847,26 @@ def view_argv(server, requested, extra_field):
         str(requested),
         "--fields",
         ",".join(fields),
+    ]
+
+
+def preflight_argv(server):
+    return [
+        "--server",
+        server,
+        "--json",
+        "bug",
+        "list",
+        "--limit",
+        "1",
+        "--offset",
+        "0",
+        "--fields",
+        "id",
+        "--sort",
+        "bug_id",
+        "--order",
+        "asc",
     ]
 
 

@@ -360,6 +360,20 @@ class AnalyzerTestCase(unittest.TestCase):
         omissions_without_graph_cap["cap"]["omitted_discovered_identities"] = 1
         mutations.append(omissions_without_graph_cap)
 
+        relationship_limitation_without_flag = copy.deepcopy(scope_partial)
+        relationship_limitation_without_flag["limitations"] = ["relationship_cap"]
+        mutations.append(relationship_limitation_without_flag)
+
+        relationship_flag_without_limitation = copy.deepcopy(scope_partial)
+        relationship_flag_without_limitation["cap"]["relationship_cap_reached"] = True
+        mutations.append(relationship_flag_without_limitation)
+
+        relationship_omissions_without_cap = copy.deepcopy(scope_partial)
+        relationship_omissions_without_cap["cap"][
+            "omitted_relationships_lower_bound"
+        ] = 1
+        mutations.append(relationship_omissions_without_cap)
+
         restriction_limitation_without_flag = copy.deepcopy(scope_partial)
         restriction_limitation_without_flag["cap"]["scope_truncated"] = False
         mutations.append(restriction_limitation_without_flag)
@@ -422,6 +436,20 @@ class AnalyzerTestCase(unittest.TestCase):
         with self.assertRaisesRegex(
             ANALYZER.AnalysisInputError,
             "bounds.max_nodes must be at most 9999",
+        ):
+            ANALYZER.analyze(collection)
+
+    def test_max_relationships_accepts_9999_and_rejects_10000(self):
+        collection = self.load_collection("branch")
+        collection["bounds"]["max_relationships"] = 9_999
+        self.assertEqual(
+            ANALYZER.analyze(collection)["bounds"]["max_relationships"],
+            9_999,
+        )
+        collection["bounds"]["max_relationships"] = 10_000
+        with self.assertRaisesRegex(
+            ANALYZER.AnalysisInputError,
+            "bounds.max_relationships must be at most 9999",
         ):
             ANALYZER.analyze(collection)
 
