@@ -4,7 +4,7 @@ Generated: 2026-08-28T12:00:00Z
 
 ## Scope and rules
 
-- **Fact:** 1 visible row collected in a rolling snapshot.
+- **Fact:** 2 visible rows collected in a rolling snapshot.
 - **Assumption:** complete statuses are RESOLVED and CLOSED; P1 is blocking; stale after 14 days.
 - **Fact:** authorization may hide rows.
 
@@ -27,7 +27,7 @@ Generated: 2026-08-28T12:00:00Z
 ## Source commands
 
 ```text
-bzr bug list --target-milestone 9.0 --limit 100 --paginate --json --sort bug_id --order asc --fields id,summary,status,priority,last_change_time
+bzr bug list --target-milestone 9.0 --limit 100 --paginate --json --sort bug_id --order asc --fields id,summary,status,priority,last_change_time,assigned_to
 ```
 
 ## Evidence appendix

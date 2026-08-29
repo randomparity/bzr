@@ -53,6 +53,18 @@ for projection in \
   grep -Fq -- "$projection" "$SKILL"
 done
 grep -Fq -- '--limit 100 --paginate --json --sort bug_id --order asc' "$SKILL"
+grep -Fq -- 'Only non-complete bugs contribute to blocker, stale, and ownership checks.' "$SKILL"
+
+# RR-COMPLETE: a complete row may match every selected predicate, but must not
+# appear in the blocker, stale, or ownership evidence.
+jq -e '
+  [.bugs[] |
+   select(.status == "RESOLVED" and .priority == "P1" and
+          .last_change_time < "2026-08-14T12:00:00Z" and
+          .assigned_to == null) |
+   .id] == [102] and
+  (.expected_report | contains("Bug #102") | not)
+' "$BUGS" >/dev/null
 
 jq -jr '.expected_report' "$BUGS" >"$WORK/report.md"
 cmp "$WORK/report.md" "$REPORT"
