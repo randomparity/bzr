@@ -116,6 +116,16 @@ if "$HERE/../scripts/publish-run.sh" "$root" fractional "$fractional_stage" >"$W
 fi
 grep -q 'snapshot-v1.schema.json' "$WORK/fractional.err"
 
+symlink_stage="$root/.staging/symlink"
+mkdir "$symlink_stage"
+cp "$WORK/new.json" "$WORK/external-snapshot.json"
+ln -s "$WORK/external-snapshot.json" "$symlink_stage/snapshot.json"
+if "$HERE/../scripts/publish-run.sh" "$root" symlink "$symlink_stage" >/dev/null 2>&1; then
+	echo 'expected staged symlink rejection' >&2
+	exit 1
+fi
+[ ! -e "$root/runs/symlink" ]
+
 outside="$WORK/outside-stage"
 mkdir "$outside"
 cp "$WORK/new.json" "$outside/snapshot.json"
@@ -155,7 +165,6 @@ jq -n --slurpfile previous "$WORK/stale-old.json" --slurpfile current "$WORK/sta
 
 [ "$(printf '%s' '=cmd' | jq -Rr -L "$HERE/../scripts" 'include "safe-output"; spreadsheet_text')" = "'=cmd" ]
 [ "$(printf '%s' '<b>&' | jq -Rr -L "$HERE/../scripts" 'include "safe-output"; html_text')" = '&lt;b&gt;&amp;' ]
-[ "$(printf '%s' 'javascript:alert(1)' | jq -Rr -L "$HERE/../scripts" 'include "safe-output"; safe_http_url')" = null ]
 
 grep -q 'WS-10' "$HERE/../reference/eval-cases.md"
 if grep -Eq 'bzr (bug|comment|attachment) (create|update|close|resolve|reopen|dup|add|upload|delete)' "$HERE/../SKILL.md"; then

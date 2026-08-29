@@ -26,6 +26,10 @@ staging=$(CDPATH='' cd -- "$staging" && pwd -P)
 	echo "publish-run: snapshot.json not found" >&2
 	exit 2
 }
+if find "$staging" -type l -print -quit | grep -q .; then
+	echo "publish-run: staging directory must not contain symlinks" >&2
+	exit 2
+fi
 if ! jq -e '
   .fields as $allowed |
   (keys - ["bugs", "bzr_schema_version", "created_at", "fields", "format_version",
