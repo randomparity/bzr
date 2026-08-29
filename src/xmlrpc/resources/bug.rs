@@ -43,6 +43,9 @@ impl XmlRpcClient {
         if let Some(limit) = params.limit {
             rpc_params.insert("limit".into(), Value::Int(i64::from(limit)));
         }
+        if let Some(offset) = params.offset {
+            rpc_params.insert("offset".into(), Value::Int(i64::from(offset)));
+        }
         add_field_lists(&mut rpc_params, params);
 
         let result = self.call("Bug.search", rpc_params).await?;

@@ -624,13 +624,20 @@ async fn paginate_with_progress_streams_page_and_done_on_stderr() {
     // clean JSON document. Guards execution.rs's `ctx.progress()` wiring, which
     // functional tier 138a exercises only via `bug list` (a different caller).
     let (_lock, mock, _tmp) = setup_test_env().await;
-    // Page size 2; first page returns 1 bug → short page → one request, then done.
+    // Page size 2; a short page is followed by the empty terminal request.
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
+        .and(query_param("offset", "0"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "bugs": [{"id": 7, "summary": "s", "status": "NEW",
                       "product": "P", "component": "General"}]
         })))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("offset", "1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
         .mount(&mock)
         .await;
 
@@ -679,12 +686,19 @@ async fn from_url_offset_with_paginate_sends_single_offset_per_page() {
     // `--from-url …&offset=10 --paginate` must not leave the URL's offset in
     // raw_params: every page request carries exactly one (loop-managed) offset.
     let (_lock, mock, _tmp) = setup_test_env().await;
-    // Page size 2: a short first page (1 bug) stops the loop after one request.
+    // Page size 2: a short first page is followed by an empty request.
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
+        .and(query_param("offset", "10"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "bugs": [{"id": 1}]
         })))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("offset", "11"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
         .mount(&mock)
         .await;
 
