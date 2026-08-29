@@ -25,7 +25,9 @@ installed skill directory so a later installation can replace the managed payloa
 
 ## Collect, analyze, and render
 
-Choose positive depth and node bounds before retrieval. If no bounds are supplied, the skill
+Choose positive depth and node bounds before retrieval. The maximum node bound is 9,999 because
+component IDs use the four-digit `cNNNN` namespace. The collector rejects a higher bound,
+duplicate JSON keys, and invalid UTF-8 before invoking `bzr`. If no bounds are supplied, the skill
 proposes depth 5 and 200 nodes. A minimal policy for one configured server and bug-ID root is:
 
 ```json

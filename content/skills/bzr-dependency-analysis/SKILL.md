@@ -14,8 +14,10 @@ snapshot, and renders safe local text artifacts. It does not change Bugzilla.
 Ask for the server and scope, direction (`depends_on`, `blocks`, or `both`), resolved statuses,
 resolved-node mode, optional restriction, staleness threshold, and output format. Both bounds are
 required positive integers. If the user omits them, propose and state the conservative defaults of
-depth 5 and 200 nodes before running any retrieval. State that the fallback can make one `bug view`
-request per admitted bug and that every server-qualified identity is fetched at most once per run.
+depth 5 and 200 nodes before running any retrieval. The maximum node bound is 9,999 because
+component IDs use the four-digit `cNNNN` namespace. Reject a higher value before any retrieval.
+State that the fallback can make one `bug view` request per admitted bug and that every
+server-qualified identity is fetched at most once per run.
 
 Use `include-no-traverse` unless the user chooses to traverse resolved nodes. Bugzilla status names
 are installation-specific, so ask which statuses count as resolved or state the assumption. A
@@ -38,7 +40,9 @@ REPORT=/path/to/dependency-report.md
 DIAGRAM=/path/to/dependency-graph.mmd
 ```
 
-Create `$POLICY` with the exact top-level shape below. Never put literal credentials in it.
+Create `$POLICY` with the exact top-level shape below. Never put literal credentials in it. The
+policy must be duplicate-free, valid UTF-8 JSON; the collector rejects malformed input before
+invoking `bzr`.
 
 ```json
 {

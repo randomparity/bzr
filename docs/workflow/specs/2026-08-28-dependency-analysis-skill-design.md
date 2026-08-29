@@ -42,14 +42,17 @@ Before retrieval, the skill resolves:
 - roots from bug IDs, one alias per server, a named saved query, a Custom Search URL, a target
   milestone, or a version;
 - direction: `depends_on`, `blocks`, or both;
-- maximum depth and maximum distinct nodes, both required and positive;
+- maximum depth and maximum distinct nodes, both required and positive; the
+  maximum node bound is 9,999 so every component fits the four-digit `cNNNN` namespace;
 - whether resolved nodes are included and traversed or included but not traversed;
 - optional product, milestone, or query-membership restriction;
 - stale threshold, analysis timestamp, and requested output formats.
 
 If the user omits bounds, the skill proposes conservative defaults of depth 5 and 200 nodes
-and states them before fetching. It never starts an unbounded walk. Refresh is an explicit
-new collection run; within one run a server-qualified bug identity is fetched at most once.
+and states them before fetching. The collector rejects a node bound above 9,999, duplicate policy
+keys, and invalid UTF-8 before invoking a runner. It never starts an unbounded walk. Refresh is an
+explicit new collection run; within one run a server-qualified bug identity is fetched at most
+once.
 
 ### Collection
 
@@ -300,7 +303,8 @@ SCC minima/members, component numbering, and every tie break use this key; colle
 does not affect analysis identity. Warnings are stable objects `{code, nodes}` sorted by code then node identity; missing/invalid
 timestamps use `stale-timestamp-unknown`. Canonical edges sort by predecessor then successor and
 contain sorted unique observation names. Strongly connected components sort by their smallest node
-identity and receive IDs `c0001`, `c0002`, and so on; component node lists use node order. Layers
+identity and receive IDs `c0001`, `c0002`, and so on through `c9999`; component node lists use node
+order. Layers
 use condensation-graph topological order with component-ID tie breaking. Longest-chain ties choose
 the lexicographically smallest component-ID path. Cyclic components set `cyclic: true`; their
 internal ordering is not presented as executable order. Partial collection input is rejected unless
@@ -386,7 +390,8 @@ The bundled `scripts/render.py` deterministically renders Markdown and Mermaid f
 analysis inventory. Node IDs use server identity plus numeric ID, never summaries. Markdown renders
 untrusted values only as escaped plain text, disables raw HTML and image/autolink construction, and
 chooses a fence longer than any backtick run in fenced data. Mermaid uses quoted grammar strings
-with backslash, quote, newline, directive, and delimiter encoding. Renderer tests inspect complete
+with Mermaid-safe `#quot;` entities for quotes and numeric entities for backslashes, controls,
+directives, and delimiters. Renderer tests inspect complete
 Markdown fences and Mermaid tokens and cover raw HTML, images, autolinks, nested brackets,
 `</script>`, triple backticks, directives, quotes, backslashes, and newlines. DOT, HTML, CSV, XLSX,
 and PDF are not v1 contracts; the skill may suggest external conversion only after the user chooses
@@ -491,8 +496,8 @@ secrets, validate Bugzilla URLs, and emit its documented JSON envelopes.
 
 - Commands use argument arrays or shell-safe quoting; Bugzilla text is data and is never evaluated
   as shell, template source, HTML, or Mermaid syntax.
-- Positive numeric bounds are checked before collection; queue membership enforces fetch-once and
-  both hard caps.
+- Positive numeric bounds, including the 9,999-node ceiling, duplicate-free keys, and valid UTF-8
+  are checked before collection; queue membership enforces fetch-once and both hard caps.
 - Server-qualified identities prevent cross-server collisions.
 - Only documented read commands are allowlisted; the skill refuses mutation requests during an
   analysis.

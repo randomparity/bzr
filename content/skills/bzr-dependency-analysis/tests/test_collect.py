@@ -107,7 +107,10 @@ class CollectorTestCase(unittest.TestCase):
             scenario_path = root / "scenario.json"
             output_path = root / "nested" / "collection.json"
             log_path = root / "commands.ndjson"
-            policy_path.write_text(json.dumps(input_policy), encoding="utf-8")
+            if isinstance(input_policy, bytes):
+                policy_path.write_bytes(input_policy)
+            else:
+                policy_path.write_text(json.dumps(input_policy), encoding="utf-8")
             scenario_path.write_text(json.dumps({"responses": responses}), encoding="utf-8")
             env = os.environ.copy()
             env["BZR_DEPENDENCY_RUNNER_SCENARIO"] = str(scenario_path)
@@ -500,6 +503,77 @@ class CollectorTestCase(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIsNone(output)
         self.assertEqual(log, [])
+
+    def test_max_nodes_accepts_9999_and_crosses_into_analyzer(self):
+        input_policy = policy([bug_scope("primary", 1)], max_nodes=9_999)
+        response = ok(view_argv("primary", 1), bug(1))
+        result, output, log = self.run_collector(input_policy, [response])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        collection = self.parse(output)
+        self.assertEqual(collection["bounds"]["max_nodes"], 9_999)
+        self.assertEqual(log, [view_argv("primary", 1)])
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            collection_path = root / "collection.json"
+            analysis_path = root / "analysis.json"
+            collection_path.write_bytes(output)
+            analysis_result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ANALYZE),
+                    "--input",
+                    str(collection_path),
+                    "--output",
+                    str(analysis_path),
+                ],
+                capture_output=True,
+                check=False,
+            )
+        self.assertEqual(analysis_result.returncode, 0, analysis_result.stderr)
+
+    def test_max_nodes_rejects_10000_before_runner(self):
+        input_policy = policy([bug_scope("primary", 1)], max_nodes=10_000)
+        result, output, log = self.run_collector(input_policy, [])
+        self.assertEqual(result.returncode, 2)
+        self.assertIsNone(output)
+        self.assertEqual(log, [])
+        self.assertIn(b"bounds.max_nodes must be at most 9999", result.stderr)
+
+    def test_duplicate_policy_keys_are_rejected_before_runner(self):
+        serialized = json.dumps(policy([bug_scope("primary", 1)]))
+        duplicate_cases = [
+            serialized.replace(
+                '"max_nodes": 10',
+                '"max_nodes": 10, "max_nodes": 9',
+                1,
+            ),
+            serialized.replace(
+                '"direction": "both"',
+                '"direction": "both", "direction": "blocks"',
+                1,
+            ),
+        ]
+        for duplicate in duplicate_cases:
+            with self.subTest(policy=duplicate):
+                result, output, log = self.run_collector(
+                    duplicate.encode("utf-8"),
+                    [],
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertIsNone(output)
+                self.assertEqual(log, [])
+                self.assertIn(b"duplicate JSON key", result.stderr)
+
+    def test_invalid_utf8_policy_is_rejected_cleanly_before_runner(self):
+        result, output, log = self.run_collector(b"\xff", [])
+        self.assertEqual(result.returncode, 2)
+        self.assertIsNone(output)
+        self.assertEqual(log, [])
+        self.assertEqual(
+            result.stderr,
+            b"policy error: policy must be readable valid JSON\n",
+        )
 
 
 if __name__ == "__main__":
