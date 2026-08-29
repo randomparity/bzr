@@ -67,6 +67,9 @@ case " $* " in
   omitted)
     printf '%s\n' '{"data":[]}'
     ;;
+  link-only)
+    printf '%s\n' '{"data":[{"id":7,"relation":"depends_on","status":"NEW"}]}'
+    ;;
   *)
     printf 'unexpected FAKE_LINK_MODE: %s\n' "$FAKE_LINK_MODE" >&2
     exit 1
@@ -101,6 +104,9 @@ case " $* " in
     ;;
   missing-link-target)
     printf '%s\n' '{"data":[{"id":1,"summary":"visible work","status":"NEW","priority":"Normal","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"ordinary","depends_on":[]},{"id":2,"summary":"complete","status":"RESOLVED","priority":"Normal","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"ordinary","depends_on":[]},{"id":3,"summary":"release root","status":"NEW","priority":"Highest","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"release-blocker","depends_on":[7]}]}'
+    ;;
+  link-only-target)
+    printf '%s\n' '{"data":[{"id":1,"summary":"visible work","status":"NEW","priority":"Normal","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"ordinary","depends_on":[]},{"id":2,"summary":"complete","status":"RESOLVED","priority":"Normal","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"ordinary","depends_on":[]},{"id":3,"summary":"release root","status":"NEW","priority":"Highest","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"release-blocker","depends_on":[]}]}'
     ;;
   *)
     printf 'unexpected FAKE_PRODUCT_MODE: %s\n' "$FAKE_PRODUCT_MODE" >&2
@@ -266,7 +272,7 @@ assert_report_contains "$work/unknown-status-report.md" \
 assert_report_contains "$work/unknown-status-report.md" \
   '3/3 visible bugs have unknown stale evidence. Bounded sample: #1, #2, #3. Source: `product-scope`.'
 assert_report_contains "$work/unknown-status-report.md" \
-  '1/1 visible outgoing dependencies have unknown status. Bounded sample: #1. Sources: `product-scope`, `dependency-links`.'
+  '1/1 visible outgoing dependencies have unknown or conflicting evidence. Bounded sample: #1. Sources: `product-scope`, `dependency-links`.'
 assert_report_contains "$work/unknown-status-report.md" \
   'Unknown blocker IDs: #1, #2, #3. Unknown stale IDs: #1, #2, #3. Unknown dependency-risk IDs: #1.'
 
@@ -276,7 +282,7 @@ assert_report_contains "$work/unknown-time-report.md" \
 assert_report_contains "$work/unknown-time-report.md" \
   '3/3 visible bugs have unknown stale evidence. Bounded sample: #1, #2, #3. Source: `product-scope`.'
 assert_report_contains "$work/unknown-time-report.md" \
-  '1/1 visible outgoing dependencies have unknown status. Bounded sample: #1. Sources: `product-scope`, `dependency-links`.'
+  '1/1 visible outgoing dependencies have unknown or conflicting evidence. Bounded sample: #1. Sources: `product-scope`, `dependency-links`.'
 assert_report_contains "$work/unknown-time-report.md" \
   'Unknown stale IDs: #1, #2, #3. Unknown dependency-risk IDs: #1.'
 
@@ -311,11 +317,23 @@ run_helper_case missing-link-target missing-link-target omitted
 assert_report_contains "$work/missing-link-target-report.md" \
   '0/1 visible outgoing dependencies are known unresolved. Bounded sample: (none). Sources: `product-scope`, `dependency-links`.'
 assert_report_contains "$work/missing-link-target-report.md" \
-  '1/1 visible outgoing dependencies have unknown status. Bounded sample: #7. Sources: `product-scope`, `dependency-links`.'
+  '1/1 visible outgoing dependencies have unknown or conflicting evidence. Bounded sample: #7. Sources: `product-scope`, `dependency-links`.'
 assert_report_contains "$work/missing-link-target-report.md" \
   'Unknown dependency-risk IDs: #7.'
 assert_report_contains "$work/missing-link-target-report.md" \
   'Resolve the unknown selected evidence before relying on the affected checks.'
+
+run_helper_case link-only-target link-only-target link-only
+assert_report_contains "$work/link-only-target-report.md" \
+  '0/1 visible outgoing dependencies are known unresolved. Bounded sample: (none). Sources: `product-scope`, `dependency-links`.'
+assert_report_contains "$work/link-only-target-report.md" \
+  '1/1 visible outgoing dependencies have unknown or conflicting evidence. Bounded sample: #7. Sources: `product-scope`, `dependency-links`.'
+assert_report_contains "$work/link-only-target-report.md" \
+  'Unknown dependency-risk IDs: #7.'
+assert_report_contains "$work/link-only-target-report.md" \
+  'Resolve the unknown selected evidence before relying on the affected checks.'
+assert_report_contains "$work/link-only-target-report.md" \
+  'Dependency IDs are only classified when `product-scope` and `dependency-links` agree on the edge and the links record has a valid status.'
 
 cat >"$work/fake-release-helper" <<'EOF'
 #!/usr/bin/env bash

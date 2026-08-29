@@ -151,8 +151,10 @@ jq -cer --arg cutoff "$stale_cutoff" --argjson root "$root" \
     elif complete then false
     else (timestamp_epoch | type) != "number" end;
   def dependency_status_known: (.status? | nonempty_string);
+  def dependency_evidence_known:
+    .raw_present and .link_present and dependency_status_known;
   def dependency_unresolved:
-    dependency_status_known and .status != "RESOLVED" and .status != "CLOSED";
+    dependency_evidence_known and .status != "RESOLVED" and .status != "CLOSED";
   def format_ids:
     if length == 0 then "(none)" else map("#" + tostring) | join(", ") end;
   ($cutoff | fromdateiso8601) as $cutoff_epoch |
@@ -160,22 +162,30 @@ jq -cer --arg cutoff "$stale_cutoff" --argjson root "$root" \
   ($bugs | map(select(.id == $root)) | .[0].depends_on? // [] |
     if type == "array" then
       map(select(type == "number" and . > 0 and floor == .)) | unique | sort
-    else [] end) as $dependency_ids |
+    else [] end) as $raw_dependency_ids |
   ($links[0].data? // [] |
     if type == "array" then
-      map(select(type == "object" and .relation? == "depends_on"))
+      map(select(
+        type == "object" and .relation? == "depends_on" and
+        (.id? | type == "number" and . > 0 and floor == .)
+      ))
     else [] end) as $link_dependencies |
+  ($link_dependencies | map(.id) | unique | sort) as $link_dependency_ids |
+  (($raw_dependency_ids + $link_dependency_ids) | unique | sort) as $dependency_ids |
   ($dependency_ids | map(
     . as $dependency_id |
-    ($link_dependencies | map(select(.id? == $dependency_id)) | .[0]) //
-      {id: $dependency_id}
+    (($link_dependencies | map(select(.id == $dependency_id)) | .[0]) //
+      {id: $dependency_id}) + {
+        raw_present: (($raw_dependency_ids | index($dependency_id)) != null),
+        link_present: (($link_dependency_ids | index($dependency_id)) != null)
+      }
   )) as $dependencies |
   ($bugs | map(select(blocker_match)) | map(.id)) as $blockers |
   ($bugs | map(select(blocker_unknown)) | map(.id)) as $unknown_blockers |
   ($bugs | map(select(stale_match($cutoff_epoch))) | map(.id)) as $stale |
   ($bugs | map(select(stale_unknown)) | map(.id)) as $unknown_stale |
   ($dependencies | map(select(dependency_unresolved)) | map(.id)) as $unresolved |
-  ($dependencies | map(select(dependency_status_known | not)) | map(.id)) as $unknown_dependencies |
+  ($dependencies | map(select(dependency_evidence_known | not)) | map(.id)) as $unknown_dependencies |
   {
     visible_count: ($bugs | length),
     visible_ids: ($bugs | map(.id) | format_ids),
@@ -270,7 +280,7 @@ fi
   else
     printf '\n'
   fi
-  printf -- '- **Fact:** %s/%s visible outgoing dependencies have unknown status. ' \
+  printf -- '- **Fact:** %s/%s visible outgoing dependencies have unknown or conflicting evidence. ' \
     "$dependency_unknown_count" "$dependency_total"
   printf 'Bounded sample: %s. Sources: `product-scope`, `dependency-links`.\n' \
     "$dependency_unknown_sample"
@@ -311,7 +321,7 @@ fi
   printf 'reads verify the fixture only; the assessment uses the product scope alone.\n'
   if [[ $blocker_unknown_count -gt 0 || $dependency_unknown_count -gt 0 ||
     $stale_unknown_count -gt 0 ]]; then
-    printf -- '- **Fact:** Required evidence is unknown for blocker IDs %s, stale IDs %s, and dependency IDs %s. Unknown rows were not classified as matches or non-matches for the affected checks.\n\n' \
+    printf -- '- **Fact:** Required evidence is unknown or conflicting for blocker IDs %s, stale IDs %s, and dependency IDs %s. Dependency IDs are only classified when `product-scope` and `dependency-links` agree on the edge and the links record has a valid status. Unknown or conflicting observations were not classified as matches or non-matches for the affected checks.\n\n' \
       "$blocker_unknown_ids" "$stale_unknown_ids" "$dependency_unknown_ids"
   else
     printf -- '- **Fact:** No selected blocker, dependency, or stale evidence was unknown in visible rows.\n\n'
