@@ -120,59 +120,91 @@ run_evidence dependency-links "$workdir/links.json" bug links "$root" \
   --relation depends_on
 collection_end=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 
-visible_count=$(jq -er '.data | length' "$workdir/product.json")
-visible_ids=$(jq -er '
-  [.data[].id] | if length == 0 then "(none)" else map("#" + tostring) | join(", ") end
-' "$workdir/product.json")
-visible_sample=$(jq -er '
-  [.data[].id][0:5] |
-  if length == 0 then "(none)" else map("#" + tostring) | join(", ") end
-' "$workdir/product.json")
-blocker_count=$(jq -er '[.data[] | select(
-  (.status != "RESOLVED" and .status != "CLOSED") and
-  (.priority == "Highest" or (.whiteboard | contains("release-blocker")))
-)] | length' "$workdir/product.json")
-blocker_ids=$(jq -er '[.data[] | select(
-  (.status != "RESOLVED" and .status != "CLOSED") and
-  (.priority == "Highest" or (.whiteboard | contains("release-blocker")))
-) | .id] | if length == 0 then "(none)" else map("#" + tostring) | join(", ") end' \
-  "$workdir/product.json")
-blocker_sample=$(jq -er '[.data[] | select(
-  (.status != "RESOLVED" and .status != "CLOSED") and
-  (.priority == "Highest" or (.whiteboard | contains("release-blocker")))
-) | .id][0:5] |
-  if length == 0 then "(none)" else map("#" + tostring) | join(", ") end' \
-  "$workdir/product.json")
-dependency_total=$(jq -er '.data | length' "$workdir/links.json")
-dependency_count=$(jq -er '[.data[] | select(
-  .relation == "depends_on" and .status != "RESOLVED" and .status != "CLOSED"
-)] | length' "$workdir/links.json")
-dependency_ids=$(jq -er '[.data[] | select(
-  .relation == "depends_on" and .status != "RESOLVED" and .status != "CLOSED"
-) | .id] | if length == 0 then "(none)" else map("#" + tostring) | join(", ") end' \
-  "$workdir/links.json")
-dependency_sample=$(jq -er '[.data[] | select(
-  .relation == "depends_on" and .status != "RESOLVED" and .status != "CLOSED"
-) | .id][0:5] |
-  if length == 0 then "(none)" else map("#" + tostring) | join(", ") end' \
-  "$workdir/links.json")
-stale_count=$(jq -er '[.data[] | select(
-  (.status != "RESOLVED" and .status != "CLOSED") and
-  .last_change_time < $cutoff
-)] | length' --arg cutoff "$stale_cutoff" "$workdir/product.json")
-stale_ids=$(jq -er --arg cutoff "$stale_cutoff" '[.data[] | select(
-  (.status != "RESOLVED" and .status != "CLOSED") and
-  .last_change_time < $cutoff
-) | .id] | if length == 0 then "(none)" else map("#" + tostring) | join(", ") end' \
-  "$workdir/product.json")
-stale_sample=$(jq -er --arg cutoff "$stale_cutoff" '[.data[] | select(
-  (.status != "RESOLVED" and .status != "CLOSED") and
-  .last_change_time < $cutoff
-) | .id][0:5] |
-  if length == 0 then "(none)" else map("#" + tostring) | join(", ") end' \
-  "$workdir/product.json")
+summary="$workdir/summary.json"
+jq -cer --arg cutoff "$stale_cutoff" --slurpfile links "$workdir/links.json" '
+  def nonempty_string: type == "string" and length > 0;
+  def status_known: (.status? | nonempty_string);
+  def complete:
+    status_known and (.status == "RESOLVED" or .status == "CLOSED");
+  def open: status_known and (complete | not);
+  def priority_known: (.priority? | nonempty_string);
+  def whiteboard_known: (.whiteboard? | type == "string");
+  def blocker_match:
+    if open then
+      (.priority? == "Highest") or
+      (if whiteboard_known then .whiteboard | contains("release-blocker") else false end)
+    else false end;
+  def blocker_unknown:
+    if (status_known | not) then true
+    elif complete then false
+    else ((priority_known and whiteboard_known) | not) end;
+  def timestamp_epoch: try (.last_change_time? | fromdateiso8601) catch null;
+  def stale_match($cutoff_epoch):
+    if open then
+      timestamp_epoch as $changed |
+      if ($changed | type) == "number" then $changed < $cutoff_epoch else false end
+    else false end;
+  def stale_unknown:
+    if (status_known | not) then true
+    elif complete then false
+    else (timestamp_epoch | type) != "number" end;
+  def dependency_status_known: (.status? | nonempty_string);
+  def dependency_unresolved:
+    dependency_status_known and .status != "RESOLVED" and .status != "CLOSED";
+  def format_ids:
+    if length == 0 then "(none)" else map("#" + tostring) | join(", ") end;
+  ($cutoff | fromdateiso8601) as $cutoff_epoch |
+  .data as $bugs |
+  ($links[0].data | map(select(.relation == "depends_on"))) as $dependencies |
+  ($bugs | map(select(blocker_match)) | map(.id)) as $blockers |
+  ($bugs | map(select(blocker_unknown)) | map(.id)) as $unknown_blockers |
+  ($bugs | map(select(stale_match($cutoff_epoch))) | map(.id)) as $stale |
+  ($bugs | map(select(stale_unknown)) | map(.id)) as $unknown_stale |
+  ($dependencies | map(select(dependency_unresolved)) | map(.id)) as $unresolved |
+  ($dependencies | map(select(dependency_status_known | not)) | map(.id)) as $unknown_dependencies |
+  {
+    visible_count: ($bugs | length),
+    visible_ids: ($bugs | map(.id) | format_ids),
+    visible_sample: ($bugs | map(.id)[0:5] | format_ids),
+    blocker_count: ($blockers | length),
+    blocker_ids: ($blockers | format_ids),
+    blocker_sample: ($blockers[0:5] | format_ids),
+    blocker_unknown_count: ($unknown_blockers | length),
+    blocker_unknown_ids: ($unknown_blockers | format_ids),
+    blocker_unknown_sample: ($unknown_blockers[0:5] | format_ids),
+    dependency_total: ($dependencies | length),
+    dependency_count: ($unresolved | length),
+    dependency_ids: ($unresolved | format_ids),
+    dependency_sample: ($unresolved[0:5] | format_ids),
+    dependency_unknown_count: ($unknown_dependencies | length),
+    dependency_unknown_ids: ($unknown_dependencies | format_ids),
+    dependency_unknown_sample: ($unknown_dependencies[0:5] | format_ids),
+    stale_count: ($stale | length),
+    stale_ids: ($stale | format_ids),
+    stale_sample: ($stale[0:5] | format_ids),
+    stale_unknown_count: ($unknown_stale | length),
+    stale_unknown_ids: ($unknown_stale | format_ids),
+    stale_unknown_sample: ($unknown_stale[0:5] | format_ids)
+  }
+' "$workdir/product.json" >"$summary"
+IFS=$'\t' read -r visible_count visible_ids visible_sample \
+  blocker_count blocker_ids blocker_sample blocker_unknown_count \
+  blocker_unknown_ids blocker_unknown_sample dependency_total dependency_count \
+  dependency_ids dependency_sample dependency_unknown_count dependency_unknown_ids \
+  dependency_unknown_sample stale_count stale_ids stale_sample stale_unknown_count \
+  stale_unknown_ids stale_unknown_sample < <(jq -r '[
+    .visible_count, .visible_ids, .visible_sample,
+    .blocker_count, .blocker_ids, .blocker_sample,
+    .blocker_unknown_count, .blocker_unknown_ids, .blocker_unknown_sample,
+    .dependency_total, .dependency_count, .dependency_ids, .dependency_sample,
+    .dependency_unknown_count, .dependency_unknown_ids, .dependency_unknown_sample,
+    .stale_count, .stale_ids, .stale_sample,
+    .stale_unknown_count, .stale_unknown_ids, .stale_unknown_sample
+  ] | @tsv' "$summary")
 if [[ $blocker_count -gt 0 ]]; then
   assessment='not ready'
+elif [[ $blocker_unknown_count -gt 0 ]]; then
+  assessment='indeterminate'
 else
   assessment='no configured blocker observed'
 fi
@@ -200,37 +232,81 @@ fi
   printf -- '- **Fact:** Authorization can hide bugs, so this report does not claim an unobservable total.\n\n'
   printf '## Readiness assessment\n\n'
   printf -- '- **Assessment:** %s.\n' "$assessment"
-  printf -- '- **Fact:** %s/%s visible bugs match a configured blocker. ' \
+  printf -- '- **Fact:** %s/%s visible bugs are known to match a configured blocker. ' \
     "$blocker_count" "$visible_count"
-  printf 'Bounded sample: %s. Source: `product-scope`.\n\n' "$blocker_sample"
+  printf 'Bounded sample: %s. Source: `product-scope`.\n' "$blocker_sample"
+  printf -- '- **Fact:** %s/%s visible bugs have unknown blocker evidence. ' \
+    "$blocker_unknown_count" "$visible_count"
+  printf 'Bounded sample: %s. Source: `product-scope`.\n\n' \
+    "$blocker_unknown_sample"
   printf '## Blockers\n\n'
-  printf -- '- **Fact:** %s is open with `Highest` priority and the configured whiteboard marker. Source: `product-scope`.\n\n' \
-    "$blocker_ids"
+  if [[ $blocker_count -gt 0 ]]; then
+    printf -- '- **Fact:** Known blocker IDs %s are open and match at least one configured blocker rule. Source: `product-scope`.\n\n' \
+      "$blocker_ids"
+  else
+    printf -- '- **Fact:** No visible bug is known to match a configured blocker. Source: `product-scope`.\n\n'
+  fi
   printf '## Dependency risks\n\n'
-  printf -- '- **Fact:** %s/%s visible outgoing dependencies are unresolved. ' \
+  printf -- '- **Fact:** %s/%s visible outgoing dependencies are known unresolved. ' \
     "$dependency_count" "$dependency_total"
-  printf 'Bounded sample: %s. Source: `dependency-links`. It affects #%s.\n\n' \
-    "$dependency_sample" "$root"
+  printf 'Bounded sample: %s. Source: `dependency-links`.' "$dependency_sample"
+  if [[ $dependency_count -gt 0 ]]; then
+    printf ' It affects #%s.\n' "$root"
+  else
+    printf '\n'
+  fi
+  printf -- '- **Fact:** %s/%s visible outgoing dependencies have unknown status. ' \
+    "$dependency_unknown_count" "$dependency_total"
+  printf 'Bounded sample: %s. Source: `dependency-links`.\n' \
+    "$dependency_unknown_sample"
+  if [[ $dependency_count -eq 0 ]]; then
+    printf -- '- **Fact:** No visible outgoing dependency is known unresolved. Source: `dependency-links`.\n'
+  fi
+  printf '\n'
   printf '## Stale or unowned work\n\n'
-  printf -- '- **Fact:** %s/%s visible bugs are stale under the stated assumptions. ' \
+  printf -- '- **Fact:** %s/%s visible bugs are known stale under the stated assumptions. ' \
     "$stale_count" "$visible_count"
   printf 'Bounded sample: %s. Source: `product-scope`.\n' "$stale_sample"
+  printf -- '- **Fact:** %s/%s visible bugs have unknown stale evidence. ' \
+    "$stale_unknown_count" "$visible_count"
+  printf 'Bounded sample: %s. Source: `product-scope`.\n' "$stale_unknown_sample"
   printf -- '- **Fact:** Ownership check: N/A (not selected).\n\n'
   printf '## Recent adverse changes\n\n'
   printf -- '- **Fact:** History/regression check: N/A (not selected); no history read was issued.\n\n'
   printf '## Decisions needed\n\n'
-  printf -- '- **Assessment:** Decide whether #%s can be cleared and whether dependency %s ' \
-    "$root" "$dependency_ids"
-  printf 'must close before the release proceeds.\n\n'
+  if [[ $blocker_count -gt 0 ]]; then
+    printf -- '- **Assessment:** Decide whether blocker %s can be cleared before the release proceeds.\n' \
+      "$blocker_ids"
+  fi
+  if [[ $dependency_count -gt 0 ]]; then
+    printf -- '- **Assessment:** Decide whether dependency %s must close before the release proceeds.\n' \
+      "$dependency_ids"
+  fi
+  if [[ $blocker_unknown_count -gt 0 || $dependency_unknown_count -gt 0 ||
+    $stale_unknown_count -gt 0 ]]; then
+    printf -- '- **Assessment:** Resolve the unknown selected evidence before relying on the affected checks.\n'
+  elif [[ $blocker_count -eq 0 && $dependency_count -eq 0 ]]; then
+    printf -- '- **Assessment:** No blocker or dependency decision is supported by known visible evidence.\n'
+  fi
+  printf '\n'
   printf '## Data limitations\n\n'
   printf -- '- **Fact:** Rolling snapshot, visible rows only. Deadline, ownership, milestone, '
   printf 'status/resolution, history/regression, and custom-field evidence is N/A because '
   printf 'those checks were not selected. Alternate saved-query, URL, milestone, and version '
-  printf 'reads verify the fixture only; the assessment uses the product scope alone.\n\n'
+  printf 'reads verify the fixture only; the assessment uses the product scope alone.\n'
+  if [[ $blocker_unknown_count -gt 0 || $dependency_unknown_count -gt 0 ||
+    $stale_unknown_count -gt 0 ]]; then
+    printf -- '- **Fact:** Required evidence is unknown for blocker IDs %s, stale IDs %s, and dependency IDs %s. Unknown rows were not classified as matches or non-matches for the affected checks.\n\n' \
+      "$blocker_unknown_ids" "$stale_unknown_ids" "$dependency_unknown_ids"
+  else
+    printf -- '- **Fact:** No selected blocker, dependency, or stale evidence was unknown in visible rows.\n\n'
+  fi
   printf '## Source commands\n\n```text\n'
   jq -r '"[\(.label)] \(.argv | join(" "))"' "$trace"
   printf '```\n\n'
   printf '## Evidence appendix\n\n'
   printf -- '- **Fact:** Blocker IDs: %s. Stale IDs: %s. Dependency-risk IDs: %s. Visible IDs: %s. Sources: `product-scope`, `dependency-links`.\n' \
     "$blocker_ids" "$stale_ids" "$dependency_ids" "$visible_ids"
+  printf -- '- **Fact:** Unknown blocker IDs: %s. Unknown stale IDs: %s. Unknown dependency-risk IDs: %s. Sources: `product-scope`, `dependency-links`.\n' \
+    "$blocker_unknown_ids" "$stale_unknown_ids" "$dependency_unknown_ids"
 } >"$output"

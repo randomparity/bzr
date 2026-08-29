@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016 # Assertions contain literal Markdown code spans.
 set -euo pipefail
 
 test_root=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
@@ -50,7 +51,24 @@ case " $* " in
   printf '%s\n' '{"data":[{"field":"status","removed":"RESOLVED","added":"REOPENED","when":"2030-08-01T00:00:00Z"}]}'
   ;;
 *' bug links '*)
-  printf '%s\n' '{"data":[{"id":1,"relation":"depends_on","status":"NEW"}]}'
+  case ${FAKE_LINK_MODE:-default} in
+  default)
+    printf '%s\n' '{"data":[{"id":1,"relation":"depends_on","status":"NEW"}]}'
+    ;;
+  resolved)
+    printf '%s\n' '{"data":[{"id":1,"relation":"depends_on","status":"RESOLVED"}]}'
+    ;;
+  unknown-null)
+    printf '%s\n' '{"data":[{"id":1,"relation":"depends_on","status":null}]}'
+    ;;
+  unknown-missing)
+    printf '%s\n' '{"data":[{"id":1,"relation":"depends_on"}]}'
+    ;;
+  *)
+    printf 'unexpected FAKE_LINK_MODE: %s\n' "$FAKE_LINK_MODE" >&2
+    exit 1
+    ;;
+  esac
   ;;
 *' field list '*)
   printf '%s\n' '{"data":[]}'
@@ -62,7 +80,24 @@ case " $* " in
   printf '%s\n' '{"type":"object"}'
   ;;
 *' bug search '* | *' query run '* | *' bug list '*)
-  printf '%s\n' '{"data":[{"id":1,"product":"ReleaseDemo","version":"9.0","target_milestone":"9.0","summary":"dependency","status":"NEW","priority":"Normal","severity":"major","assigned_to":"owner@example.invalid","deadline":"2030-08-31","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 dependency","depends_on":[]},{"id":2,"product":"ReleaseDemo","version":"9.0","target_milestone":"9.0","summary":"complete","status":"RESOLVED","priority":"Highest","severity":"major","assigned_to":null,"deadline":"2030-07-01","last_change_time":"2030-07-01T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 complete","depends_on":[]},{"id":3,"product":"ReleaseDemo","version":"9.0","target_milestone":"9.0","summary":"release root","status":"NEW","priority":"Highest","severity":"major","assigned_to":null,"deadline":"2030-08-31","last_change_time":"2030-07-01T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 release-blocker","depends_on":[1]}]}'
+  case ${FAKE_PRODUCT_MODE:-default} in
+  default)
+    printf '%s\n' '{"data":[{"id":1,"summary":"dependency","status":"NEW","priority":"Normal","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 dependency","depends_on":[]},{"id":2,"summary":"complete","status":"RESOLVED","priority":"Highest","last_change_time":"2030-07-01T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 complete","depends_on":[]},{"id":3,"summary":"release root","status":"NEW","priority":"Highest","last_change_time":"2030-07-01T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 release-blocker","depends_on":[1]}]}'
+    ;;
+  unknown-status)
+    printf '%s\n' '{"data":[{"id":1,"summary":"null status","status":null,"priority":"Highest","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 dependency","depends_on":[]},{"id":2,"summary":"missing status","priority":"Normal","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 complete","depends_on":[]},{"id":3,"summary":"malformed status","status":7,"priority":"Highest","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 release-blocker","depends_on":[1]}]}'
+    ;;
+  unknown-time)
+    printf '%s\n' '{"data":[{"id":1,"summary":"null timestamp","status":"NEW","priority":"Normal","last_change_time":null,"whiteboard":"bzr-release-readiness-demo-v1 dependency","depends_on":[]},{"id":2,"summary":"missing timestamp","status":"NEW","priority":"Normal","whiteboard":"bzr-release-readiness-demo-v1 complete","depends_on":[]},{"id":3,"summary":"malformed timestamp","status":"NEW","priority":"Normal","last_change_time":"not-a-time","whiteboard":"bzr-release-readiness-demo-v1 complete","depends_on":[1]}]}'
+    ;;
+  no-blocker)
+    printf '%s\n' '{"data":[{"id":1,"summary":"dependency","status":"NEW","priority":"Normal","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 dependency","depends_on":[]},{"id":2,"summary":"complete","status":"RESOLVED","priority":"Highest","last_change_time":"2030-07-01T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 complete","depends_on":[]},{"id":3,"summary":"release root","status":"NEW","priority":"Normal","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 complete","depends_on":[1]}]}'
+    ;;
+  *)
+    printf 'unexpected FAKE_PRODUCT_MODE: %s\n' "$FAKE_PRODUCT_MODE" >&2
+    exit 1
+    ;;
+  esac
   ;;
 esac
 EOF
@@ -133,6 +168,39 @@ common_env=(
   FAKE_MV_STATE="$work/mv-failed"
 )
 
+assert_report_contains() {
+  local report=$1
+  local expected=$2
+  grep -Fq -- "$expected" "$report" || {
+    printf 'missing report contract in %s: %s\n' "$report" "$expected" >&2
+    exit 1
+  }
+}
+
+assert_report_excludes() {
+  local report=$1
+  local forbidden=$2
+  if grep -Fq -- "$forbidden" "$report"; then
+    printf 'forbidden report text in %s: %s\n' "$report" "$forbidden" >&2
+    exit 1
+  fi
+}
+
+run_helper_case() {
+  local name=$1
+  local product_mode=$2
+  local link_mode=$3
+  rm -f "$work/$name-date-state"
+  (
+    cd "$work"
+    env "${common_env[@]}" FAKE_DATE_STATE="$work/$name-date-state" \
+      FAKE_PRODUCT_MODE="$product_mode" FAKE_LINK_MODE="$link_mode" \
+      bash "$sandbox/tools/run-release-readiness-demo.sh" demo \
+      bzr-release-readiness-demo-v1 3 ReleaseDemo \
+      "$work/$name-report.md" "$work/$name-trace.jsonl"
+  )
+}
+
 rm -f "$work/date-state"
 (
   cd "$work"
@@ -169,16 +237,56 @@ jq -r '"[\(.label)] \(.argv | join(" "))"' "$work/timed-trace.jsonl" \
 sed -n '/^```text$/,/^```$/p' "$work/timed-report.md" |
   sed '1d;$d' >"$work/report-commands"
 cmp "$work/trace-commands" "$work/report-commands"
-grep -Fq "1/3 visible bugs match a configured blocker. Bounded sample: #3. Source: \`product-scope\`." \
-  "$work/timed-report.md"
-grep -Fq "1/3 visible bugs are stale under the stated assumptions. Bounded sample: #3. Source: \`product-scope\`." \
-  "$work/timed-report.md"
-grep -Fq "1/1 visible outgoing dependencies are unresolved. Bounded sample: #1. Source: \`dependency-links\`." \
-  "$work/timed-report.md"
+assert_report_contains "$work/timed-report.md" \
+  '1/3 visible bugs are known to match a configured blocker. Bounded sample: #3. Source: `product-scope`.'
+assert_report_contains "$work/timed-report.md" \
+  '1/3 visible bugs are known stale under the stated assumptions. Bounded sample: #3. Source: `product-scope`.'
+assert_report_contains "$work/timed-report.md" \
+  '1/1 visible outgoing dependencies are known unresolved. Bounded sample: #1. Source: `dependency-links`.'
 grep -Fq 'Blocker IDs: #3. Stale IDs: #3. Dependency-risk IDs: #1.' \
   "$work/timed-report.md"
 grep -Fq 'whether dependency #1 must close before the release proceeds.' \
   "$work/timed-report.md"
+
+run_helper_case unknown-status unknown-status unknown-null
+assert_report_contains "$work/unknown-status-report.md" '**Assessment:** indeterminate.'
+assert_report_contains "$work/unknown-status-report.md" \
+  '0/3 visible bugs are known to match a configured blocker.'
+assert_report_contains "$work/unknown-status-report.md" \
+  '3/3 visible bugs have unknown blocker evidence. Bounded sample: #1, #2, #3. Source: `product-scope`.'
+assert_report_contains "$work/unknown-status-report.md" \
+  '3/3 visible bugs have unknown stale evidence. Bounded sample: #1, #2, #3. Source: `product-scope`.'
+assert_report_contains "$work/unknown-status-report.md" \
+  '1/1 visible outgoing dependencies have unknown status. Bounded sample: #1. Source: `dependency-links`.'
+assert_report_contains "$work/unknown-status-report.md" \
+  'Unknown blocker IDs: #1, #2, #3. Unknown stale IDs: #1, #2, #3. Unknown dependency-risk IDs: #1.'
+
+run_helper_case unknown-time unknown-time unknown-missing
+assert_report_contains "$work/unknown-time-report.md" \
+  '0/3 visible bugs are known stale under the stated assumptions.'
+assert_report_contains "$work/unknown-time-report.md" \
+  '3/3 visible bugs have unknown stale evidence. Bounded sample: #1, #2, #3. Source: `product-scope`.'
+assert_report_contains "$work/unknown-time-report.md" \
+  '1/1 visible outgoing dependencies have unknown status. Bounded sample: #1. Source: `dependency-links`.'
+assert_report_contains "$work/unknown-time-report.md" \
+  'Unknown stale IDs: #1, #2, #3. Unknown dependency-risk IDs: #1.'
+
+run_helper_case no-blocker no-blocker default
+assert_report_contains "$work/no-blocker-report.md" \
+  'No visible bug is known to match a configured blocker. Source: `product-scope`.'
+assert_report_contains "$work/no-blocker-report.md" \
+  'Decide whether dependency #1 must close before the release proceeds.'
+assert_report_excludes "$work/no-blocker-report.md" '(none) is open'
+assert_report_excludes "$work/no-blocker-report.md" 'whether blocker (none)'
+
+run_helper_case no-dependency default resolved
+assert_report_contains "$work/no-dependency-report.md" \
+  'No visible outgoing dependency is known unresolved. Source: `dependency-links`.'
+assert_report_contains "$work/no-dependency-report.md" \
+  'Decide whether blocker #3 can be cleared before the release proceeds.'
+assert_report_excludes "$work/no-dependency-report.md" 'dependency (none)'
+assert_report_excludes "$work/no-dependency-report.md" '(none) must close'
+assert_report_excludes "$work/no-dependency-report.md" 'It affects #3.'
 
 cat >"$work/fake-release-helper" <<'EOF'
 #!/usr/bin/env bash
