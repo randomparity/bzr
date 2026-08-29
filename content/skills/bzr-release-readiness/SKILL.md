@@ -100,11 +100,11 @@ pagination run is a rolling snapshot of rows the server exposed, not a
 point-in-time or authorization-universe guarantee. Zero visible rows means **no
 visible evidence**, unless the stated policy gives it a different meaning.
 
-For blocker checks, match priority/severity by exact scalar equality, keywords
-by exact element membership, and flags by the selected name plus status and
-optional requestee tuple. Ignore matching values on complete bugs. Missing
-required data makes a selected check unknown; a check that policy does not
-select is N/A with its reason.
+Only non-complete bugs contribute to blocker, stale, and ownership checks. For
+blocker checks, match priority/severity by exact scalar equality, keywords by
+exact element membership, and flags by the selected name plus status and
+optional requestee tuple. Missing required data makes a selected check unknown;
+a check that policy does not select is N/A with its reason.
 
 Use no command outside this read-only allowlist: `bug list`, `bug search`,
 `query show`, `query run`, `bug view`, `bug history`, `bug links`, `field list`,
