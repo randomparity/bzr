@@ -238,10 +238,13 @@ if [[ "${1:-}" == "release-readiness" ]]; then
   export RELEASE_READINESS_DEMO_MARKER="$release_marker"
   export RELEASE_READINESS_DEMO_REPORT="$release_workdir/release-readiness.md"
   export RELEASE_READINESS_DEMO_SERVER=demo
-  release_pending_cast="$release_workdir/bzr-release-readiness-demo.cast"
-  release_pending_gif="$release_workdir/bzr-release-readiness-demo.gif"
   release_cast="$REPO_ROOT/docs/assets/bzr-release-readiness-demo.cast"
   release_gif="$REPO_ROOT/docs/assets/bzr-release-readiness-demo.gif"
+  release_stage=$(mktemp -d \
+    "$REPO_ROOT/docs/assets/.bzr-release-readiness-publish.XXXXXX")
+  trap 'rm -r "$release_workdir" "$release_stage"' EXIT
+  release_pending_cast="$release_stage/new.cast"
+  release_pending_gif="$release_stage/new.gif"
 
   echo "==> Recording release-readiness analysis (root bug $release_root)"
   (
@@ -263,8 +266,29 @@ if [[ "${1:-}" == "release-readiness" ]]; then
   echo "==> Rendering release-readiness GIF"
   agg --theme dracula --font-size 16 --idle-time-limit 3 \
     "$release_pending_cast" "$release_pending_gif"
-  mv "$release_pending_cast" "$release_cast"
-  mv "$release_pending_gif" "$release_gif"
+
+  release_had_cast=0
+  release_previous_cast="$release_stage/previous.cast"
+  if [[ -e $release_cast ]]; then
+    cp -p "$release_cast" "$release_previous_cast"
+    release_had_cast=1
+  fi
+  if ! mv "$release_pending_cast" "$release_cast"; then
+    echo "ERROR: could not publish release-readiness cast; previous assets retained" >&2
+    exit 1
+  fi
+  if ! mv "$release_pending_gif" "$release_gif"; then
+    if [[ $release_had_cast -eq 1 ]]; then
+      if ! mv "$release_previous_cast" "$release_cast"; then
+        echo "ERROR: GIF publication failed and previous cast restoration failed" >&2
+        exit 1
+      fi
+    else
+      rm -f "$release_cast"
+    fi
+    echo "ERROR: could not publish release-readiness GIF; previous assets restored" >&2
+    exit 1
+  fi
   ls -la "$release_cast" "$release_gif"
   exit 0
 fi

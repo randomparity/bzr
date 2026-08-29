@@ -5,6 +5,7 @@ test_root=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 repo_root=$(cd "$test_root/../.." && pwd -P)
 work=$(mktemp -d)
 trap 'rm -r "$work"' EXIT
+real_mv=$(command -v mv)
 
 sandbox="$work/repo"
 stub_bin="$work/bin"
@@ -23,9 +24,51 @@ cp "$tracked_gif" "$work/gif.before"
 cat >"$stub_bin/bzr" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ " $* " == *' bug list '* ]]; then
-  printf '%s\n' '{"data":[{"id":3,"product":"ReleaseDemo","whiteboard":"bzr-release-readiness-demo-v1 release-blocker"}]}'
-fi
+case " $* " in
+*' bug list '*' --whiteboard '*)
+  printf '%s\n' '{"data":[{"id":1,"product":"ReleaseDemo","whiteboard":"bzr-release-readiness-demo-v1 dependency"},{"id":2,"product":"ReleaseDemo","whiteboard":"bzr-release-readiness-demo-v1 complete"},{"id":3,"product":"ReleaseDemo","whiteboard":"bzr-release-readiness-demo-v1 release-blocker"}]}'
+  ;;
+*' bug view '*)
+  printf '%s\n' '{"data":{"id":3,"product":"ReleaseDemo","version":"9.0","target_milestone":"9.0","summary":"release root","status":"NEW","priority":"Highest","severity":"major","assigned_to":null,"deadline":"2030-08-31","last_change_time":"2030-07-01T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 release-blocker","depends_on":[1]}}'
+  ;;
+*' query show release-readiness-demo-url '*)
+  printf '%s\n' '{"data":{"source_url":"https://bugzilla.example.invalid/buglist.cgi?product=ReleaseDemo"}}'
+  ;;
+*' query show '*)
+  printf '%s\n' '{"data":{"name":"release-readiness-demo"}}'
+  ;;
+*' bug history '*)
+  printf '%s\n' '{"data":[{"field":"status","removed":"RESOLVED","added":"REOPENED","when":"2030-08-01T00:00:00Z"}]}'
+  ;;
+*' bug links '*)
+  printf '%s\n' '{"data":[{"id":1,"relation":"depends_on","status":"NEW"}]}'
+  ;;
+*' field list '*)
+  printf '%s\n' '{"data":[]}'
+  ;;
+*' server capabilities '*)
+  printf '%s\n' '{"data":{"custom_fields":[]}}'
+  ;;
+*' schema '*)
+  printf '%s\n' '{"type":"object"}'
+  ;;
+*' bug search '* | *' query run '* | *' bug list '*)
+  printf '%s\n' '{"data":[{"id":1,"product":"ReleaseDemo","version":"9.0","target_milestone":"9.0","summary":"dependency","status":"NEW","priority":"Normal","severity":"major","assigned_to":"owner@example.invalid","deadline":"2030-08-31","last_change_time":"2030-08-29T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 dependency","depends_on":[]},{"id":2,"product":"ReleaseDemo","version":"9.0","target_milestone":"9.0","summary":"complete","status":"RESOLVED","priority":"Highest","severity":"major","assigned_to":null,"deadline":"2030-07-01","last_change_time":"2030-07-01T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 complete","depends_on":[]},{"id":3,"product":"ReleaseDemo","version":"9.0","target_milestone":"9.0","summary":"release root","status":"NEW","priority":"Highest","severity":"major","assigned_to":null,"deadline":"2030-08-31","last_change_time":"2030-07-01T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 release-blocker","depends_on":[1]}]}'
+  ;;
+esac
+EOF
+cat >"$stub_bin/date" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+count=0
+[[ ! -e $FAKE_DATE_STATE ]] || count=$(<"$FAKE_DATE_STATE")
+case $count in
+0) now=2030-08-30T00:00:00Z ;;
+1) now=2030-08-30T00:00:05Z ;;
+*) now=2030-08-30T00:00:10Z ;;
+esac
+printf '%s\n' "$((count + 1))" >"$FAKE_DATE_STATE"
+printf '%s\n' "$now"
 EOF
 cat >"$stub_bin/curl" <<'EOF'
 #!/usr/bin/env bash
@@ -47,13 +90,38 @@ printf '%s\n%s\n' "$input" "$output" >"$AGG_CALLED"
 printf 'rendered-gif\n' >"$output"
 [[ ${FAKE_AGG_FAIL:-0} -eq 0 ]]
 EOF
-chmod +x "$stub_bin/bzr" "$stub_bin/curl" "$stub_bin/asciinema" "$stub_bin/agg"
+cat >"$stub_bin/mv" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+args=("$@")
+destination=${args[${#args[@]}-1]}
+target=${FAKE_MV_FAIL_TARGET:-}
+if [[ -n $target && ! -e ${FAKE_MV_STATE:?} &&
+  $destination == *"bzr-release-readiness-demo.$target" ]]; then
+  : >"$FAKE_MV_STATE"
+  exit 1
+fi
+exec "$MV_REAL" "$@"
+EOF
+chmod +x "$stub_bin/bzr" "$stub_bin/date" "$stub_bin/curl" \
+  "$stub_bin/asciinema" "$stub_bin/agg" "$stub_bin/mv"
 
 common_env=(
   PATH="$stub_bin:$PATH"
   BZR_BIN="$stub_bin/bzr"
   AGG_CALLED="$work/agg-called"
+  MV_REAL="$real_mv"
+  FAKE_MV_STATE="$work/mv-failed"
 )
+
+rm -f "$work/date-state"
+env "${common_env[@]}" FAKE_DATE_STATE="$work/date-state" \
+  bash "$sandbox/tools/run-release-readiness-demo.sh" demo \
+  bzr-release-readiness-demo-v1 "$work/timed-report.md"
+grep -Fq 'Generated: 2030-08-30T00:00:00Z' "$work/timed-report.md"
+grep -Fq 'collection started 2030-08-30T00:00:05Z and ended 2030-08-30T00:00:10Z' \
+  "$work/timed-report.md"
+grep -Fq 'changed before 2030-07-31T00:00:00Z' "$work/timed-report.md"
 
 if env "${common_env[@]}" FAKE_CAST_CONTENT='http://127.0.0.1:8089' \
   bash "$sandbox/tools/record-demo.sh" release-readiness \
@@ -89,12 +157,39 @@ cmp "$work/gif.before" "$tracked_gif" || {
   exit 1
 }
 
+for failed_asset in cast gif; do
+  cp "$work/cast.before" "$tracked_cast"
+  cp "$work/gif.before" "$tracked_gif"
+  rm -f "$work/mv-failed"
+  if env "${common_env[@]}" FAKE_CAST_CONTENT='verified-cast' \
+    FAKE_MV_FAIL_TARGET="$failed_asset" \
+    bash "$sandbox/tools/record-demo.sh" release-readiness \
+    >"$work/$failed_asset-failure.stdout" \
+    2>"$work/$failed_asset-failure.stderr"; then
+    printf 'recorder publication failure: failing %s move was accepted\n' \
+      "$failed_asset" >&2
+    exit 1
+  fi
+  cmp "$work/cast.before" "$tracked_cast" || {
+    printf 'recorder publication failure: %s failure did not restore cast\n' \
+      "$failed_asset" >&2
+    exit 1
+  }
+  cmp "$work/gif.before" "$tracked_gif" || {
+    printf 'recorder publication failure: %s failure did not restore GIF\n' \
+      "$failed_asset" >&2
+    exit 1
+  }
+done
+
+rm -f "$work/mv-failed"
 env "${common_env[@]}" FAKE_CAST_CONTENT='verified-cast' \
   bash "$sandbox/tools/record-demo.sh" release-readiness \
   >"$work/clean.stdout" 2>"$work/clean.stderr"
 grep -Fxq 'verified-cast' "$tracked_cast"
 grep -Fxq 'rendered-gif' "$tracked_gif"
-if grep -Fq "$sandbox/docs/assets/" "$work/agg-called"; then
+if grep -Fxq "$tracked_cast" "$work/agg-called" ||
+  grep -Fxq "$tracked_gif" "$work/agg-called"; then
   printf 'recorder publication failure: renderer used a published asset path\n' >&2
   exit 1
 fi

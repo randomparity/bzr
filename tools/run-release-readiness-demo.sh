@@ -20,6 +20,11 @@ for tool in "$BZR_BIN" jq; do
   }
 done
 
+as_of=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+collection_start=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+stale_cutoff=$(jq -nr --arg as_of "$as_of" \
+  '$as_of | fromdateiso8601 - (30 * 24 * 60 * 60) | todateiso8601')
+
 bzr_json=("$BZR_BIN" --server "$server" --json)
 "${bzr_json[@]}" bug list --whiteboard "$marker" --limit 100 --paginate \
   --sort bug_id --order asc --fields "$discovery_fields" >"$workdir/discovery.json"
@@ -69,6 +74,7 @@ done
 "${bzr_json[@]}" field list status >"$workdir/status-field.json"
 "${bzr_json[@]}" server capabilities >"$workdir/capabilities.json"
 "${bzr_json[@]}" schema bug >"$workdir/schema.json"
+collection_end=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 
 visible_count=$(jq -er '.data | length' "$workdir/product.json")
 visible_ids=$(jq -er '[.data[].id] | join(", #")' "$workdir/product.json")
@@ -88,8 +94,8 @@ dependency_ids=$(jq -er '[.data[] | select(
 ) | .id] | join(", #")' "$workdir/links.json")
 stale_count=$(jq -er '[.data[] | select(
   (.status != "RESOLVED" and .status != "CLOSED") and
-  .last_change_time < "2026-07-30T16:00:00Z"
-)] | length' "$workdir/product.json")
+  .last_change_time < $cutoff
+)] | length' --arg cutoff "$stale_cutoff" "$workdir/product.json")
 unowned_count=$(jq -er '[.data[] | select(
   (.status != "RESOLVED" and .status != "CLOSED") and
   (.assigned_to == null or .assigned_to == "")
@@ -106,12 +112,16 @@ fi
 
 {
   printf '# Release readiness: product `%s`\n\n' "$product"
-  printf 'Generated: 2026-08-29T16:00:00Z\n\n'
+  printf 'Generated: %s\n\n' "$as_of"
   printf '## Scope and rules\n\n'
-  printf -- '- **Fact:** Product scope; %s visible bugs (#%s); bounded rolling collection.\n' \
+  printf -- '- **Fact:** Product scope; collection started %s and ended %s; ' \
+    "$collection_start" "$collection_end"
+  printf '%s visible bugs (#%s); bounded rolling collection.\n' \
     "$visible_count" "$visible_ids"
   printf -- '- **Assumption:** `RESOLVED` and `CLOSED` are complete; `Highest` priority or '
-  printf '`release-blocker` whiteboard text is blocking; stale means 30 days; time zone is UTC.\n'
+  printf '`release-blocker` whiteboard text is blocking; stale means changed before %s ' \
+    "$stale_cutoff"
+  printf '(30 days before `as-of`); time zone is UTC.\n'
   printf -- '- **Fact:** Authorization can hide bugs, so this report does not claim an unobservable total.\n\n'
   printf '## Readiness assessment\n\n'
   printf -- '- **Assessment:** %s.\n' "$assessment"
