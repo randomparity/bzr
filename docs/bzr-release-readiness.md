@@ -20,10 +20,14 @@ bzr skills install --agent codex --project .
 
 Then ask the agent for a release review and provide exactly one scope. For example:
 
-> Analyze the latest release candidate in Bugzilla. Use product `Nimbus`, keep the review
-> read-only, treat `RESOLVED` and `CLOSED` as complete, treat `Highest` priority or the
-> `release-blocker` whiteboard marker as blocking, use 30 days for staleness and UTC for
-> deadlines, include dependency risks, and return a PM-ready Markdown report.
+> Analyze release readiness in Bugzilla. Use product `Nimbus` as the only release scope and
+> keep the complete review read-only with zero offset. Capture one UTC `as-of` instant. Treat
+> `RESOLVED` and `CLOSED` as complete. Select blocker, dependency, stale, and literal-whiteboard
+> checks: `Highest` priority or literal `release-blocker` text is release-blocking, with no
+> severity, keyword, flag, or custom-field blocker. Treat `RESOLVED` and `CLOSED` dependency
+> targets as complete with no resolved-target risk override; dependency and stale findings are
+> non-blocking. Do not run deadline, ownership, milestone, status/resolution, or
+> history/regression checks. Use a maximum of 100 root bugs and return a PM-ready Markdown report.
 
 The skill confirms rules that affect the outcome before collecting evidence. Its complete reads
 use a positive page bound, pagination, stable bug-ID ordering, and an explicit field projection.

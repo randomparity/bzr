@@ -117,11 +117,51 @@ common_env=(
 rm -f "$work/date-state"
 env "${common_env[@]}" FAKE_DATE_STATE="$work/date-state" \
   bash "$sandbox/tools/run-release-readiness-demo.sh" demo \
-  bzr-release-readiness-demo-v1 "$work/timed-report.md"
+  bzr-release-readiness-demo-v1 "$work/timed-report.md" "$work/timed-trace.jsonl"
 grep -Fq 'Generated: 2030-08-30T00:00:00Z' "$work/timed-report.md"
 grep -Fq 'collection started 2030-08-30T00:00:05Z and ended 2030-08-30T00:00:10Z' \
   "$work/timed-report.md"
 grep -Fq 'changed before 2030-07-31T00:00:00Z' "$work/timed-report.md"
+grep -Fq '**Fact:** Ownership check: N/A (not selected).' "$work/timed-report.md"
+grep -Fq '**Fact:** History/regression check: N/A (not selected); no history read was issued.' \
+  "$work/timed-report.md"
+
+jq -e '
+  all(.[]; type == "array" and .[0:4] ==
+    ["bzr", "--server", "<server-profile>", "--json"]) and
+  any(.[]; .[4:6] == ["bug", "list"] and
+    any(.[]; . == "bzr-release-readiness-demo-v1")) and
+  ([.[] | select(.[4:6] == ["query", "show"])] | length) == 2 and
+  any(.[]; .[4:7] == ["bug", "list", "--product"] and
+    (index("id,summary,status,priority,severity,keywords,flags,depends_on,last_change_time,whiteboard") != null)) and
+  all(.[]; .[4:6] != ["bug", "history"])
+' < <(jq -s . "$work/timed-trace.jsonl") >/dev/null
+jq -r 'join(" ")' "$work/timed-trace.jsonl" >"$work/trace-commands"
+# shellcheck disable=SC2016 # The sed addresses are literal Markdown fences.
+sed -n '/^```text$/,/^```$/p' "$work/timed-report.md" |
+  sed '1d;$d' >"$work/report-commands"
+cmp "$work/trace-commands" "$work/report-commands"
+
+cat >"$work/fake-release-helper" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '# test report\n' >"$3"
+EOF
+chmod +x "$work/fake-release-helper"
+env RELEASE_READINESS_DEMO_HELPER="$work/fake-release-helper" \
+  RELEASE_READINESS_DEMO_MARKER=bzr-release-readiness-demo-v1 \
+  RELEASE_READINESS_DEMO_REPORT="$work/driver-report.md" \
+  RELEASE_READINESS_DEMO_SERVER=demo \
+  RELEASE_READINESS_DEMO_PRODUCT=ReleaseDemo \
+  BZR_BIN="$stub_bin/bzr" \
+  bash "$sandbox/tools/record-demo.sh" --drive-release-readiness \
+  >"$work/driver.stdout"
+# shellcheck disable=SC2016 # Backticks are literal scope delimiters.
+grep -Fq 'Use product `ReleaseDemo` as the only release scope.' "$work/driver.stdout"
+grep -Fq 'Do not run deadline, ownership, milestone, status/resolution, or history/regression checks.' \
+  "$work/driver.stdout"
+grep -Fq 'Use a maximum of 100 root bugs and return a PM-ready Markdown report.' \
+  "$work/driver.stdout"
 
 if env "${common_env[@]}" FAKE_CAST_CONTENT='http://127.0.0.1:8089' \
   bash "$sandbox/tools/record-demo.sh" release-readiness \
