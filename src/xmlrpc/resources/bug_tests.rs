@@ -20,6 +20,9 @@ async fn search_bugs_returns_results() {
     let mock = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains(
+            "<name>offset</name><value><int>7</int></value>",
+        ))
         .respond_with(
             ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(42, "Test bug")),
         )
@@ -30,6 +33,7 @@ async fn search_bugs_returns_results() {
     let params = SearchParams {
         product: vec!["TestProduct".into()],
         limit: Some(10),
+        offset: Some(7),
         ..Default::default()
     };
 

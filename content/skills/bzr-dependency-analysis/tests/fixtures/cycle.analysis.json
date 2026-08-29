@@ -1,0 +1,341 @@
+{
+  "analysis_timestamp": "2026-08-28T12:00:00Z",
+  "bounds": {
+    "max_depth": 3,
+    "max_nodes": 5,
+    "max_relationships": 5
+  },
+  "cap": {
+    "graph_cap_reached": true,
+    "omitted_discovered_identities": 1,
+    "omitted_relationships_lower_bound": 0,
+    "relationship_cap_reached": false,
+    "scope_truncated": false
+  },
+  "components": [
+    {
+      "cyclic": true,
+      "id": "c0001",
+      "nodes": [
+        {
+          "id": 20,
+          "requested": null,
+          "server": "primary"
+        },
+        {
+          "id": 21,
+          "requested": null,
+          "server": "primary"
+        },
+        {
+          "id": 22,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    },
+    {
+      "cyclic": false,
+      "id": "c0002",
+      "nodes": [
+        {
+          "id": 23,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    },
+    {
+      "cyclic": false,
+      "id": "c0003",
+      "nodes": [
+        {
+          "id": null,
+          "requested": "ghost",
+          "server": "primary"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "observations": [
+        "blocks"
+      ],
+      "predecessor": {
+        "id": 20,
+        "server": "primary"
+      },
+      "successor": {
+        "id": 21,
+        "server": "primary"
+      }
+    },
+    {
+      "observations": [
+        "blocks"
+      ],
+      "predecessor": {
+        "id": 21,
+        "server": "primary"
+      },
+      "successor": {
+        "id": 22,
+        "server": "primary"
+      }
+    },
+    {
+      "observations": [
+        "blocks"
+      ],
+      "predecessor": {
+        "id": 22,
+        "server": "primary"
+      },
+      "successor": {
+        "id": 20,
+        "server": "primary"
+      }
+    },
+    {
+      "observations": [
+        "blocks"
+      ],
+      "predecessor": {
+        "id": 22,
+        "server": "primary"
+      },
+      "successor": {
+        "id": 23,
+        "server": "primary"
+      }
+    }
+  ],
+  "findings": {
+    "bottlenecks": [
+      {
+        "fan_out": 2,
+        "node": {
+          "id": 22,
+          "requested": null,
+          "server": "primary"
+        }
+      }
+    ],
+    "execution_order": {
+      "assumptions": [
+        "cycles-prevent-total-node-order",
+        "partial-evidence",
+        "resolved-include-no-traverse"
+      ],
+      "component_order": [
+        "c0001",
+        "c0003",
+        "c0002"
+      ],
+      "cycle_impediments": [
+        "c0001"
+      ],
+      "incomplete_boundaries": [
+        {
+          "id": 23,
+          "requested": null,
+          "server": "primary"
+        },
+        {
+          "id": null,
+          "requested": "ghost",
+          "server": "primary"
+        }
+      ]
+    },
+    "stale_blockers": [],
+    "structural_leaves": [
+      {
+        "id": 23,
+        "requested": null,
+        "server": "primary"
+      },
+      {
+        "id": null,
+        "requested": "ghost",
+        "server": "primary"
+      }
+    ],
+    "structural_roots": [
+      {
+        "id": null,
+        "requested": "ghost",
+        "server": "primary"
+      }
+    ],
+    "unassigned_blockers": [
+      {
+        "id": 22,
+        "requested": null,
+        "server": "primary"
+      }
+    ]
+  },
+  "layers": [
+    [
+      "c0001",
+      "c0003"
+    ],
+    [
+      "c0002"
+    ]
+  ],
+  "limitations": [
+    "graph-node-cap"
+  ],
+  "longest_chain": {
+    "kind": "edge_count",
+    "length": 1,
+    "path": [
+      "c0001",
+      "c0002"
+    ]
+  },
+  "nodes": [
+    {
+      "assigned_to": "a@example.test",
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 20,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "20",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": false,
+      "state": "known",
+      "status": "NEW",
+      "summary": "Cycle A"
+    },
+    {
+      "assigned_to": "b@example.test",
+      "boundary_reason": null,
+      "depth": 1,
+      "error_type": null,
+      "id": 21,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "21",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": false,
+      "state": "known",
+      "status": "NEW",
+      "summary": "Cycle B"
+    },
+    {
+      "assigned_to": null,
+      "boundary_reason": null,
+      "depth": 2,
+      "error_type": null,
+      "id": 22,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "22",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": false,
+      "state": "known",
+      "status": "NEW",
+      "summary": "Cycle C and branch"
+    },
+    {
+      "assigned_to": null,
+      "boundary_reason": "depth_limit",
+      "depth": 3,
+      "error_type": null,
+      "id": 23,
+      "last_change_time": null,
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "23",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": "unknown",
+      "state": "boundary",
+      "status": null,
+      "summary": null
+    },
+    {
+      "assigned_to": null,
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": "not_found",
+      "id": null,
+      "last_change_time": null,
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "ghost",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": "unknown",
+      "state": "unknown",
+      "status": null,
+      "summary": null
+    }
+  ],
+  "policy": {
+    "direction": "both",
+    "duration": null,
+    "resolved_mode": "include-no-traverse",
+    "resolved_statuses": [
+      "RESOLVED"
+    ],
+    "stale_after_days": 14,
+    "unassigned_assignees": {}
+  },
+  "provenance": [
+    {
+      "parameter_names": [],
+      "scope_kind": "bug-ids",
+      "server": "primary",
+      "source": null
+    },
+    {
+      "parameter_names": [],
+      "scope_kind": "alias",
+      "server": "primary",
+      "source": null
+    }
+  ],
+  "roots": [
+    {
+      "id": 20,
+      "requested": "20",
+      "server": "primary"
+    },
+    {
+      "id": null,
+      "requested": "ghost",
+      "server": "primary"
+    }
+  ],
+  "schema": "bzr-dependency-analysis/v1",
+  "status": "partial",
+  "warnings": []
+}

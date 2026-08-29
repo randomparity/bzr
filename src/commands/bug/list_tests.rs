@@ -753,8 +753,8 @@ async fn list_paginate_with_progress_emits_page_then_terminal_done() {
     // and a single terminal `done` (emitted by the command after the write
     // succeeds, not by the fetch loop), with stdout left a clean JSON document.
     let (_lock, mock, _tmp) = setup_test_env().await;
-    // Page size 2: offset 0 → 2 bugs, offset 2 → 1 bug (short page, stop).
-    for (off, ids) in [("0", vec![1, 2]), ("2", vec![3])] {
+    // Page size 2: a short page is followed by the empty terminal request.
+    for (off, ids) in [("0", vec![1, 2]), ("2", vec![3]), ("3", vec![])] {
         let bugs: Vec<serde_json::Value> =
             ids.iter().map(|id| serde_json::json!({"id": id})).collect();
         Mock::given(method("GET"))
@@ -781,6 +781,7 @@ async fn list_paginate_with_progress_emits_page_then_terminal_done() {
         vec![
             "{\"event\":\"page\",\"n\":1,\"fetched\":2}",
             "{\"event\":\"page\",\"n\":2,\"fetched\":3}",
+            "{\"event\":\"page\",\"n\":3,\"fetched\":3}",
             "{\"event\":\"done\",\"fetched\":3}",
         ],
         "page events during the loop, then exactly one terminal done"

@@ -113,7 +113,7 @@ async fn fetch_page_rejects_next_offset_overflow() {
 
     assert!(
         matches!(&err, crate::error::BzrError::InputValidation { message: msg, .. }
-            if msg.contains("--offset") && msg.contains("--limit")),
+            if msg.contains("--offset") && msg.contains("page size")),
         "next offset overflow should be rejected before search: {err:?}"
     );
     assert!(
@@ -149,10 +149,10 @@ async fn fetch_page_no_truncation_when_under_limit() {
 }
 
 #[tokio::test]
-async fn fetch_page_paginate_loops_until_short_page() {
+async fn fetch_page_paginate_loops_until_empty_page() {
     let mock = MockServer::start().await;
-    // Page size 2: offset 0 → 2 bugs, offset 2 → 2 bugs, offset 4 → 1 (short, stop).
-    for (off, n) in [("0", 2u64), ("2", 2), ("4", 1)] {
+    // Page size 2: the short page still needs an empty terminal request.
+    for (off, n) in [("0", 2u64), ("2", 2), ("4", 1), ("5", 0)] {
         Mock::given(method("GET"))
             .and(path("/rest/bug"))
             .and(query_param("offset", off))
@@ -173,12 +173,17 @@ async fn fetch_page_paginate_loops_until_short_page() {
     .unwrap();
 
     assert!(!page.truncated, "paginate retrieves everything");
-    assert_eq!(page.bugs.len(), 5, "2 + 2 + 1 across three pages");
+    assert_eq!(page.bugs.len(), 5, "2 + 2 + 1 followed by an empty page");
 }
 
 #[tokio::test]
 async fn fetch_page_paginate_rejects_next_offset_overflow() {
     let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(bugs_body(6)))
+        .mount(&mock)
+        .await;
     let client = test_client(&mock.uri());
     let params = SearchParams {
         limit: Some(10),
@@ -200,12 +205,8 @@ async fn fetch_page_paginate_rejects_next_offset_overflow() {
 
     assert!(
         matches!(&err, crate::error::BzrError::InputValidation { message: msg, .. }
-            if msg.contains("--offset") && msg.contains("--limit")),
-        "paginate offset overflow should be rejected before search: {err:?}"
-    );
-    assert!(
-        mock.received_requests().await.unwrap().is_empty(),
-        "paginate overflow validation should happen before any search request"
+            if msg.contains("--offset") && msg.contains("page size")),
+        "paginate offset overflow should be rejected after observing the batch: {err:?}"
     );
 }
 
@@ -371,7 +372,7 @@ async fn fetch_page_paginate_zero_limit_makes_single_unbounded_request() {
 }
 
 #[tokio::test]
-async fn fetch_all_pages_errors_when_safety_cap_reached_without_short_page() {
+async fn fetch_all_pages_errors_when_safety_cap_reached_without_empty_page() {
     let mock = MockServer::start().await;
     for off in ["0", "2"] {
         Mock::given(method("GET"))
@@ -401,12 +402,48 @@ async fn fetch_all_pages_errors_when_safety_cap_reached_without_short_page() {
 }
 
 #[tokio::test]
+async fn fetch_all_pages_advances_by_server_clamped_batch_size() {
+    let mock = MockServer::start().await;
+    for (off, body) in [
+        ("0", serde_json::json!({"bugs": [{"id": 1}, {"id": 2}]})),
+        ("2", serde_json::json!({"bugs": [{"id": 3}, {"id": 4}]})),
+        ("4", serde_json::json!({"bugs": [{"id": 5}]})),
+        ("5", serde_json::json!({"bugs": []})),
+    ] {
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("limit", "100"))
+            .and(query_param("offset", off))
+            .respond_with(ResponseTemplate::new(200).set_body_json(body))
+            .mount(&mock)
+            .await;
+    }
+
+    let client = test_client(&mock.uri());
+    let bugs = fetch_all_pages_with_cap(
+        &client,
+        &params_with_limit(100),
+        4,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        bugs.iter().map(|bug| bug.id).collect::<Vec<_>>(),
+        vec![1, 2, 3, 4, 5],
+        "clamped pages must be contiguous, complete, and free of duplicates"
+    );
+}
+
+#[tokio::test]
 async fn fetch_page_paginate_emits_page_events_but_not_done() {
     // `fetch_page` emits one `page` per request during the loop; the terminal
     // `done` is the caller's responsibility (emitted only after the whole
     // invocation succeeds), so it must NOT appear in the fetch's own output.
     let mock = MockServer::start().await;
-    for (off, n) in [("0", 2u64), ("2", 2), ("4", 1)] {
+    for (off, n) in [("0", 2u64), ("2", 2), ("4", 1), ("5", 0)] {
         Mock::given(method("GET"))
             .and(path("/rest/bug"))
             .and(query_param("offset", off))
@@ -433,6 +470,7 @@ async fn fetch_page_paginate_emits_page_events_but_not_done() {
             "{\"event\":\"page\",\"n\":1,\"fetched\":2}",
             "{\"event\":\"page\",\"n\":2,\"fetched\":4}",
             "{\"event\":\"page\",\"n\":3,\"fetched\":5}",
+            "{\"event\":\"page\",\"n\":4,\"fetched\":5}",
         ],
         "no terminal done from fetch_page itself"
     );
@@ -508,6 +546,12 @@ async fn fetch_page_none_progress_is_silent_on_stderr() {
         .respond_with(ResponseTemplate::new(200).set_body_json(bugs_body(1)))
         .mount(&mock)
         .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("offset", "1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(bugs_body(0)))
+        .mount(&mock)
+        .await;
     let client = test_client(&mock.uri());
     let mut io = crate::test_helpers::CapturedIo::new();
     let _ = fetch_page(
@@ -526,7 +570,7 @@ async fn fetch_page_none_progress_is_silent_on_stderr() {
 async fn paginate_stdout_identical_with_and_without_progress() {
     async fn run(progress: Option<crate::types::ProgressFormat>) -> Vec<u8> {
         let mock = MockServer::start().await;
-        for (off, n) in [("0", 2u64), ("2", 1)] {
+        for (off, n) in [("0", 2u64), ("2", 1), ("3", 0)] {
             Mock::given(method("GET"))
                 .and(path("/rest/bug"))
                 .and(query_param("offset", off))

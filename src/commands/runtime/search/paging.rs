@@ -6,8 +6,9 @@
 //!
 //! - **`--offset <N>`** skips leading matches, so a window past the first
 //!   `--limit` is retrievable.
-//! - **`--paginate`** loops `offset += limit` until a short page and returns
-//!   every match — the full-retrieval path for "process all matching bugs".
+//! - **`--paginate`** advances by the rows actually received until an empty
+//!   page and returns every match — the full-retrieval path for "process all
+//!   matching bugs", including when the server clamps the requested limit.
 //!
 //! Without `--paginate`, [`fetch_page`] over-fetches one extra row (`limit+1`):
 //! if the server returns more than `limit`, at least one more match exists, so
@@ -52,16 +53,16 @@ fn overfetch_limit(limit: u32) -> Result<u32> {
     })
 }
 
-fn checked_next_offset(offset: u32, limit: u32) -> Result<u32> {
-    offset.checked_add(limit).ok_or_else(|| {
+fn checked_next_offset(offset: u32, page_size: u32) -> Result<u32> {
+    offset.checked_add(page_size).ok_or_else(|| {
         BzrError::input(format!(
-            "--offset {offset} plus --limit {limit} is too large to calculate the next page"
+            "--offset {offset} plus page size {page_size} is too large to calculate the next page"
         ))
     })
 }
 
 /// Fetch results honoring `--offset`/`--paginate`. With `paginate`, returns
-/// every match or errors if the safety cap is reached before a short page.
+/// every match or errors if the safety cap is reached before an empty page.
 /// Otherwise returns one window, with `truncated` set when the server had more
 /// rows than `limit`.
 ///
@@ -104,9 +105,9 @@ pub(crate) async fn fetch_page(
     Ok(Page { bugs, truncated })
 }
 
-/// Loop `offset += limit` until a page shorter than `limit` (the last page) and
-/// return the accumulated matches. A zero/absent limit means the single
-/// unbounded request already returns everything (bounded by the server max).
+/// Advance by the rows actually received until an empty page and return the
+/// accumulated matches. A zero/absent limit means the single unbounded request
+/// already returns everything (bounded by the server max).
 async fn fetch_all_pages(
     client: &BugzillaClient,
     params: &SearchParams,
@@ -123,17 +124,16 @@ async fn fetch_all_pages_with_cap(
     progress: Option<ProgressFormat>,
     w: &mut Writers<'_>,
 ) -> Result<Vec<Bug>> {
-    let Some(page_size) = params.limit.filter(|l| *l > 0) else {
+    if params.limit.is_none_or(|limit| limit == 0) {
         // No window: one unbounded request returns everything. There is no
         // multi-page sequence to report; the caller emits the terminal `done`.
         return client.search_bugs(params).await;
-    };
+    }
     let mut offset = params.offset.unwrap_or(0);
     let mut all = Vec::new();
     let mut reached_last_page = false;
     let mut page_no: u32 = 0;
     for _ in 0..max_pages {
-        let next_offset = checked_next_offset(offset, page_size)?;
         let mut p = params.clone();
         p.offset = Some(offset);
         let batch = client.search_bugs(&p).await?;
@@ -141,17 +141,20 @@ async fn fetch_all_pages_with_cap(
         all.extend(batch);
         page_no += 1;
         crate::output::progress::page_event(progress, w.err, page_no, all.len());
-        if received < page_size as usize {
+        if received == 0 {
             reached_last_page = true;
             break;
         }
-        offset = next_offset;
+        let received = u32::try_from(received).map_err(|_| {
+            BzrError::input("a search page is too large to calculate the next offset".into())
+        })?;
+        offset = checked_next_offset(offset, received)?;
     }
     if !reached_last_page {
         // The terminal `error` event is emitted by `main.rs` when this
         // propagates out of dispatch; the caller never reaches its `done`.
         return Err(BzrError::input(format!(
-            "--paginate stopped at the {max_pages}-page safety cap before reaching a short page; \
+            "--paginate stopped at the {max_pages}-page safety cap before reaching an empty page; \
              the server may be ignoring offset, so results would be incomplete"
         )));
     }

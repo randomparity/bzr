@@ -1,0 +1,231 @@
+{
+  "analysis_timestamp": "2026-08-28T12:00:00Z",
+  "bounds": {
+    "max_depth": 3,
+    "max_nodes": 10,
+    "max_relationships": 10
+  },
+  "cap": {
+    "graph_cap_reached": false,
+    "omitted_discovered_identities": 0,
+    "omitted_relationships_lower_bound": 0,
+    "relationship_cap_reached": false,
+    "scope_truncated": false
+  },
+  "components": [
+    {
+      "cyclic": false,
+      "id": "c0001",
+      "nodes": [
+        {
+          "id": 1,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    },
+    {
+      "cyclic": false,
+      "id": "c0002",
+      "nodes": [
+        {
+          "id": 2,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    },
+    {
+      "cyclic": false,
+      "id": "c0003",
+      "nodes": [
+        {
+          "id": 3,
+          "requested": null,
+          "server": "primary"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "observations": [
+        "blocks"
+      ],
+      "predecessor": {
+        "id": 1,
+        "server": "primary"
+      },
+      "successor": {
+        "id": 2,
+        "server": "primary"
+      }
+    },
+    {
+      "observations": [
+        "blocks"
+      ],
+      "predecessor": {
+        "id": 1,
+        "server": "primary"
+      },
+      "successor": {
+        "id": 3,
+        "server": "primary"
+      }
+    }
+  ],
+  "findings": {
+    "bottlenecks": [
+      {
+        "fan_out": 2,
+        "node": {
+          "id": 1,
+          "requested": null,
+          "server": "primary"
+        }
+      }
+    ],
+    "execution_order": {
+      "assumptions": [
+        "resolved-include-no-traverse"
+      ],
+      "component_order": [
+        "c0001",
+        "c0002",
+        "c0003"
+      ],
+      "cycle_impediments": [],
+      "incomplete_boundaries": []
+    },
+    "stale_blockers": [],
+    "structural_leaves": [
+      {
+        "id": 2,
+        "requested": null,
+        "server": "primary"
+      },
+      {
+        "id": 3,
+        "requested": null,
+        "server": "primary"
+      }
+    ],
+    "structural_roots": [
+      {
+        "id": 1,
+        "requested": null,
+        "server": "primary"
+      }
+    ],
+    "unassigned_blockers": []
+  },
+  "layers": [
+    [
+      "c0001"
+    ],
+    [
+      "c0002",
+      "c0003"
+    ]
+  ],
+  "limitations": [],
+  "longest_chain": {
+    "kind": "edge_count",
+    "length": 1,
+    "path": [
+      "c0001",
+      "c0002"
+    ]
+  },
+  "nodes": [
+    {
+      "assigned_to": "owner@example.test",
+      "boundary_reason": null,
+      "depth": 0,
+      "error_type": null,
+      "id": 1,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "1",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": false,
+      "state": "known",
+      "status": "NEW",
+      "summary": "Branch root"
+    },
+    {
+      "assigned_to": "a@example.test",
+      "boundary_reason": null,
+      "depth": 1,
+      "error_type": null,
+      "id": 2,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "2",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": false,
+      "state": "known",
+      "status": "NEW",
+      "summary": "Left"
+    },
+    {
+      "assigned_to": "b@example.test",
+      "boundary_reason": null,
+      "depth": 1,
+      "error_type": null,
+      "id": 3,
+      "last_change_time": "2026-08-27T12:00:00Z",
+      "provenance": {
+        "command": "bug view",
+        "server": "primary"
+      },
+      "requested": "3",
+      "requested_aliases": [],
+      "resolution": null,
+      "server": "primary",
+      "stale": false,
+      "state": "known",
+      "status": "NEW",
+      "summary": "Right"
+    }
+  ],
+  "policy": {
+    "direction": "both",
+    "duration": null,
+    "resolved_mode": "include-no-traverse",
+    "resolved_statuses": [
+      "RESOLVED"
+    ],
+    "stale_after_days": 14,
+    "unassigned_assignees": {}
+  },
+  "provenance": [
+    {
+      "parameter_names": [],
+      "scope_kind": "bug-ids",
+      "server": "primary",
+      "source": null
+    }
+  ],
+  "roots": [
+    {
+      "id": 1,
+      "requested": "1",
+      "server": "primary"
+    }
+  ],
+  "schema": "bzr-dependency-analysis/v1",
+  "status": "complete",
+  "warnings": []
+}
