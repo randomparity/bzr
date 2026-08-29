@@ -2,11 +2,14 @@
   "analysis_timestamp": "2026-08-28T12:00:00Z",
   "bounds": {
     "max_depth": 3,
-    "max_nodes": 10
+    "max_nodes": 10,
+    "max_relationships": 10
   },
   "cap": {
     "graph_cap_reached": false,
     "omitted_discovered_identities": 0,
+    "omitted_relationships_lower_bound": 0,
+    "relationship_cap_reached": false,
     "scope_truncated": false
   },
   "components": [

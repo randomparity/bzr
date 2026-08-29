@@ -25,14 +25,17 @@ installed skill directory so a later installation can replace the managed payloa
 
 ## Collect, analyze, and render
 
-Choose positive depth and node bounds before retrieval. The maximum node bound is 9,999 because
-component IDs use the four-digit `cNNNN` namespace. The collector rejects a higher bound,
-duplicate JSON keys, and invalid UTF-8 before invoking `bzr`. If no bounds are supplied, the skill
-proposes depth 5 and 200 nodes. A minimal policy for one configured server and bug-ID root is:
+Choose positive depth and node bounds before retrieval. The optional positive relationship bound
+defaults to the node bound and may be raised independently. Node and relationship bounds may not
+exceed 9,999; the node ceiling preserves the four-digit `cNNNN` namespace. The collector rejects a
+higher bound, duplicate JSON keys, and invalid UTF-8 before invoking `bzr`. If no bounds are
+supplied, the skill proposes depth 5, 200 nodes, and 200 relationships. It preflights each server
+once with a released read-only command before retrieving resources. A minimal policy for one
+configured server and bug-ID root is:
 
 ```json
 {
-  "bounds": {"max_depth": 5, "max_nodes": 200},
+  "bounds": {"max_depth": 5, "max_nodes": 200, "max_relationships": 200},
   "bzr": "bzr",
   "direction": "both",
   "resolved_mode": "include-no-traverse",
@@ -70,8 +73,10 @@ python3 "$SKILL_ROOT/scripts/render.py" \
 ```
 
 The analyzer rejects a partial collection unless the operator explicitly chooses
-`--allow-partial`. Unknown, inaccessible, missing, depth-limited, scope-limited, and interrupted
-nodes remain visible so an incomplete snapshot cannot be mistaken for a complete graph.
+`--allow-partial`. Unknown, inaccessible, missing, depth-limited, scope-limited, relationship-capped,
+and interrupted nodes remain visible so an incomplete snapshot cannot be mistaken for a complete
+graph. A relationship-cap omission count is explicitly a lower bound because unfetched nodes may
+contain additional relationships.
 
 ## Interpret the result structurally
 

@@ -77,6 +77,14 @@ def validate_cap_relationships(cap, limitations):
     if graph_limited != graph_cap_reached or (has_omissions and not graph_cap_reached):
         raise RenderInputError("graph cap metadata is inconsistent")
 
+    relationship_limited = "relationship_cap" in limitations
+    relationship_cap_reached = cap["relationship_cap_reached"]
+    has_relationship_omissions = cap["omitted_relationships_lower_bound"] > 0
+    if relationship_limited != relationship_cap_reached or (
+        has_relationship_omissions and not relationship_cap_reached
+    ):
+        raise RenderInputError("relationship cap metadata is inconsistent")
+
     scope_limitations = set(limitations) & {
         "restriction-node-cap",
         "scope-node-cap",
@@ -400,18 +408,43 @@ def validate_analysis(document):
         raise RenderInputError(
             "analysis_timestamp must be second-precision UTC RFC 3339"
         ) from error
-    exact_keys(document["bounds"], {"max_depth", "max_nodes"}, "bounds")
+    exact_keys(
+        document["bounds"],
+        {"max_depth", "max_nodes", "max_relationships"},
+        "bounds",
+    )
     integer(document["bounds"]["max_depth"], "bounds.max_depth", positive=True)
     integer(document["bounds"]["max_nodes"], "bounds.max_nodes", positive=True)
     if document["bounds"]["max_nodes"] > MAX_NODES:
         raise RenderInputError(f"bounds.max_nodes must be at most {MAX_NODES}")
-    cap_keys = {"graph_cap_reached", "omitted_discovered_identities", "scope_truncated"}
+    integer(
+        document["bounds"]["max_relationships"],
+        "bounds.max_relationships",
+        positive=True,
+    )
+    if document["bounds"]["max_relationships"] > MAX_NODES:
+        raise RenderInputError(f"bounds.max_relationships must be at most {MAX_NODES}")
+    cap_keys = {
+        "graph_cap_reached",
+        "omitted_discovered_identities",
+        "omitted_relationships_lower_bound",
+        "relationship_cap_reached",
+        "scope_truncated",
+    }
     exact_keys(document["cap"], cap_keys, "cap")
     boolean(document["cap"]["graph_cap_reached"], "cap.graph_cap_reached")
+    boolean(
+        document["cap"]["relationship_cap_reached"],
+        "cap.relationship_cap_reached",
+    )
     boolean(document["cap"]["scope_truncated"], "cap.scope_truncated")
     integer(
         document["cap"]["omitted_discovered_identities"],
         "cap.omitted_discovered_identities",
+    )
+    integer(
+        document["cap"]["omitted_relationships_lower_bound"],
+        "cap.omitted_relationships_lower_bound",
     )
     if document["status"] not in {"complete", "partial"}:
         raise RenderInputError("status is unsupported")
@@ -428,6 +461,8 @@ def validate_analysis(document):
         raise RenderInputError("nodes must be sorted and unique")
     if len(identities) > document["bounds"]["max_nodes"]:
         raise RenderInputError("nodes exceed bounds.max_nodes")
+    if len(document["edges"]) > document["bounds"]["max_relationships"]:
+        raise RenderInputError("edges exceed bounds.max_relationships")
     node_identities = set(identities)
     numeric_nodes = {
         (server, bug_id) for server, bug_id, _ in identities if bug_id is not None
@@ -493,7 +528,8 @@ def metadata_lines(document):
         f"Analysis timestamp: {document['analysis_timestamp']}",
         (
             f"Bounds: maximum depth {document['bounds']['max_depth']}; "
-            f"maximum nodes {document['bounds']['max_nodes']}"
+            f"maximum nodes {document['bounds']['max_nodes']}; "
+            f"maximum relationships {document['bounds']['max_relationships']}"
         ),
         (
             f"Resolved-node policy: {document['policy']['resolved_mode']}; "
@@ -508,6 +544,14 @@ def metadata_lines(document):
         (
             "Omitted discovered identities: "
             f"{document['cap']['omitted_discovered_identities']}"
+        ),
+        (
+            "Relationship cap reached: "
+            f"{str(document['cap']['relationship_cap_reached']).lower()}"
+        ),
+        (
+            "Omitted relationships (lower bound): "
+            f"{document['cap']['omitted_relationships_lower_bound']}"
         ),
         f"Scope truncated: {str(document['cap']['scope_truncated']).lower()}",
         f"Limitations: {limitations}",

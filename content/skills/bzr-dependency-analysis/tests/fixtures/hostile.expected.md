@@ -3,12 +3,14 @@
 - Schema: bzr&#45;dependency&#45;analysis/v1
 - Status: complete
 - Analysis timestamp: 2026&#45;08&#45;28T12:00:00Z
-- Bounds: maximum depth 5; maximum nodes 200
+- Bounds: maximum depth 5; maximum nodes 200; maximum relationships 200
 - Resolved&#45;node policy: include&#45;no&#45;traverse; resolved statuses RESOLVED
 - Duration assumptions: none; weighted critical&#45;path analysis is unsupported
 - Evidence gaps: 0 unknown nodes; 0 boundary nodes
 - Graph cap reached: false
 - Omitted discovered identities: 0
+- Relationship cap reached: false
+- Omitted relationships &#40;lower bound&#41;: 0
 - Scope truncated: false
 - Limitations: none
 - Collection commands: bug search, bug view, query run

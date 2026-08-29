@@ -199,7 +199,7 @@ if [[ "${1:-}" == "dependency-analysis" ]]; then
   dependency_report="$dependency_project/dependency-report.md"
   dependency_diagram="$dependency_project/dependency-graph.mmd"
   jq -n --arg bzr "$BZR_BIN" --argjson root "$dependency_root" '{
-    bounds: {max_depth: 5, max_nodes: 20},
+    bounds: {max_depth: 5, max_nodes: 20, max_relationships: 40},
     bzr: $bzr,
     direction: "both",
     resolved_mode: "include-no-traverse",

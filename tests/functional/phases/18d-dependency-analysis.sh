@@ -20,6 +20,11 @@ for _DA_PATH in "$_DA_COLLECT" "$_DA_ANALYZE" "$_DA_RENDER" "$_DA_CYCLE"; do
   esac
 done
 _DA_BZR_CANONICAL=$(cd "$(dirname "$BZR_BIN")" && pwd -P)/$(basename "$BZR_BIN")
+_DA_CONFIG="$XDG_CONFIG_HOME/bzr/config.toml"
+printf '\n[servers.dependency-rest-public]\nurl = "%s"\napi_mode = "rest"\n' \
+  "$BZ_URL" >>"$_DA_CONFIG"
+printf '\n[servers.dependency-xmlrpc-public]\nurl = "%s"\napi_mode = "xmlrpc"\n' \
+  "$BZ_URL" >>"$_DA_CONFIG"
 
 test_begin "123k. live pipeline resolves only installed helpers and release bzr"
 if [[ $_DA_PATHS_OK -eq 1 ]] && [[ -f "$_DA_COLLECT" ]] &&
@@ -89,7 +94,7 @@ jq -n \
   --arg bzr "$_DA_BZR_CANONICAL" \
   --argjson root "${_DA_ROOT:-0}" \
   '{
-    bounds: {max_depth: 5, max_nodes: 20},
+    bounds: {max_depth: 5, max_nodes: 20, max_relationships: 40},
     bzr: $bzr,
     direction: "both",
     resolved_mode: "include-no-traverse",
@@ -132,10 +137,12 @@ if [[ $_DA_PIPELINE_OK -eq 1 ]] &&
       ];
       .schema == "bzr-dependency-analysis/v1" and
       .status == "complete" and
-      .bounds == {"max_depth": 5, "max_nodes": 20} and
+      .bounds == {"max_depth": 5, "max_nodes": 20, "max_relationships": 40} and
       .cap == {
         "graph_cap_reached": false,
         "omitted_discovered_identities": 0,
+        "omitted_relationships_lower_bound": 0,
+        "relationship_cap_reached": false,
         "scope_truncated": false
       } and
       ([.nodes[] | select(.id == $root) | .server] | sort) == ["public", "test"] and
@@ -156,6 +163,8 @@ if [[ $_DA_PIPELINE_OK -eq 1 ]] &&
   grep -q '<script>alert(1)</script>' "$_DA_REPORT" &&
   grep -Fq -- '- Graph cap reached: false' "$_DA_REPORT" &&
   grep -Fq -- '- Omitted discovered identities: 0' "$_DA_REPORT" &&
+  grep -Fq -- '- Relationship cap reached: false' "$_DA_REPORT" &&
+  grep -Fq -- '- Omitted relationships &#40;lower bound&#41;: 0' "$_DA_REPORT" &&
   grep -Fq -- '- Longest dependency chain components:' "$_DA_REPORT" &&
   grep -Fq -- '- Bottlenecks:' "$_DA_REPORT" &&
   grep -Fq -- '- Execution assumptions:' "$_DA_REPORT" &&
@@ -180,14 +189,17 @@ _DA_MISSING_ANALYSIS="$FUNC_CONFIG_DIR/dependency-missing.analysis.json"
 jq -n --arg bzr "$_DA_BZR_CANONICAL" --argjson root "${_DA_ROOT:-0}" \
   --argjson missing "$_DA_MISSING" '
     {
-      bounds: {max_depth: 5, max_nodes: 12},
+      bounds: {max_depth: 5, max_nodes: 30, max_relationships: 60},
       bzr: $bzr,
       direction: "both",
       resolved_mode: "include-no-traverse",
       resolved_statuses: ["RESOLVED"],
       restriction: null,
-      scopes: [{ids: [$root, $missing], kind: "bug-ids", server: "public"}],
-      servers: ["public"],
+      scopes: [
+        {ids: [$root, $missing], kind: "bug-ids", server: "dependency-rest-public"},
+        {ids: [$root, $missing], kind: "bug-ids", server: "dependency-xmlrpc-public"}
+      ],
+      servers: ["dependency-rest-public", "dependency-xmlrpc-public"],
       stale_after_days: 14
     }
   ' >"$_DA_MISSING_POLICY"
@@ -197,18 +209,18 @@ python3 "$_DA_COLLECT" --policy "$_DA_MISSING_POLICY" \
 python3 "$_DA_ANALYZE" --input "$_DA_MISSING_COLLECTION" \
   --output "$_DA_MISSING_ANALYSIS" || _DA_MISSING_OK=0
 
-test_begin "123n. nonexistent root is sanitized and does not stop visible collection"
+test_begin "123n. REST and XML-RPC missing roots are sanitized and nonfatal"
 if [[ $_DA_MISSING_OK -eq 1 ]] &&
   jq -e --argjson root "$_DA_ROOT" --argjson missing "$_DA_MISSING" '
       ([.nodes[] | select(
         .id == $missing and .state == "unknown" and
-        .error_type == "not_found" and .summary == null)] | length) == 1 and
-      ([.nodes[] | select(.id == $root and .state == "known")] | length) == 1 and
+        .error_type == "not_found" and .summary == null)] | length) == 2 and
+      ([.nodes[] | select(.id == $root and .state == "known")] | length) == 2 and
       ([.. | objects | select(has("message"))] | length) == 0
     ' "$_DA_MISSING_COLLECTION" >/dev/null &&
   jq -e --argjson missing "$_DA_MISSING" '
       [.findings.execution_order.incomplete_boundaries[] |
-        select(.id == $missing and .server == "public")] | length == 1
+        select(.id == $missing)] | length == 2
     ' "$_DA_MISSING_ANALYSIS" >/dev/null &&
   ! grep -Eiq 'does not exist|not authorized|not permitted' \
     "$_DA_MISSING_COLLECTION"; then
@@ -223,14 +235,14 @@ _DA_INACCESSIBLE_ANALYSIS="$FUNC_CONFIG_DIR/dependency-inaccessible.analysis.jso
 jq -n --arg bzr "$_DA_BZR_CANONICAL" --argjson root "${_DA_ROOT:-0}" \
   --argjson restricted "${RESTRICTED_BUG:-0}" '
     {
-      bounds: {max_depth: 5, max_nodes: 12},
+      bounds: {max_depth: 5, max_nodes: 12, max_relationships: 24},
       bzr: $bzr,
       direction: "both",
       resolved_mode: "include-no-traverse",
       resolved_statuses: ["RESOLVED"],
       restriction: null,
-      scopes: [{ids: [$root, $restricted], kind: "bug-ids", server: "public"}],
-      servers: ["public"],
+      scopes: [{ids: [$root, $restricted], kind: "bug-ids", server: "dependency-rest-public"}],
+      servers: ["dependency-rest-public"],
       stale_after_days: 14
     }
   ' >"$_DA_INACCESSIBLE_POLICY"
@@ -251,7 +263,7 @@ if [[ $_DA_INACCESSIBLE_OK -eq 1 ]] &&
     ' "$_DA_INACCESSIBLE_COLLECTION" >/dev/null &&
   jq -e --argjson restricted "$RESTRICTED_BUG" '
       [.findings.execution_order.incomplete_boundaries[] |
-        select(.id == $restricted and .server == "public")] | length == 1
+        select(.id == $restricted and .server == "dependency-rest-public")] | length == 1
     ' "$_DA_INACCESSIBLE_ANALYSIS" >/dev/null &&
   ! grep -Eiq 'does not exist|not authorized|not permitted' \
     "$_DA_INACCESSIBLE_COLLECTION"; then
@@ -260,14 +272,61 @@ else
   test_fail "inaccessible root was conflated, unsanitized, or stopped visible traversal"
 fi
 
+_DA_RELATIONSHIP_POLICY="$FUNC_CONFIG_DIR/dependency-relationship-cap.policy.json"
+_DA_RELATIONSHIP_COLLECTION="$FUNC_CONFIG_DIR/dependency-relationship-cap.collection.json"
+_DA_RELATIONSHIP_ANALYSIS="$FUNC_CONFIG_DIR/dependency-relationship-cap.analysis.json"
+jq -n --arg bzr "$_DA_BZR_CANONICAL" --argjson root "${_DA_ROOT:-0}" '
+  {
+    bounds: {max_depth: 5, max_nodes: 20, max_relationships: 1},
+    bzr: $bzr,
+    direction: "both",
+    resolved_mode: "include-no-traverse",
+    resolved_statuses: ["RESOLVED"],
+    restriction: null,
+    scopes: [{ids: [$root], kind: "bug-ids", server: "test"}],
+    servers: ["test"],
+    stale_after_days: 14
+  }
+' >"$_DA_RELATIONSHIP_POLICY"
+_DA_RELATIONSHIP_OK=1
+python3 "$_DA_COLLECT" --policy "$_DA_RELATIONSHIP_POLICY" \
+  --output "$_DA_RELATIONSHIP_COLLECTION" || _DA_RELATIONSHIP_OK=0
+python3 "$_DA_ANALYZE" --input "$_DA_RELATIONSHIP_COLLECTION" --allow-partial \
+  --output "$_DA_RELATIONSHIP_ANALYSIS" || _DA_RELATIONSHIP_OK=0
+
+test_begin "123p. installed live relationship cap retains a bounded partial prefix"
+if [[ $_DA_RELATIONSHIP_OK -eq 1 ]] &&
+  jq -e --argjson root "$_DA_ROOT" '
+      .status == "partial" and
+      .limitations == ["relationship_cap"] and
+      .bounds.max_relationships == 1 and
+      .cap.relationship_cap_reached == true and
+      .cap.omitted_relationships_lower_bound >= 2 and
+      ([.nodes[] | select(.id == $root and .state == "known")] | length) == 1 and
+      (.observations | length) == 1 and
+      (.nodes | length) == 2
+    ' "$_DA_RELATIONSHIP_COLLECTION" >/dev/null &&
+  jq -e '
+      .status == "partial" and
+      .limitations == ["relationship_cap"] and
+      .cap.relationship_cap_reached == true and
+      (.edges | length) == 1
+    ' "$_DA_RELATIONSHIP_ANALYSIS" >/dev/null; then
+  test_pass
+else
+  test_fail "relationship cap did not retain a deterministic bounded partial prefix"
+fi
+
 unset RESTRICTED_BUG
-unset _DA_ANALYSIS _DA_ANALYZE _DA_BASE _DA_BZR_CANONICAL _DA_COLLECT
+unset _DA_ANALYSIS _DA_ANALYZE _DA_BASE _DA_BZR_CANONICAL _DA_COLLECT _DA_CONFIG
 unset _DA_COLLECTION _DA_CREATE _DA_CYCLE _DA_DIAGRAM _DA_FIXTURE_OK
 unset _DA_HOSTILE_SUMMARY _DA_INACCESSIBLE_ANALYSIS _DA_INACCESSIBLE_COLLECTION
 unset _DA_INACCESSIBLE_OK _DA_INACCESSIBLE_POLICY _DA_LEFT _DA_MARKER
 unset _DA_MISSING _DA_MISSING_ANALYSIS _DA_MISSING_COLLECTION _DA_MISSING_OK
 unset _DA_MISSING_POLICY _DA_PATH _DA_PATH_CANONICAL _DA_PATHS_OK _DA_PIPELINE_OK
 unset _DA_POLICY _DA_RENDER _DA_REPORT _DA_RESOLVED _DA_RESOLVED_PARENT
+unset _DA_RELATIONSHIP_ANALYSIS _DA_RELATIONSHIP_COLLECTION _DA_RELATIONSHIP_OK
+unset _DA_RELATIONSHIP_POLICY
 unset _DA_RIGHT _DA_ROOT _DA_SKILL_ROOT _DA_SKILL_ROOT_CANONICAL
 
 echo ""

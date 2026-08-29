@@ -42,15 +42,17 @@ Before retrieval, the skill resolves:
 - roots from bug IDs, one alias per server, a named saved query, a Custom Search URL, a target
   milestone, or a version;
 - direction: `depends_on`, `blocks`, or both;
-- maximum depth and maximum distinct nodes, both required and positive; the
-  maximum node bound is 9,999 so every component fits the four-digit `cNNNN` namespace;
+- maximum depth and maximum distinct nodes, both required and positive; optional positive
+  `max_relationships` defaults to `max_nodes`; node and relationship bounds are at most 9,999,
+  and the node ceiling keeps every component in the four-digit `cNNNN` namespace;
 - whether resolved nodes are included and traversed or included but not traversed;
 - optional product, milestone, or query-membership restriction;
 - stale threshold, analysis timestamp, and requested output formats.
 
-If the user omits bounds, the skill proposes conservative defaults of depth 5 and 200 nodes
-and states them before fetching. The collector rejects a node bound above 9,999, duplicate policy
-keys, and invalid UTF-8 before invoking a runner. It never starts an unbounded walk. Refresh is an
+If the user omits bounds, the skill proposes conservative defaults of depth 5, 200 nodes, and 200
+relationships and states them before fetching. An explicit relationship bound may raise that
+budget independently. The collector rejects a node or relationship bound above 9,999, duplicate
+policy keys, and invalid UTF-8 before invoking a runner. It never starts an unbounded walk. Refresh is an
 explicit new collection run; within one run a server-qualified bug identity is fetched at most
 once.
 
@@ -70,7 +72,10 @@ proves oversize. This bounds both membership storage and requests by the chosen 
 
 The bundled `scripts/collect.py` owns collection and invokes `bzr` through a command-runner
 boundary. Tests substitute a recorded runner; live use invokes the configured binary without a
-shell. The collector maintains `queued`, `fetched`, and `nodes` sets keyed by `(server, bug-id)`.
+shell. Before other retrieval, it preflights every declared server exactly once with released
+read-only `bug list --limit 1 --offset 0 --fields id --sort bug_id --order asc`. Any preflight
+failure is command-fatal. The collector maintains `queued`, `fetched`, and `nodes` sets keyed by
+`(server, bug-id)`.
 Admission immediately creates a `boundary` node with `boundary_reason: pending_fetch`; every
 admitted identity therefore has a legal record before its command runs.
 Root processing follows server aliases lexically, with the optional alias root before numeric roots
@@ -93,10 +98,11 @@ command-level failure exposes the versioned structured error envelope. It theref
 one command per admitted bug. The field list additionally
 requests `product`, `target_milestone`, or `version` when the corresponding restriction is
 active. Both adjacency fields are fetched so reciprocal evidence can be normalized. The selected
-direction controls discovery, admission, cap consumption, and omitted-identity counts:
+direction controls discovery, admission, node-cap consumption, and omitted-identity counts:
 `depends_on` selects dependency neighbors, `blocks` selects blocking neighbors, and `both` selects
-their union. The collector stages every returned selected- and unselected-field observation before
-endpoint filtering. After all admission and fetching finishes, a deterministic second pass first
+their union. The collector stages selected- and unselected-field observations in fixed field and
+response order until the aggregate relationship budget is consumed; it never retains or discovers
+from the unprocessed suffix. After all admission and fetching finishes, a deterministic second pass first
 filters staged observations to pairs whose endpoints are admitted, establishes canonical edges
 from selected observations, then attaches unselected observations only when they normalize onto
 one of those established edges. Thus
@@ -128,8 +134,11 @@ distinct server-qualified identities rejected while scanning all adjacency lists
 for the current frontier; duplicate observations count once. No further frontier is fetched, so
 deeper undiscovered identities are neither named nor counted. Collection order is canonical: server
 aliases lexically, numeric roots sorted ascending after stable deduplication,
-breadth-first depth, and numeric bug ID within each frontier. Returned nodes and adjacency IDs are
-sorted before admission, and output records use the same order. Scope restrictions
+breadth-first depth, and numeric bug ID within each frontier. Output records use canonical sorted
+order. Relationship exhaustion stops further staging, discovery, and fetching, preserves the
+already admitted graph, and adds limitation `relationship_cap`. Its
+`omitted_relationships_lower_bound` counts only visibly skipped entries in fetched arrays and is
+explicitly a lower bound because unprocessed nodes may contain more. Scope restrictions
 are evaluated from fetched fields or the initial scope membership; nodes outside the
 restriction remain visible boundary nodes and are not traversed.
 
@@ -138,8 +147,10 @@ admitted identity in that frontier is fetched in canonical order. Their returned
 record observations only between admitted endpoints and contribute rejected identities to the
 deduplicated omitted count. Collection then stops before fetching a next frontier.
 
-The single-ID structured error envelope makes Bugzilla API codes 100/101 (`not_found`) and 102
-(`inaccessible`) per-resource failures; each becomes an unknown node with that stable `error_type`.
+After successful server preflight, the single-ID structured error envelope makes Bugzilla API
+codes 100/101 (`not_found`) and 102 (`inaccessible`) per-resource failures; each becomes an unknown
+node with that stable `error_type`. Structured `type=not_found,resource=bug` is also `not_found`,
+including in XML-RPC mode. Code 102 without successful preflight is ambiguous and fatal.
 Other `api` failures and every `http` failure are fatal. Global
 authentication, TLS, transport, schema-version, malformed-output, and unclassified failures stop
 collection and preserve a partial inventory with a run-level limitation. Batch failures are never
@@ -167,10 +178,12 @@ The normative collection shape is:
 ```json
 {
   "analysis_timestamp": "2026-08-28T12:00:00Z",
-  "bounds": {"max_depth": 5, "max_nodes": 200},
+  "bounds": {"max_depth": 5, "max_nodes": 200, "max_relationships": 200},
   "cap": {
     "graph_cap_reached": false,
     "omitted_discovered_identities": 0,
+    "omitted_relationships_lower_bound": 0,
+    "relationship_cap_reached": false,
     "scope_truncated": false
   },
   "limitations": [],
@@ -238,6 +251,8 @@ limitation `scope-node-cap`; the first `max_nodes` roots remain. Traversal exhau
 `graph-node-cap`. An oversized membership restriction emits no nodes, status `partial`, limitation
 `restriction-node-cap`, and `scope_truncated: true`; traversal does not start. Fatal collection adds
 its stable run-level limitation code and status `partial` without changing already recorded nodes.
+Relationship exhaustion sets `relationship_cap_reached: true`, limitation `relationship_cap`, and
+the explicit lower-bound omission count without discarding already admitted nodes or observations.
 Every observation endpoint must occur in `nodes`. When cap admission rejects a newly discovered
 identity, all observations to that identity are omitted and the identity contributes exactly once
 to `omitted_discovered_identities`.
@@ -249,8 +264,8 @@ The normative analyzer output is one `bzr-dependency-analysis/v1` document:
 ```json
 {
   "analysis_timestamp": "2026-08-28T12:00:00Z",
-  "bounds": {"max_depth": 5, "max_nodes": 200},
-  "cap": {"graph_cap_reached": false, "omitted_discovered_identities": 0, "scope_truncated": false},
+  "bounds": {"max_depth": 5, "max_nodes": 200, "max_relationships": 200},
+  "cap": {"graph_cap_reached": false, "omitted_discovered_identities": 0, "omitted_relationships_lower_bound": 0, "relationship_cap_reached": false, "scope_truncated": false},
   "components": [
     {"cyclic": false, "id": "c0001", "nodes": [{"id": 1199, "requested": null, "server": "primary"}]},
     {"cyclic": false, "id": "c0002", "nodes": [{"id": 1200, "requested": null, "server": "primary"}]}
@@ -455,20 +470,23 @@ behavioral Python tests compare helper output against fixture oracles byte-for-b
 | DA-12 | Custom Search URL containing secret-like and unknown parameters | Sanitized scope kind and allowlisted names only | Literal value appears | block |
 | DA-13 | Broad scope and oversized query restriction | Root enumeration stops at cap; restriction refuses before pagination | Exhaustive unbounded fetch | block |
 | DA-14 | Permuted mixed scopes, roots, responses, adjacency lists, and saved-query order around cap | Canonical deduplicated provenance, explicit bug-ID sort, and byte-identical capped inventory | Order-dependent graph or provenance | block |
-| DA-15a | Single-ID API 100/101 missing | Each becomes nonfatal sanitized `not_found`, remains an unknown node, and traversal continues | Fatal missing node, fabricated detail, or raw stderr | block |
-| DA-15b | Single-ID API 102 inaccessible | Becomes nonfatal sanitized `inaccessible`, remains an unknown node, and traversal continues | Fatal inaccessible node, fabricated detail, or raw stderr | block |
+| DA-15a | Single-ID API 100/101 or structured bug `not_found` | Each becomes nonfatal sanitized `not_found`, remains an unknown node, and traversal continues | Fatal missing node, fabricated detail, or raw stderr | block |
+| DA-15b | Successful preflight then single-ID API 102 inaccessible | Becomes nonfatal sanitized `inaccessible`, remains an unknown node, and traversal continues | Fatal inaccessible node, fabricated detail, or raw stderr | block |
 | DA-15c | Other API and global auth/TLS/connection/transport failures | Stops with a partial run-level limitation and fetch-interrupted boundaries | Fabricated unknown or continued global failure | block |
+| DA-15d | Failed preflight or API 102 without successful preflight | Command-fatal sanitized API limitation before resource classification | Invalid credentials classified as inaccessible | block |
 | DA-16 | Stale, missing, and malformed timestamps at injected UTC time | `true` or `unknown` with warning | Wall-clock-dependent or ignored result | block |
 | DA-17 | Fatal error after one successful frontier | Valid `partial` JSON, generic stderr, exit 1; rejected without opt-in | Truncated stream accepted as complete | block |
 | DA-18 | Alias success/collapse and alias `not_found` | Canonical numeric node or linked unresolved root, one fetch and slot, byte-exact roots and alias provenance | Duplicate/unlinked node or fetch | block |
 | DA-19 | PM findings with unresolved roots, branch, and cycle | Roots preserved; deterministic structural roots/leaves, bottlenecks, unassigned blockers, and execution assumptions | Missing or ambiguous finding | block |
 | DA-20 | Zero-node partial restriction result | Exact empty findings and zero-length empty path with partial assumption | Rejection or fabricated path | block |
 | DA-21 | Direction isolation at cap | Only selected adjacency admits nodes and consumes cap for `depends_on`, `blocks`, and `both` | Unselected neighbor changes inventory | block |
+| DA-22 | Wide adjacency beyond `max_relationships` | Retains only the deterministic bounded prefix, stops staging/discovery, and reports a lower-bound omission count | Unbounded retained/work state or hidden omission | block |
 
 `python3 content/skills/bzr-dependency-analysis/tests/test_analyze.py` runs DA-01 and DA-03
 through DA-11 plus DA-16, DA-19, and DA-20. `python3 content/skills/bzr-dependency-analysis/tests/test_collect.py`
 runs DA-04, DA-06, DA-13 through DA-15c, and DA-17 with a stubbed command runner and exact command
-log assertions, and runs DA-18 for alias canonicalization plus DA-21 for direction isolation. `python3 content/skills/bzr-dependency-analysis/tests/test_render.py` runs DA-07
+log assertions, and runs DA-18 for alias canonicalization, DA-21 for direction isolation, and DA-22
+for aggregate relationship bounding. `python3 content/skills/bzr-dependency-analysis/tests/test_render.py` runs DA-07
 against every deterministic renderer. `content/skills/bzr-dependency-analysis/tests/skill-contract.sh`
 runs DA-02 and DA-12 plus static command allowlist and phantom-flag checks. The fixture suite validates the skill
 contract and every documented `bzr` invocation. A real
@@ -496,8 +514,9 @@ secrets, validate Bugzilla URLs, and emit its documented JSON envelopes.
 
 - Commands use argument arrays or shell-safe quoting; Bugzilla text is data and is never evaluated
   as shell, template source, HTML, or Mermaid syntax.
-- Positive numeric bounds, including the 9,999-node ceiling, duplicate-free keys, and valid UTF-8
-  are checked before collection; queue membership enforces fetch-once and both hard caps.
+- Positive numeric bounds, including the 9,999 node and relationship ceilings, duplicate-free keys,
+  and valid UTF-8 are checked before collection; queue membership enforces fetch-once and the hard
+  depth, node, and relationship caps.
 - Server-qualified identities prevent cross-server collisions.
 - Only documented read commands are allowlisted; the skill refuses mutation requests during an
   analysis.
@@ -528,10 +547,12 @@ collect→analyze→render chain through the real `bzr` binary. It asserts serve
 resolved handling, caps, and inert rendered text without resolving any stage from the checkout.
 The phase also analyzes the installed deterministic cycle fixture and asserts its cyclic component;
 it does not attempt an impossible live circular mutation.
-Using the credentialless server and restricted fixture created by the existing functional phases,
-18d separately collects a real nonexistent starting ID and a real inaccessible starting ID beside
-a visible root. It asserts `not_found` and `inaccessible` unknown nodes, continued collection,
-valid partial-safe output, and absence of the server's raw error message.
+Using explicit credentialless REST and XML-RPC server profiles plus the restricted fixture created
+by the existing functional phases, 18d collects real nonexistent starting IDs in both API modes and
+a real inaccessible REST starting ID beside visible roots. It asserts `not_found` and `inaccessible`
+unknown nodes, continued collection, valid partial-safe output, and absence of raw server messages.
+It also runs the installed pipeline with a one-relationship budget and asserts the bounded admitted
+prefix, `relationship_cap`, and lower-bound omission metadata.
 Phase 18d gives the live graph a stable, unique whiteboard marker so a later read-only demonstration
 can discover the already-provisioned IDs. Fixture creation belongs only to the disposable functional
 harness; neither the installed skill nor the displayed analysis workflow performs a mutation.

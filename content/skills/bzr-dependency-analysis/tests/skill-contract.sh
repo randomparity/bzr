@@ -92,7 +92,7 @@ done < <(rg -o "$command_pattern" "$skill")
 require_words 'server alias, scope kind, saved-query name, allowlisted parameter names, and collection command name'
 require_words 'never includes parameter values, a literal Custom Search URL, credentials, raw server errors, or a full command line'
 require_words 'Unknown and boundary nodes remain visible'
-require_words 'maximum node bound is 9,999'
+require_words 'Node and relationship bounds may not exceed 9,999'
 require_words 'longest dependency chain by edge count'
 require_words 'Weighted critical-path analysis and delivery-date prediction are unsupported'
 require_words 'refuse the request rather than mutate Bugzilla'
@@ -109,8 +109,8 @@ require_file_literal "$documentation" \
   '![Dependency analysis demo](assets/bzr-dependency-analysis-demo.gif)'
 require_file_literal "$documentation" \
   '[Download the asciinema cast](assets/bzr-dependency-analysis-demo.cast)'
-require_file_literal "$documentation" 'maximum node bound is 9,999'
-require_file_literal "$specification" 'maximum node bound is 9,999'
+require_file_literal "$documentation" 'Node and relationship bounds may not'
+require_file_literal "$specification" 'node and relationship bounds are at most 9,999'
 require_file_literal "$specification" 'Mermaid-safe `#quot;` entities'
 
 printf 'dependency-analysis skill contract: ok\n'

@@ -351,12 +351,24 @@ def validate_collection(document, allow_partial):
     if document["schema"] != COLLECTION_SCHEMA:
         raise AnalysisInputError(f"schema must be {COLLECTION_SCHEMA}")
     parse_analysis_timestamp(document["analysis_timestamp"])
-    exact_keys(document["bounds"], {"max_depth", "max_nodes"}, "bounds")
+    exact_keys(
+        document["bounds"],
+        {"max_depth", "max_nodes", "max_relationships"},
+        "bounds",
+    )
     positive_integer(document["bounds"]["max_depth"], "bounds.max_depth")
     max_nodes = positive_integer(document["bounds"]["max_nodes"], "bounds.max_nodes")
     if max_nodes > MAX_COMPONENTS:
         raise AnalysisInputError(
             f"bounds.max_nodes must be at most {MAX_COMPONENTS}"
+        )
+    max_relationships = positive_integer(
+        document["bounds"]["max_relationships"],
+        "bounds.max_relationships",
+    )
+    if max_relationships > MAX_COMPONENTS:
+        raise AnalysisInputError(
+            f"bounds.max_relationships must be at most {MAX_COMPONENTS}"
         )
     validate_cap(document["cap"])
     sorted_unique_strings(document["limitations"], "limitations")
@@ -371,6 +383,8 @@ def validate_collection(document, allow_partial):
         raise AnalysisInputError("partial input requires --allow-partial")
     nodes, node_lookup, numeric_nodes = validate_nodes(document["nodes"], max_nodes)
     validate_observations(document["observations"], numeric_nodes)
+    if len(document["observations"]) > max_relationships:
+        raise AnalysisInputError("observations exceeds bounds.max_relationships")
     validate_roots(document["roots"], node_lookup)
     return nodes
 
@@ -378,16 +392,27 @@ def validate_collection(document, allow_partial):
 def validate_cap(cap):
     exact_keys(
         cap,
-        {"graph_cap_reached", "omitted_discovered_identities", "scope_truncated"},
+        {
+            "graph_cap_reached",
+            "omitted_discovered_identities",
+            "omitted_relationships_lower_bound",
+            "relationship_cap_reached",
+            "scope_truncated",
+        },
         "cap",
     )
     if (
         type(cap["graph_cap_reached"]) is not bool
+        or type(cap["relationship_cap_reached"]) is not bool
         or type(cap["scope_truncated"]) is not bool
     ):
         raise AnalysisInputError("cap flags must be booleans")
     nonnegative_integer(
         cap["omitted_discovered_identities"], "cap.omitted_discovered_identities"
+    )
+    nonnegative_integer(
+        cap["omitted_relationships_lower_bound"],
+        "cap.omitted_relationships_lower_bound",
     )
 
 
@@ -397,6 +422,14 @@ def validate_cap_relationships(cap, limitations):
     has_omissions = cap["omitted_discovered_identities"] > 0
     if graph_limited != graph_cap_reached or (has_omissions and not graph_cap_reached):
         raise AnalysisInputError("graph cap metadata is inconsistent")
+
+    relationship_limited = "relationship_cap" in limitations
+    relationship_cap_reached = cap["relationship_cap_reached"]
+    has_relationship_omissions = cap["omitted_relationships_lower_bound"] > 0
+    if relationship_limited != relationship_cap_reached or (
+        has_relationship_omissions and not relationship_cap_reached
+    ):
+        raise AnalysisInputError("relationship cap metadata is inconsistent")
 
     scope_limitations = set(limitations) & {
         "restriction-node-cap",

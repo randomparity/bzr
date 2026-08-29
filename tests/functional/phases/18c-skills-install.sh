@@ -271,6 +271,14 @@ _DA_REPLAY_DIAGRAM="$FUNC_CONFIG_DIR/dependency-replay.mmd"
 jq -n '{
   responses: [{
     argv: [
+      "--server", "primary", "--json", "bug", "list",
+      "--limit", "1", "--offset", "0", "--fields", "id",
+      "--sort", "bug_id", "--order", "asc"
+    ],
+    exit_code: 0,
+    stdout: {schema_version: "0.6.1", data: []}
+  }, {
+    argv: [
       "--server", "primary", "--json", "bug", "view", "delivery",
       "--fields",
       "id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on"
@@ -310,7 +318,11 @@ python3 "$_DA_INSTALLED_ROOT/scripts/render.py" \
   --output "$_DA_REPLAY_DIAGRAM" || _DA_REPLAY_OK=0
 if [[ $_DA_REPLAY_OK -eq 1 ]] &&
   cmp -s "$_DA_REPLAY_EXPECTED" "$_DA_REPLAY_COLLECTION" &&
-  jq -s -e 'length == 1 and .[0] == [
+  jq -s -e 'length == 2 and .[0] == [
+      "--server", "primary", "--json", "bug", "list",
+      "--limit", "1", "--offset", "0", "--fields", "id",
+      "--sort", "bug_id", "--order", "asc"
+    ] and .[1] == [
       "--server", "primary", "--json", "bug", "view", "delivery",
       "--fields",
       "id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on"

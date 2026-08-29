@@ -130,6 +130,8 @@ class RendererTestCase(unittest.TestCase):
             "Cycle impediments: c0001",
             "Graph cap reached: true",
             "Omitted discovered identities: 1",
+            "Relationship cap reached: false",
+            "Omitted relationships (lower bound): 0",
             "Scope truncated: false",
             "Limitations: graph-node-cap",
         )
@@ -143,7 +145,12 @@ class RendererTestCase(unittest.TestCase):
             with self.subTest(output_format=output_format):
                 cycle = self.render_fixture(output_format, "cycle").decode("utf-8")
                 stale = self.render_fixture(output_format, "stale").decode("utf-8")
-                normalized_cycle = cycle.replace("&#35;", "#").replace("&#45;", "-")
+                normalized_cycle = (
+                    cycle.replace("&#35;", "#")
+                    .replace("&#40;", "(")
+                    .replace("&#41;", ")")
+                    .replace("&#45;", "-")
+                )
                 normalized_stale = stale.replace("&#35;", "#").replace("&#45;", "-")
                 for value in expected_cycle:
                     self.assertIn(value, normalized_cycle)
@@ -194,6 +201,20 @@ class RendererTestCase(unittest.TestCase):
         omissions_without_graph_cap = copy.deepcopy(partial)
         omissions_without_graph_cap["cap"]["omitted_discovered_identities"] = 1
         mutations.append(omissions_without_graph_cap)
+
+        relationship_limitation_without_flag = copy.deepcopy(partial)
+        relationship_limitation_without_flag["limitations"].append("relationship_cap")
+        mutations.append(relationship_limitation_without_flag)
+
+        relationship_flag_without_limitation = copy.deepcopy(partial)
+        relationship_flag_without_limitation["cap"]["relationship_cap_reached"] = True
+        mutations.append(relationship_flag_without_limitation)
+
+        relationship_omissions_without_cap = copy.deepcopy(partial)
+        relationship_omissions_without_cap["cap"][
+            "omitted_relationships_lower_bound"
+        ] = 1
+        mutations.append(relationship_omissions_without_cap)
 
         for limitation in ("restriction-node-cap", "scope-node-cap"):
             scope_limitation_without_flag = copy.deepcopy(partial)
@@ -267,6 +288,20 @@ class RendererTestCase(unittest.TestCase):
         self.assertEqual(rejected.returncode, 2)
         self.assertIsNone(output)
         self.assertIn(b"bounds.max_nodes must be at most 9999", rejected.stderr)
+
+    def test_max_relationships_accepts_9999_and_rejects_10000(self):
+        document = json.loads((FIXTURES / "hostile.analysis.json").read_text())
+        document["bounds"]["max_relationships"] = 9_999
+        accepted, _ = self.run_renderer(document, "markdown")
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+
+        document["bounds"]["max_relationships"] = 10_000
+        rejected, _ = self.run_renderer(document, "markdown")
+        self.assertEqual(rejected.returncode, 2)
+        self.assertIn(
+            b"bounds.max_relationships must be at most 9999",
+            rejected.stderr,
+        )
 
     def test_every_analysis_fixture_renders_in_both_formats(self):
         for fixture in sorted(FIXTURES.glob("*.analysis.json")):
