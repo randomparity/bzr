@@ -5,8 +5,6 @@ read-only, evidence-backed report for a release decision. It accepts a Custom Se
 saved query, target milestone, version, or product and keeps facts, operator assumptions,
 assessment, and data limitations distinct.
 
-![Release-readiness demo](assets/bzr-release-readiness-demo.gif)
-
 [Download the asciinema cast](assets/bzr-release-readiness-demo.cast) to replay the terminal
 session with asciinema.
 
@@ -52,7 +50,7 @@ helper out of view. The published terminal flow contains the agent-style request
 final PM report; setup commands, helper plumbing, credentials, local paths, and the live server URL
 are not shown.
 
-Install `asciinema` 3 or newer, `agg`, `jq`, and `curl`, then run:
+Install `asciinema` 3 or newer, `jq`, and `curl`, then run:
 
 ```sh
 cargo build --release
@@ -60,6 +58,5 @@ make functional-test
 BZR_BIN="$PWD/target/release/bzr" tools/record-demo.sh release-readiness
 ```
 
-This regenerates `docs/assets/bzr-release-readiness-demo.cast` and
-`docs/assets/bzr-release-readiness-demo.gif`. If the fixture is absent, the recorder stops and
-asks for the functional test instead of mutating Bugzilla.
+This regenerates `docs/assets/bzr-release-readiness-demo.cast`. If the fixture is absent, the
+recorder stops and asks for the functional test instead of mutating Bugzilla.
