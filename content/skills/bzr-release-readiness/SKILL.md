@@ -22,7 +22,22 @@ explicit assumption about each missing input:
 - blocker priority, severity, keyword, flag, and custom-field rules;
 - stale duration, release-policy IANA time zone, and one UTC `as-of` instant;
 - whether dependencies, ownership, milestones, status/resolution, whiteboard,
-  or history/regression checks are wanted; and
+  or history/regression checks are wanted;
+- for dependencies, which exact complete statuses make an outgoing target
+  resolved, and whether policy nevertheless treats a resolved target as a risk;
+- for ownership, every installation sentinel login (for example an installation's
+  default assignee); without installation sentinel logins, test only blank/null
+  and report that limitation;
+- the exact unset milestone sentinel and whether the release process uses
+  milestones; when it does not, make the check N/A with that reason;
+- allowed exact status/resolution pairs; without an allowlist, make the check
+  N/A and do not request `resolution`;
+- literal or validated regular-expression whiteboard rules; reject a regular
+  expression that does not compile before collection, and make the check N/A
+  when no rule is supplied;
+- for history, the operator-named field transitions plus either an explicit UTC
+  baseline or a lookback duration from `as-of`; selected events must be strictly
+  after the baseline and no later than `as-of`; and
 - requested artifact format and its destination.
 
 Ask whether a non-zero offset deliberately defines a partial window. Reject it
@@ -100,11 +115,46 @@ pagination run is a rolling snapshot of rows the server exposed, not a
 point-in-time or authorization-universe guarantee. Zero visible rows means **no
 visible evidence**, unless the stated policy gives it a different meaning.
 
-Only non-complete bugs contribute to blocker, stale, and ownership checks. For
-blocker checks, match priority/severity by exact scalar equality, keywords by
-exact element membership, and flags by the selected name plus status and
-optional requestee tuple. Missing required data makes a selected check unknown;
-a check that policy does not select is N/A with its reason.
+Apply the selected checks exactly as follows. Missing or invalid required data
+makes that bug's selected check **unknown**; a failed/restricted follow-up read
+does too. A check the policy does not select, or that is irrelevant under an
+elicited policy choice, is **N/A** with its reason. Never turn unknown or N/A
+into a non-match.
+
+- Open work: `status` is outside the exact complete-status set. An unknown
+  status is unknown.
+- Release blocker: a non-complete bug matches any configured rule. Match
+  priority/severity by exact scalar equality, keywords by exact element
+  membership, flags by the selected name plus status and optional requestee
+  tuple, and custom fields only with the validated type/operator grammar above.
+- Dependencies: reconcile raw `depends_on` IDs with `bug links --relation
+  depends_on`. Only non-complete outgoing targets are unresolved prerequisites;
+  apply any explicitly elicited resolved-target override as policy, and treat a
+  missing/unreadable target as unknown rather than resolved.
+- Deadline: interpret a date-only deadline in the elicited IANA time zone. A
+  non-complete bug is overdue only when its deadline date is before the calendar
+  date containing `as-of` in that zone; equality is not overdue and blank is
+  N/A. Clarify an absent or invalid zone before running the check.
+- Unowned: a non-complete bug has blank/null `assigned_to` or exactly matches an
+  elicited installation sentinel login. With no sentinels, test only blank/null
+  and report the limitation.
+- Missing milestone: when the process uses milestones, a non-complete bug has a
+  blank/null `target_milestone` or exactly matches the elicited unset sentinel;
+  otherwise the check is N/A with the stated process reason.
+- Stale: a non-complete bug has a valid `last_change_time` strictly before
+  `as-of - duration`; equality is not stale. Derive the cutoff from the one
+  captured `as-of` instant and the elicited duration.
+- Reopened/regressed: an operator-named history transition occurred strictly
+  after the baseline and no later than `as-of`. Derive a lookback baseline from
+  the same `as-of`; do not claim event order among equal timestamps. A failed
+  history read is unknown.
+- Status/resolution: the observed exact pair is absent from the allowed exact
+  status/resolution pairs. Without that allowlist the check is N/A.
+- Whiteboard risk: a selected literal occurs as literal text, or a selected
+  validated regex matches the current `whiteboard` snapshot. Without a rule the
+  check is N/A; only history can support a claim about earlier state.
+
+Deadline, missing-milestone, blocker, stale, and ownership checks ignore complete bugs.
 
 Use no command outside this read-only allowlist: `bug list`, `bug search`,
 `query show`, `query run`, `bug view`, `bug history`, `bug links`, `field list`,

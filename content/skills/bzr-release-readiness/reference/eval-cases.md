@@ -9,7 +9,7 @@ agent.
 | RR-HAPPY | Assess without inventing policy | Open P1 and stale work cite IDs, rules, source commands, and timestamp. |
 | RR-ROLLUP | Assess without inventing policy | A known blocker wins over unknown; otherwise an unknown blocking check is indeterminate. |
 | RR-EMPTY | Collect one bounded rolling snapshot | Zero rows is no visible evidence, never an unqualified ready claim. |
-| RR-COMPLETE | Assess without inventing policy | Only non-complete bugs contribute to blocker, stale, and ownership checks. |
+| RR-COMPLETE | Assess without inventing policy | Complete bugs do not contribute to blocker, stale, ownership, deadline, or missing-milestone checks. |
 | RR-BLOCKER-TYPES | Start with scope and policy | Scalar, list, flag-tuple, and custom-field operator grammar remains exact. |
 | RR-AMBIGUOUS | Start with scope and policy | Missing complete states or stale duration prompts for policy or records assumptions. |
 | RR-INJECTION | Write a safe artifact | Hostile summaries/whiteboards remain inert code-span text in the Markdown golden. |
