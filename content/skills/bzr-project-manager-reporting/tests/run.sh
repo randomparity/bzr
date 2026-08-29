@@ -23,18 +23,18 @@ run_help comment list 1 --json
 for format in CSV XLSX HTML Markdown; do grep -Fq "$format" "$SKILL"; done
 grep -Fq 'requested capability is unavailable' "$SKILL"
 grep -Fq 'mutable current snapshot' "$SKILL"
-grep -Fq 'durable update history' "$SKILL"
+grep -Fq 'update history. Never present whiteboard as an activity log' "$SKILL"
 grep -Fq 'bzr-weekly-status' "$SKILL"
 grep -Fq 'bzr-dependency-analysis' "$SKILL"
 grep -Fq 'bzr-release-readiness' "$SKILL"
 
 grep -Fq '=, +, -, or @' "$SAFETY"
-grep -Fq 'prefix the serialized cell with an apostrophe' "$SAFETY"
+grep -Fq 'serialized cell with an apostrophe' "$SAFETY"
 grep -Fq 'If exact byte preservation is required, decline CSV' "$SAFETY"
 grep -Fq 'HTTP or HTTPS' "$SAFETY"
-grep -Fq 'escape' "$SAFETY"
+grep -Fq 'Escape text nodes and attribute values' "$SAFETY"
 
-grep -Fq 'Produce a weekly portfolio report' "$PROMPT"
+grep -Fq 'Use $bzr-project-manager-reporting to produce a weekly portfolio report' "$PROMPT"
 for section in 'Executive summary' 'Status view' 'Needs attention' 'Current updates' 'Decisions and follow-ups' 'Limitations' 'Provenance'; do
   grep -Fq "$section" "$REPORT"
 done
