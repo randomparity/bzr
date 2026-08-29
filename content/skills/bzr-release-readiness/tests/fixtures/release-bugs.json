@@ -157,7 +157,49 @@
         "https://user:secret@bugzilla.invalid/buglist.cgi?product=Example"
       ],
       "accepted": ["https://bugzilla.invalid/buglist.cgi?product=Example"],
-      "secret": "secret"
+      "secret": "secret",
+      "provenance": {
+        "input_url": "https://bugzilla.invalid/buglist.cgi?product=Example&bug_status=NEW&assigned_to=release.owner%40internal.invalid&f1=component&o1=equals&v1=Backend&query_format=advanced#private-release-plan",
+        "canonical_filter_names": [
+          "product",
+          "component",
+          "bug_status",
+          "assigned_to",
+          "reporter",
+          "priority",
+          "bug_severity",
+          "status_whiteboard",
+          "target_milestone",
+          "version",
+          "op_sys",
+          "rep_platform",
+          "resolution",
+          "qa_contact",
+          "bug_file_loc"
+        ],
+        "retained_parameter_names": ["product", "bug_status", "f1", "o1", "v1"],
+        "retained_pairs": [
+          "product=Example",
+          "bug_status=NEW",
+          "f1=component",
+          "o1=equals",
+          "v1=Backend"
+        ],
+        "sensitive_parameter_names": ["assigned_to"],
+        "input_sensitive_values": [
+          "release.owner%40internal.invalid",
+          "private-release-plan"
+        ],
+        "displayed_url": "https://bugzilla.invalid/buglist.cgi?product=Example&bug_status=NEW&f1=component&o1=equals&v1=Backend",
+        "dropped_parameter_names": ["assigned_to", "query_format", "fragment"],
+        "dropped_values": [
+          "release.owner@internal.invalid",
+          "release.owner%40internal.invalid",
+          "advanced",
+          "private-release-plan"
+        ],
+        "displayed_source_command": "bzr bug search --from-url \"https://bugzilla.invalid/buglist.cgi?product=Example&bug_status=NEW&f1=component&o1=equals&v1=Backend\" --limit 100 --paginate --json --sort bug_id --order asc --fields id,summary,status\nDropped URL inputs: `assigned_to`, `query_format`, `fragment`."
+      }
     }
   },
   "check_matrix_cases": {

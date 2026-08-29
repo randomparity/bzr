@@ -214,7 +214,9 @@ visible facts, assumptions, and complete or explicitly limited collection.
 - `RR-SECRET-URL`: every listed authentication alias, duplicate, ASCII case
   variant, percent-encoded key spelling, malformed encoding, and userinfo form is
   rejected before execution; the secret appears in no argv, trace, provenance,
-  report, request, or retained evidence.
+  report, request, or retained evidence. An accepted credential-free URL with a
+  sensitive filter value and fragment retains only canonical non-secret filter and
+  Boolean-chart provenance, omits those values, and lists the dropped input names.
 
 Each fixture stores operator input, structured command results, the expected
 command trace, and report assertions. A deterministic validator checks the trace

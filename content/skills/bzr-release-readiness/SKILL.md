@@ -225,3 +225,14 @@ Source-command provenance must preserve explicit server selection. For every
 command that used `--server`, render `--server <server-profile>` instead of the
 real profile name; do not add the placeholder to commands that did not use an
 explicit server selection.
+
+For displayed Custom Search source-command provenance, never render the input URL verbatim.
+Omit userinfo and the fragment. Preserve only canonical non-secret filter and Boolean-chart
+parameters. The canonical filter names are `product`, `component`, `bug_status`, `assigned_to`,
+`reporter`, `priority`, `bug_severity`, `status_whiteboard`, `target_milestone`, `version`,
+`op_sys`, `rep_platform`, `resolution`, `qa_contact`, and `bug_file_loc`; Boolean-chart names
+match `fN`, `oN`, or `vN` for a positive decimal `N`. A credential-free URL is not necessarily
+safe to publish: retain a value only when the operator's artifact policy says it is non-secret,
+and otherwise drop its parameter. Re-encode retained names and values into the displayed URL.
+List every distinct dropped query-parameter name without a value, in first-seen order, and list
+`fragment` when a fragment was removed. Never write a dropped value elsewhere in the artifact.
