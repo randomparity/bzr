@@ -37,7 +37,7 @@ ANALYZE_SPEC.loader.exec_module(ANALYZER)
 class AnalyzerTestCase(unittest.TestCase):
     maxDiff = None
 
-    def run_analyzer(self, collection, *, allow_partial=False):
+    def run_analyzer(self, collection, *, allow_partial=False, initial=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             input_path = root / "collection.json"
@@ -50,6 +50,9 @@ class AnalyzerTestCase(unittest.TestCase):
                 input_path.write_bytes(collection)
             else:
                 input_path.write_text(json.dumps(collection), encoding="utf-8")
+            if initial is not None:
+                output_path.parent.mkdir(parents=True)
+                output_path.write_bytes(initial)
             command = [
                 sys.executable,
                 str(ANALYZE),
@@ -400,6 +403,40 @@ class AnalyzerTestCase(unittest.TestCase):
                 self.assertEqual(result.returncode, 2)
                 self.assertIsNone(output)
                 self.assertIn(b"analysis input error:", result.stderr)
+
+    def test_unknown_limitation_is_rejected_without_replacing_output(self):
+        collection = self.load_collection("branch")
+        collection["status"] = "partial"
+        collection["limitations"] = ["token=secret"]
+        result, output = self.run_analyzer(
+            collection,
+            allow_partial=True,
+            initial=b"keep\n",
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(output, b"keep\n")
+        self.assertEqual(
+            result.stderr,
+            b"analysis input error: limitations contains an unsupported value\n",
+        )
+
+    def test_analyzer_rejects_an_internal_unknown_warning_code(self):
+        collection = self.load_collection("branch")
+        original = ANALYZER.apply_staleness
+
+        def hostile_staleness(*args):
+            nodes, _ = original(*args)
+            return nodes, [{"code": "credential=secret", "nodes": []}]
+
+        try:
+            ANALYZER.apply_staleness = hostile_staleness
+            with self.assertRaisesRegex(
+                ANALYZER.AnalysisInputError,
+                "warnings contains an unsupported code",
+            ):
+                ANALYZER.analyze(collection)
+        finally:
+            ANALYZER.apply_staleness = original
 
     def test_component_namespace_accepts_9999_isolated_components(self):
         document = ANALYZER.analyze(self.collection_with_isolated_nodes(9_999))

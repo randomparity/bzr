@@ -622,7 +622,8 @@ class Collector:
     def stage_detail(self, server, detail):
         key = (server, detail["id"])
         retained = {"blocks": [], "depends_on": []}
-        for field in ("blocks", "depends_on"):
+        field_order = relationship_field_order(self.policy["direction"])
+        for field_index, field in enumerate(field_order):
             relationships = detail[field]
             index = 0
             while (
@@ -640,8 +641,7 @@ class Collector:
                 self.omitted_relationships_lower_bound += len(relationships) - index
                 self.record_relationship_cap()
             if self.relationship_cap_reached:
-                later_fields = ("depends_on",) if field == "blocks" else ()
-                for later_field in later_fields:
+                for later_field in field_order[field_index + 1:]:
                     self.omitted_relationships_lower_bound += len(detail[later_field])
                 break
         self.details[key] = {
@@ -743,6 +743,12 @@ def selected_fields(direction):
     if direction == "both":
         return ("blocks", "depends_on")
     return (direction,)
+
+
+def relationship_field_order(direction):
+    if direction == "depends_on":
+        return ("depends_on", "blocks")
+    return ("blocks", "depends_on")
 
 
 def canonical_edge(observation):

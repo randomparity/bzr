@@ -97,12 +97,19 @@ id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on`, be
 command-level failure exposes the versioned structured error envelope. It therefore makes at most
 one command per admitted bug. The field list additionally
 requests `product`, `target_milestone`, or `version` when the corresponding restriction is
-active. Both adjacency fields are fetched so reciprocal evidence can be normalized. The selected
-direction controls discovery, admission, node-cap consumption, and omitted-identity counts:
+active. A released `bzr` command produces a complete JSON response, which the collector captures
+and parses before applying `max_relationships`. The relationship cap therefore bounds only the
+post-parse relationship records retained, staged, discovered from, and traversed. It does not bound
+the upstream Bugzilla/`bzr` response size, JSON-decoding work, or peak parse memory; bounded
+upstream retrieval is deferred to issue #573. Both adjacency fields are fetched so reciprocal
+evidence can be normalized. The selected direction controls discovery, admission, node-cap
+consumption, and omitted-identity counts:
 `depends_on` selects dependency neighbors, `blocks` selects blocking neighbors, and `both` selects
-their union. The collector stages selected- and unselected-field observations in fixed field and
-response order until the aggregate relationship budget is consumed; it never retains or discovers
-from the unprocessed suffix. After all admission and fetching finishes, a deterministic second pass first
+their union. For a one-direction policy, the collector stages the selected field before optional
+reciprocal evidence. For `both`, the canonical order is `blocks` then `depends_on`. Within a field,
+the collector preserves response order until the aggregate relationship budget is consumed; it
+never retains or discovers from the unprocessed suffix. After all admission and fetching finishes,
+a deterministic second pass first
 filters staged observations to pairs whose endpoints are admitted, establishes canonical edges
 from selected observations, then attaches unselected observations only when they normalize onto
 one of those established edges. Thus
@@ -253,6 +260,10 @@ limitation `scope-node-cap`; the first `max_nodes` roots remain. Traversal exhau
 its stable run-level limitation code and status `partial` without changing already recorded nodes.
 Relationship exhaustion sets `relationship_cap_reached: true`, limitation `relationship_cap`, and
 the explicit lower-bound omission count without discarding already admitted nodes or observations.
+The complete version 1 limitation vocabulary is `collection-api`, `collection-auth`,
+`collection-http`, `collection-malformed-output`, `collection-schema-version`, `collection-tls`,
+`collection-transport`, `collection-unclassified`, `graph-node-cap`, `relationship_cap`,
+`restriction-node-cap`, and `scope-node-cap`; analyzer and renderer reject every other value.
 Every observation endpoint must occur in `nodes`. When cap admission rejects a newly discovered
 identity, all observations to that identity are omitted and the identity contributes exactly once
 to `omitted_discovered_identities`.
@@ -315,8 +326,10 @@ object `{"id": NUMBER, "server": STRING}` because observations cannot have null-
 The total analysis identity key is server alias by Unicode code-point order, then numeric ID; a
 null-ID unresolved root sorts after numeric IDs by its `requested` string. Edges, warning node lists,
 SCC minima/members, component numbering, and every tie break use this key; collection depth order
-does not affect analysis identity. Warnings are stable objects `{code, nodes}` sorted by code then node identity; missing/invalid
-timestamps use `stale-timestamp-unknown`. Canonical edges sort by predecessor then successor and
+does not affect analysis identity. Warnings are stable objects `{code, nodes}` sorted by code then
+node identity. The closed version 1 warning-code vocabulary is `stale-timestamp-future` and
+`stale-timestamp-unknown`; the renderer rejects every other code. Missing/invalid timestamps use
+`stale-timestamp-unknown`. Canonical edges sort by predecessor then successor and
 contain sorted unique observation names. Strongly connected components sort by their smallest node
 identity and receive IDs `c0001`, `c0002`, and so on through `c9999`; component node lists use node
 order. Layers
@@ -428,7 +441,9 @@ structural findings, execution groups, and optional artifacts. Allowed sources a
 artifact capabilities must remain explicit. The agent may not mutate Bugzilla, invent missing
 nodes or estimates, call structural chains schedules, or traverse beyond stated bounds. Its
 fallback is a partial Markdown report with unknown/boundary nodes and limitations. Cost is bounded
-by the node and depth limits; the current fallback may perform one request per bug. Success means
+for retained graph traversal and request count by the node and depth limits; individual upstream
+response size and parsing are not bounded by `max_relationships`. The current fallback may perform
+one request per bug. Success means
 fixtures deterministically produce the expected node/edge inventory, warnings, and terminology.
 
 ## Failure-mode map and evaluation plan
@@ -480,7 +495,7 @@ behavioral Python tests compare helper output against fixture oracles byte-for-b
 | DA-19 | PM findings with unresolved roots, branch, and cycle | Roots preserved; deterministic structural roots/leaves, bottlenecks, unassigned blockers, and execution assumptions | Missing or ambiguous finding | block |
 | DA-20 | Zero-node partial restriction result | Exact empty findings and zero-length empty path with partial assumption | Rejection or fabricated path | block |
 | DA-21 | Direction isolation at cap | Only selected adjacency admits nodes and consumes cap for `depends_on`, `blocks`, and `both` | Unselected neighbor changes inventory | block |
-| DA-22 | Wide adjacency beyond `max_relationships` | Retains only the deterministic bounded prefix, stops staging/discovery, and reports a lower-bound omission count | Unbounded retained/work state or hidden omission | block |
+| DA-22 | Wide adjacency beyond `max_relationships` | Retains/traverses only the deterministic post-parse bounded prefix, prioritizes the selected direction, and reports a lower-bound omission count | Unbounded retained/traversed state or hidden omission | block |
 
 `python3 content/skills/bzr-dependency-analysis/tests/test_analyze.py` runs DA-01 and DA-03
 through DA-11 plus DA-16, DA-19, and DA-20. `python3 content/skills/bzr-dependency-analysis/tests/test_collect.py`
@@ -516,7 +531,8 @@ secrets, validate Bugzilla URLs, and emit its documented JSON envelopes.
   as shell, template source, HTML, or Mermaid syntax.
 - Positive numeric bounds, including the 9,999 node and relationship ceilings, duplicate-free keys,
   and valid UTF-8 are checked before collection; queue membership enforces fetch-once and the hard
-  depth, node, and relationship caps.
+  depth and node caps, while the post-parse relationship cap bounds retained/staged/traversed
+  relationship records.
 - Server-qualified identities prevent cross-server collisions.
 - Only documented read commands are allowlisted; the skill refuses mutation requests during an
   analysis.
@@ -549,8 +565,10 @@ The phase also analyzes the installed deterministic cycle fixture and asserts it
 it does not attempt an impossible live circular mutation.
 Using explicit credentialless REST and XML-RPC server profiles plus the restricted fixture created
 by the existing functional phases, 18d collects real nonexistent starting IDs in both API modes and
-a real inaccessible REST starting ID beside visible roots. It asserts `not_found` and `inaccessible`
-unknown nodes, continued collection, valid partial-safe output, and absence of raw server messages.
+a real inaccessible starting ID beside visible roots in both modes. It asserts `not_found` and
+`inaccessible` unknown nodes, continued collection, valid partial-safe output, and absence of raw
+server messages. Deliberately rejected credentials in both modes additionally prove that preflight
+is sanitized, command-fatal, and completes before any root is admitted or resource read begins.
 It also runs the installed pipeline with a one-relationship budget and asserts the bounded admitted
 prefix, `relationship_cap`, and lower-bound omission metadata.
 Phase 18d gives the live graph a stable, unique whiteboard marker so a later read-only demonstration

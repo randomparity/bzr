@@ -165,6 +165,30 @@ class RendererTestCase(unittest.TestCase):
         self.assertEqual(output, b"keep\n")
         self.assertEqual(result.stderr, b"render input error: analysis has invalid keys\n")
 
+    def test_unknown_limitation_and_warning_codes_do_not_replace_output(self):
+        source = json.loads((FIXTURES / "hostile.analysis.json").read_text())
+        hostile = []
+
+        limitation = copy.deepcopy(source)
+        limitation["status"] = "partial"
+        limitation["limitations"] = ["token=secret"]
+        hostile.append(limitation)
+
+        warning = copy.deepcopy(source)
+        warning["warnings"] = [{"code": "credential=secret", "nodes": []}]
+        hostile.append(warning)
+
+        for document in hostile:
+            with self.subTest(document=document):
+                result, output = self.run_renderer(
+                    document,
+                    "markdown",
+                    initial=b"keep\n",
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(output, b"keep\n")
+                self.assertIn(b"unsupported", result.stderr)
+
     def test_abbreviated_options_are_rejected_without_replacing_output(self):
         source = (FIXTURES / "hostile.analysis.json").read_bytes()
         for full, abbreviated in (

@@ -39,6 +39,13 @@ PARAMETER_NAMES = {
     "product", "qa_contact", "reporter", "resolution", "severity", "status",
     "target_milestone", "version",
 }
+LIMITATION_CODES = {
+    "collection-api", "collection-auth", "collection-http",
+    "collection-malformed-output", "collection-schema-version", "collection-tls",
+    "collection-transport", "collection-unclassified", "graph-node-cap",
+    "relationship_cap", "restriction-node-cap", "scope-node-cap",
+}
+WARNING_CODES = {"stale-timestamp-future", "stale-timestamp-unknown"}
 
 
 class RenderInputError(ValueError):
@@ -389,6 +396,8 @@ def validate_warnings(document, node_identities):
         context = f"warnings[{index}]"
         exact_keys(warning, {"code", "nodes"}, context)
         string(warning["code"], f"{context}.code")
+        if warning["code"] not in WARNING_CODES:
+            raise RenderInputError(f"{context}.code is unsupported")
         validate_identity_list(warning["nodes"], f"{context}.nodes", node_identities)
         codes.append(warning["code"])
     if codes != sorted(set(codes)):
@@ -448,7 +457,7 @@ def validate_analysis(document):
     )
     if document["status"] not in {"complete", "partial"}:
         raise RenderInputError("status is unsupported")
-    sorted_strings(document["limitations"], "limitations")
+    sorted_strings(document["limitations"], "limitations", allowed=LIMITATION_CODES)
     validate_cap_relationships(document["cap"], document["limitations"])
     if (document["status"] == "partial") != bool(document["limitations"]):
         raise RenderInputError("status and limitations disagree")

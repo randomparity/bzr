@@ -33,6 +33,11 @@ supplied, the skill proposes depth 5, 200 nodes, and 200 relationships. It prefl
 once with a released read-only command before retrieving resources. A minimal policy for one
 configured server and bug-ID root is:
 
+`max_relationships` applies after each released `bzr` command has returned and its complete JSON
+response has been parsed. It bounds retained, staged, and traversed relationship records, not the
+upstream Bugzilla/`bzr` response size, JSON-decoding work, or peak parse memory. Upstream bounded
+retrieval is tracked separately in issue #573.
+
 ```json
 {
   "bounds": {"max_depth": 5, "max_nodes": 200, "max_relationships": 200},
@@ -86,9 +91,9 @@ These are properties of the collected graph, not a delivery schedule. The format
 model, so it does not support weighted critical-path analysis or delivery-date prediction. Members
 of a cyclic component also have no total execution order.
 
-Collection is bounded but can make one `bug view` request per admitted bug. Matching numeric IDs on
-different servers remain distinct. Markdown and Mermaid are the only supported render formats;
-DOT, HTML, CSV, XLSX, and PDF are not version 1 outputs.
+The retained graph and traversal are bounded, and collection can make one `bug view` request per
+admitted bug. Matching numeric IDs on different servers remain distinct. Markdown and Mermaid are
+the only supported render formats; DOT, HTML, CSV, XLSX, and PDF are not version 1 outputs.
 
 ## Regenerate the demo
 
