@@ -353,6 +353,10 @@ def validate_collection(document, allow_partial):
     exact_keys(document["bounds"], {"max_depth", "max_nodes"}, "bounds")
     positive_integer(document["bounds"]["max_depth"], "bounds.max_depth")
     max_nodes = positive_integer(document["bounds"]["max_nodes"], "bounds.max_nodes")
+    if max_nodes > MAX_COMPONENTS:
+        raise AnalysisInputError(
+            f"bounds.max_nodes must be at most {MAX_COMPONENTS}"
+        )
     validate_cap(document["cap"])
     sorted_unique_strings(document["limitations"], "limitations")
     validate_cap_relationships(document["cap"], document["limitations"])

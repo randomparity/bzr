@@ -12,6 +12,7 @@ import tempfile
 
 
 SCHEMA = "bzr-dependency-analysis/v1"
+MAX_NODES = 9_999
 TOP_LEVEL_KEYS = {
     "analysis_timestamp", "bounds", "cap", "components", "edges", "findings",
     "layers", "limitations", "longest_chain", "nodes", "policy", "provenance",
@@ -402,6 +403,8 @@ def validate_analysis(document):
     exact_keys(document["bounds"], {"max_depth", "max_nodes"}, "bounds")
     integer(document["bounds"]["max_depth"], "bounds.max_depth", positive=True)
     integer(document["bounds"]["max_nodes"], "bounds.max_nodes", positive=True)
+    if document["bounds"]["max_nodes"] > MAX_NODES:
+        raise RenderInputError(f"bounds.max_nodes must be at most {MAX_NODES}")
     cap_keys = {"graph_cap_reached", "omitted_discovered_identities", "scope_truncated"}
     exact_keys(document["cap"], cap_keys, "cap")
     boolean(document["cap"]["graph_cap_reached"], "cap.graph_cap_reached")
@@ -483,6 +486,7 @@ def metadata_lines(document):
     states = [node["state"] for node in document["nodes"]]
     commands = collection_commands(document)
     statuses = ", ".join(document["policy"]["resolved_statuses"])
+    limitations = ", ".join(document["limitations"]) or "none"
     return [
         f"Schema: {document['schema']}",
         f"Status: {document['status']}",
@@ -500,6 +504,13 @@ def metadata_lines(document):
             f"Evidence gaps: {states.count('unknown')} unknown nodes; "
             f"{states.count('boundary')} boundary nodes"
         ),
+        f"Graph cap reached: {str(document['cap']['graph_cap_reached']).lower()}",
+        (
+            "Omitted discovered identities: "
+            f"{document['cap']['omitted_discovered_identities']}"
+        ),
+        f"Scope truncated: {str(document['cap']['scope_truncated']).lower()}",
+        f"Limitations: {limitations}",
         f"Collection commands: {', '.join(commands) if commands else 'none'}",
     ]
 
@@ -515,6 +526,53 @@ def provenance_text(entry):
 
 def reference_list(values):
     return ", ".join(identity_text(value) for value in values) if values else "none"
+
+
+def bottleneck_list(values):
+    if not values:
+        return "none"
+    return ", ".join(
+        f"{identity_text(value['node'])} (fan-out {value['fan_out']})"
+        for value in values
+    )
+
+
+def component_list(values):
+    return ", ".join(values) if values else "none"
+
+
+def warning_list(values):
+    if not values:
+        return "none"
+    return "; ".join(
+        f"{warning['code']} ({reference_list(warning['nodes'])})"
+        for warning in values
+    )
+
+
+def finding_rows(document):
+    findings = document["findings"]
+    order = findings["execution_order"]
+    return [
+        (
+            "Longest dependency chain by edge count",
+            str(document["longest_chain"]["length"]),
+        ),
+        (
+            "Longest dependency chain components",
+            component_list(document["longest_chain"]["path"]),
+        ),
+        ("Structural roots", reference_list(findings["structural_roots"])),
+        ("Structural leaves", reference_list(findings["structural_leaves"])),
+        ("Bottlenecks", bottleneck_list(findings["bottlenecks"])),
+        ("Unassigned blockers", reference_list(findings["unassigned_blockers"])),
+        ("Stale blockers", reference_list(findings["stale_blockers"])),
+        ("Execution assumptions", component_list(order["assumptions"])),
+        ("Execution component order", component_list(order["component_order"])),
+        ("Cycle impediments", component_list(order["cycle_impediments"])),
+        ("Incomplete boundaries", reference_list(order["incomplete_boundaries"])),
+        ("Analysis warnings", warning_list(document["warnings"])),
+    ]
 
 
 def markdown_inventory(document):
@@ -536,7 +594,6 @@ def markdown_inventory(document):
 
 
 def render_markdown(document):
-    findings = document["findings"]
     lines = ["# Bugzilla dependency analysis", ""]
     lines.extend(f"- {markdown_text(line)}" for line in metadata_lines(document))
     lines.extend(["", "## Scope provenance", ""])
@@ -548,16 +605,10 @@ def render_markdown(document):
     else:
         lines.append("- none")
     lines.extend(["", "## Structural findings", ""])
-    lines.extend([
-        f"- Longest dependency chain by edge count: {document['longest_chain']['length']}",
-        f"- Structural roots: {markdown_text(reference_list(findings['structural_roots']))}",
-        f"- Structural leaves: {markdown_text(reference_list(findings['structural_leaves']))}",
-        f"- Unassigned blockers: {markdown_text(reference_list(findings['unassigned_blockers']))}",
-        f"- Stale blockers: {markdown_text(reference_list(findings['stale_blockers']))}",
-        "- Cycle impediments: " + markdown_text(
-            ", ".join(findings["execution_order"]["cycle_impediments"]) or "none"
-        ),
-    ])
+    lines.extend(
+        f"- {label}: {markdown_text(value)}"
+        for label, value in finding_rows(document)
+    )
     lines.extend(["", "## Structural execution groups", ""])
     if document["layers"]:
         for index, layer in enumerate(document["layers"], start=1):
@@ -575,25 +626,16 @@ def render_markdown(document):
 MERMAID_ENTITIES = {
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "%": "&#37;", "[": "&#91;",
     "]": "&#93;", "{": "&#123;", "}": "&#125;", "(": "&#40;", ")": "&#41;",
-    "`": "&#96;", "#": "&#35;",
+    "`": "&#96;", "#": "&#35;", '"': "#quot;", "\\": "#92;",
+    "\n": "#10;", "\r": "#13;", "\t": "#9;",
 }
 
 
 def mermaid_text(value):
     escaped = []
     for character in str(value):
-        if character == "\\":
-            escaped.append("\\\\")
-        elif character == '"':
-            escaped.append('\\"')
-        elif character == "\n":
-            escaped.append("\\n")
-        elif character == "\r":
-            escaped.append("\\r")
-        elif character == "\t":
-            escaped.append("\\t")
-        elif ord(character) < 32 or character in {"\u2028", "\u2029"}:
-            escaped.append(f"&#{ord(character)};")
+        if ord(character) < 32 or character in {"\u2028", "\u2029"}:
+            escaped.append(MERMAID_ENTITIES.get(character, f"#{ord(character)};"))
         else:
             escaped.append(MERMAID_ENTITIES.get(character, character))
     return "".join(escaped)
@@ -620,15 +662,11 @@ def render_mermaid(document):
         provenance_text(entry) for entry in document["provenance"]
     ) or "none"
     layers = " | ".join(",".join(layer) for layer in document["layers"]) or "none"
-    impediments = ",".join(
-        document["findings"]["execution_order"]["cycle_impediments"]
-    ) or "none"
-    structural = (
-        f"Longest dependency chain by edge count: {document['longest_chain']['length']}; "
-        f"layers: {layers}; cycle impediments: {impediments}"
-    )
     label = "\n".join([
-        *metadata_lines(document), f"Scope provenance: {provenance}", structural,
+        *metadata_lines(document),
+        f"Scope provenance: {provenance}",
+        *(f"{name}: {value}" for name, value in finding_rows(document)),
+        f"Structural execution layers: {layers}",
     ])
     lines = ["flowchart TD", f'    metadata["{mermaid_text(label)}"]']
     for node in document["nodes"]:

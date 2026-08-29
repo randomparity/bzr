@@ -15,6 +15,7 @@ from urllib.parse import parse_qsl, urlparse
 
 SCHEMA = "bzr-dependency-collection/v1"
 BZR_SCHEMA_VERSION = "0.6.1"
+MAX_NODES = 9_999
 TIMESTAMP_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\Z")
 DETAIL_FIELDS = [
     "id",
@@ -93,6 +94,15 @@ class FatalCollection(RuntimeError):
         super().__init__(limitation)
         self.limitation = limitation
         self.error_type = error_type
+
+
+def unique_object(pairs):
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            raise PolicyError(f"duplicate JSON key: {key}")
+        value[key] = item
+    return value
 
 
 def exact_keys(value, expected, context):
@@ -237,9 +247,12 @@ def validate_policy(value):
         "policy",
     )
     exact_keys(value["bounds"], {"max_depth", "max_nodes"}, "bounds")
+    max_nodes = positive_integer(value["bounds"]["max_nodes"], "bounds.max_nodes")
+    if max_nodes > MAX_NODES:
+        raise PolicyError(f"bounds.max_nodes must be at most {MAX_NODES}")
     bounds = {
         "max_depth": positive_integer(value["bounds"]["max_depth"], "bounds.max_depth"),
-        "max_nodes": positive_integer(value["bounds"]["max_nodes"], "bounds.max_nodes"),
+        "max_nodes": max_nodes,
     }
     if not isinstance(value["servers"], list) or not value["servers"]:
         raise PolicyError("servers must be a non-empty array")
@@ -885,8 +898,8 @@ def parse_arguments(argv=None):
 def load_policy(path):
     try:
         with open(path, encoding="utf-8") as handle:
-            return validate_policy(json.load(handle))
-    except (OSError, json.JSONDecodeError) as error:
+            return validate_policy(json.load(handle, object_pairs_hook=unique_object))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise PolicyError("policy must be readable valid JSON") from error
 
 

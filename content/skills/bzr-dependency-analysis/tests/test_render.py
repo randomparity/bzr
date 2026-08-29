@@ -53,8 +53,8 @@ class RendererTestCase(unittest.TestCase):
             output = output_path.read_bytes() if output_path.exists() else None
             return result, output
 
-    def render_fixture(self, output_format):
-        source = (FIXTURES / "hostile.analysis.json").read_bytes()
+    def render_fixture(self, output_format, case="hostile"):
+        source = (FIXTURES / f"{case}.analysis.json").read_bytes()
         result, output = self.run_renderer(source, output_format)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIsNotNone(output)
@@ -105,12 +105,50 @@ class RendererTestCase(unittest.TestCase):
         self.assertNotIn("![image]", output)
         self.assertNotIn("<https://evil.example>", output)
         self.assertNotIn("token=secret", output)
-        token = re.compile(r'^    [a-z][a-z0-9_]*\["(?:\\.|[^"\\])*"\]$')
+        self.assertIn("#quot;", output)
+        self.assertNotIn('\\"', output)
+        token = re.compile(r'^    [a-z][a-z0-9_]*\["(?P<label>[^"]*)"\]$')
         for line in output.splitlines():
             if "[\"" in line:
-                self.assertRegex(line, token)
+                match = token.fullmatch(line)
+                self.assertIsNotNone(match, line)
+                self.assertNotIn("\\", match.group("label"))
+                self.assertNotRegex(match.group("label"), r"[\r\n\t]")
         self.assertIn("n_7072696d617279_80", output)
         self.assertIn("n_7072696d617279_81", output)
+
+    def test_pm_findings_and_incomplete_metadata_render_in_both_formats(self):
+        expected_cycle = (
+            "Longest dependency chain components: c0001, c0002",
+            "Bottlenecks:",
+            "fan-out 2",
+            "Execution assumptions:",
+            "cycles-prevent-total-node-order",
+            "partial-evidence",
+            "Execution component order: c0001, c0003, c0002",
+            "Incomplete boundaries:",
+            "Cycle impediments: c0001",
+            "Graph cap reached: true",
+            "Omitted discovered identities: 1",
+            "Scope truncated: false",
+            "Limitations: graph-node-cap",
+        )
+        expected_stale = (
+            "Stale blockers:",
+            "Analysis warnings:",
+            "stale-timestamp-future",
+            "stale-timestamp-unknown",
+        )
+        for output_format in ("markdown", "mermaid"):
+            with self.subTest(output_format=output_format):
+                cycle = self.render_fixture(output_format, "cycle").decode("utf-8")
+                stale = self.render_fixture(output_format, "stale").decode("utf-8")
+                normalized_cycle = cycle.replace("&#35;", "#").replace("&#45;", "-")
+                normalized_stale = stale.replace("&#35;", "#").replace("&#45;", "-")
+                for value in expected_cycle:
+                    self.assertIn(value, normalized_cycle)
+                for value in expected_stale:
+                    self.assertIn(value, normalized_stale)
 
     def test_strict_schema_rejects_unknown_keys_without_replacing_output(self):
         document = json.loads((FIXTURES / "hostile.analysis.json").read_text())
@@ -216,6 +254,19 @@ class RendererTestCase(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIsNone(output)
         self.assertIn(b"duplicate JSON key: schema", result.stderr)
+
+    def test_max_nodes_accepts_9999_and_rejects_10000(self):
+        document = json.loads((FIXTURES / "hostile.analysis.json").read_text())
+        document["bounds"]["max_nodes"] = 9_999
+        accepted, output = self.run_renderer(document, "markdown")
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        self.assertIsNotNone(output)
+
+        document["bounds"]["max_nodes"] = 10_000
+        rejected, output = self.run_renderer(document, "markdown")
+        self.assertEqual(rejected.returncode, 2)
+        self.assertIsNone(output)
+        self.assertIn(b"bounds.max_nodes must be at most 9999", rejected.stderr)
 
     def test_every_analysis_fixture_renders_in_both_formats(self):
         for fixture in sorted(FIXTURES.glob("*.analysis.json")):

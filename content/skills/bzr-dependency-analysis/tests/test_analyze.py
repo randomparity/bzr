@@ -390,11 +390,12 @@ class AnalyzerTestCase(unittest.TestCase):
         self.assertEqual(len(document["components"]), 9_999)
         self.assertEqual(document["components"][-1]["id"], "c9999")
 
-    def test_component_namespace_rejects_10000_isolated_components(self):
-        collection = self.collection_with_isolated_nodes(10_000)
+    def test_max_nodes_rejects_10000_before_component_analysis(self):
+        collection = self.load_collection("branch")
+        collection["bounds"]["max_nodes"] = 10_000
         with self.assertRaisesRegex(
             ANALYZER.AnalysisInputError,
-            "four-digit component namespace",
+            "bounds.max_nodes must be at most 9999",
         ):
             ANALYZER.analyze(collection)
 

@@ -7,6 +7,10 @@
 - Resolved&#45;node policy: include&#45;no&#45;traverse; resolved statuses RESOLVED
 - Duration assumptions: none; weighted critical&#45;path analysis is unsupported
 - Evidence gaps: 0 unknown nodes; 0 boundary nodes
+- Graph cap reached: false
+- Omitted discovered identities: 0
+- Scope truncated: false
+- Limitations: none
 - Collection commands: bug search, bug view, query run
 
 ## Scope provenance
@@ -17,11 +21,17 @@
 ## Structural findings
 
 - Longest dependency chain by edge count: 1
+- Longest dependency chain components: c0001, c0002
 - Structural roots: primary&#35;80
 - Structural leaves: primary&#35;81
+- Bottlenecks: none
 - Unassigned blockers: primary&#35;80
 - Stale blockers: none
+- Execution assumptions: resolved&#45;include&#45;no&#45;traverse
+- Execution component order: c0001, c0002
 - Cycle impediments: none
+- Incomplete boundaries: none
+- Analysis warnings: none
 
 ## Structural execution groups
 

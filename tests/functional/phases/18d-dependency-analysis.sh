@@ -154,9 +154,19 @@ if [[ $_DA_PIPELINE_OK -eq 1 ]] &&
     ' "$_DA_ANALYSIS" >/dev/null &&
   grep -q '^````text$' "$_DA_REPORT" &&
   grep -q '<script>alert(1)</script>' "$_DA_REPORT" &&
+  grep -Fq -- '- Graph cap reached: false' "$_DA_REPORT" &&
+  grep -Fq -- '- Omitted discovered identities: 0' "$_DA_REPORT" &&
+  grep -Fq -- '- Longest dependency chain components:' "$_DA_REPORT" &&
+  grep -Fq -- '- Bottlenecks:' "$_DA_REPORT" &&
+  grep -Fq -- '- Execution assumptions:' "$_DA_REPORT" &&
+  grep -Fq -- '- Execution component order:' "$_DA_REPORT" &&
+  grep -Fq -- '- Incomplete boundaries:' "$_DA_REPORT" &&
+  grep -Fq -- '- Analysis warnings:' "$_DA_REPORT" &&
   ! grep -q '<script>' "$_DA_DIAGRAM" &&
   ! grep -q '%%{init:' "$_DA_DIAGRAM" &&
+  ! grep -Fq '\"' "$_DA_DIAGRAM" &&
   grep -q '&lt;script&gt;' "$_DA_DIAGRAM" &&
+  grep -q '#quot;theme#quot;' "$_DA_DIAGRAM" &&
   grep -q '&#37;&#37;&#123;init:' "$_DA_DIAGRAM"; then
   test_pass
 else
