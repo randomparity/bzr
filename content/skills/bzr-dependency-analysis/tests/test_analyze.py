@@ -7,6 +7,8 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
+import tracemalloc
 import unittest
 
 
@@ -389,6 +391,30 @@ class AnalyzerTestCase(unittest.TestCase):
         document = ANALYZER.analyze(self.collection_with_isolated_nodes(9_999))
         self.assertEqual(len(document["components"]), 9_999)
         self.assertEqual(document["components"][-1]["id"], "c9999")
+
+    def test_9999_component_chain_is_bounded_and_deterministic(self):
+        component_order = [f"c{index:04d}" for index in range(1, 10_000)]
+        graph = {
+            component: ({component_order[index + 1]} if index < 9_998 else set())
+            for index, component in enumerate(component_order)
+        }
+
+        tracemalloc.start()
+        started = time.monotonic()
+        layers = ANALYZER.topological_layers(graph)
+        chain = ANALYZER.longest_chain(graph, component_order)
+        elapsed = time.monotonic() - started
+        _, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+
+        self.assertEqual(len(layers), 9_999)
+        self.assertTrue(all(len(layer) == 1 for layer in layers))
+        self.assertEqual(layers[0], ["c0001"])
+        self.assertEqual(layers[-1], ["c9999"])
+        self.assertEqual(chain["length"], 9_998)
+        self.assertEqual(chain["path"], component_order)
+        self.assertLess(elapsed, 5.0)
+        self.assertLess(peak, 32 * 1024 * 1024)
 
     def test_max_nodes_rejects_10000_before_component_analysis(self):
         collection = self.load_collection("branch")
