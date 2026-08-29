@@ -29,6 +29,7 @@ SKILLS_EXPECTED=(
   bzr-search-report
   bzr-setup
   bzr-triage-bug
+  bzr-weekly-status
 )
 
 DEPENDENCY_ANALYSIS_PAYLOAD=(
