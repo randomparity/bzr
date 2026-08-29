@@ -93,7 +93,8 @@ _rr_capture_fixture_state() {
     jq -S . "$BZR_STDOUT" >"$destination/bug-$bug_id.json" || return 1
     run_bzr bug history "$bug_id"
     [[ $BZR_EXIT -eq 0 ]] || return 1
-    jq -S . "$BZR_STDOUT" >"$destination/history-$bug_id.json" || return 1
+    jq -S -f "$SCRIPT_DIR/normalize-history.jq" "$BZR_STDOUT" \
+      >"$destination/history-$bug_id.json" || return 1
   done
 }
 
