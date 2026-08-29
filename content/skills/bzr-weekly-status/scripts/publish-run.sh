@@ -32,24 +32,31 @@ jq -e '
            "limitations", "rules", "scope_fingerprint", "scope_label", "server"] | length) == 0 and
   .format_version == 1 and
   (.created_at | type == "string") and
+  (try (.created_at | fromdateiso8601 | type == "number") catch false) and
   (.server | type == "string" and length > 0) and
   (.scope_label | type == "string" and length > 0) and
   (.scope_fingerprint | test("^[0-9a-f]{64}$")) and
   (.fields | type == "array" and length > 0) and
+  (all($allowed[]; type == "string" and length > 0)) and
   (($allowed | unique | length) == ($allowed | length)) and
   (.rules | type == "object") and
   ((.rules | keys) - ["stale_after_days", "terminal_statuses"] | length) == 0 and
   ((.rules.terminal_statuses // []) | type == "array") and
-  ((.rules.stale_after_days // 1) | type == "number" and . >= 1) and
+  (all((.rules.terminal_statuses // [])[]; type == "string" and length > 0)) and
+  (((.rules.terminal_statuses // []) | unique | length) == ((.rules.terminal_statuses // []) | length)) and
+  ((.rules.stale_after_days // 1) | type == "number" and . >= 1 and floor == .) and
+  ((.bzr_schema_version // null) | type == "null" or type == "string") and
   (.bugs | type == "object") and
   (all(.bugs | to_entries[];
     (.key | test("^[1-9][0-9]*$")) and
     (.value | type == "object") and
     ((.value | keys) - ($allowed + ["id"]) | length) == 0 and
+    (.value.id | type == "number" and floor == . and . >= 1) and
     (.value.id | tostring) == .key)) and
   (.limitations | type == "array") and
   (all(.limitations[];
     (keys - ["id", "reason"] | length) == 0 and
+    ((.id // null) | type == "null" or (type == "number" and floor == . and . >= 1)) and
     (.reason | type == "string" and length > 0))) and
   ([.. | objects | keys[] | ascii_downcase] |
     map(select(. == "api_key" or . == "bugzilla_api_key" or . == "token" or

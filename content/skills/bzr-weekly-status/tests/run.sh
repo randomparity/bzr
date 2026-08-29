@@ -94,6 +94,15 @@ if "$HERE/../scripts/publish-run.sh" "$root" sensitive "$sensitive_stage" >/dev/
   exit 1
 fi
 
+typed_stage="$root/.staging/typed"
+mkdir "$typed_stage"
+jq '.created_at="not-a-date" | .bzr_schema_version=7 | .rules.terminal_statuses=[7] | .rules.stale_after_days=1.5 | .limitations=[{"id":"wrong","reason":"bad"}]' "$WORK/new.json" >"$typed_stage/snapshot.json"
+if "$HERE/../scripts/publish-run.sh" "$root" typed "$typed_stage" >/dev/null 2>&1; then
+  echo 'expected schema type rejection' >&2
+  exit 1
+fi
+[ ! -e "$root/runs/typed" ]
+
 outside="$WORK/outside-stage"
 mkdir "$outside"
 cp "$WORK/new.json" "$outside/snapshot.json"
