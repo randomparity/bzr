@@ -238,6 +238,7 @@ if [[ "${1:-}" == "release-readiness" ]]; then
   export RELEASE_READINESS_DEMO_MARKER="$release_marker"
   export RELEASE_READINESS_DEMO_REPORT="$release_workdir/release-readiness.md"
   export RELEASE_READINESS_DEMO_SERVER=demo
+  release_pending_cast="$release_workdir/bzr-release-readiness-demo.cast"
   release_cast="$REPO_ROOT/docs/assets/bzr-release-readiness-demo.cast"
   release_gif="$REPO_ROOT/docs/assets/bzr-release-readiness-demo.gif"
 
@@ -245,18 +246,19 @@ if [[ "${1:-}" == "release-readiness" ]]; then
   (
     cd "$REPO_ROOT"
     asciinema rec --headless --return --overwrite --window-size 110x38 \
-      -c "bash tools/record-demo.sh --drive-release-readiness" "$release_cast"
+      -c "bash tools/record-demo.sh --drive-release-readiness" "$release_pending_cast"
   )
 
   echo "==> Inspecting cast for credentials and private host data"
-  if grep -Fq "$BZ_URL" "$release_cast" ||
-    grep -Fq "$release_workdir" "$release_cast" ||
-    grep -Fq "$REPO_ROOT" "$release_cast" ||
-    grep -Fq "$API_KEY" "$release_cast" ||
-    grep -Fq "BZR_API_KEY" "$release_cast"; then
+  if grep -Fq "$BZ_URL" "$release_pending_cast" ||
+    grep -Fq "$release_workdir" "$release_pending_cast" ||
+    grep -Fq "$REPO_ROOT" "$release_pending_cast" ||
+    grep -Fq "$API_KEY" "$release_pending_cast" ||
+    grep -Fq "BZR_API_KEY" "$release_pending_cast"; then
     echo "ERROR: release-readiness cast contains private recording data" >&2
     exit 1
   fi
+  mv "$release_pending_cast" "$release_cast"
 
   echo "==> Rendering release-readiness GIF"
   agg --theme dracula --font-size 16 --idle-time-limit 3 \
