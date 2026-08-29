@@ -2,28 +2,29 @@
 
 ## Executive summary
 
-- 3 open bugs are in scope; 1 needs an ownership decision before the next milestone review.
-- Milestone 1.5 has one stale blocker: bug 41.
+- 3 open bugs are in scope; 1 needs an ownership decision before the next review.
+- The parser rollout is blocked; QA and documentation are moving.
 
-## Milestone view
+## Status view
 
-| Milestone | Open | In progress | Blocked/at risk | Stale |
-| --- | ---: | ---: | ---: | ---: |
-| 1.5 | 2 | 1 | 1 | 1 |
-| 1.6 | 1 | 0 | 0 | 0 |
+| Status | Count | Bugs |
+| --- | ---: | --- |
+| In progress | 1 | {{BLOCKER_ID}} |
+| New | 2 | {{QA_ID}}, {{DOCS_ID}} |
 
 ## Needs attention
 
-- **Bug 41 — Parser rollout:** stale and marked `blocked: owner needed`; assign an owner by Monday.
+- **Bug {{BLOCKER_ID}} — Parser rollout:** marked `blocked: owner needed`; assign an owner by Monday.
 
 ## Current updates
 
-- **Bug 41:** `blocked: owner needed` (mutable whiteboard snapshot).
-- **Bug 44:** `qa: verification underway` (mutable whiteboard snapshot).
+- **Bug {{BLOCKER_ID}}:** `blocked: owner needed` (mutable whiteboard snapshot).
+- **Bug {{QA_ID}}:** `verification underway` (mutable whiteboard snapshot).
+- **Bug {{DOCS_ID}}:** `ready for review` (mutable whiteboard snapshot).
 
 ## Decisions and follow-ups
 
-- Assign bug 41 before the 1.5 go/no-go; program manager owns follow-up.
+- Assign bug {{BLOCKER_ID}} before the next review; program manager owns follow-up.
 
 ## Limitations
 
@@ -31,6 +32,6 @@
 
 ## Provenance
 
-- Saved query `pm-demo`; fields
+- Saved query `pm-demo`; three-row fixture verified against structured output; fields
   `id,summary,status,assigned_to,target_milestone,last_change_time,whiteboard`; complete paginated
-  collection at 2026-08-29T17:00:00Z.
+  collection from the local demo server.

@@ -188,7 +188,11 @@ fi
 # the cast shows the user interaction and the artifact they asked for.
 if [[ "${1:-}" == "--drive-project-manager-reporting" ]]; then
   : "${PM_REPORT_DEMO_PROMPT:?}"
+  : "${PM_REPORT_DEMO_TEMPLATE:?}"
   : "${PM_REPORT_DEMO_REPORT:?}"
+  : "${PM_REPORT_BLOCKER_ID:?}"
+  : "${PM_REPORT_QA_ID:?}"
+  : "${PM_REPORT_DOCS_ID:?}"
   prompt=$'\e[1;35m❯\e[0m '
   request=$(<"$PM_REPORT_DEMO_PROMPT")
   printf '%b' "$prompt"
@@ -197,6 +201,10 @@ if [[ "${1:-}" == "--drive-project-manager-reporting" ]]; then
     sleep 0.006
   done
   printf '\n\n'
+  sed -e "s/{{BLOCKER_ID}}/$PM_REPORT_BLOCKER_ID/g" \
+    -e "s/{{QA_ID}}/$PM_REPORT_QA_ID/g" \
+    -e "s/{{DOCS_ID}}/$PM_REPORT_DOCS_ID/g" \
+    "$PM_REPORT_DEMO_TEMPLATE" >"$PM_REPORT_DEMO_REPORT"
   sed -n '1,$p' "$PM_REPORT_DEMO_REPORT"
   sleep 3
   printf '\n%b\n' "$prompt"
@@ -226,15 +234,44 @@ if [[ "${1:-}" == "project-manager-reporting" ]]; then
   pm_project="$pm_workdir/project"
   mkdir "$pm_project"
   "$BZR_BIN" config set-server demo --url "$BZ_URL" >/dev/null
-  pm_url="${BZ_URL}/buglist.cgi?f1=status_whiteboard&o1=substring&v1=owner%3Aprogram-manager&query_format=advanced"
+  pm_matches=$("$BZR_BIN" --server demo --json bug list --whiteboard bzr-pm-demo-v1 \
+    --fields id,whiteboard --paginate)
+  pm_marker=$(jq -er '
+    [.data[] | select(.whiteboard | contains("blocker blocked: owner needed"))] |
+    max_by(.id) | .whiteboard | split(" ")[0]
+  ' <<<"$pm_matches")
+  [[ $pm_marker =~ ^bzr-pm-demo-v1-[0-9]+-[0-9]+$ ]] || {
+    echo "ERROR: project-manager reporting demo fixture not found" >&2
+    exit 1
+  }
+  pm_url="${BZ_URL}/buglist.cgi?f1=status_whiteboard&o1=substring&v1=${pm_marker}&query_format=advanced"
   "$BZR_BIN" query save pm-demo --from-url "$pm_url" >/dev/null
   "$BZR_BIN" skills install --agent codex --project "$pm_project" >/dev/null
   pm_skill="$pm_project/.agents/skills/bzr-project-manager-reporting"
   export PM_REPORT_DEMO_PROMPT="$pm_skill/assets/demo-prompt.txt"
-  export PM_REPORT_DEMO_REPORT="$pm_skill/assets/demo-report.md"
-  "$BZR_BIN" --server demo --json query run pm-demo \
+  export PM_REPORT_DEMO_TEMPLATE="$pm_skill/assets/demo-report.md"
+  export PM_REPORT_DEMO_REPORT="$pm_workdir/pm-report.md"
+  pm_collection=$("$BZR_BIN" --server demo --json query run pm-demo \
     --fields id,summary,status,assigned_to,target_milestone,last_change_time,whiteboard \
-    --paginate >/dev/null
+    --paginate)
+  jq -e --arg marker "$pm_marker" '
+    .data | length == 3 and
+    (map(.summary) | sort) == ["Documentation readiness", "Parser rollout", "QA validation"] and
+    all(.[]; .whiteboard | startswith($marker + " ")) and
+    ([.[] | select(.summary == "Parser rollout" and .status == "IN_PROGRESS")] | length) == 1
+  ' <<<"$pm_collection" >/dev/null || {
+    echo "ERROR: project-manager reporting fixture does not match the demo artifact" >&2
+    exit 1
+  }
+  export PM_REPORT_BLOCKER_ID
+  export PM_REPORT_QA_ID
+  export PM_REPORT_DOCS_ID
+  PM_REPORT_BLOCKER_ID=$(jq -er '.data[] | select(.summary == "Parser rollout") | .id' \
+    <<<"$pm_collection")
+  PM_REPORT_QA_ID=$(jq -er '.data[] | select(.summary == "QA validation") | .id' \
+    <<<"$pm_collection")
+  PM_REPORT_DOCS_ID=$(jq -er '.data[] | select(.summary == "Documentation readiness") | .id' \
+    <<<"$pm_collection")
   pm_cast="$REPO_ROOT/docs/assets/bzr-project-manager-reporting-demo.cast"
   pm_stage=$(mktemp -d "$REPO_ROOT/docs/assets/.bzr-pm-report-publish.XXXXXX")
   trap 'rm -r "$pm_workdir" "$pm_stage"' EXIT

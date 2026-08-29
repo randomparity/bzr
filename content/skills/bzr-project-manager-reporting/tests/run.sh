@@ -29,10 +29,12 @@ grep -Fq 'bzr-dependency-analysis' "$SKILL"
 grep -Fq 'bzr-release-readiness' "$SKILL"
 
 grep -Fq '=, +, -, or @' "$SAFETY"
+grep -Fq 'prefix the serialized cell with an apostrophe' "$SAFETY"
+grep -Fq 'If exact byte preservation is required, decline CSV' "$SAFETY"
 grep -Fq 'HTTP or HTTPS' "$SAFETY"
 grep -Fq 'escape' "$SAFETY"
 
 grep -Fq 'Produce a weekly portfolio report' "$PROMPT"
-for section in 'Executive summary' 'Milestone view' 'Needs attention' 'Current updates' 'Decisions and follow-ups' 'Limitations' 'Provenance'; do
+for section in 'Executive summary' 'Status view' 'Needs attention' 'Current updates' 'Decisions and follow-ups' 'Limitations' 'Provenance'; do
   grep -Fq "$section" "$REPORT"
 done
