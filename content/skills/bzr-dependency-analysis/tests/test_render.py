@@ -205,6 +205,25 @@ class RendererTestCase(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertEqual(output, b"keep\n")
 
+    def test_reciprocal_only_edges_do_not_replace_output(self):
+        for direction in ("blocks", "depends_on"):
+            for output_format in ("markdown", "mermaid"):
+                with self.subTest(direction=direction, output_format=output_format):
+                    source = json.loads(
+                        (FIXTURES / "branch.analysis.json").read_text()
+                    )
+                    source["policy"]["direction"] = direction
+                    reciprocal = "depends_on" if direction == "blocks" else "blocks"
+                    for edge in source["edges"]:
+                        edge["observations"] = [reciprocal]
+                    result, output = self.run_renderer(
+                        source,
+                        output_format,
+                        initial=b"keep\n",
+                    )
+                    self.assertEqual(result.returncode, 2)
+                    self.assertEqual(output, b"keep\n")
+
     def test_strict_schema_rejects_unknown_keys_without_replacing_output(self):
         document = json.loads((FIXTURES / "hostile.analysis.json").read_text())
         document["unexpected"] = True

@@ -142,17 +142,17 @@ if [[ $_DA_PIPELINE_OK -eq 1 ]] &&
     --argjson resolved "$_DA_RESOLVED" --argjson skipped "$_DA_RESOLVED_PARENT" \
     --arg public_default_assignee "$_DA_PUBLIC_DEFAULT_ASSIGNEE" \
     --arg test_default_assignee "$_DA_TEST_DEFAULT_ASSIGNEE" '
-      def edge($server; $predecessor; $successor): {
-        observations: ["blocks", "depends_on"],
+      def edge($server; $predecessor; $successor; $observations): {
+        observations: $observations,
         predecessor: {id: $predecessor, server: $server},
         successor: {id: $successor, server: $server}
       };
       def inventory($server): [
-        edge($server; $base; $left),
-        edge($server; $base; $right),
-        edge($server; $left; $root),
-        edge($server; $right; $root),
-        edge($server; $resolved; $root)
+        edge($server; $base; $left; ["blocks", "depends_on"]),
+        edge($server; $base; $right; ["blocks", "depends_on"]),
+        edge($server; $left; $root; ["blocks", "depends_on"]),
+        edge($server; $right; $root; ["blocks", "depends_on"]),
+        edge($server; $resolved; $root; ["depends_on"])
       ];
       .schema == "bzr-dependency-analysis/v1" and
       .status == "complete" and

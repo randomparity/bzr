@@ -25,7 +25,10 @@ server-qualified identity is fetched at most once per run.
 
 Use `include-no-traverse` unless the user chooses to traverse resolved nodes. Bugzilla status names
 are installation-specific, so ask which statuses count as resolved or state the assumption. A
-refresh is a new collection; never combine data from separate runs into one analysis.
+resolved no-traverse node keeps its incoming edge, but its outgoing selected adjacency does not
+consume the relationship budget or drive discovery; only reciprocal corroboration of an already
+selected edge may remain. A refresh is a new collection; never combine data from separate runs
+into one analysis.
 
 The collector invokes only released structured read commands: `bug view`, `bug list`, `bug search`,
 and `query run`. It preflights each declared server once with a released, read-only one-row
@@ -187,11 +190,13 @@ Report inaccessible and missing nodes as unknown evidence, not absent bugs. Repo
 relationship caps, the lower bound on omitted relationships, depth, scope, and interrupted-fetch
 boundaries. `relationship_cap` means collection stopped staging and discovering once the admitted
 relationship budget was consumed; the omitted count is only a lower bound because unfetched nodes
-may contain more relationships. Adjacency IDs are validated, deduplicated, and sorted numerically
-before cap admission. For a one-direction policy, only selected-field evidence consumes the
-relationship budget; optional reciprocal evidence has a separate same-sized retention ceiling and
-cannot stop selected traversal. For `both`, selected evidence uses canonical field order `blocks`
-then `depends_on`, with numeric order within each field. On any request to create, update, resolve,
+may contain more relationships. It still fetches every identity already admitted to the current
+frontier in canonical order, without staging further selected adjacency, before stopping. Adjacency
+IDs are validated, deduplicated, and sorted numerically before cap admission. For a one-direction
+policy, only selected-field evidence consumes the relationship budget; optional reciprocal evidence
+has a separate same-sized retention ceiling and cannot stop selected traversal. For `both`, selected
+evidence uses canonical field order `blocks` then `depends_on`, with numeric order within each field.
+On any request to create, update, resolve,
 link, comment
 on, attach to, or otherwise change a Bugzilla resource during this analysis, refuse the request
 rather than mutate Bugzilla. If complete evidence is unavailable, return a partial Markdown report

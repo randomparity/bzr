@@ -433,6 +433,7 @@ def validate_collection(document, allow_partial):
     nodes, node_lookup, numeric_nodes = validate_nodes(document["nodes"], max_nodes)
     validate_observations(document["observations"], numeric_nodes)
     selected = selected_fields(document["policy"]["direction"])
+    validate_observation_grounding(document["observations"], selected)
     selected_count = sum(
         observation["field"] in selected
         for observation in document["observations"]
@@ -522,12 +523,8 @@ def validate_nodes(nodes, max_nodes):
 def canonical_edges(observations):
     grouped = {}
     for observation in observations:
-        source = (observation["source"]["server"], observation["source"]["id"])
-        target = (observation["target"]["server"], observation["target"]["id"])
-        predecessor, successor = (
-            (target, source) if observation["field"] == "depends_on" else (source, target)
-        )
-        grouped.setdefault((predecessor, successor), set()).add(observation["field"])
+        edge = canonical_observation_edge(observation)
+        grouped.setdefault(edge, set()).add(observation["field"])
     result = []
     for (predecessor, successor), fields in sorted(grouped.items()):
         result.append({
@@ -536,6 +533,25 @@ def canonical_edges(observations):
             "successor": {"id": successor[1], "server": successor[0]},
         })
     return result
+
+
+def canonical_observation_edge(observation):
+    source = (observation["source"]["server"], observation["source"]["id"])
+    target = (observation["target"]["server"], observation["target"]["id"])
+    if observation["field"] == "depends_on":
+        return target, source
+    return source, target
+
+
+def validate_observation_grounding(observations, selected):
+    grouped = {}
+    for observation in observations:
+        edge = canonical_observation_edge(observation)
+        grouped.setdefault(edge, set()).add(observation["field"])
+    if any(fields.isdisjoint(selected) for fields in grouped.values()):
+        raise AnalysisInputError(
+            "observations contain an edge without selected-direction evidence"
+        )
 
 
 def graph_adjacency(nodes, edges):

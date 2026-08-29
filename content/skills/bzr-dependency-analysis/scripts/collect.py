@@ -555,7 +555,11 @@ class Collector:
             )
             return
         self.nodes[numeric_key] = known_node(server, detail, 0, [alias])
-        self.stage_detail(server, detail)
+        self.stage_detail(
+            server,
+            detail,
+            selected_eligible=self.selected_adjacency_eligible(detail),
+        )
         self.apply_field_restriction(numeric_key, detail)
 
     def fetch_breadth_first(self):
@@ -565,22 +569,20 @@ class Collector:
         )
         depth = 0
         while frontier:
-            unfinished_frontier = False
             for index, key in enumerate(frontier):
                 if self.nodes[key]["boundary_reason"] == "pending_fetch" and key not in self.fetched:
                     self.fetch_numeric(key)
-                if self.relationship_cap_reached:
-                    unfinished_frontier = index + 1 < len(frontier)
-                    break
-                if self.relationships_processed == self.max_relationships and index + 1 < len(frontier):
+                if (
+                    not self.relationship_cap_reached
+                    and self.relationships_processed == self.max_relationships
+                    and index + 1 < len(frontier)
+                ):
                     self.record_relationship_cap()
-                    unfinished_frontier = True
-                    break
             candidates = self.discovery_candidates(frontier)
             next_frontier = self.admit_discoveries(candidates, depth + 1)
             if (
                 self.relationships_processed == self.max_relationships
-                and (unfinished_frontier or next_frontier)
+                and next_frontier
             ):
                 self.record_relationship_cap()
             if self.graph_cap_reached or self.relationship_cap_reached:
@@ -604,8 +606,18 @@ class Collector:
         aliases = self.nodes[key]["requested_aliases"]
         self.nodes[key] = known_node(server, detail, self.nodes[key]["depth"], aliases)
         self.fetched.add(key)
-        self.stage_detail(server, detail)
+        self.stage_detail(
+            server,
+            detail,
+            selected_eligible=self.selected_adjacency_eligible(detail),
+        )
         self.apply_field_restriction(key, detail)
+
+    def selected_adjacency_eligible(self, detail):
+        return not (
+            self.policy["resolved_mode"] == "include-no-traverse"
+            and detail["status"] in self.policy["resolved_statuses"]
+        )
 
     def discovery_candidates(self, frontier):
         selected = selected_fields(self.policy["direction"])
@@ -641,7 +653,7 @@ class Collector:
                 self.record_graph_cap()
         return sorted(next_frontier, key=numeric_identity_key)
 
-    def stage_detail(self, server, detail):
+    def stage_detail(self, server, detail, *, selected_eligible):
         key = (server, detail["id"])
         retained = {"blocks": [], "depends_on": []}
         relationships = {
@@ -649,27 +661,28 @@ class Collector:
             for field in ("blocks", "depends_on")
         }
         selected = selected_fields(self.policy["direction"])
-        for field_index, field in enumerate(selected):
-            field_relationships = relationships[field]
-            index = 0
-            while (
-                index < len(field_relationships)
-                and self.relationships_processed < self.max_relationships
-            ):
-                target = field_relationships[index]
-                self.relationships_processed += 1
-                retained[field].append(target)
-                self.staged.add((field, server, detail["id"], server, target))
-                index += 1
-            if index < len(field_relationships):
-                self.omitted_relationships_lower_bound += len(field_relationships) - index
-                self.record_relationship_cap()
-            if self.relationship_cap_reached:
-                for later_field in selected[field_index + 1:]:
-                    self.omitted_relationships_lower_bound += len(
-                        relationships[later_field]
-                    )
-                break
+        if selected_eligible:
+            for field_index, field in enumerate(selected):
+                field_relationships = relationships[field]
+                index = 0
+                while (
+                    index < len(field_relationships)
+                    and self.relationships_processed < self.max_relationships
+                ):
+                    target = field_relationships[index]
+                    self.relationships_processed += 1
+                    retained[field].append(target)
+                    self.staged.add((field, server, detail["id"], server, target))
+                    index += 1
+                if index < len(field_relationships):
+                    self.omitted_relationships_lower_bound += len(field_relationships) - index
+                    self.record_relationship_cap()
+                if self.relationship_cap_reached:
+                    for later_field in selected[field_index + 1:]:
+                        self.omitted_relationships_lower_bound += len(
+                            relationships[later_field]
+                        )
+                    break
         if self.policy["direction"] != "both":
             reciprocal_field = "blocks" if selected[0] == "depends_on" else "depends_on"
             available = self.max_relationships - len(self.reciprocal_staged)
