@@ -59,8 +59,10 @@ Steps:
    type/operator validation, total readiness precedence, read-only allowlist,
    and capability-gated artifact safety.
 4. Add the detailed RR cases and report template, including prompt input and the
-   final PM-facing report fixture; rerun the skill-local test and
-   `agent-skills/tests/run.sh`, expecting exit 0.
+   final PM-facing report fixture; rerun
+   `BZR_BIN="$PWD/target/debug/bzr" sh
+   content/skills/bzr-release-readiness/tests/run.sh` and then `make skills-test`,
+   expecting both final binary-bound checks to exit 0.
 
 Acceptance: every issue criterion changes an agent decision; every documented
 command shape is executable; fixtures demonstrate the report contract without
