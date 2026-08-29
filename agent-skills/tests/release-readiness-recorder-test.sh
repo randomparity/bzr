@@ -177,6 +177,8 @@ grep -Fq "1/1 visible outgoing dependencies are unresolved. Bounded sample: #1. 
   "$work/timed-report.md"
 grep -Fq 'Blocker IDs: #3. Stale IDs: #3. Dependency-risk IDs: #1.' \
   "$work/timed-report.md"
+grep -Fq 'whether dependency #1 must close before the release proceeds.' \
+  "$work/timed-report.md"
 
 cat >"$work/fake-release-helper" <<'EOF'
 #!/usr/bin/env bash
