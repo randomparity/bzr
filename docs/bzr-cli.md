@@ -368,10 +368,13 @@ persists an order into the saved query.
 
 - **`--offset <N>`** skips the first `N` matches, so a window beyond the first
   `--limit` is retrievable. Page through a large set by repeating with
-  increasing offsets; a short or empty page means there are no more matches.
-- **`--paginate`** loops internally — `--limit` becomes the per-request page
-  size — fetching pages until the server returns a short page, then emits the
-  full result set. This is the path for "process all matching bugs" workflows.
+  offsets increased by the rows actually returned; an empty page means there
+  are no more matches.
+- **`--paginate`** loops internally — `--limit` becomes the requested per-page
+  size, and pagination advances by the rows the server actually returns so a
+  lower server-side cap does not skip or truncate matches. The loop ends after
+  an empty response, then emits the full result set. This is the path for
+  "process all matching bugs" workflows.
   (For `bug my`, each of the assigned/created/CC categories is paged
   independently and the union is de-duplicated.)
 
@@ -392,8 +395,8 @@ signal. When a window is truncated:
 - **JSON** output keeps stdout a clean array and writes the same note to
   **stderr**, so a deterministic, in-band JSON truncation flag is not added to
   the default array shape. For programmatic truncation detection, either use
-  `--paginate` (which returns everything) or page with `--offset` until a page
-  returns fewer than `--limit` rows.
+  `--paginate` (which continues through server-clamped pages) or page manually
+  with `--offset` until the server returns no rows.
 
 #### Date format
 

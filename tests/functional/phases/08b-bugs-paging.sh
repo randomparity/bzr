@@ -47,7 +47,14 @@ test_begin "138a. bug list --paginate --progress ndjson streams events on stderr
 run_bzr bug list --whiteboard "$_PGMARK" --paginate --limit 2 --progress ndjson
 if assert_success && assert_json_array_length '.' 3 &&
     assert_stderr_contains '"event":"page"' &&
-    assert_stderr_contains '"event":"done"'; then test_pass; fi
+    assert_stderr_contains '"event":"done"'; then
+    _PG_PAGE_COUNT=$(grep -c '"event":"page"' "$BZR_STDERR" 2>/dev/null || true)
+    if [[ $_PG_PAGE_COUNT == 3 ]]; then
+        test_pass
+    else
+        test_fail "page event count = ${_PG_PAGE_COUNT:-0}, expected 3"
+    fi
+fi
 
 test_begin "139. bug list --sort bug_id --order desc"
 run_bzr bug list --whiteboard "$_PGMARK" --sort bug_id --order desc
@@ -83,5 +90,5 @@ run_bzr bug list --version "$_VVA"
 if assert_success && assert_json_exists ".[] | select(.id==$VBA)" &&
     assert_json "[.[] | select(.id==$VBB)] | length" "0"; then test_pass; fi
 
-unset _PGMARK _PGOTHER _PG_CREATE P1 P3 PX _VPA _VPB _VVA _VVB VBA VBB
+unset _PGMARK _PGOTHER _PG_CREATE _PG_PAGE_COUNT P1 P3 PX _VPA _VPB _VVA _VVB VBA VBB
 echo ""
