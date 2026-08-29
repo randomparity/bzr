@@ -22,6 +22,8 @@ a choice, it records the resulting assumption in the report.
 2. Establish rules before assessing data: complete/open statuses, blocker
    priority/severity/keyword/flag/custom-field values, stale duration, deadline
    comparison time zone, resolved dependency handling, and artifact format.
+   When a custom-field rule is selected, read `bzr server capabilities --json`
+   before collection and use its mapped custom-field type and legal values.
 3. Derive the smallest field projection from the selected checks. Every complete
    collection overrides URL and saved-query page sizing with the bounded positive
    page size `--limit 100`, including when the stored value is missing, zero, or
@@ -62,8 +64,10 @@ a choice, it records the resulting assumption in the report.
 The report contains scope and rules, readiness assessment, blockers, dependency
 risks, stale or unowned work, recent adverse changes, decisions needed, data
 limitations, source commands, and generation time. Each assessment statement
-links to its supporting fact section. Counts never hide their contributing bug
-IDs.
+links to its supporting fact section. Aggregates show their count, denominator,
+source command, and a bounded PM-readable sample in the main report. A referenced
+evidence appendix carries the complete contributing-ID set so the assessment is
+auditable without forcing thousands of IDs into the meeting summary.
 
 Only predicates the operator explicitly designates as release-blocking affect
 the headline, with this total precedence: any known matched blocker produces
@@ -103,11 +107,10 @@ Custom-field operators are deliberately small and schema-driven:
 
 | Field shape reported by schema | Allowed operators | Operand contract |
 |---|---|---|
-| scalar string, enum, user, or bug ID | `equals`, `not-equals`, `present` | exact scalar value for equality; no operand for `present` |
-| multi-value string, enum, user, or bug ID | `contains`, `present` | one exact element for `contains`; no operand for `present` |
-| integer or decimal | `equals`, `not-equals`, `less-than`, `less-or-equal`, `greater-than`, `greater-or-equal`, `present` | finite number parsed in the field's numeric domain; no operand for `present` |
-| date or date-time | `equals`, `not-equals`, `before`, `on-or-before`, `after`, `on-or-after`, `present` | schema-valid ISO date/date-time; date-time comparisons normalize to UTC while date-only comparisons use the elicited release-policy time zone; no operand for `present` |
-| boolean | `equals`, `not-equals`, `present` | exact `true` or `false`; no operand for `present` |
+| `freetext`, `textarea`, `single_select`, `bug_id`, or `bug_urls` | `equals`, `not-equals`, `present` | exact scalar value for equality; a `single_select` operand must be one of the reported legal values; no operand for `present` |
+| `multi_select` or `keywords` | `contains`, `present` | one exact element for `contains`, drawn from reported legal values when supplied; no operand for `present` |
+| `integer` | `equals`, `not-equals`, `less-than`, `less-or-equal`, `greater-than`, `greater-or-equal`, `present` | integer operand; no operand for `present` |
+| `date` or `datetime` | `equals`, `not-equals`, `before`, `on-or-before`, `after`, `on-or-after`, `present` | schema-valid ISO date/date-time; date-time comparisons normalize to UTC while date-only comparisons use the elicited release-policy time zone; no operand for `present` |
 
 Unknown schema types, scalar/list mismatches, missing operands, operands supplied
 to `present`, and every operator absent from the applicable row are validation
@@ -141,10 +144,10 @@ parameter name. Unsafe links render as text. The
 workflow never opens links or executes field, comment, or whiteboard content.
 
 The readiness workflow is read-only. It may run only `bug list`, `bug search`,
-`query show`, `query run`, `bug view`, `bug history`, `bug links`, `field list`, and `schema`
-commands. Query import with `--save-as` writes local `bzr` configuration, so the
-skill never uses it. It never invokes Bugzilla or local configuration mutation
-commands.
+`query show`, `query run`, `bug view`, `bug history`, `bug links`, `field list`,
+`server capabilities`, and `schema` commands. Query import with `--save-as`
+writes local `bzr` configuration, so the skill never uses it. It never invokes
+Bugzilla or local configuration mutation commands.
 
 ## AI-SPEC
 
@@ -221,10 +224,14 @@ Markdown/HTML golden fragments. When document capability exists,
 relationships to reject macros, active markup, or external relationships derived
 from remote values; capability absence routes to `RR-NO-ARTIFACT`.
 
-The committed fixtures exercise each `RR-*` case through deterministic command
-trace and artifact assertions. They test the skill contract without prescribing
-a particular agent model, runtime, sampling policy, trial count, or retained
-evaluation harness.
+The committed fixtures cover each documented command shape, representative
+structured inputs, and expected report fragments for every `RR-*` case. Each
+fixture names the skill section and safety rule it illustrates, but these are
+contract examples rather than a claim that CI executes an agent. The real
+Bugzilla demonstration is reviewed for the requested prompt, read-only command
+trace, visible assumptions and limitations, bug-linked findings, and usable
+PM-facing artifact. No fixed agent model, runtime, sampling policy, trial count,
+or retained evaluation harness is prescribed.
 
 ## Threat model
 
