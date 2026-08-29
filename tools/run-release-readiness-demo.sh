@@ -2,15 +2,16 @@
 # shellcheck disable=SC2016 # Backticks below are literal Markdown delimiters.
 set -euo pipefail
 
-server=${1:?usage: run-release-readiness-demo.sh SERVER MARKER OUTPUT}
-marker=${2:?usage: run-release-readiness-demo.sh SERVER MARKER OUTPUT}
-output=${3:?usage: run-release-readiness-demo.sh SERVER MARKER OUTPUT}
+server=${1:?usage: run-release-readiness-demo.sh SERVER MARKER OUTPUT [TRACE]}
+marker=${2:?usage: run-release-readiness-demo.sh SERVER MARKER OUTPUT [TRACE]}
+output=${3:?usage: run-release-readiness-demo.sh SERVER MARKER OUTPUT [TRACE]}
 BZR_BIN=${BZR_BIN:-bzr}
 saved_query=release-readiness-demo
 url_query=release-readiness-demo-url
-fields=id,summary,status,priority,severity,assigned_to,target_milestone,version,deadline,last_change_time,whiteboard,depends_on
-discovery_fields=$fields,product
+fields=id,summary,status,priority,severity,keywords,flags,depends_on,last_change_time,whiteboard
+discovery_fields=id,product,version,target_milestone,whiteboard
 workdir=$(mktemp -d)
+trace=${4:-$workdir/source-command-argv.jsonl}
 trap 'rm -r "$workdir"' EXIT
 
 for tool in "$BZR_BIN" jq; do
@@ -20,20 +21,38 @@ for tool in "$BZR_BIN" jq; do
   }
 done
 
+: >"$trace"
+
+run_evidence() {
+  local destination=$1
+  local argument
+  local -a normalized=(bzr --server '<server-profile>' --json)
+  shift
+
+  for argument in "$@"; do
+    if [[ -n ${custom_url:-} && $argument == "$custom_url" ]]; then
+      normalized+=("<credential-free-url>")
+    else
+      normalized+=("$argument")
+    fi
+  done
+  jq -cn --args '$ARGS.positional' -- "${normalized[@]}" >>"$trace"
+  "$BZR_BIN" --server "$server" --json "$@" >"$destination"
+}
+
 as_of=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 collection_start=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 stale_cutoff=$(jq -nr --arg as_of "$as_of" \
   '$as_of | fromdateiso8601 - (30 * 24 * 60 * 60) | todateiso8601')
 
-bzr_json=("$BZR_BIN" --server "$server" --json)
-"${bzr_json[@]}" bug list --whiteboard "$marker" --limit 100 --paginate \
-  --sort bug_id --order asc --fields "$discovery_fields" >"$workdir/discovery.json"
+run_evidence "$workdir/discovery.json" bug list --whiteboard "$marker" \
+  --limit 100 --paginate --sort bug_id --order asc --fields "$discovery_fields"
 root=$(jq -er --arg marker "$marker" '
   [.data[] | select(.whiteboard == ($marker + " release-blocker")) | .id] |
   max
 ' "$workdir/discovery.json")
 
-"${bzr_json[@]}" bug view "$root" --fields "$discovery_fields" >"$workdir/root.json"
+run_evidence "$workdir/root.json" bug view "$root" --fields "$discovery_fields"
 product=$(jq -er '.data.product' "$workdir/root.json")
 version=$(jq -er '.data.version' "$workdir/root.json")
 milestone=$(jq -er '.data.target_milestone' "$workdir/root.json")
@@ -49,31 +68,27 @@ for value in "$product" "$version" "$milestone"; do
   }
 done
 
-"${bzr_json[@]}" query show "$url_query" >"$workdir/url-query.json"
+run_evidence "$workdir/url-query.json" query show "$url_query"
 custom_url=$(jq -er '.data.source_url' "$workdir/url-query.json")
-"${bzr_json[@]}" query show "$saved_query" >"$workdir/query.json"
-"${bzr_json[@]}" bug search --from-url "$custom_url" --limit 100 --paginate \
-  --sort bug_id --order asc --fields "$fields" >"$workdir/custom.json"
-"${bzr_json[@]}" query run "$saved_query" --limit 100 --paginate \
-  --sort bug_id --order asc --fields "$fields" >"$workdir/saved.json"
-"${bzr_json[@]}" bug list --product "$product" "--target-milestone=$milestone" \
-  --limit 100 --paginate --sort bug_id --order asc --fields "$fields" \
-  >"$workdir/milestone.json"
-"${bzr_json[@]}" bug list --version "$version" --limit 100 --paginate \
-  --sort bug_id --order asc --fields "$fields" >"$workdir/version.json"
-"${bzr_json[@]}" bug list --product "$product" --limit 100 --paginate \
-  --sort bug_id --order asc --fields "$fields" >"$workdir/product.json"
+run_evidence "$workdir/query.json" query show "$saved_query"
+run_evidence "$workdir/custom.json" bug search --from-url "$custom_url" \
+  --limit 100 --paginate --sort bug_id --order asc --fields "$fields"
+run_evidence "$workdir/saved.json" query run "$saved_query" --limit 100 \
+  --paginate --sort bug_id --order asc --fields "$fields"
+run_evidence "$workdir/milestone.json" bug list --product "$product" \
+  "--target-milestone=$milestone" --limit 100 --paginate --sort bug_id \
+  --order asc --fields "$fields"
+run_evidence "$workdir/version.json" bug list --version "$version" --limit 100 \
+  --paginate --sort bug_id --order asc --fields "$fields"
+run_evidence "$workdir/product.json" bug list --product "$product" --limit 100 \
+  --paginate --sort bug_id --order asc --fields "$fields"
 
 for scope in custom saved milestone version product; do
   jq -e --argjson expected "$fixture_ids" '[.data[].id] == $expected' \
     "$workdir/$scope.json" >/dev/null
 done
 
-"${bzr_json[@]}" bug history "$root" --since 2020-01-01 >"$workdir/history.json"
-"${bzr_json[@]}" bug links "$root" --relation depends_on >"$workdir/links.json"
-"${bzr_json[@]}" field list status >"$workdir/status-field.json"
-"${bzr_json[@]}" server capabilities >"$workdir/capabilities.json"
-"${bzr_json[@]}" schema bug >"$workdir/schema.json"
+run_evidence "$workdir/links.json" bug links "$root" --relation depends_on
 collection_end=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 
 visible_count=$(jq -er '.data | length' "$workdir/product.json")
@@ -96,14 +111,6 @@ stale_count=$(jq -er '[.data[] | select(
   (.status != "RESOLVED" and .status != "CLOSED") and
   .last_change_time < $cutoff
 )] | length' --arg cutoff "$stale_cutoff" "$workdir/product.json")
-unowned_count=$(jq -er '[.data[] | select(
-  (.status != "RESOLVED" and .status != "CLOSED") and
-  (.assigned_to == null or .assigned_to == "")
-)] | length' "$workdir/product.json")
-custom_field_count=$(jq -er '.data.custom_fields | length' "$workdir/capabilities.json")
-history_count=$(jq -er '[.data[] | select(.field == "status")] | length' \
-  "$workdir/history.json")
-
 if [[ $blocker_count -gt 0 ]]; then
   assessment='not ready'
 else
@@ -118,10 +125,17 @@ fi
     "$collection_start" "$collection_end"
   printf '%s visible bugs (#%s); bounded rolling collection.\n' \
     "$visible_count" "$visible_ids"
-  printf -- '- **Assumption:** `RESOLVED` and `CLOSED` are complete; `Highest` priority or '
-  printf '`release-blocker` whiteboard text is blocking; stale means changed before %s ' \
+  printf -- '- **Assumption:** `RESOLVED` and `CLOSED` are complete. `Highest` priority or '
+  printf 'literal `release-blocker` whiteboard text is release-blocking; there are no '
+  printf 'severity, keyword, flag, or custom-field blocker rules.\n'
+  printf -- '- **Assumption:** Dependency and stale checks are selected as non-blocking risks. '
+  printf 'Dependency targets in `RESOLVED` or `CLOSED` are complete with no resolved-target '
+  printf 'override. Stale means changed before %s (30 days before `as-of`); UTC is the ' \
     "$stale_cutoff"
-  printf '(30 days before `as-of`); time zone is UTC.\n'
+  printf 'release-policy time zone.\n'
+  printf -- '- **Assumption:** Deadline, ownership, milestone, status/resolution, and '
+  printf 'history/regression checks are not selected. This is a complete zero-offset review, '
+  printf 'the root cap is 100, and Markdown is the requested artifact.\n'
   printf -- '- **Fact:** Authorization can hide bugs, so this report does not claim an unobservable total.\n\n'
   printf '## Readiness assessment\n\n'
   printf -- '- **Assessment:** %s.\n' "$assessment"
@@ -134,32 +148,22 @@ fi
   printf -- '- **Fact:** %s unresolved outgoing dependency (#%s) blocks #%s.\n\n' \
     "$dependency_count" "$dependency_ids" "$root"
   printf '## Stale or unowned work\n\n'
-  printf -- '- **Fact:** %s stale and %s unowned open bugs under the stated assumptions.\n\n' \
-    "$stale_count" "$unowned_count"
+  printf -- '- **Fact:** %s stale open bugs under the stated assumptions.\n' "$stale_count"
+  printf -- '- **Fact:** Ownership check: N/A (not selected).\n\n'
   printf '## Recent adverse changes\n\n'
-  printf -- '- **Fact:** #%s has %s visible status-change record since 2020-01-01.\n\n' \
-    "$root" "$history_count"
+  printf -- '- **Fact:** History/regression check: N/A (not selected); no history read was issued.\n\n'
   printf '## Decisions needed\n\n'
   printf -- '- **Assessment:** Decide whether #%s can be cleared and whether dependency #%s ' \
     "$root" "$dependency_ids"
   printf 'must close before the release proceeds.\n\n'
   printf '## Data limitations\n\n'
-  printf -- '- **Fact:** Rolling snapshot, visible rows only; custom fields observed: %s; ' \
-    "$custom_field_count"
-  printf 'no custom-field rule was assumed.\n\n'
+  printf -- '- **Fact:** Rolling snapshot, visible rows only. Deadline, ownership, milestone, '
+  printf 'status/resolution, history/regression, and custom-field evidence is N/A because '
+  printf 'those checks were not selected. Alternate saved-query, URL, milestone, and version '
+  printf 'reads verify the fixture only; the assessment uses the product scope alone.\n\n'
   printf '## Source commands\n\n```text\n'
-  printf 'bzr --server <server-profile> bug search --from-url <credential-free-url> --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$fields"
-  printf 'bzr --server <server-profile> query show %s --json\n' "$saved_query"
-  printf 'bzr --server <server-profile> query run %s --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$saved_query" "$fields"
-  printf 'bzr --server <server-profile> bug list --product %s --target-milestone %s --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$product" "$milestone" "$fields"
-  printf 'bzr --server <server-profile> bug list --version %s --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$version" "$fields"
-  printf 'bzr --server <server-profile> bug list --product %s --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$product" "$fields"
-  printf 'bzr --server <server-profile> bug view %s --json --fields %s\n' "$root" "$fields"
-  printf 'bzr --server <server-profile> bug history %s --since 2020-01-01 --json\n' "$root"
-  printf 'bzr --server <server-profile> bug links %s --relation depends_on --json\n' "$root"
-  printf 'bzr --server <server-profile> field list status --json\n'
-  printf 'bzr --server <server-profile> server capabilities --json\n'
-  printf 'bzr --server <server-profile> schema bug\n```\n\n'
+  jq -r 'join(" ")' "$trace"
+  printf '```\n\n'
   printf '## Evidence appendix\n\n'
   printf -- '- **Fact:** Blocker IDs: #%s. Dependency-risk IDs: #%s. Visible IDs: #%s.\n' \
     "$blocker_ids" "$dependency_ids" "$visible_ids"

@@ -158,11 +158,12 @@ fi
 if [[ "${1:-}" == "--drive-release-readiness" ]]; then
   : "${RELEASE_READINESS_DEMO_HELPER:?}"
   : "${RELEASE_READINESS_DEMO_MARKER:?}"
+  : "${RELEASE_READINESS_DEMO_PRODUCT:?}"
   : "${RELEASE_READINESS_DEMO_REPORT:?}"
   : "${RELEASE_READINESS_DEMO_SERVER:?}"
 
   prompt=$'\e[1;35m❯\e[0m '
-  request='Analyze the latest release candidate in Bugzilla. Keep the review read-only. Treat RESOLVED and CLOSED as complete, Highest priority or release-blocker as blocking, and 30 days as stale. Use UTC, include dependency risks, distinguish facts from assumptions and assessments, and return a PM-ready Markdown report.'
+  request="Analyze release readiness in Bugzilla. Use product \`$RELEASE_READINESS_DEMO_PRODUCT\` as the only release scope. Keep the complete review read-only with zero offset and capture one UTC as-of instant. Treat RESOLVED and CLOSED as complete. Select blocker, dependency, stale, and literal-whiteboard checks: Highest priority or literal release-blocker is release-blocking; use no severity, keyword, flag, or custom-field blocker. For dependencies, RESOLVED and CLOSED are complete and resolved targets are not risks. Dependency and stale findings are non-blocking. Do not run deadline, ownership, milestone, status/resolution, or history/regression checks. Use a maximum of 100 root bugs and return a PM-ready Markdown report."
 
   printf '%b' "$prompt"
   for ((i = 0; i < ${#request}; i++)); do
@@ -236,6 +237,7 @@ if [[ "${1:-}" == "release-readiness" ]]; then
 
   export RELEASE_READINESS_DEMO_HELPER="$release_helper"
   export RELEASE_READINESS_DEMO_MARKER="$release_marker"
+  export RELEASE_READINESS_DEMO_PRODUCT="$release_product"
   export RELEASE_READINESS_DEMO_REPORT="$release_workdir/release-readiness.md"
   export RELEASE_READINESS_DEMO_SERVER=demo
   release_cast="$REPO_ROOT/docs/assets/bzr-release-readiness-demo.cast"

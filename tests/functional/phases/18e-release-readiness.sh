@@ -165,22 +165,44 @@ else
 fi
 
 _RR_REPORT="$FUNC_CONFIG_DIR/release-readiness-demo.md"
+_RR_REPORT_TRACE="$FUNC_CONFIG_DIR/release-readiness-demo.trace.jsonl"
 test_begin "123u. demo helper turns live evidence into a PM report"
-_RR_SOURCE_COMMAND_COUNT=0
-_RR_PROFILE_COMMAND_COUNT=0
+_RR_REPORT_OK=1
 if [[ -x "$REPO_ROOT/tools/run-release-readiness-demo.sh" ]] &&
   BZR_BIN="$BZR_BIN" "$REPO_ROOT/tools/run-release-readiness-demo.sh" \
-    test "$_RR_MARKER" "$_RR_REPORT"; then
-  _RR_SOURCE_COMMAND_COUNT=$(grep -c '^bzr ' "$_RR_REPORT" || true)
-  _RR_PROFILE_COMMAND_COUNT=$(grep -c '^bzr --server <server-profile> ' \
-    "$_RR_REPORT" || true)
+    test "$_RR_MARKER" "$_RR_REPORT" "$_RR_REPORT_TRACE"; then
+  jq -r 'join(" ")' "$_RR_REPORT_TRACE" >"$_RR_REPORT_TRACE.expected"
+  # shellcheck disable=SC2016 # The sed addresses are literal Markdown fences.
+  sed -n '/^```text$/,/^```$/p' "$_RR_REPORT" |
+    sed '1d;$d' >"$_RR_REPORT_TRACE.actual"
+  diff -u "$_RR_REPORT_TRACE.expected" "$_RR_REPORT_TRACE.actual" ||
+    _RR_REPORT_OK=0
+  jq -s -e --arg fields \
+    'id,summary,status,priority,severity,keywords,flags,depends_on,last_change_time,whiteboard' '
+    all(.[]; .[0:4] ==
+      ["bzr", "--server", "<server-profile>", "--json"]) and
+    any(.[]; .[4:6] == ["bug", "list"] and
+      any(.[]; . == "bzr-release-readiness-demo-v1")) and
+    ([.[] | select(.[4:6] == ["query", "show"])] | length) == 2 and
+    all(.[];
+      if ((.[4:6] == ["bug", "search"]) or
+          (.[4:6] == ["query", "run"]) or
+          (.[4:6] == ["bug", "list"] and (index("--whiteboard") == null)))
+      then .[index("--fields") + 1] == $fields
+      else true
+      end) and
+    all(.[]; .[4:6] != ["bug", "history"])
+  ' "$_RR_REPORT_TRACE" >/dev/null || _RR_REPORT_OK=0
+else
+  _RR_REPORT_OK=0
 fi
-if [[ $_RR_SOURCE_COMMAND_COUNT -eq 12 ]] &&
-  [[ $_RR_PROFILE_COMMAND_COUNT -eq $_RR_SOURCE_COMMAND_COUNT ]] &&
+if [[ $_RR_REPORT_OK -eq 1 ]] &&
   grep -Fq '# Release readiness:' "$_RR_REPORT" &&
   grep -Fq '**Fact:**' "$_RR_REPORT" &&
   grep -Fq '**Assumption:**' "$_RR_REPORT" &&
   grep -Fq '**Assessment:** not ready' "$_RR_REPORT" &&
+  grep -Fq 'Ownership check: N/A (not selected)' "$_RR_REPORT" &&
+  grep -Fq 'History/regression check: N/A (not selected)' "$_RR_REPORT" &&
   grep -Fq '## Data limitations' "$_RR_REPORT" &&
   grep -Fq "#$_RR_ROOT" "$_RR_REPORT" &&
   grep -Fq "#$_RR_DEPENDENCY" "$_RR_REPORT"; then
@@ -205,6 +227,6 @@ unset _RR_MARKER _RR_PRODUCT _RR_VERSION _RR_QUERY _RR_URL_QUERY _RR_FIELDS _RR_
 unset _RR_FIXTURE_OK _RR_DEPENDENCY _RR_COMPLETE _RR_ROOT _RR_EXPECTED_IDS _RR_URL
 unset _RR_CONFIG _RR_STATE_BEFORE _RR_STATE_AFTER _RR_STATE_OK
 unset _RR_SCOPES_OK _RR_SUPPLEMENT_OK _RR_CUSTOM_FIELD_COUNT _RR_REPORT
-unset _RR_SOURCE_COMMAND_COUNT _RR_PROFILE_COMMAND_COUNT
+unset _RR_REPORT_TRACE _RR_REPORT_OK
 unset -f _rr_capture_fixture_state _rr_scope_matches_fixture
 echo ""
