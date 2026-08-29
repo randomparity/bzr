@@ -15,6 +15,7 @@ set -euo pipefail
 # Usage: tools/record-demo.sh
 #        tools/record-demo.sh --weekly-status
 #        tools/record-demo.sh dependency-analysis
+#        tools/record-demo.sh release-readiness
 
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 BZ_URL=${BZ_URL:-http://127.0.0.1:8089}
@@ -150,6 +151,117 @@ if [[ "${1:-}" == "--drive-dependency-analysis" ]]; then
   printf '%b' "$prompt"
   sleep 1.6
   printf '\n'
+  exit 0
+fi
+
+# ── Release-readiness driver mode: runs inside the asciinema PTY ────────
+if [[ "${1:-}" == "--drive-release-readiness" ]]; then
+  : "${RELEASE_READINESS_DEMO_HELPER:?}"
+  : "${RELEASE_READINESS_DEMO_MARKER:?}"
+  : "${RELEASE_READINESS_DEMO_REPORT:?}"
+  : "${RELEASE_READINESS_DEMO_SERVER:?}"
+
+  prompt=$'\e[1;35m❯\e[0m '
+  request='Analyze the latest release candidate in Bugzilla. Keep the review read-only. Treat RESOLVED and CLOSED as complete, Highest priority or release-blocker as blocking, and 30 days as stale. Use UTC, include dependency risks, distinguish facts from assumptions and assessments, and return a PM-ready Markdown report.'
+
+  printf '%b' "$prompt"
+  for ((i = 0; i < ${#request}; i++)); do
+    printf '%s' "${request:i:1}"
+    sleep 0.006
+  done
+  sleep 0.5
+  printf '\n\n'
+  BZR_BIN="$BZR_BIN" "$RELEASE_READINESS_DEMO_HELPER" \
+    "$RELEASE_READINESS_DEMO_SERVER" "$RELEASE_READINESS_DEMO_MARKER" \
+    "$RELEASE_READINESS_DEMO_REPORT" >/dev/null 2>&1
+  sed -n '1,$p' "$RELEASE_READINESS_DEMO_REPORT"
+  sleep 3
+  printf '\n%b\n' "$prompt"
+  exit 0
+fi
+
+# Release-readiness orchestrator mode.
+if [[ "${1:-}" == "release-readiness" ]]; then
+  for tool in asciinema agg jq curl; do
+    command -v "$tool" >/dev/null || {
+      echo "ERROR: $tool not found on PATH" >&2
+      exit 1
+    }
+  done
+  [[ -x "$BZR_BIN" ]] || {
+    echo "ERROR: $BZR_BIN not found — run: cargo build --release" >&2
+    exit 1
+  }
+  release_helper="$REPO_ROOT/tools/run-release-readiness-demo.sh"
+  [[ -x "$release_helper" ]] || {
+    echo "ERROR: release-readiness demo helper is not executable: $release_helper" >&2
+    exit 1
+  }
+  curl -fsS "$BZ_URL/rest/version" >/dev/null || {
+    echo "ERROR: no Bugzilla at $BZ_URL — run: make functional-start" >&2
+    exit 1
+  }
+
+  release_workdir=$(mktemp -d)
+  release_workdir=$(cd "$release_workdir" && pwd -P)
+  trap 'rm -r "$release_workdir"' EXIT
+  export BZR_CONFIG="$release_workdir/config.toml"
+  export RUST_LOG=error
+
+  echo "==> Configuring a throwaway read-only profile"
+  "$BZR_BIN" config set-server demo --url "$BZ_URL" >/dev/null
+  release_marker="bzr-release-readiness-demo-v1"
+  release_matches=$("$BZR_BIN" --server demo --json bug list \
+    --whiteboard "$release_marker" --fields id,product,whiteboard \
+    --limit 100 --paginate --sort bug_id --order asc)
+  release_root=$(jq -er --arg marker "$release_marker" '
+    [.data[] | select(.whiteboard == ($marker + " release-blocker")) | .id] |
+    max
+  ' <<<"$release_matches") || {
+    echo "ERROR: release-readiness demo fixture not found." >&2
+    echo "  Run: make functional-test" >&2
+    echo "  Then rerun: tools/record-demo.sh release-readiness" >&2
+    exit 1
+  }
+  release_product=$(jq -er --argjson root "$release_root" '
+    .data[] | select(.id == $root) | .product
+  ' <<<"$release_matches")
+
+  echo "==> Preparing hidden read-only demo inputs"
+  "$BZR_BIN" query save release-readiness-demo --product "$release_product" \
+    --limit 1 --sort last_change_time --order desc >/dev/null
+  release_url="${BZ_URL}/buglist.cgi?product=${release_product}&query_format=advanced&limit=1&order=changeddate%20DESC"
+  "$BZR_BIN" query save release-readiness-demo-url --from-url "$release_url" \
+    --limit 1 >/dev/null 2>&1
+
+  export RELEASE_READINESS_DEMO_HELPER="$release_helper"
+  export RELEASE_READINESS_DEMO_MARKER="$release_marker"
+  export RELEASE_READINESS_DEMO_REPORT="$release_workdir/release-readiness.md"
+  export RELEASE_READINESS_DEMO_SERVER=demo
+  release_cast="$REPO_ROOT/docs/assets/bzr-release-readiness-demo.cast"
+  release_gif="$REPO_ROOT/docs/assets/bzr-release-readiness-demo.gif"
+
+  echo "==> Recording release-readiness analysis (root bug $release_root)"
+  (
+    cd "$REPO_ROOT"
+    asciinema rec --headless --return --overwrite --window-size 110x38 \
+      -c "bash tools/record-demo.sh --drive-release-readiness" "$release_cast"
+  )
+
+  echo "==> Inspecting cast for credentials and private host data"
+  if grep -Fq "$BZ_URL" "$release_cast" ||
+    grep -Fq "$release_workdir" "$release_cast" ||
+    grep -Fq "$REPO_ROOT" "$release_cast" ||
+    grep -Fq "$API_KEY" "$release_cast" ||
+    grep -Fq "BZR_API_KEY" "$release_cast"; then
+    echo "ERROR: release-readiness cast contains private recording data" >&2
+    exit 1
+  fi
+
+  echo "==> Rendering release-readiness GIF"
+  agg --theme dracula --font-size 16 --idle-time-limit 3 \
+    "$release_cast" "$release_gif"
+  ls -la "$release_cast" "$release_gif"
   exit 0
 fi
 
