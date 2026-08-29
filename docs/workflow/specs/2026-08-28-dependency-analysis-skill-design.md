@@ -122,7 +122,11 @@ filters staged observations to pairs whose endpoints are admitted, establishes c
 from selected observations, then attaches unselected observations only when they normalize onto
 one of those established edges. Thus
 unselected evidence can enrich provenance but cannot admit an endpoint, create an edge, or alter
-analysis, regardless of fetch order. Query restrictions
+analysis, regardless of fetch order. The analyzer and renderer independently reject any canonical
+edge group that lacks a selected-direction observation. Under `include-no-traverse`, a fetched
+resolved node's eligibility is decided before selected staging: its incoming edge remains, its
+outgoing selected adjacency consumes no relationship budget, and only reciprocal evidence that
+corroborates an already established selected edge may survive normalization. Query restrictions
 use the bounded, fully paginated server-qualified membership set
 described above. Returned adjacency lists add an observation when both endpoint nodes are admitted,
 even when the target is already fetched. Classified per-ID failures create unknown nodes
@@ -150,14 +154,18 @@ for the current frontier; duplicate observations count once. No further frontier
 deeper undiscovered identities are neither named nor counted. Collection order is canonical: server
 aliases lexically, numeric roots sorted ascending after stable deduplication,
 breadth-first depth, and numeric bug ID within each frontier. Output records use canonical sorted
-order. Selected-relationship exhaustion stops further selected staging, discovery, and fetching,
-preserves the already admitted graph, and adds limitation `relationship_cap`. Its
-`omitted_relationships_lower_bound` counts only visibly skipped canonical selected entries in
-fetched arrays and is explicitly a lower bound because unprocessed nodes may contain more. Scope restrictions
+order. Selected-relationship exhaustion stops further selected staging and next-frontier discovery,
+preserves the already admitted graph, and adds limitation `relationship_cap`. Every identity in
+the already admitted current frontier is still fetched in canonical order to establish its
+terminal known or unknown state. Selected adjacency returned by later eligible siblings is not
+staged or traversed; visibly skipped canonical entries contribute to
+`omitted_relationships_lower_bound`, while reciprocal evidence may only corroborate an established
+selected edge. Endpoints from the selected prefix staged before exhaustion remain admitted. The
+omission count is explicitly a lower bound because unprocessed nodes may contain more. Scope restrictions
 are evaluated from fetched fields or the initial scope membership; nodes outside the
 restriction remain visible boundary nodes and are not traversed.
 
-Reaching the cap closes admission but does not interrupt the current frontier. Every already
+Reaching the node cap closes admission but does not interrupt the current frontier. Every already
 admitted identity in that frontier is fetched in canonical order. Their returned adjacency lists
 record observations only between admitted endpoints and contribute rejected identities to the
 deduplicated omitted count. Collection then stops before fetching a next frontier.
@@ -513,13 +521,15 @@ behavioral Python tests compare helper output against fixture oracles byte-for-b
 | DA-22 | Wide/permuted adjacency beyond `max_relationships` | Canonical numeric selected prefix is byte-identical; one-direction reciprocal evidence cannot preempt later selected traversal; omissions are lower bounds | Response-order graph, unbounded retained state, or hidden omission | block |
 | DA-23 | Default-assignee placeholder login | Exact per-server login and null assignee are unassigned blockers; prefix lookalike is assigned | Missing blocker or prefix inference | block |
 | DA-24 | Every traversal direction rendered | Escaped `Traversal direction` metadata in Markdown and Mermaid | Direction omitted from PM artifact | block |
+| DA-25 | Relationship exhaustion inside a multi-node frontier | Later admitted siblings reach known/unknown terminal states; resolved no-traverse adjacency consumes no selected budget; reciprocal-only edge groups are rejected | Pending admitted sibling, resolved branch truncates active work, or ungrounded edge | block |
 
 `python3 content/skills/bzr-dependency-analysis/tests/test_analyze.py` runs DA-01 and DA-03
 through DA-11 plus DA-16, DA-19, and DA-20. `python3 content/skills/bzr-dependency-analysis/tests/test_collect.py`
 runs DA-04, DA-06, DA-13 through DA-15c, and DA-17 with a stubbed command runner and exact command
 log assertions, and runs DA-18 for alias canonicalization, DA-21 for direction isolation, and DA-22
-for aggregate relationship bounding. `python3 content/skills/bzr-dependency-analysis/tests/test_render.py` runs DA-07
-against every deterministic renderer. `content/skills/bzr-dependency-analysis/tests/skill-contract.sh`
+for aggregate relationship bounding. The collector, analyzer, and renderer suites jointly run DA-25.
+`python3 content/skills/bzr-dependency-analysis/tests/test_render.py` runs DA-07 against every
+deterministic renderer. `content/skills/bzr-dependency-analysis/tests/skill-contract.sh`
 runs DA-02 and DA-12 plus static command allowlist and phantom-flag checks. The fixture suite validates the skill
 contract and every documented `bzr` invocation. A real
 functional Bugzilla demonstration creates a branch, a diamond, a resolved blocker, and

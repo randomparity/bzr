@@ -886,6 +886,97 @@ class CollectorTestCase(unittest.TestCase):
                     )
                 self.assertEqual(analyzed.returncode, 0, analyzed.stderr)
 
+    def test_relationship_cap_finishes_already_admitted_frontier(self):
+        responses = [
+            ok(view_argv("primary", 1), bug(1, depends=[2, 3, 4])),
+            ok(view_argv("primary", 2), bug(2, depends=[5, 6])),
+            ok(view_argv("primary", 3), bug(3, blocks=[1])),
+            failed(view_argv("primary", 4), "api", api_code=100),
+        ]
+        result, output, log = self.run_collector(
+            policy(
+                [bug_scope("primary", 1)],
+                max_relationships=4,
+                direction="depends_on",
+            ),
+            responses,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        document = self.parse(output)
+        self.assertEqual(
+            [(node["id"], node["state"]) for node in document["nodes"]],
+            [
+                (1, "known"),
+                (2, "known"),
+                (3, "known"),
+                (4, "unknown"),
+                (5, "boundary"),
+            ],
+        )
+        self.assertEqual(
+            log,
+            [view_argv("primary", bug_id) for bug_id in (1, 2, 3, 4)],
+        )
+        self.assertEqual(document["limitations"], ["relationship_cap"])
+        self.assertEqual(document["cap"]["omitted_relationships_lower_bound"], 1)
+        self.assertLessEqual(
+            sum(
+                observation["field"] == "depends_on"
+                for observation in document["observations"]
+            ),
+            4,
+        )
+        self.assertIn(
+            {
+                "field": "blocks",
+                "source": {"id": 3, "server": "primary"},
+                "target": {"id": 1, "server": "primary"},
+            },
+            document["observations"],
+        )
+
+    def test_resolved_no_traverse_adjacency_does_not_consume_budget(self):
+        responses = [
+            ok(view_argv("primary", 1), bug(1, depends=[2, 3])),
+            ok(
+                view_argv("primary", 2),
+                bug(2, depends=[4, 5], blocks=[1], status="RESOLVED"),
+            ),
+            ok(view_argv("primary", 3), bug(3)),
+        ]
+        result, output, log = self.run_collector(
+            policy(
+                [bug_scope("primary", 1)],
+                max_relationships=3,
+                direction="depends_on",
+            ),
+            responses,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        document = self.parse(output)
+        self.assertEqual(
+            [(node["id"], node["state"]) for node in document["nodes"]],
+            [(1, "known"), (2, "known"), (3, "known")],
+        )
+        self.assertEqual(
+            log,
+            [view_argv("primary", bug_id) for bug_id in (1, 2, 3)],
+        )
+        self.assertEqual(document["limitations"], [])
+        self.assertEqual(document["cap"]["omitted_relationships_lower_bound"], 0)
+        self.assertEqual(
+            [
+                observation
+                for observation in document["observations"]
+                if observation["source"]["id"] == 2
+            ],
+            [{
+                "field": "blocks",
+                "source": {"id": 2, "server": "primary"},
+                "target": {"id": 1, "server": "primary"},
+            }],
+        )
+
     def test_unassigned_assignee_policy_defaults_and_validates_per_server_logins(self):
         default_result, default_output, default_log = self.run_collector(
             policy([bug_scope("primary", 1)]),

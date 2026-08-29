@@ -289,6 +289,9 @@ def validate_edges(document, numeric_nodes):
     edges = document["edges"]
     if not isinstance(edges, list):
         raise RenderInputError("edges must be an array")
+    selected = {"blocks", "depends_on"}
+    if document["policy"]["direction"] != "both":
+        selected = {document["policy"]["direction"]}
     keys = []
     for index, edge in enumerate(edges):
         context = f"edges[{index}]"
@@ -297,6 +300,10 @@ def validate_edges(document, numeric_nodes):
             edge["observations"], f"{context}.observations",
             allowed={"blocks", "depends_on"}, nonempty=True,
         )
+        if selected.isdisjoint(edge["observations"]):
+            raise RenderInputError(
+                f"{context}.observations has no selected-direction evidence"
+            )
         endpoints = []
         for role in ("predecessor", "successor"):
             endpoint = edge[role]

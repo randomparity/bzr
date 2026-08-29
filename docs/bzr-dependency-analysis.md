@@ -89,7 +89,9 @@ The analyzer rejects a partial collection unless the operator explicitly chooses
 `--allow-partial`. Unknown, inaccessible, missing, depth-limited, scope-limited, relationship-capped,
 and interrupted nodes remain visible so an incomplete snapshot cannot be mistaken for a complete
 graph. A relationship-cap omission count is explicitly a lower bound because unfetched nodes may
-contain additional relationships.
+contain additional relationships. When the cap closes selected staging, the collector still
+fetches every identity already admitted to the current frontier in canonical order, without
+staging further selected adjacency, before stopping.
 
 ## Interpret the result structurally
 
@@ -100,6 +102,9 @@ those findings. For one-direction collection, only selected evidence consumes
 `max_relationships`; bounded optional reciprocal evidence cannot preempt selected traversal.
 Selected adjacency IDs are deduplicated and sorted numerically before cap admission. For `both`,
 the canonical order is `blocks` then `depends_on`, with numeric order inside each field.
+Resolved nodes under `include-no-traverse` keep their incoming edge, but their outgoing selected
+adjacency consumes no relationship budget and drives no discovery. Reciprocal observations only
+corroborate an edge grounded by selected-direction evidence.
 These are properties of the collected graph, not a delivery schedule. The format has no duration
 model, so it does not support weighted critical-path analysis or delivery-date prediction. Members
 of a cyclic component also have no total execution order.

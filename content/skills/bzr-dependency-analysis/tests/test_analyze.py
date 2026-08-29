@@ -238,6 +238,28 @@ class AnalyzerTestCase(unittest.TestCase):
                 self.assertIsNone(output)
                 self.assertIn(b"analysis input error:", result.stderr)
 
+    def test_reciprocal_only_edge_groups_do_not_replace_output(self):
+        for direction in ("blocks", "depends_on"):
+            with self.subTest(direction=direction):
+                collection = self.load_collection("branch")
+                collection["policy"]["direction"] = direction
+                if direction == "blocks":
+                    collection["observations"] = [
+                        {
+                            "field": "depends_on",
+                            "source": observation["target"],
+                            "target": observation["source"],
+                        }
+                        for observation in collection["observations"]
+                    ]
+                result, output = self.run_analyzer(
+                    collection,
+                    initial=b"keep\n",
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(output, b"keep\n")
+                self.assertIn(b"analysis input error:", result.stderr)
+
     def test_da10_scope_restriction_boundary_remains_in_findings(self):
         collection = self.load_collection("missing")
         boundary = collection["nodes"][1]
