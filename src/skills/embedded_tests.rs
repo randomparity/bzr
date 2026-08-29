@@ -90,3 +90,26 @@ fn embeds_complete_dependency_analysis_payload() {
         ]
     );
 }
+
+#[test]
+fn embeds_complete_project_manager_reporting_payload() {
+    let paths: Vec<_> = embedded::files()
+        .iter()
+        .filter_map(|file| {
+            file.relative_path
+                .strip_prefix("bzr-project-manager-reporting/")
+        })
+        .collect();
+
+    assert_eq!(
+        paths,
+        vec![
+            "SKILL.md",
+            "assets/demo-prompt.txt",
+            "assets/demo-report.md",
+            "reference/artifact-safety.md",
+            "reference/report-template.md",
+            "tests/run.sh",
+        ]
+    );
+}

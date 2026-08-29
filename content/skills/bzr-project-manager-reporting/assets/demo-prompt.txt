@@ -1,0 +1,3 @@
+Use $bzr-project-manager-reporting to produce a weekly portfolio report for the platform steering
+meeting from the saved query pm-demo. Group by target milestone, highlight stale or blocked work,
+include current whiteboard updates, and return a Markdown artifact for the program manager.

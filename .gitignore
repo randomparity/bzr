@@ -17,6 +17,8 @@ reference/
 !content/skills/bzr-reference/reference/**
 !content/skills/bzr-release-readiness/reference/
 !content/skills/bzr-release-readiness/reference/**
+!content/skills/bzr-project-manager-reporting/reference/
+!content/skills/bzr-project-manager-reporting/reference/**
 
 # Claude Flow
 .claude-flow/

@@ -31,5 +31,6 @@
 
 ## Provenance
 
-- Saved query `pm-status`; fields `id,summary,status,assigned_to,target_milestone,last_change_time,whiteboard`;
-  complete paginated collection at 2026-08-29T17:00:00Z.
+- Saved query `pm-demo`; fields
+  `id,summary,status,assigned_to,target_milestone,last_change_time,whiteboard`; complete paginated
+  collection at 2026-08-29T17:00:00Z.

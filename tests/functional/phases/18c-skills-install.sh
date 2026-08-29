@@ -78,6 +78,15 @@ RELEASE_READINESS_PAYLOAD=(
   tests/run.sh
 )
 
+PROJECT_MANAGER_REPORTING_PAYLOAD=(
+  SKILL.md
+  assets/demo-prompt.txt
+  assets/demo-report.md
+  reference/artifact-safety.md
+  reference/report-template.md
+  tests/run.sh
+)
+
 test_begin "123a. skills install populates both project layouts"
 run_bzr skills install --agent all --project "$SKILLS_PROJECT"
 if assert_success &&
@@ -136,6 +145,27 @@ if [[ $_RR_INSTALLED_OK -eq 1 ]]; then
   test_pass
 else
   test_fail "installed release-readiness payload did not match the embedded contract"
+fi
+
+test_begin "123l. project-manager reporting installation contains the complete payload"
+_PM_INSTALLED_EXPECTED="$FUNC_CONFIG_DIR/project-manager-reporting-installed-expected.txt"
+printf '%s\n' "${PROJECT_MANAGER_REPORTING_PAYLOAD[@]}" | LC_ALL=C sort \
+  >"$_PM_INSTALLED_EXPECTED"
+_PM_INSTALLED_OK=1
+for _PM_LAYOUT in .agents .claude; do
+  _PM_LAYOUT_ROOT="$SKILLS_PROJECT/$_PM_LAYOUT/skills/bzr-project-manager-reporting"
+  _PM_INSTALLED_PATHS="$FUNC_CONFIG_DIR/project-manager-reporting-${_PM_LAYOUT#*.}-paths.txt"
+  (
+    cd "$_PM_LAYOUT_ROOT" || exit 1
+    find . -type f ! -name .bzr-skill-managed -print |
+      sed 's#^\./##' | LC_ALL=C sort
+  ) >"$_PM_INSTALLED_PATHS"
+  cmp -s "$_PM_INSTALLED_EXPECTED" "$_PM_INSTALLED_PATHS" || _PM_INSTALLED_OK=0
+done
+if [[ $_PM_INSTALLED_OK -eq 1 ]]; then
+  test_pass
+else
+  test_fail "installed project-manager reporting payload did not match the embedded contract"
 fi
 
 test_begin "123b. skills install idempotently replaces an owned skill"

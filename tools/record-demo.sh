@@ -187,18 +187,16 @@ fi
 # Project-manager reporting driver mode. Setup and generation remain hidden so
 # the cast shows the user interaction and the artifact they asked for.
 if [[ "${1:-}" == "--drive-project-manager-reporting" ]]; then
+  : "${PM_REPORT_DEMO_PROMPT:?}"
   : "${PM_REPORT_DEMO_REPORT:?}"
-  : "${PM_REPORT_DEMO_RUNNER:?}"
   prompt=$'\e[1;35m❯\e[0m '
-  # shellcheck disable=SC2016 # The cast must show the literal skill invocation.
-  request='Use $bzr-project-manager-reporting to produce a weekly portfolio report from the saved query pm-demo. Group by target milestone, highlight stale or blocked work, include current whiteboard updates, and return a Markdown artifact for the program manager.'
+  request=$(<"$PM_REPORT_DEMO_PROMPT")
   printf '%b' "$prompt"
   for ((i = 0; i < ${#request}; i++)); do
     printf '%s' "${request:i:1}"
     sleep 0.006
   done
   printf '\n\n'
-  "$PM_REPORT_DEMO_RUNNER" "$PM_REPORT_DEMO_REPORT" >/dev/null
   sed -n '1,$p' "$PM_REPORT_DEMO_REPORT"
   sleep 3
   printf '\n%b\n' "$prompt"
@@ -225,23 +223,34 @@ if [[ "${1:-}" == "project-manager-reporting" ]]; then
   trap 'rm -r "$pm_workdir"' EXIT
   export BZR_CONFIG="$pm_workdir/config.toml"
   export RUST_LOG=error
+  pm_project="$pm_workdir/project"
+  mkdir "$pm_project"
   "$BZR_BIN" config set-server demo --url "$BZ_URL" >/dev/null
   pm_url="${BZ_URL}/buglist.cgi?f1=status_whiteboard&o1=substring&v1=owner%3Aprogram-manager&query_format=advanced"
   "$BZR_BIN" query save pm-demo --from-url "$pm_url" >/dev/null
-  export PM_REPORT_DEMO_REPORT="$pm_workdir/pm-report.md"
-  export PM_REPORT_DEMO_RUNNER="$REPO_ROOT/tools/run-project-manager-reporting-demo.sh"
-  export BZR_BIN
+  "$BZR_BIN" skills install --agent codex --project "$pm_project" >/dev/null
+  pm_skill="$pm_project/.agents/skills/bzr-project-manager-reporting"
+  export PM_REPORT_DEMO_PROMPT="$pm_skill/assets/demo-prompt.txt"
+  export PM_REPORT_DEMO_REPORT="$pm_skill/assets/demo-report.md"
+  "$BZR_BIN" --server demo --json query run pm-demo \
+    --fields id,summary,status,assigned_to,target_milestone,last_change_time,whiteboard \
+    --paginate >/dev/null
   pm_cast="$REPO_ROOT/docs/assets/bzr-project-manager-reporting-demo.cast"
+  pm_stage=$(mktemp -d "$REPO_ROOT/docs/assets/.bzr-pm-report-publish.XXXXXX")
+  trap 'rm -r "$pm_workdir" "$pm_stage"' EXIT
+  pm_pending_cast="$pm_stage/new.cast"
   (
     cd "$REPO_ROOT"
     asciinema rec --headless --return --overwrite --window-size 110x36 \
-      -c "bash tools/record-demo.sh --drive-project-manager-reporting" "$pm_cast"
+      -c "bash tools/record-demo.sh --drive-project-manager-reporting" "$pm_pending_cast"
   )
-  if grep -Fq "$BZ_URL" "$pm_cast" || grep -Fq "$pm_workdir" "$pm_cast" ||
-    grep -Fq "$REPO_ROOT" "$pm_cast"; then
+  if grep -Fq "$BZ_URL" "$pm_pending_cast" || grep -Fq "$pm_workdir" "$pm_pending_cast" ||
+    grep -Fq "$REPO_ROOT" "$pm_pending_cast" || grep -Fq "$API_KEY" "$pm_pending_cast" ||
+    grep -Fq "BZR_API_KEY" "$pm_pending_cast"; then
     echo "ERROR: project-manager reporting cast contains private recording data" >&2
     exit 1
   fi
+  mv "$pm_pending_cast" "$pm_cast"
   ls -la "$pm_cast"
   exit 0
 fi
