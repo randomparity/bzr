@@ -36,7 +36,8 @@ risks, stale or unowned work, recent adverse changes, decisions needed, limitati
 commands, generation time, and contributing bug IDs. Authorization can hide bugs and pagination
 is a rolling snapshot, so the report names those limits rather than claiming an unobservable or
 transactional total. Custom-field rules are used only when the server reports the field and its
-operator contract.
+operator contract. Source commands retain explicit server selection as the privacy-safe
+`--server <server-profile>` placeholder instead of exposing the configured profile name.
 
 ## Regenerate the demo
 

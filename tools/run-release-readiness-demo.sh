@@ -138,18 +138,18 @@ fi
     "$custom_field_count"
   printf 'no custom-field rule was assumed.\n\n'
   printf '## Source commands\n\n```text\n'
-  printf 'bzr bug search --from-url <credential-free-url> --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$fields"
-  printf 'bzr query show %s --json\n' "$saved_query"
-  printf 'bzr query run %s --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$saved_query" "$fields"
-  printf 'bzr bug list --product %s --target-milestone %s --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$product" "$milestone" "$fields"
-  printf 'bzr bug list --version %s --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$version" "$fields"
-  printf 'bzr bug list --product %s --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$product" "$fields"
-  printf 'bzr bug view %s --json --fields %s\n' "$root" "$fields"
-  printf 'bzr bug history %s --since 2020-01-01 --json\n' "$root"
-  printf 'bzr bug links %s --relation depends_on --json\n' "$root"
-  printf 'bzr field list status --json\n'
-  printf 'bzr server capabilities --json\n'
-  printf 'bzr schema bug\n```\n\n'
+  printf 'bzr --server <server-profile> bug search --from-url <credential-free-url> --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$fields"
+  printf 'bzr --server <server-profile> query show %s --json\n' "$saved_query"
+  printf 'bzr --server <server-profile> query run %s --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$saved_query" "$fields"
+  printf 'bzr --server <server-profile> bug list --product %s --target-milestone %s --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$product" "$milestone" "$fields"
+  printf 'bzr --server <server-profile> bug list --version %s --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$version" "$fields"
+  printf 'bzr --server <server-profile> bug list --product %s --limit 100 --paginate --json --sort bug_id --order asc --fields %s\n' "$product" "$fields"
+  printf 'bzr --server <server-profile> bug view %s --json --fields %s\n' "$root" "$fields"
+  printf 'bzr --server <server-profile> bug history %s --since 2020-01-01 --json\n' "$root"
+  printf 'bzr --server <server-profile> bug links %s --relation depends_on --json\n' "$root"
+  printf 'bzr --server <server-profile> field list status --json\n'
+  printf 'bzr --server <server-profile> server capabilities --json\n'
+  printf 'bzr --server <server-profile> schema bug\n```\n\n'
   printf '## Evidence appendix\n\n'
   printf -- '- **Fact:** Blocker IDs: #%s. Dependency-risk IDs: #%s. Visible IDs: #%s.\n' \
     "$blocker_ids" "$dependency_ids" "$visible_ids"

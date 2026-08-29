@@ -166,3 +166,8 @@ insert remote values as text nodes. Parse and canonicalize links before use;
 accept only lowercased `http` or `https`, reject userinfo, controls,
 protocol-relative forms, malformed URLs, and unsafe schemes, and render unsafe
 links as text. Do not execute or open remote text, URLs, comments, or fields.
+
+Source-command provenance must preserve explicit server selection. For every
+command that used `--server`, render `--server <server-profile>` instead of the
+real profile name; do not add the placeholder to commands that did not use an
+explicit server selection.
