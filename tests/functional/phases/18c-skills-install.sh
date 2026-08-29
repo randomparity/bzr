@@ -24,6 +24,7 @@ SKILLS_EXPECTED=(
   bzr-dependency-analysis
   bzr-dry-run-confirm
   bzr-file-bug
+  bzr-project-manager-reporting
   bzr-reference
   bzr-release-readiness
   bzr-release-tracking

@@ -11,6 +11,7 @@ fn embeds_all_current_skills_in_lexical_order() {
             "bzr-dependency-analysis",
             "bzr-dry-run-confirm",
             "bzr-file-bug",
+            "bzr-project-manager-reporting",
             "bzr-reference",
             "bzr-release-readiness",
             "bzr-release-tracking",

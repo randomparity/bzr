@@ -1,0 +1,3 @@
+Produce a weekly portfolio report for the platform steering meeting from the saved query
+pm-status. Group by target milestone, highlight stale or blocked work, include the current
+whiteboard update, and give me a Markdown artifact I can send to the program manager.

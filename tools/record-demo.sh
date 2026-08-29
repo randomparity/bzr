@@ -16,6 +16,7 @@ set -euo pipefail
 #        tools/record-demo.sh --weekly-status
 #        tools/record-demo.sh dependency-analysis
 #        tools/record-demo.sh release-readiness
+#        tools/record-demo.sh project-manager-reporting
 
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 BZ_URL=${BZ_URL:-http://127.0.0.1:8089}
@@ -180,6 +181,68 @@ if [[ "${1:-}" == "--drive-release-readiness" ]]; then
   sed -n '1,$p' "$RELEASE_READINESS_DEMO_REPORT"
   sleep 3
   printf '\n%b\n' "$prompt"
+  exit 0
+fi
+
+# Project-manager reporting driver mode. Setup and generation remain hidden so
+# the cast shows the user interaction and the artifact they asked for.
+if [[ "${1:-}" == "--drive-project-manager-reporting" ]]; then
+  : "${PM_REPORT_DEMO_REPORT:?}"
+  : "${PM_REPORT_DEMO_RUNNER:?}"
+  prompt=$'\e[1;35m❯\e[0m '
+  # shellcheck disable=SC2016 # The cast must show the literal skill invocation.
+  request='Use $bzr-project-manager-reporting to produce a weekly portfolio report from the saved query pm-demo. Group by target milestone, highlight stale or blocked work, include current whiteboard updates, and return a Markdown artifact for the program manager.'
+  printf '%b' "$prompt"
+  for ((i = 0; i < ${#request}; i++)); do
+    printf '%s' "${request:i:1}"
+    sleep 0.006
+  done
+  printf '\n\n'
+  "$PM_REPORT_DEMO_RUNNER" "$PM_REPORT_DEMO_REPORT" >/dev/null
+  sed -n '1,$p' "$PM_REPORT_DEMO_REPORT"
+  sleep 3
+  printf '\n%b\n' "$prompt"
+  exit 0
+fi
+
+if [[ "${1:-}" == "project-manager-reporting" ]]; then
+  for tool in asciinema jq curl; do
+    command -v "$tool" >/dev/null || {
+      echo "ERROR: $tool not found on PATH" >&2
+      exit 1
+    }
+  done
+  [[ -x "$BZR_BIN" ]] || {
+    echo "ERROR: $BZR_BIN not found — run: cargo build --release" >&2
+    exit 1
+  }
+  curl -fsS "$BZ_URL/rest/version" >/dev/null || {
+    echo "ERROR: no Bugzilla at $BZ_URL — run: make functional-test" >&2
+    exit 1
+  }
+  pm_workdir=$(mktemp -d)
+  pm_workdir=$(cd "$pm_workdir" && pwd -P)
+  trap 'rm -r "$pm_workdir"' EXIT
+  export BZR_CONFIG="$pm_workdir/config.toml"
+  export RUST_LOG=error
+  "$BZR_BIN" config set-server demo --url "$BZ_URL" >/dev/null
+  pm_url="${BZ_URL}/buglist.cgi?f1=status_whiteboard&o1=substring&v1=owner%3Aprogram-manager&query_format=advanced"
+  "$BZR_BIN" query save pm-demo --from-url "$pm_url" >/dev/null
+  export PM_REPORT_DEMO_REPORT="$pm_workdir/pm-report.md"
+  export PM_REPORT_DEMO_RUNNER="$REPO_ROOT/tools/run-project-manager-reporting-demo.sh"
+  export BZR_BIN
+  pm_cast="$REPO_ROOT/docs/assets/bzr-project-manager-reporting-demo.cast"
+  (
+    cd "$REPO_ROOT"
+    asciinema rec --headless --return --overwrite --window-size 110x36 \
+      -c "bash tools/record-demo.sh --drive-project-manager-reporting" "$pm_cast"
+  )
+  if grep -Fq "$BZ_URL" "$pm_cast" || grep -Fq "$pm_workdir" "$pm_cast" ||
+    grep -Fq "$REPO_ROOT" "$pm_cast"; then
+    echo "ERROR: project-manager reporting cast contains private recording data" >&2
+    exit 1
+  fi
+  ls -la "$pm_cast"
   exit 0
 fi
 

@@ -29,6 +29,7 @@ sh "$HERE/version-check.sh" || rc=1
 sh "$HERE/package-content-check.sh" || rc=1
 sh "$HERE/../../content/skills/bzr-weekly-status/tests/run.sh" || rc=1
 sh "$HERE/../../content/skills/bzr-release-readiness/tests/run.sh" || rc=1
+sh "$HERE/../../content/skills/bzr-project-manager-reporting/tests/run.sh" || rc=1
 bash "$HERE/release-readiness-recorder-test.sh" || rc=1
 
 # Self-tests
