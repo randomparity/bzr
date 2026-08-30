@@ -111,6 +111,39 @@ fn node_defaults_missing_fields() {
 }
 
 #[test]
+fn duplicates_accept_numeric_and_red_hat_object_ids() {
+    let node: BugLinksNode =
+        serde_json::from_str(r#"{"id":7,"duplicates":[11,{"bug_id":13,"summary":"ignored"},11]}"#)
+            .unwrap();
+
+    assert_eq!(node.duplicates, [11, 13, 11]);
+}
+
+#[test]
+fn duplicates_reject_invalid_relationship_ids_actionably() {
+    for invalid in [
+        "0",
+        "-1",
+        "1.5",
+        r#"{"bug_id":0}"#,
+        r#"{"bug_id":-1}"#,
+        r#"{"bug_id":"11"}"#,
+        r#"{"summary":"missing id"}"#,
+        "null",
+        "[]",
+    ] {
+        let json = format!(r#"{{"id":7,"duplicates":[{invalid}]}}"#);
+        let error = serde_json::from_str::<BugLinksNode>(&json).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("positive integer relationship ID"),
+            "unexpected error for {invalid}: {error}"
+        );
+    }
+}
+
+#[test]
 fn bug_link_serializes_in_documented_key_order() {
     let link = BugLink {
         id: 12346,
