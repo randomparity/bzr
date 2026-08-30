@@ -171,8 +171,8 @@ fn sample_adjacency() -> BugAdjacencyResult {
                 assigned_to: Some("owner@example.invalid".into()),
                 last_change_time: Some("2026-08-29T00:00:00Z".into()),
                 target_milestone: Some("---".into()),
-                blocks: vec![200, 300],
-                depends_on: vec![10, 20],
+                blocks: vec![300, 200, 200],
+                depends_on: vec![20, 10, 20],
             },
         ],
     }
@@ -237,13 +237,11 @@ fn write_bug_adjacency_ndjson_is_one_compact_result_record() {
     let output = capture_bug_adjacency(OutputFormat::Ndjson, &result);
     assert_eq!(output.lines().count(), 1);
     assert!(!output.contains("  \""));
-    assert_eq!(
-        output,
-        format!("{}\n", serde_json::to_string(&result).unwrap())
-    );
     let value: serde_json::Value = serde_json::from_str(&output).unwrap();
     assert_eq!(value["requests"][1], value["requests"][2]);
     assert_eq!(value["bugs"].as_array().unwrap().len(), 2);
+    assert_eq!(value["bugs"][1]["blocks"], serde_json::json!([200, 300]));
+    assert_eq!(value["bugs"][1]["depends_on"], serde_json::json!([10, 20]));
 }
 
 #[test]

@@ -436,10 +436,22 @@ pub fn write_bug_adjacency<W: Write + ?Sized>(
     out: &mut W,
 ) {
     disable_color_for_tests();
+    let normalized = normalized_bug_adjacency(result);
     match format {
-        OutputFormat::Json | OutputFormat::Ndjson => write_json_family(result, format, out),
-        OutputFormat::Table => write_bug_adjacency_table(result, out),
+        OutputFormat::Json | OutputFormat::Ndjson => write_json_family(&normalized, format, out),
+        OutputFormat::Table => write_bug_adjacency_table(&normalized, out),
     }
+}
+
+fn normalized_bug_adjacency(result: &BugAdjacencyResult) -> BugAdjacencyResult {
+    let mut normalized = result.clone();
+    for bug in &mut normalized.bugs {
+        bug.blocks.sort_unstable();
+        bug.blocks.dedup();
+        bug.depends_on.sort_unstable();
+        bug.depends_on.dedup();
+    }
+    normalized
 }
 
 fn write_bug_adjacency_table(result: &BugAdjacencyResult, out: &mut (impl Write + ?Sized)) {
