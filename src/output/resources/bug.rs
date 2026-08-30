@@ -423,13 +423,6 @@ pub fn write_bug_links<W: Write + ?Sized>(links: &[BugLink], format: OutputForma
 }
 
 /// Render a bounded adjacency result as a structured payload or two fixed table sections.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "The adjacency command calls this writer in the later orchestration slice."
-    )
-)]
 pub fn write_bug_adjacency<W: Write + ?Sized>(
     result: &BugAdjacencyResult,
     format: OutputFormat,

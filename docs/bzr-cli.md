@@ -2372,7 +2372,7 @@ Every pretty `--json` response is wrapped in a stable envelope:
 
 ```json
 {
-  "schema_version": "0.6.1",
+  "schema_version": "0.6.2",
   "data": <the command's payload>
 }
 ```
@@ -2387,7 +2387,7 @@ bzr --json schema | jq -r '.schema_version'   # the contract version itself
 ```
 
 `--json` error output carries the version too, beside an `error` object:
-`{"schema_version":"0.6.1","error":{"type":...,"message":...,"exit_code":...}}`.
+`{"schema_version":"0.6.2","error":{"type":...,"message":...,"exit_code":...}}`.
 
 Two outputs are deliberately **not** enveloped:
 

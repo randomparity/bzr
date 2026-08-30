@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/bug-adjacency.json",
+  "title": "BugAdjacencyResult",
+  "description": "Bounded positional bug request outcomes and canonical dependency adjacency observations.",
+  "type": "object",
+  "properties": {
+    "requests": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "requested": {
+                "$ref": "#/$defs/nonEmptyString"
+              },
+              "bug_id": {
+                "$ref": "#/$defs/bugId"
+              }
+            },
+            "required": [
+              "requested",
+              "bug_id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "requested": {
+                "$ref": "#/$defs/nonEmptyString"
+              },
+              "error": {
+                "$ref": "#/$defs/requestError"
+              }
+            },
+            "required": [
+              "requested",
+              "error"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "bugs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/bug"
+      }
+    }
+  },
+  "required": [
+    "requests",
+    "bugs"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "bugId": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nullableString": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "requestError": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "not_found"
+            },
+            "api_code": {
+              "enum": [
+                100,
+                101
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "api_code"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "inaccessible"
+            },
+            "api_code": {
+              "const": 102
+            }
+          },
+          "required": [
+            "type",
+            "api_code"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "bug": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/bugId"
+        },
+        "summary": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "status": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "resolution": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "product": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "version": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "assigned_to": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "last_change_time": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "target_milestone": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/bugId"
+          }
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/bugId"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "summary",
+        "status",
+        "resolution",
+        "product",
+        "version",
+        "assigned_to",
+        "last_change_time",
+        "target_milestone",
+        "blocks",
+        "depends_on"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

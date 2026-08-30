@@ -29,6 +29,10 @@ fn parse_error_kind(args: &[&str]) -> ErrorKind {
 #[test]
 fn each_verb_binds_to_its_action_variant() {
     assert!(matches!(
+        bug_action(&["bzr", "bug", "adjacency", "1"]),
+        BugAction::Adjacency(_)
+    ));
+    assert!(matches!(
         bug_action(&["bzr", "bug", "list"]),
         BugAction::List(_)
     ));

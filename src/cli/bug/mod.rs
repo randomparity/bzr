@@ -4,6 +4,7 @@ use crate::types::bug::{FilterField, SearchParams, FIELD_MAPPINGS};
 use crate::types::output::SortDirection;
 use crate::types::query::SavedQuery;
 
+mod adjacency;
 mod clone;
 mod create;
 mod history;
@@ -15,6 +16,7 @@ mod update;
 mod verbs;
 mod view;
 
+pub(crate) use adjacency::AdjacencyArgs;
 pub(crate) use clone::CloneArgs;
 pub(crate) use create::CreateArgs;
 pub(crate) use history::HistoryArgs;
@@ -333,6 +335,9 @@ fn merge_saved_query_filter_values<'a>(
 
 #[derive(Subcommand)]
 pub(crate) enum BugAction {
+    /// Retrieve bounded dependency adjacency for bug IDs and aliases.
+    #[command(long_about = adjacency::LONG_ABOUT)]
+    Adjacency(AdjacencyArgs),
     /// List bugs that match the given filters.
     #[command(long_about = list::LONG_ABOUT)]
     List(ListArgs),

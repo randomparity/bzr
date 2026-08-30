@@ -10,6 +10,7 @@ use crate::error::Result;
 use crate::output::writers::Writers;
 use crate::types::output::OutputFormat;
 
+mod adjacency;
 mod clone;
 mod compound;
 mod create;
@@ -43,7 +44,8 @@ fn bug_column_spec(action: &BugAction) -> Option<ColumnSpec<'_>> {
 #[must_use]
 pub(crate) fn capabilities(action: &BugAction) -> CommandCapabilities {
     match action {
-        BugAction::List(_)
+        BugAction::Adjacency(_)
+        | BugAction::List(_)
         | BugAction::View(_)
         | BugAction::Search(_)
         | BugAction::History(_)
@@ -67,6 +69,9 @@ pub(crate) async fn execute(
 ) -> Result<()> {
     let format = ctx.format();
     update::validate_action(action)?;
+    if let BugAction::Adjacency(args) = action {
+        adjacency::validate(args)?;
+    }
 
     // `--web` resolves the bug's URL from local config and opens (or prints)
     // it — no auth, no network, no field selection. Short-circuit before any
@@ -114,7 +119,8 @@ pub(crate) async fn execute(
     }
 
     match action {
-        BugAction::List(_)
+        BugAction::Adjacency(_)
+        | BugAction::List(_)
         | BugAction::View(_)
         | BugAction::History(_)
         | BugAction::Links(_)
@@ -138,6 +144,7 @@ async fn execute_connected_read(
 ) -> Result<()> {
     let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
     match action {
+        BugAction::Adjacency(args) => adjacency::handle(&client, args, format, w).await,
         BugAction::List(args) => list::handle(&client, args, format, ctx.progress(), w).await,
         BugAction::View(args) => view::handle(&client, args, format, w).await,
         BugAction::History(args) => history::handle(&client, args, format, w).await,
