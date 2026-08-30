@@ -372,6 +372,16 @@ alternate-auth and XML-RPC fallback behavior.
 
 ## Verification
 
+### Landing sequence
+
+First add the paired decoder regressions red, implement only the REST/XML-RPC wire-row exception,
+run its focused suites and lint, and commit that product correction independently as
+`fix(client): accept Bugzilla assignee detail companion`. The preserved functional drafts remain
+unstaged during that commit. Only after the product commit is review-approved may the fixture
+entrypoints and phase drafts be corrected, run across all supported versions, and committed as the
+separate functional-test slice. This order leaves the cause-level compatibility fix independently
+bisectable and makes the live matrix evidence rather than part of the fix.
+
 ### Focused tests
 
 - CLI parsing accepts mixed numeric/alias inputs and rejects missing inputs; a command-level test
@@ -391,8 +401,11 @@ alternate-auth and XML-RPC fallback behavior.
 - REST and XML-RPC client tests prove missing adjacency fields and malformed or negative edge
   members are fatal rather than silently shortened or converted to empty arrays.
 - Paired REST and XML-RPC tests prove object/struct-valued `assigned_to_detail` is ignored while
-  preserving the exact eleven-field public result. Sibling tests reject scalar, array, and null
-  companion values and continue rejecting every other unknown bug-row key.
+  preserving the exact eleven-field public result. Each accepted fixture contains unexpected
+  nested keys whose values deliberately span strings, null, arrays, and nested objects/structs,
+  proving the decoder inspects only the outer container rather than adopting a nested schema.
+  Sibling tests reject scalar, array, and null outer companion values and continue rejecting every
+  other unknown bug-row key.
 - REST and XML-RPC tests prove empty, multiple, mixed, extra, and mismatched 2xx outcomes are
   command-fatal. Numeric bug/fault identities must match numerically; aliases may map to a
   canonical bug ID but fault identities preserve exact alias text.
