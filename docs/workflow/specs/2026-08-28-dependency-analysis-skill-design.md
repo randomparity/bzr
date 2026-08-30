@@ -84,8 +84,10 @@ shell. Each child receives a copy of the caller environment so configuration and
 sources remain available, with `RUST_LOG` forced to `off` so inherited tracing cannot precede the
 structured failure envelope. Before other retrieval, the collector verifies that declared servers
 exactly equal the scope/restriction server universe, then preflights each server exactly once with
-released read-only `bug list --limit 1 --offset 0 --fields id --sort bug_id --order asc`. Any preflight
-failure is command-fatal. The collector maintains `queued`, `fetched`, and `nodes` sets keyed by
+a released read-only, one-row search derived from that server's canonical declared scope. Explicit
+bug IDs use the lowest ID across that server's scopes; remaining scopes use total canonical
+kind-and-value ordering and reuse their enumeration command. Any preflight failure is command-fatal.
+The collector maintains `queued`, `fetched`, and `nodes` sets keyed by
 `(server, bug-id)`.
 Admission immediately creates a `boundary` node with `boundary_reason: pending_fetch`; every
 admitted identity therefore has a legal record before its command runs.
@@ -523,7 +525,7 @@ behavioral Python tests compare helper output against fixture oracles byte-for-b
 | DA-15a | Single-ID API 100/101 or structured bug `not_found` | Each becomes nonfatal sanitized `not_found`, remains an unknown node, and traversal continues | Fatal missing node, fabricated detail, or raw stderr | block |
 | DA-15b | Successful preflight then single-ID API 102 inaccessible | Becomes nonfatal sanitized `inaccessible`, remains an unknown node, and traversal continues | Fatal inaccessible node, fabricated detail, or raw stderr | block |
 | DA-15c | Other API and global auth/TLS/connection/transport failures | Stops with a partial run-level limitation and fetch-interrupted boundaries | Fabricated unknown or continued global failure | block |
-| DA-15d | Failed preflight or API 102 without successful preflight | Command-fatal sanitized API limitation before resource classification | Invalid credentials classified as inaccessible | block |
+| DA-15d | Failed scope-qualified preflight, including API 1000 or 102 | Command-fatal sanitized API limitation before resource classification | Invalid credentials classified as inaccessible, or structured API failure degraded to malformed output | block |
 | DA-16 | Stale, missing, and malformed timestamps at injected UTC time | `true` or `unknown` with warning | Wall-clock-dependent or ignored result | block |
 | DA-17 | Fatal error after one successful frontier | Valid `partial` JSON, generic stderr, exit 1; rejected without opt-in | Truncated stream accepted as complete | block |
 | DA-18 | Alias success/collapse and alias `not_found` | Canonical numeric node or linked unresolved root, one fetch and slot, byte-exact roots and alias provenance | Duplicate/unlinked node or fetch | block |

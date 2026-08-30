@@ -30,9 +30,11 @@ defaults to the node bound and may be raised independently. Node and relationshi
 exceed 9,999; the node ceiling preserves the four-digit `cNNNN` namespace. The collector rejects a
 higher bound, duplicate JSON keys, and invalid UTF-8 before invoking `bzr`. If no bounds are
 supplied, the skill proposes depth 5, 200 nodes, and 200 relationships. It preflights each server
-once with a released read-only command before retrieving resources. `servers` must exactly equal
-the server aliases referenced by scopes and the optional restriction, so unused declarations are
-rejected before preflight. A minimal policy for one configured server and bug-ID root is:
+once with a released read-only, one-row search derived from that server's canonical declared scope
+before retrieving resources. Explicit bug-ID scopes use the lowest ID on that server; other scope
+kinds reuse their bounded enumeration command. `servers` must exactly equal the server aliases
+referenced by scopes and the optional restriction, so unused declarations are rejected before
+preflight. A minimal policy for one configured server and bug-ID root is:
 
 `max_relationships` applies after each released `bzr` command has returned and its complete JSON
 response has been parsed. It bounds selected relationship records retained, staged, and traversed.

@@ -668,6 +668,108 @@ else
   test_fail "REST and XML-RPC adjacency payloads differ"
 fi
 
+_DA_PRODUCTION_POLICY_OK=1
+_DA_PRODUCTION_POLICY_COLLECTION="$FUNC_CONFIG_DIR/dependency-production-policy.collection.json"
+_DA_PRODUCTION_POLICY_FAILURE="$FUNC_CONFIG_DIR/dependency-production-policy-failure.collection.json"
+_DA_PRODUCTION_POLICY_FAILURE_ERROR="$FUNC_CONFIG_DIR/dependency-production-policy-failure.stderr"
+_DA_PRODUCTION_POLICY="$FUNC_CONFIG_DIR/dependency-production-policy.json"
+_DA_PRODUCTION_POLICY_REJECT="$FUNC_CONFIG_DIR/dependency-production-policy-reject.json"
+if redhat_shape_start "$BZ_PORT"; then
+  trap 'cleanup; redhat_shape_stop' EXIT
+  _DA_PRODUCTION_POLICY_URL="http://127.0.0.1:${REDHAT_SHAPE_PORT}"
+  printf '\n[servers.dependency-production-policy]\nurl = "%s"\napi_mode = "rest"\n' \
+    "$_DA_PRODUCTION_POLICY_URL" >>"$_DA_CONFIG"
+
+  test_begin "123y. production-policy proxy rejects the legacy termless preflight"
+  run_bzr_raw --json --server dependency-production-policy bug list \
+    --limit 1 --offset 0 --fields id --sort bug_id --order asc
+  if assert_exit_code 4 && jq -e '
+      .error.type == "api" and .error.api_code == 1000
+    ' "$BZR_STDERR" >/dev/null; then
+    test_pass
+  else
+    _DA_PRODUCTION_POLICY_OK=0
+  fi
+
+  jq -n --arg bzr "$_DA_BZR_CANONICAL" --argjson root "${_DA_ROOT:-0}" '
+    {
+      bounds: {max_depth: 1, max_nodes: 2, max_relationships: 2},
+      bzr: $bzr,
+      direction: "both",
+      resolved_mode: "include-no-traverse",
+      resolved_statuses: ["RESOLVED"],
+      restriction: null,
+      scopes: [{ids: [$root], kind: "bug-ids", server: "dependency-production-policy"}],
+      servers: ["dependency-production-policy"],
+      stale_after_days: 14
+    }
+  ' >"$_DA_PRODUCTION_POLICY"
+  if ! python3 "$_DA_COLLECT" --policy "$_DA_PRODUCTION_POLICY" \
+    --output "$_DA_PRODUCTION_POLICY_COLLECTION"; then
+    _DA_PRODUCTION_POLICY_OK=0
+  fi
+
+  test_begin "123z. installed collector uses a scoped proof through the production-policy proxy"
+  if [[ $_DA_PRODUCTION_POLICY_OK -eq 1 ]] &&
+    jq -e --argjson root "$_DA_ROOT" '
+      .status == "complete" and
+      any(.nodes[]; .id == $root and .state == "known") and
+      .limitations == []
+    ' "$_DA_PRODUCTION_POLICY_COLLECTION" >/dev/null; then
+    test_pass
+  else
+    test_fail "scope-qualified collection failed through production-policy proxy"
+  fi
+
+  jq -n --arg bzr "$_DA_BZR_CANONICAL" \
+    --arg url "$_DA_PRODUCTION_POLICY_URL/buglist.cgi?product=" '
+    {
+      bounds: {max_depth: 1, max_nodes: 2, max_relationships: 2},
+      bzr: $bzr,
+      direction: "both",
+      resolved_mode: "include-no-traverse",
+      resolved_statuses: ["RESOLVED"],
+      restriction: null,
+      scopes: [{
+        kind: "custom-search",
+        parameter_names: ["product"],
+        server: "dependency-production-policy",
+        url: $url
+      }],
+      servers: ["dependency-production-policy"],
+      stale_after_days: 14
+    }
+  ' >"$_DA_PRODUCTION_POLICY_REJECT"
+  if python3 "$_DA_COLLECT" --policy "$_DA_PRODUCTION_POLICY_REJECT" \
+    --output "$_DA_PRODUCTION_POLICY_FAILURE" 2>"$_DA_PRODUCTION_POLICY_FAILURE_ERROR"; then
+    _DA_PRODUCTION_POLICY_FAILURE_EXIT=0
+  else
+    _DA_PRODUCTION_POLICY_FAILURE_EXIT=$?
+  fi
+
+  test_begin "123z1. installed collector preserves production code 1000 as API failure"
+  if [[ $_DA_PRODUCTION_POLICY_FAILURE_EXIT -eq 1 ]] &&
+    jq -e '
+      .status == "partial" and .limitations == ["collection-api"] and
+      .nodes == [] and .roots == []
+    ' "$_DA_PRODUCTION_POLICY_FAILURE" >/dev/null &&
+    grep -Fxq 'collection failed: api' "$_DA_PRODUCTION_POLICY_FAILURE_ERROR"; then
+    test_pass
+  else
+    test_fail "installed collector did not preserve production code 1000 classification"
+  fi
+
+  redhat_shape_stop || _DA_PRODUCTION_POLICY_OK=0
+  trap cleanup EXIT
+else
+  test_begin "123y. production-policy proxy rejects the legacy termless preflight"
+  test_fail "production-policy proxy did not become ready: $REDHAT_SHAPE_LOG"
+  test_begin "123z. installed collector uses a scoped proof through the production-policy proxy"
+  test_skip "production-policy proxy unavailable"
+  test_begin "123z1. installed collector preserves production code 1000 as API failure"
+  test_skip "production-policy proxy unavailable"
+fi
+
 unset RESTRICTED_BUG
 unset _DA_ADJ_FIXTURE_OK _DA_ADJ_MODE _DA_ADJ_PARITY_OK _DA_ADJ_REST
 unset _DA_ADJ_SERVER _DA_ADJ_XMLRPC
@@ -684,6 +786,10 @@ unset _DA_MISSING _DA_MISSING_ALIAS _DA_MISSING_ANALYSIS _DA_MISSING_COLLECTION 
 unset _DA_MISSING_POLICY _DA_PATH _DA_PATH_CANONICAL _DA_PATHS_OK _DA_PIPELINE_OK
 unset _DA_POLICY _DA_PUBLIC_DEFAULT_ASSIGNEE _DA_RENDER _DA_REPORT
 unset _DA_POLICY_SECRET
+unset _DA_PRODUCTION_POLICY _DA_PRODUCTION_POLICY_COLLECTION
+unset _DA_PRODUCTION_POLICY_FAILURE _DA_PRODUCTION_POLICY_FAILURE_ERROR
+unset _DA_PRODUCTION_POLICY_FAILURE_EXIT _DA_PRODUCTION_POLICY_OK
+unset _DA_PRODUCTION_POLICY_REJECT _DA_PRODUCTION_POLICY_URL
 unset _DA_RESOLVED _DA_RESOLVED_PARENT
 unset _DA_RELATIONSHIP_ANALYSIS _DA_RELATIONSHIP_COLLECTION _DA_RELATIONSHIP_OK
 unset _DA_RELATIONSHIP_POLICY
