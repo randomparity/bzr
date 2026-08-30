@@ -56,14 +56,16 @@ credentialed reads without configured email add no eager prerequisite; they beco
 does not cache a successful proof: every credentialed code 102 gets a contemporaneous
 `valid_login` call, including repeated 102s in the same invocation. It commits output only after
 every request finishes. The worst case is one batch, 100 sequential omission/alias probes, and 100
-credential proofs: 201 upstream calls. ADR
+credential proofs: 201 physical application requests after shared connection establishment.
+Adjacency retrieval and proof calls do not use transient retries; connection, version, auth, and
+TLS probes occur before retrieval and are outside this operation budget. ADR
 [0024](../../adr/0024-bounded-bug-adjacency-contract.md) records why this is a new command instead
 of a mode on either existing command.
 
-Strict adjacency REST sends retain the ordinary transient retry policy but disable the transport's
-transparent 401 alternate-auth fallback. The configured client method therefore necessarily
-produced any returned code 102, and `valid_login` applies that same method. A 401 from a stale or
-wrong cached method stays command-fatal instead of silently changing authentication provenance.
+Strict adjacency REST sends disable both transient retries and the transport's transparent 401
+alternate-auth fallback. The configured client method therefore necessarily produced any returned
+code 102, and `valid_login` applies that same method. A 401 from a stale or wrong cached method stays
+command-fatal instead of silently changing authentication provenance.
 Adjacency retrieval also defines stricter API-mode routing: `Rest` and `Hybrid` use only the strict
 REST calls, while `XmlRpc` uses only strict XML-RPC. A successful empty REST batch is returned to the
 command for per-ID REST probes; it never triggers XML-RPC comparison. No REST error, including 401,
@@ -84,8 +86,10 @@ spellings, and repeated arguments remain strings at the CLI boundary. An all-dec
 numeric request only within `0..=9223372036854775807`, the signed range supported by every
 transport; larger decimal values are an `ids` input-validation error before connection setup. More
 than 100 requests is the same pre-connection validation class. Clap rejects zero positional
-arguments as usage. The strict wire mappings and public schema apply the same maximum to canonical
-and adjacency bug IDs returned by the server.
+arguments as usage. An explicitly empty positional string is an `ids` input-validation error before
+connection and is never sent as an alias. The strict wire mappings and public schema apply the same
+maximum to canonical and adjacency bug IDs returned by the server; every serialized `requested`
+string is non-empty.
 
 The command is anonymous-capable, read-only, and does not support field selection, recursion,
 direction selection, or a permissive flag. Both dependency fields are always requested because
@@ -215,6 +219,12 @@ stdout. The ordinary structured command error remains on stderr with its normal 
 Connection, authentication negotiation, API-mode selection, and TLS trust happen once before the
 handler.
 
+Strict adjacency REST parsing does not use the shared ADR-0015 populated-data warning downgrade.
+It inspects the raw JSON envelope before typed row deserialization: any top-level `error: true`
+becomes its `BzrError::Api` even when `bugs` is populated. Batch codes 100, 101, and 102 then trigger
+deterministic individual probes; any other batch or single error is command-fatal. Existing REST
+callers retain the shared warning-with-data behavior.
+
 Each successful bug record is complete for the search or Bug.get response whose observation won
 the canonical-node rule. Sequential responses are not an atomic Bugzilla snapshot: another actor
 may change dependencies between reads, the command does not reconcile reciprocal arrays, and
@@ -231,11 +241,15 @@ may change dependencies between reads, the command does not reconcile reciprocal
   REST wire form requires both adjacency arrays rather than converting from the tolerant `Bug`.
 - `src/client/resources/bug.rs` adds strict batch and single-bug adjacency methods with the strict
   routing rule: `Rest` and `Hybrid` use REST only, while `XmlRpc` uses XML-RPC only. Strict REST sends
-  retain transient retries while disabling transparent alternate-auth fallback.
+  disable transient retries and transparent alternate-auth fallback.
 - `src/xmlrpc/resources/bug.rs` adds a strict adjacency mapper that requires both arrays and every
   member to be a non-negative integer; existing tolerant bug reads keep their current behavior.
 - `src/client/transport.rs` exposes the focused no-auth-fallback send path used only by strict
-  adjacency REST retrieval, without changing ordinary command behavior.
+  adjacency REST retrieval. It sends once without transient or alternate-auth retries, without
+  changing ordinary command behavior.
+- `src/client/response.rs` exposes a focused strict-error parser that turns every top-level
+  `error: true` envelope into `BzrError::Api` before deserializing adjacency rows; the shared
+  ADR-0015 warning-with-data parser remains unchanged.
 - `src/output/resources/bug.rs` renders the two table sections and uses the shared JSON-family
   formatter for structured output.
 - A focused `BugzillaClient` credential-validation method reuses the installed `valid_login`
@@ -269,6 +283,8 @@ TLS policy, timeouts, and API-mode selection.
 ### Controls
 
 - Count validation runs before connection and bounds work at 100 distinct argument positions.
+- Empty positional strings are rejected as `ids` input errors before connection and cannot reach an
+  alias URL or the published result.
 - Numeric validation caps every transport at `i64::MAX` before connection; strict response parsing
   and the schema apply the same maximum to canonical and adjacency IDs.
 - Numeric IDs are sorted and deduplicated before one bounded search; exact aliases are sorted and
@@ -279,7 +295,9 @@ TLS policy, timeouts, and API-mode selection.
   a later validation failure. Anonymous mode carries no credential whose rejection could be
   confused with resource denial.
 - Strict REST retrieval cannot switch auth methods after a 401, preserving the provenance needed
-  by the lazy validation rule; ordinary client calls retain their current alternate-auth fallback.
+  by the lazy validation rule. It also cannot retry a transient failure, keeping the physical
+  application-request budget at 201; ordinary client calls retain their retry and alternate-auth
+  policies.
 - The strict adjacency wire type rejects absent, non-array, negative, or non-integer adjacency
   members. Its retrieval boundary also rejects extra or duplicate batch identities, multi-row
   single responses, and numeric response/request ID mismatches. Existing `Bug` deserialization
@@ -304,7 +322,8 @@ fallback behavior.
 
 ### Focused tests
 
-- CLI parsing accepts mixed numeric/alias inputs and rejects missing inputs.
+- CLI parsing accepts mixed numeric/alias inputs and rejects missing inputs; a command-level test
+  passes an explicit empty argv element and proves an `ids` error before connection.
 - Command tests prove one-batch visible numeric retrieval; probes only for omitted numerics;
   resource-code batch fallback; the 101/102 mixed-success schema; code 100 alias failure;
   all-failure success; lazy credentialed 102 validation; successful credentialed Bugzilla 5.0 reads
@@ -327,13 +346,17 @@ fallback behavior.
   correlated failure variants; invalid type/code combinations and empty strings fail; the registry
   lists `bug-adjacency` in lexical order.
 - Transport tests prove strict adjacency does not follow 401 alternate-auth fallback and that the
-  ordinary send path still does.
+  ordinary send path still does. With `--retry 10`, 100 classified inputs still produce at most 201
+  adjacency/proof attempts; a transient strict response is fatal after its first attempt.
 - REST, XML-RPC, and Hybrid boundary tests accept `i64::MAX` and reject `i64::MAX + 1` before
   connection with the same `ids` input-validation error.
 - REST strict-wire tests reject canonical and adjacency response IDs above `i64::MAX`, matching the
   XML-RPC signed-integer domain and the public schema.
 - Hybrid tests prove REST 401, transport/HTTP failure, code 100500, and an empty REST batch never
   invoke XML-RPC; the empty batch proceeds to strict per-ID REST probes.
+- Strict response tests prove populated-data envelopes with batch code 100/101/102 trigger probes,
+  while populated-data code 410 or 100500 is fatal before typed row deserialization. Existing
+  callers retain their ADR-0015 warning behavior.
 - Output and functional assertions pin the additive `SCHEMA_VERSION` bump to `0.6.2` everywhere
   ADR 0007 requires synchronized current-contract documentation or fixtures.
 - A controlled-fault test changes one accepted resource code to fatal and must make the focused
@@ -359,12 +382,15 @@ generated `data/params.json` or `data/params` file before Apache starts. The pha
 an alias and first uses existing `bug view <alias>` behavior to prove the server persisted and
 resolves it; a skipped, silently ignored, or unresolved alias fails before adjacency assertions.
 
-Reuse phase 08e's credentialed non-member before membership is granted: invoke `bug adjacency` on
-the restricted bug and assert typed code 102 only after the live `valid_login` proof succeeds. Reuse
-phase 18d's explicit REST and XML-RPC server aliases to run the public-success, missing-ID, and
-inaccessible cases through both transports on each supported container version. Run the installed
-dependency-analysis collector against the newly built binary after the `0.6.2` bump so its accepted
-version is exercised live rather than only through replay fixtures.
+Before phase 08e grants membership, add `restricted-rest` and `restricted-xmlrpc` server aliases
+using the non-member's configured email and API key with explicit API modes. Invoke
+`bug adjacency` on the restricted bug through both and assert typed code 102; that result is possible
+only after each path's live `valid_login` proof. The focused two-102 request-count test pins one proof
+per response. Reuse phase 18d's anonymous explicit REST and XML-RPC aliases to run public-success,
+missing-ID, and credentialless-inaccessible cases through both transports on each supported
+container version. Run the installed dependency-analysis collector against the newly built binary
+after the `0.6.2` bump so its accepted version is exercised live rather than only through replay
+fixtures.
 
 Run `make lint`, `make test`, and `make functional-test-all` before delivery. The host is arm64;
 the declared project targets are x86_64/aarch64 Linux, powerpc64le Linux, s390x Linux,
