@@ -155,6 +155,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │          [--sort <FIELD>] [--order asc|desc]
 │   ├── history <ID> [--since <DATE>]
 │   ├── links <ID> [--recursive] [--depth <N>] [--relation <TYPE>]
+│   ├── adjacency <ID_OR_ALIAS>...
 │   ├── my [--created] [--cc] [--all] [--status <S>...] [--product <P>...] [--component <C>...]
 │   │       [--priority <P>...] [--severity <S>...] [--resolution <R>...] [--version <V>...]
 │   │       [--op-sys <OS>...] [--platform <P>...] [--whiteboard <W>...] [--target-milestone <M>...]
@@ -613,6 +614,80 @@ permission) fails like `bzr bug view` — exit 2 when the server reports no such
 bug, exit 4 when it reports an access error; inaccessible related bugs are
 skipped silently. In table mode, a root with no in-scope relationships prints
 `No related bugs for #<id>.`.
+
+### `bzr bug adjacency`
+
+Retrieve bounded dependency adjacency for one or more bug IDs or aliases. It
+is read-only and works against public bugs without an API key.
+
+```bash
+bzr bug adjacency 12345 release/2026
+bzr --json bug adjacency 12345 release/2026 missing-alias
+bzr bug adjacency 00123 123 release/2026 --output ndjson
+bzr schema bug-adjacency
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<ID_OR_ALIAS>...` | Yes | One through 100 bug IDs or exact aliases. Decimal IDs must fit in a signed 64-bit integer; an empty value, more than 100 values, or a larger decimal ID is an input-validation error (exit 7). |
+
+There are no command-specific flags: field selection, recursion, direction
+selection, and a permissive switch are deliberately unsupported. The command
+keeps every positional occurrence in `requests`, including duplicates and
+leading-zero spellings. It fetches distinct numeric IDs in numeric order, then
+distinct exact aliases in lexical order. Canonical `bugs` are deduplicated and
+sorted by numeric `id`; each `blocks` and `depends_on` array is sorted and
+deduplicated.
+
+Table output has a `Requests` section with `REQUESTED` and `RESULT` columns in
+argument order, followed by `Canonical bugs` in numeric-ID order. The canonical
+table always includes the fixed fields `ID`, `SUMMARY`, `STATUS`, `RESOLUTION`,
+`PRODUCT`, `VERSION`, `ASSIGNEE`, `LAST CHANGE TIME`, `TARGET MILESTONE`,
+`BLOCKS`, and `DEPENDS ON`; the two adjacency columns are complete,
+comma-separated ID lists.
+
+Under `--json`, the usual `0.6.2` envelope contains a closed result object:
+
+```json
+{
+  "schema_version": "0.6.2",
+  "data": {
+    "requests": [
+      {"requested": "00123", "bug_id": 123},
+      {"requested": "release/2026", "bug_id": 123},
+      {"requested": "missing-alias", "error": {"type": "not_found", "api_code": 100}}
+    ],
+    "bugs": [
+      {
+        "id": 123,
+        "summary": "Example",
+        "status": "NEW",
+        "resolution": null,
+        "product": "Example Product",
+        "version": "unspecified",
+        "assigned_to": "owner@example.invalid",
+        "last_change_time": "2026-08-29T00:00:00Z",
+        "target_milestone": "---",
+        "blocks": [200, 300],
+        "depends_on": [10, 20]
+      }
+    ]
+  }
+}
+```
+
+Each request entry has exactly `requested` plus either `bug_id` or `error`.
+The only per-request errors are `{"type":"not_found","api_code":100}` for
+an invalid alias, `not_found`/`101` for an invalid numeric ID, and
+`{"type":"inaccessible","api_code":102}` for an access-denied bug. An
+all-failure or mixed result still exits zero. The closed payload is published by
+`bzr schema bug-adjacency`.
+
+`--output ndjson` emits the entire `requests`/`bugs` result as one compact,
+bare record: it has no `schema_version` envelope or `.data` wrapper. All other
+API, authentication, TLS, transport, redirect, and malformed-response failures
+remain command-fatal. Output is buffered, so a fatal failure writes no partial
+result to stdout.
 
 ### `bzr bug my`
 
@@ -2322,6 +2397,7 @@ Run without a name to list the available schemas; pass one to print it:
 ```bash
 bzr schema                      # list schema names
 bzr schema bug                  # the bug object (bug view / list elements)
+bzr schema bug-adjacency        # bounded bug request outcomes and adjacency
 bzr schema bug-create-input     # `bug create --from-json` payload
 bzr schema bug-update-input     # `bug update --from-json` payload
 bzr schema error                # stderr error envelope under JSON-family output
@@ -2334,7 +2410,7 @@ Listing honors `--output`: a name-per-line table at a TTY, a JSON array under
 emits the schema document verbatim. An unknown name exits 7 with the list of
 valid names.
 
-Available schemas: `bug`, `comment`, `attachment`, `product`, `component`,
+Available schemas: `bug`, `bug-adjacency`, `comment`, `attachment`, `product`, `component`,
 `classification`, `user`, `group`, `field-value`, `whoami` (read shapes); and the
 mutation/result envelopes `action-result`, `batch-result`,
 `batch-create-result`, `compound-create-result`, `multi-bug-view`, `tag-result`,

@@ -63,6 +63,23 @@ Operate on bugs.
     `--recursive`, is a *usage* error: exit 2 with plain text on stderr and **no
     JSON error object**, even under `--json`. That is clap rejecting the
     invocation, not the `not_found` exit 2 in the error table.
+- `bzr bug adjacency 12345 release/2026 [--json]`
+  - Read-only bounded dependency adjacency for 1–100 IDs or exact aliases;
+    public bugs need no API key. It has no field-selection, recursion,
+    direction, or permissive flag.
+  - `requests` retains each positional spelling and argument order. Distinct
+    numeric IDs are fetched in numeric order, followed by distinct aliases in
+    lexical order; canonical `bugs` are unique and numeric-ID ordered, and
+    `blocks`/`depends_on` are sorted and deduplicated.
+  - Table output has `Requests` (requested/result) and `Canonical bugs`
+    sections. JSON is the `0.6.2` envelope with `.data.requests` and
+    `.data.bugs`; NDJSON is one bare compact result object. Inspect the closed
+    payload with `bzr schema bug-adjacency`.
+  - Only Bugzilla codes `100` (invalid alias), `101` (invalid numeric ID), and
+    `102` (inaccessible) become typed per-request outcomes (`not_found`/100 or
+    101; `inaccessible`/102), and mixed or all-failure reports exit zero. Other
+    API, auth, TLS, transport, redirect, or malformed-response failures are
+    fatal and write no partial stdout.
 - `bzr bug my [--status \!CLOSED] [--product Foo] [--component Bar]`
   - Supports the shared list filters: `--product --component --priority
     --severity --created-since --changed-since --whiteboard --target-milestone
