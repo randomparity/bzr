@@ -184,49 +184,56 @@ fn capture_bug_adjacency(format: OutputFormat, result: &BugAdjacencyResult) -> S
     String::from_utf8(buf).unwrap()
 }
 
+fn expected_adjacency_payload() -> serde_json::Value {
+    serde_json::json!({
+        "requests": [
+            {"requested": "00123", "bug_id": 123},
+            {"requested": "release-alias", "bug_id": 123},
+            {"requested": "release-alias", "bug_id": 123},
+            {"requested": "missing-alias", "error": {"type": "not_found", "api_code": 100}},
+            {"requested": "999999", "error": {"type": "not_found", "api_code": 101}},
+            {"requested": "restricted", "error": {"type": "inaccessible", "api_code": 102}}
+        ],
+        "bugs": [
+            {
+                "id": 42,
+                "summary": null,
+                "status": null,
+                "resolution": null,
+                "product": null,
+                "version": null,
+                "assigned_to": null,
+                "last_change_time": null,
+                "target_milestone": null,
+                "blocks": [],
+                "depends_on": []
+            },
+            {
+                "id": 123,
+                "summary": "Example",
+                "status": "NEW",
+                "resolution": null,
+                "product": "Example Product",
+                "version": "unspecified",
+                "assigned_to": "owner@example.invalid",
+                "last_change_time": "2026-08-29T00:00:00Z",
+                "target_milestone": "---",
+                "blocks": [200, 300],
+                "depends_on": [10, 20]
+            }
+        ]
+    })
+}
+
 #[test]
 fn write_bug_adjacency_json_has_the_closed_result_shape() {
     let output = capture_bug_adjacency(OutputFormat::Json, &sample_adjacency());
     let value: serde_json::Value = serde_json::from_str(&output).unwrap();
     assert_eq!(
-        value["data"],
+        value,
         serde_json::json!({
-            "requests": [
-                {"requested": "00123", "bug_id": 123},
-                {"requested": "release-alias", "bug_id": 123},
-                {"requested": "release-alias", "bug_id": 123},
-                {"requested": "missing-alias", "error": {"type": "not_found", "api_code": 100}},
-                {"requested": "999999", "error": {"type": "not_found", "api_code": 101}},
-                {"requested": "restricted", "error": {"type": "inaccessible", "api_code": 102}}
-            ],
-            "bugs": [
-                {
-                    "id": 42,
-                    "summary": null,
-                    "status": null,
-                    "resolution": null,
-                    "product": null,
-                    "version": null,
-                    "assigned_to": null,
-                    "last_change_time": null,
-                    "target_milestone": null,
-                    "blocks": [],
-                    "depends_on": []
-                },
-                {
-                    "id": 123,
-                    "summary": "Example",
-                    "status": "NEW",
-                    "resolution": null,
-                    "product": "Example Product",
-                    "version": "unspecified",
-                    "assigned_to": "owner@example.invalid",
-                    "last_change_time": "2026-08-29T00:00:00Z",
-                    "target_milestone": "---",
-                    "blocks": [200, 300],
-                    "depends_on": [10, 20]
-                }
-            ]
+            "schema_version": crate::output::SCHEMA_VERSION,
+            "data": expected_adjacency_payload(),
         })
     );
 }
@@ -238,10 +245,7 @@ fn write_bug_adjacency_ndjson_is_one_compact_result_record() {
     assert_eq!(output.lines().count(), 1);
     assert!(!output.contains("  \""));
     let value: serde_json::Value = serde_json::from_str(&output).unwrap();
-    assert_eq!(value["requests"][1], value["requests"][2]);
-    assert_eq!(value["bugs"].as_array().unwrap().len(), 2);
-    assert_eq!(value["bugs"][1]["blocks"], serde_json::json!([200, 300]));
-    assert_eq!(value["bugs"][1]["depends_on"], serde_json::json!([10, 20]));
+    assert_eq!(value, expected_adjacency_payload());
 }
 
 #[test]
