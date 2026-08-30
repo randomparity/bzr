@@ -31,7 +31,7 @@ fi
 test_begin "69. bug view (verify template fields)"
 if [[ -n "$TMPL_BUG" ]]; then
     run_bzr bug view "$TMPL_BUG"
-    if assert_success && assert_json '.product' "FuncTestProd" && assert_json '.component' "Backend" && assert_json '.priority' "Normal"; then
+    if assert_success && assert_json '.product' "FuncTestProd" && assert_json '.component[0]' "Backend" && assert_json '.priority' "Normal"; then
         test_pass
     fi
 else test_skip "no TMPL_BUG"; fi

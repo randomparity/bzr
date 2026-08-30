@@ -7,7 +7,7 @@
 /// envelope plus the payload shapes inside `data`. Bumped manually per the JSON
 /// Output Stability policy in `docs/bzr-cli.md`, independent of the crate
 /// version. Present in `--json` output only (never `--output ndjson`).
-pub const SCHEMA_VERSION: &str = "0.6.2";
+pub const SCHEMA_VERSION: &str = "1.0.0";
 
 mod formatting;
 pub mod progress;

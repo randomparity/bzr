@@ -29,10 +29,16 @@
       "type": ["string", "null"]
     },
     "component": {
-      "type": ["string", "null"]
+      "oneOf": [
+        { "type": "null" },
+        { "type": "array", "items": { "type": "string" } }
+      ]
     },
     "version": {
-      "type": ["string", "null"]
+      "oneOf": [
+        { "type": "null" },
+        { "type": "array", "items": { "type": "string" } }
+      ]
     },
     "assigned_to": {
       "type": ["string", "null"]

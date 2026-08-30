@@ -36,7 +36,7 @@ case " $* " in
   printf '%s\n' "{\"data\":[{\"id\":1,\"product\":\"$product\",\"whiteboard\":\"bzr-release-readiness-demo-v1 dependency\"},{\"id\":2,\"product\":\"$product\",\"whiteboard\":\"bzr-release-readiness-demo-v1 complete\"},{\"id\":3,\"product\":\"$product\",\"whiteboard\":\"bzr-release-readiness-demo-v1 release-blocker\"}]}"
   ;;
 *' bug view '*)
-  printf '%s\n' '{"data":{"id":3,"product":"ReleaseDemo","version":"9.0","target_milestone":"9.0","summary":"release root","status":"NEW","priority":"Highest","severity":"major","assigned_to":null,"deadline":"2030-08-31","last_change_time":"2030-07-01T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 release-blocker","depends_on":[1]}}'
+  printf '%s\n' '{"data":{"id":3,"product":"ReleaseDemo","version":["9.0"],"target_milestone":"9.0","summary":"release root","status":"NEW","priority":"Highest","severity":"major","assigned_to":null,"deadline":"2030-08-31","last_change_time":"2030-07-01T00:00:00Z","whiteboard":"bzr-release-readiness-demo-v1 release-blocker","depends_on":[1]}}'
   ;;
 *' query show release-readiness-demo-url '*)
   printf '%s\n' '{"data":{"source_url":"https://bugzilla.example.invalid/buglist.cgi?product=ReleaseDemo"}}'

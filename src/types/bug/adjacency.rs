@@ -69,7 +69,7 @@ pub struct BugAdjacencyBug {
     pub status: Option<String>,
     pub resolution: Option<String>,
     pub product: Option<String>,
-    pub version: Option<String>,
+    pub version: Option<Vec<String>>,
     pub assigned_to: Option<String>,
     pub last_change_time: Option<String>,
     pub target_milestone: Option<String>,

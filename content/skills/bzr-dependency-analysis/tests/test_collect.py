@@ -17,7 +17,7 @@ ANALYZE = SKILL_ROOT / "scripts" / "analyze.py"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 RUNNER = FIXTURES / "recording_runner.py"
 TIMESTAMP = "2026-08-28T12:00:00Z"
-SCHEMA_VERSION = "0.6.2"
+SCHEMA_VERSION = "1.0.0"
 DETAIL_FIELDS = (
     "id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on"
 )
@@ -394,7 +394,7 @@ class CollectorTestCase(unittest.TestCase):
                 "preserved = os.environ.get('DEPENDENCY_TEST_PRESERVED') == 'yes'\n"
                 "error_type = 'http' if preserved else 'api'\n"
                 "exit_code = 5 if preserved else 4\n"
-                "json.dump({'schema_version': '0.6.2', 'error': {\n"
+                "json.dump({'schema_version': '1.0.0', 'error': {\n"
                 "    'type': error_type, 'message': 'private',\n"
                 "    'exit_code': exit_code}}, sys.stderr)\n"
                 "sys.stderr.write('\\n')\n"
@@ -418,7 +418,7 @@ class CollectorTestCase(unittest.TestCase):
             script = Path(directory) / "utf8_output.py"
             script.write_text(
                 "import json\n"
-                "json.dump({'schema_version': '0.6.2', 'data': "
+                "json.dump({'schema_version': '1.0.0', 'data': "
                 "{'summary': 'Résumé'}}, open(1, 'w', encoding='utf-8'), "
                 "ensure_ascii=False)\n",
                 encoding="utf-8",

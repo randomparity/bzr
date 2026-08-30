@@ -106,6 +106,38 @@ async fn bug_adjacency_rest_ignores_structured_assignee_detail_byte_equivalently
 }
 
 #[tokio::test]
+async fn bug_adjacency_rest_normalizes_scalar_and_array_version() {
+    for (wire, expected) in [
+        (serde_json::json!("rawhide"), vec!["rawhide"]),
+        (serde_json::json!([]), Vec::<&str>::new()),
+        (serde_json::json!(["40", "rawhide"]), vec!["40", "rawhide"]),
+    ] {
+        let mut body = minimal_strict_rest_bug();
+        body["bugs"][0]["version"] = wire;
+        let bug = parse_strict_rest_bug(body).await.unwrap().unwrap();
+        assert_eq!(
+            bug.version.unwrap(),
+            expected.into_iter().map(str::to_string).collect::<Vec<_>>()
+        );
+    }
+}
+
+#[tokio::test]
+async fn bug_adjacency_rest_rejects_malformed_version_lists() {
+    for wire in [
+        serde_json::json!(null),
+        serde_json::json!(7),
+        serde_json::json!({}),
+        serde_json::json!(["rawhide", 7]),
+        serde_json::json!([["rawhide"]]),
+    ] {
+        let mut body = minimal_strict_rest_bug();
+        body["bugs"][0]["version"] = wire;
+        assert!(parse_strict_rest_bug(body).await.is_err());
+    }
+}
+
+#[tokio::test]
 async fn bug_adjacency_rest_rejects_non_object_assignee_detail() {
     for detail in [
         serde_json::json!("scalar"),

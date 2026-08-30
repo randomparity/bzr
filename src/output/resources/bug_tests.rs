@@ -28,8 +28,8 @@ fn make_bug(id: u64, summary: &str, status: &str) -> Bug {
         dupe_of: None,
         deadline: None,
         product: Some("TestProduct".into()),
-        component: Some("TestComponent".into()),
-        version: Some("1.0".into()),
+        component: Some(vec!["TestComponent".into()]),
+        version: Some(vec!["1.0".into()]),
         assigned_to: Some("dev@example.com".into()),
         priority: Some("P1".into()),
         severity: Some("major".into()),
@@ -167,7 +167,7 @@ fn sample_adjacency() -> BugAdjacencyResult {
                 status: Some("NEW".into()),
                 resolution: None,
                 product: Some("Example Product".into()),
-                version: Some("unspecified".into()),
+                version: Some(vec!["unspecified".into()]),
                 assigned_to: Some("owner@example.invalid".into()),
                 last_change_time: Some("2026-08-29T00:00:00Z".into()),
                 target_milestone: Some("---".into()),
@@ -214,7 +214,7 @@ fn expected_adjacency_payload() -> serde_json::Value {
                 "status": "NEW",
                 "resolution": null,
                 "product": "Example Product",
-                "version": "unspecified",
+                "version": ["unspecified"],
                 "assigned_to": "owner@example.invalid",
                 "last_change_time": "2026-08-29T00:00:00Z",
                 "target_milestone": "---",
@@ -242,7 +242,7 @@ fn write_bug_adjacency_json_has_the_closed_result_shape() {
 fn write_bug_adjacency_json_uses_schema_version_0_6_2() {
     let output = capture_bug_adjacency(OutputFormat::Json, sample_adjacency());
     let value: serde_json::Value = serde_json::from_str(&output).unwrap();
-    assert_eq!(value["schema_version"], "0.6.2");
+    assert_eq!(value["schema_version"], "1.0.0");
 }
 
 #[test]
@@ -592,7 +592,8 @@ fn write_bug_detail_json_contains_all_fields() {
     assert_eq!(parsed["summary"], "Detail test");
     assert_eq!(parsed["status"], "ASSIGNED");
     assert_eq!(parsed["product"], "TestProduct");
-    assert_eq!(parsed["component"], "TestComponent");
+    assert_eq!(parsed["component"], serde_json::json!(["TestComponent"]));
+    assert_eq!(parsed["version"], serde_json::json!(["1.0"]));
     assert_eq!(parsed["assigned_to"], "dev@example.com");
     assert_eq!(parsed["priority"], "P1");
     assert_eq!(parsed["severity"], "major");

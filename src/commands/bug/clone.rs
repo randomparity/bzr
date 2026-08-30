@@ -46,7 +46,8 @@ pub(super) async fn handle(
     let clone_description =
         resolve_source_description(&client, source.id, description.as_deref()).await?;
     let source_product = required_source_field(source.product, "product")?;
-    let source_component = required_source_field(source.component, "component")?;
+    let clone_component =
+        resolve_required_clone_field(component.as_ref(), source.component, "component")?;
     let source_summary = required_source_field(source.summary, "summary")?;
 
     let mut blocks = Vec::new();
@@ -60,11 +61,9 @@ pub(super) async fn handle(
 
     let params = CreateBugParams {
         product: product.clone().unwrap_or(source_product),
-        component: component.clone().unwrap_or(source_component),
+        component: clone_component,
         summary: summary.clone().unwrap_or(source_summary),
-        version: version
-            .clone()
-            .or(source.version)
+        version: resolve_optional_clone_field(version.as_ref(), source.version, "version")?
             .unwrap_or_else(|| "unspecified".to_string()),
         description: clone_description,
         priority: priority.clone().or(source.priority),
@@ -146,6 +145,47 @@ fn required_source_field(value: Option<String>, field: &str) -> Result<String> {
     value.ok_or_else(|| {
         crate::error::BzrError::DataIntegrity(format!("source bug missing {field} field"))
     })
+}
+
+fn optional_single_source_field(value: Option<Vec<String>>, field: &str) -> Result<Option<String>> {
+    let Some(values) = value else {
+        return Ok(None);
+    };
+    match values.as_slice() {
+        [] => Ok(None),
+        [value] => Ok(Some(value.clone())),
+        _ => Err(crate::error::BzrError::DataIntegrity(format!(
+            "source bug has multiple {field} values; supply --{field} explicitly"
+        ))),
+    }
+}
+
+fn required_single_source_field(value: Option<Vec<String>>, field: &str) -> Result<String> {
+    optional_single_source_field(value, field)?.ok_or_else(|| {
+        crate::error::BzrError::DataIntegrity(format!("source bug missing {field} field"))
+    })
+}
+
+fn resolve_required_clone_field(
+    explicit: Option<&String>,
+    source: Option<Vec<String>>,
+    field: &str,
+) -> Result<String> {
+    match explicit {
+        Some(value) => Ok(value.clone()),
+        None => required_single_source_field(source, field),
+    }
+}
+
+fn resolve_optional_clone_field(
+    explicit: Option<&String>,
+    source: Option<Vec<String>>,
+    field: &str,
+) -> Result<Option<String>> {
+    match explicit {
+        Some(value) => Ok(Some(value.clone())),
+        None => optional_single_source_field(source, field),
+    }
 }
 
 fn clone_list(

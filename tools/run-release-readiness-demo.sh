@@ -82,7 +82,7 @@ jq -e --argjson root "$root" --arg product "$product" '
   echo "ERROR: demo root detail no longer matches the resolved fixture identity" >&2
   exit 1
 }
-version=$(jq -er '.data.version' "$workdir/root.json")
+version=$(jq -er '.data.version | select(length == 1) | .[0]' "$workdir/root.json")
 milestone=$(jq -er '.data.target_milestone' "$workdir/root.json")
 fixture_ids=$(jq -cer --arg marker "$marker" --arg product "$product" '
   [.data[] | select(
