@@ -938,10 +938,6 @@ async fn bug_create_editor_flow_resolves_via_editor_when_stdin_is_tty() {
     use std::io::IsTerminal;
 
     if !std::io::stdin().is_terminal() {
-        let _ = writeln!(
-            std::io::stderr(),
-            "Skipping: editor flow requires TTY stdin (cargo test runs non-TTY)."
-        );
         return;
     }
 
@@ -996,10 +992,6 @@ async fn bug_create_editor_branch_unreachable_when_stdin_piped() {
     use std::io::IsTerminal;
 
     if std::io::stdin().is_terminal() {
-        let _ = writeln!(
-            std::io::stderr(),
-            "Skipping: this test asserts the non-editor path under piped stdin."
-        );
         return;
     }
 

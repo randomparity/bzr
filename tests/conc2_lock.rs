@@ -97,6 +97,12 @@ fn update_locked_waits_for_a_held_lock_then_completes() {
     unsafe { std::env::set_var("XDG_CONFIG_HOME", dir.path()) };
     let cfg_dir = dir.path().join("bzr");
     std::fs::create_dir_all(&cfg_dir).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        std::fs::set_permissions(&cfg_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
     let lock_path = cfg_dir.join("config.lock");
     let ready = dir.path().join("ready");
     let release = dir.path().join("release");

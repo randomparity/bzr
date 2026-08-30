@@ -88,6 +88,8 @@ fn config_file_io_operations() {
     // config".
     let _ = fs::remove_file(&config_path);
     fs::create_dir_all(&config_path).unwrap();
+    #[cfg(unix)]
+    fs::set_permissions(&config_path, fs::Permissions::from_mode(0o700)).unwrap();
     assert!(Config::load_at(Some(&config_path)).is_err());
 }
 
@@ -97,6 +99,10 @@ fn config_load_read_error_names_operation_and_path() {
     let tmp = tempfile::tempdir().unwrap();
     let config_path = tmp.path().join("config.toml");
     fs::create_dir_all(&config_path).unwrap();
+    #[cfg(unix)]
+    fs::set_permissions(tmp.path(), fs::Permissions::from_mode(0o700)).unwrap();
+    #[cfg(unix)]
+    fs::set_permissions(&config_path, fs::Permissions::from_mode(0o700)).unwrap();
 
     let err = Config::load_at(Some(&config_path)).unwrap_err().to_string();
 
@@ -113,6 +119,10 @@ fn config_load_parse_error_names_operation_and_path() {
     let tmp = tempfile::tempdir().unwrap();
     let config_path = tmp.path().join("config.toml");
     fs::write(&config_path, "default_server = [").unwrap();
+    #[cfg(unix)]
+    fs::set_permissions(&config_path, fs::Permissions::from_mode(0o600)).unwrap();
+    #[cfg(unix)]
+    fs::set_permissions(tmp.path(), fs::Permissions::from_mode(0o700)).unwrap();
 
     let err = Config::load_at(Some(&config_path)).unwrap_err().to_string();
 
@@ -152,8 +162,12 @@ fn config_save_rename_error_names_temp_and_target_paths() {
     let tmp = tempfile::tempdir().unwrap();
     let config_dir = tmp.path().join("bzr");
     fs::create_dir_all(&config_dir).unwrap();
+    #[cfg(unix)]
+    fs::set_permissions(&config_dir, fs::Permissions::from_mode(0o700)).unwrap();
     let config_path = config_dir.join("config.toml");
     fs::create_dir_all(&config_path).unwrap();
+    #[cfg(unix)]
+    fs::set_permissions(&config_path, fs::Permissions::from_mode(0o700)).unwrap();
 
     let err = make_config_with_server()
         .save_at(&config_path)
@@ -859,6 +873,8 @@ fn save_reaps_old_crash_orphaned_temp_files() {
 
     let dir = tmp.path().join("bzr");
     std::fs::create_dir_all(&dir).unwrap();
+    #[cfg(unix)]
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
     // An orphan left by a crash long ago: backdate its mtime past the gate.
     let orphan = dir.join("config.toml.99999.7.tmp");
     std::fs::write(&orphan, "stale").unwrap();
@@ -888,6 +904,8 @@ fn save_preserves_fresh_temp_files_of_concurrent_writers() {
 
     let dir = tmp.path().join("bzr");
     std::fs::create_dir_all(&dir).unwrap();
+    #[cfg(unix)]
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
     // A *fresh* sibling temp, as another bzr process would have mid-write.
     let live = dir.join("config.toml.12345.0.tmp");
     std::fs::write(&live, "in-flight").unwrap();
@@ -915,6 +933,8 @@ fn save_reap_requires_both_config_prefix_and_tmp_suffix() {
 
     let dir = tmp.path().join("bzr");
     std::fs::create_dir_all(&dir).unwrap();
+    #[cfg(unix)]
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
     let old = SystemTime::now() - Duration::from_secs(7200);
     // The reaper ANDs "starts with config.toml." and "ends with .tmp". Each of
     // these old files satisfies only ONE condition, so neither may be removed.
