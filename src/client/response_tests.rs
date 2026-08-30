@@ -48,6 +48,91 @@ fn assert_log_redacted(log: &str, secret: &str) {
     );
 }
 
+fn minimal_strict_rest_bug() -> serde_json::Value {
+    serde_json::json!({
+        "bugs": [{
+            "id": 42,
+            "blocks": [],
+            "depends_on": []
+        }],
+        "faults": []
+    })
+}
+
+async fn parse_strict_rest_bug(
+    body: serde_json::Value,
+) -> crate::error::Result<
+    std::result::Result<crate::types::BugAdjacencyBug, crate::types::BugAdjacencyError>,
+> {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let client = test_client(&mock.uri());
+    let response = client
+        .http
+        .get(format!("{}/rest/bug/42", mock.uri()))
+        .send()
+        .await
+        .unwrap();
+
+    client
+        .parse_strict_bug_adjacency_response(response, "42")
+        .await
+}
+
+#[tokio::test]
+async fn bug_adjacency_rest_ignores_structured_assignee_detail_byte_equivalently() {
+    let without = parse_strict_rest_bug(minimal_strict_rest_bug())
+        .await
+        .unwrap()
+        .unwrap();
+    let mut body = minimal_strict_rest_bug();
+    body["bugs"][0]["assigned_to_detail"] = serde_json::json!({
+        "unfamiliar_string": "value",
+        "unfamiliar_null": null,
+        "unfamiliar_array": [1, true, {"nested": "value"}],
+        "unfamiliar_object": {"deeper": [null, 2]}
+    });
+    let with = parse_strict_rest_bug(body).await.unwrap().unwrap();
+
+    assert_eq!(
+        serde_json::to_vec(&without).unwrap(),
+        serde_json::to_vec(&with).unwrap()
+    );
+}
+
+#[tokio::test]
+async fn bug_adjacency_rest_rejects_non_object_assignee_detail() {
+    for detail in [
+        serde_json::json!("scalar"),
+        serde_json::json!(["array"]),
+        serde_json::Value::Null,
+    ] {
+        let mut body = minimal_strict_rest_bug();
+        body["bugs"][0]["assigned_to_detail"] = detail;
+
+        assert!(matches!(
+            parse_strict_rest_bug(body).await,
+            Err(crate::error::BzrError::DataIntegrity(_))
+        ));
+    }
+}
+
+#[tokio::test]
+async fn bug_adjacency_rest_still_rejects_unrelated_unknown_bug_key() {
+    let mut body = minimal_strict_rest_bug();
+    body["bugs"][0]["reporter_detail"] = serde_json::json!({});
+
+    assert!(matches!(
+        parse_strict_rest_bug(body).await,
+        Err(crate::error::BzrError::DataIntegrity(_))
+    ));
+}
+
 #[test]
 fn strict_adjacency_resource_error_accepts_closed_integer_and_decimal_codes() {
     for (code, expected) in [

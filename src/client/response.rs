@@ -44,6 +44,12 @@ struct StrictAdjacencyBug {
     version: Option<String>,
     #[serde(default, deserialize_with = "deserialize_optional_detail")]
     assigned_to: Option<String>,
+    #[serde(
+        rename = "assigned_to_detail",
+        default,
+        deserialize_with = "deserialize_present_object"
+    )]
+    _assigned_to_detail: Option<serde_json::Map<String, serde_json::Value>>,
     #[serde(default, deserialize_with = "deserialize_optional_detail")]
     last_change_time: Option<String>,
     #[serde(default, deserialize_with = "deserialize_optional_detail")]
@@ -94,6 +100,15 @@ where
 {
     Option::<String>::deserialize(deserializer)
         .map(|value| value.filter(|detail| !detail.is_empty()))
+}
+
+fn deserialize_present_object<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<serde_json::Map<String, serde_json::Value>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    serde_json::Map::<String, serde_json::Value>::deserialize(deserializer).map(Some)
 }
 
 fn deserialize_present_string<'de, D>(

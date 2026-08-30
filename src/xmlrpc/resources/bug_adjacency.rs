@@ -81,8 +81,16 @@ fn strict_bug(value: &Value, requested: &str) -> Result<BugAdjacencyBug> {
         BzrError::DataIntegrity("strict XML-RPC Bug.get bug must be a struct".into())
     })?;
     if bug
+        .get("assigned_to_detail")
+        .is_some_and(|detail| detail.as_struct().is_none())
+    {
+        return Err(BzrError::DataIntegrity(
+            "strict XML-RPC Bug.get assigned_to_detail must be a struct".into(),
+        ));
+    }
+    if bug
         .keys()
-        .any(|key| !BUG_ADJACENCY_FIELDS.contains(&key.as_str()))
+        .any(|key| key != "assigned_to_detail" && !BUG_ADJACENCY_FIELDS.contains(&key.as_str()))
     {
         return Err(BzrError::DataIntegrity(
             "strict XML-RPC Bug.get bug has unknown fields".into(),

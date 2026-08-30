@@ -148,6 +148,76 @@ fn minimal_value_bug(id: i64) -> BTreeMap<String, Value> {
 }
 
 #[test]
+fn bug_adjacency_xmlrpc_ignores_structured_assignee_detail_byte_equivalently() {
+    let without = parse_strict_response(&strict_value_bug(minimal_value_bug(42)), "42")
+        .unwrap()
+        .unwrap();
+    let mut bug = minimal_value_bug(42);
+    bug.insert(
+        "assigned_to_detail".into(),
+        Value::Struct(BTreeMap::from([
+            ("unfamiliar_string".into(), Value::String("value".into())),
+            ("unfamiliar_int".into(), Value::Int(7)),
+            ("unfamiliar_bool".into(), Value::Bool(true)),
+            ("unfamiliar_double".into(), Value::Double(1.5)),
+            (
+                "unfamiliar_datetime".into(),
+                Value::DateTime("20260830T12:00:00".into()),
+            ),
+            ("unfamiliar_base64".into(), Value::Base64(vec![1, 2, 3])),
+            (
+                "unfamiliar_array".into(),
+                Value::Array(vec![Value::Int(1), Value::String("two".into())]),
+            ),
+            (
+                "unfamiliar_struct".into(),
+                Value::Struct(BTreeMap::from([("nested".into(), Value::Bool(false))])),
+            ),
+        ])),
+    );
+    let with = parse_strict_response(&strict_value_bug(bug), "42")
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(
+        serde_json::to_vec(&without).unwrap(),
+        serde_json::to_vec(&with).unwrap()
+    );
+}
+
+#[test]
+fn bug_adjacency_xmlrpc_rejects_every_non_struct_assignee_detail() {
+    for detail in [
+        Value::String("value".into()),
+        Value::Int(7),
+        Value::Bool(true),
+        Value::Double(1.5),
+        Value::DateTime("20260830T12:00:00".into()),
+        Value::Base64(vec![1, 2, 3]),
+        Value::Array(Vec::new()),
+    ] {
+        let mut bug = minimal_value_bug(42);
+        bug.insert("assigned_to_detail".into(), detail);
+
+        assert!(matches!(
+            parse_strict_response(&strict_value_bug(bug), "42"),
+            Err(crate::error::BzrError::DataIntegrity(_))
+        ));
+    }
+}
+
+#[test]
+fn bug_adjacency_xmlrpc_still_rejects_unrelated_unknown_bug_key() {
+    let mut bug = minimal_value_bug(42);
+    bug.insert("reporter_detail".into(), Value::Struct(BTreeMap::new()));
+
+    assert!(matches!(
+        parse_strict_response(&strict_value_bug(bug), "42"),
+        Err(crate::error::BzrError::DataIntegrity(_))
+    ));
+}
+
+#[test]
 fn bug_adjacency_xmlrpc_rejects_mismatched_numeric_success_identity() {
     let result = parse_strict_response(&strict_value_bug(minimal_value_bug(43)), "42");
     assert!(matches!(
