@@ -27,9 +27,13 @@ bzr --json bug adjacency <ID_OR_ALIAS>...
 ```
 
 `bug adjacency` is a bounded multi-get, not a graph operation. It batches distinct numeric IDs
-through the existing `search_bugs` boundary, then probes only omitted numerics and distinct aliases
-through `get_bug`. This uses one upstream call for the common all-visible numeric case without
-pretending the canonical-only batch response can carry a failure for each request.
+through a focused strict adjacency variant of the existing search transport, then probes only
+omitted numerics and distinct aliases through its matching strict single-bug variant. Both variants
+request the fixed projection and reject successful REST or XML-RPC responses unless `blocks` and
+`depends_on` are present arrays containing only non-negative integer IDs. The shared tolerant `Bug`
+mapping remains unchanged for existing commands. This uses one upstream call for the common
+all-visible numeric case without pretending the canonical-only batch response can carry a failure
+for each request or that a missing adjacency field means an empty adjacency list.
 
 If a credentialed per-ID probe returns code 102, the handler lazily validates the configured email
 and current credential through `rest/valid_login`, applying the same auth method that produced the
@@ -131,6 +135,12 @@ canonical bug table in numeric order. Each bug row renders complete comma-separa
 `depends_on` lists. NDJSON follows the existing repository rule for object payloads and emits the
 whole result as one compact record without an envelope.
 
+The new payload is an additive public-contract change, so the implementation bumps
+`output::SCHEMA_VERSION` from `0.6.1` to `0.6.2` under ADR 0007. The `docs/bzr-cli.md` envelope and
+error examples, `tests/functional/phases/18a-json-envelope.sh`, and embedded-skill functional
+fixtures in `tests/functional/phases/18c-skills-install.sh` advance in the same change. Existing
+historical ADR and design examples retain the versions they documented.
+
 ## Failure contract
 
 The command maps only these per-request results. A credentialed code 102 must first pass lazy
@@ -166,16 +176,20 @@ may change dependencies between reads, the command does not reconcile reciprocal
 
 - `src/cli/bug/adjacency.rs` defines the positional arguments and help text; `bug/mod.rs` adds the
   action.
-- `src/commands/bug/adjacency.rs` validates the cap, batches numeric requests through the existing
-  `SearchParams`/`search_bugs` path, probes omissions and aliases, maps typed failures, deduplicates
-  canonical bugs, and delegates output.
-- `src/types/bug/adjacency.rs` owns the exact request, failure, canonical-bug, and result types plus
-  canonicalization from the existing `Bug` type.
+- `src/commands/bug/adjacency.rs` validates the cap, batches numeric requests through the strict
+  adjacency path, probes omissions and aliases, maps typed failures, deduplicates canonical bugs,
+  and delegates output.
+- `src/types/bug/adjacency.rs` owns the exact request, failure, canonical-bug, and result types. Its
+  REST wire form requires both adjacency arrays rather than converting from the tolerant `Bug`.
+- `src/client/resources/bug.rs` adds strict batch and single-bug adjacency methods with the same
+  REST/Hybrid routing policy as the corresponding existing reads.
+- `src/xmlrpc/resources/bug.rs` adds a strict adjacency mapper that requires both arrays and every
+  member to be a non-negative integer; existing tolerant bug reads keep their current behavior.
 - `src/output/resources/bug.rs` renders the two table sections and uses the shared JSON-family
   formatter for structured output.
-- Existing `BugzillaClient::search_bugs` and `get_bug` remain the retrieval boundaries. A focused
-  `BugzillaClient` credential-validation method reuses the installed `valid_login` response rules
-  while applying the client's current auth method; it neither re-detects nor changes that method.
+- A focused `BugzillaClient` credential-validation method reuses the installed `valid_login`
+  response rules while applying the client's current auth method; it neither re-detects nor
+  changes that method.
 
 ## Trust boundaries and controls
 
@@ -202,8 +216,8 @@ TLS policy, timeouts, and API-mode selection.
 - Credentialed `valid_login` validation runs lazily only after a per-ID 102, uses the configured
   email plus current credential and auth method, and treats missing or inconclusive proof as fatal.
   Anonymous mode carries no credential whose rejection could be confused with resource denial.
-- `Bug` deserialization remains at the existing client boundary; the new code accepts no alternate
-  wire schema.
+- The strict adjacency wire type rejects absent, non-array, negative, or non-integer adjacency
+  members. Existing `Bug` deserialization remains tolerant for its current callers.
 - Only codes 100, 101, and 102 are downgraded, and the mapping is exhaustive and test-pinned.
 - Failure records copy only the stable type and numeric code, never server prose.
 - Canonical `BTreeMap` storage and explicit adjacency sorting/deduplication remove server-order
@@ -231,6 +245,10 @@ TLS, retries, or XML-RPC fallback behavior; it reuses those existing boundaries 
   behavior; transport fatal behavior with empty stdout; and exact-input caching.
 - Command/output tests prove alias-plus-numeric convergence, one canonical bug, positional request
   identity, numeric node order, and sorted/deduplicated adjacency arrays.
+- REST and XML-RPC client tests prove missing adjacency fields and malformed or negative edge
+  members are fatal rather than silently shortened or converted to empty arrays.
+- Output and functional assertions pin the additive `SCHEMA_VERSION` bump to `0.6.2` everywhere
+  ADR 0007 requires synchronized current-contract documentation or fixtures.
 - A controlled-fault test changes one accepted resource code to fatal and must make the focused
   mixed-result test fail before the fault is reverted.
 

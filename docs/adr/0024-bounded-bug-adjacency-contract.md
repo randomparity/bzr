@@ -11,17 +11,22 @@ alias, returns each successful canonical bug once with complete `blocks` and `de
 and turns only Bugzilla's resource-scoped codes 100, 101, and 102 into typed per-request results.
 `bug view --permissive` retains prose failures and duplicate canonical bugs, while `bug links`
 performs traversal and omits roots and repeated observations. Bugzilla does not return typed
-per-request failures from its multi-ID REST response, so one upstream request cannot provide the
-required contract on every supported server.
+per-request failures from its multi-ID REST response, and the shared tolerant `Bug` mapping cannot
+distinguish an absent or malformed adjacency field from an empty one. The existing retrieval result
+therefore cannot provide the required contract on every supported server.
 
 ## Decision
 
 Add `bzr bug adjacency <ID_OR_ALIAS>...` as a non-traversing command with a maximum of 100 request
 arguments. The command parses and sorts distinct numeric requests, retrieves their successful rows
-through one existing `search_bugs` call, and probes only omitted numeric requests through `get_bug`
-for typed faults. A batch code 100, 101, or 102 triggers the same per-ID probes because the batch
-fault cannot be attributed safely. Distinct aliases are fetched individually in lexical order
-because a canonical-only batch response cannot preserve alias identity.
+through one adjacency-specific batch call, and probes only omitted numeric requests through its
+adjacency-specific single-bug call for typed faults. Both calls request the fixed projection and
+reject a successful response unless `blocks` and `depends_on` are present arrays containing only
+non-negative integer bug IDs. They use focused strict REST and XML-RPC response mappings so the
+shared tolerant `Bug` behavior remains unchanged for existing commands. A batch code 100, 101, or
+102 triggers the same per-ID probes because the batch fault cannot be attributed safely. Distinct
+aliases are fetched individually in lexical order because a canonical-only batch response cannot
+preserve alias identity.
 
 When a credentialed per-ID lookup returns code 102, the command lazily validates the configured
 email and current credential through Bugzilla's `valid_login` endpoint using the client's current
@@ -39,8 +44,8 @@ invocation has no credential that can fail. The command emits one versioned resu
 After that validation, codes 100 and 101 serialize as `not_found`; code 102 serializes as
 `inaccessible`. A client-side `NotFound` is also `not_found` without an `api_code`. Every other API
 error and every auth, TLS, connection, HTTP, deserialization, and transport error aborts the
-command without a success body. The command reuses the existing `BugzillaClient::search_bugs` and
-`BugzillaClient::get_bug` boundaries and exposes the existing `valid_login` response handling as a
+command without a success body. The command adds focused adjacency retrieval methods beside the
+existing tolerant bug methods and exposes the existing `valid_login` response handling as a
 current-client credential check; it adds no graph traversal or analysis policy.
 
 ## Consequences
@@ -63,8 +68,10 @@ current-client credential check; it adds no graph traversal or analysis policy.
   numeric ID, then successful alias probes lexically. Requests are mapped only after those phases.
   Later requests mapping to that ID never overwrite or union fields, so input permutation and
   concurrent changes cannot select an implicit merge rule.
-- Pretty JSON inherits the repository's `schema_version` envelope; NDJSON remains intentionally
-  unenveloped under the existing output contract.
+- The new public payload is additive, so `SCHEMA_VERSION` advances from `0.6.1` to `0.6.2` under
+  ADR 0007. The constant, CLI reference examples, and functional assertions advance together.
+  Pretty JSON inherits the envelope; NDJSON remains intentionally unenveloped under the existing
+  output contract.
 
 ## Considered & rejected
 
@@ -81,8 +88,9 @@ current-client credential check; it adds no graph traversal or analysis policy.
 - **Perform only individual lookups.** verified: `rg -n "pub async fn search_bugs" \
   src/client/resources/bug.rs` at commit
   `9a7c05735c81107c5f1e74e727eba59a1b293ebb` finds the installed multi-ID numeric search boundary.
-  Reusing it for successes and probing only omissions meets the typed-failure contract with fewer
-  common-case server round trips than individual-only retrieval.
+  Mirroring its multi-ID transport shape with a strict adjacency result and probing only omissions
+  meets the typed-failure and completeness contracts with fewer common-case server round trips
+  than individual-only retrieval.
 - **Treat the batch response alone as complete.** verified: issue #573's observed supported-server
   behavior and `src/client/resources/bug.rs`'s `BugListResponse { bugs }` shape provide no
   per-request failure channel, so omitted requests still need single-ID probes for stable codes.
