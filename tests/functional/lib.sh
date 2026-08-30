@@ -593,3 +593,52 @@ _tls_cleanup() {
     fi
     return 0
 }
+
+# ── Red Hat response-shape fixture (issue #589) ─────────────────────
+REDHAT_SHAPE_PORT=""
+REDHAT_SHAPE_PID=""
+REDHAT_SHAPE_LOG=""
+
+redhat_shape_start() {
+    local backend_port="$1"
+    REDHAT_SHAPE_PORT="${BZR_FUNC_REDHAT_PORT:-$((backend_port + 2000))}"
+    REDHAT_SHAPE_LOG="$FUNC_CONFIG_DIR/redhat-shape-proxy.log"
+    python3 "$SCRIPT_DIR/redhat-shape-proxy.py" "$REDHAT_SHAPE_PORT" \
+        "$backend_port" >"$REDHAT_SHAPE_LOG" 2>&1 &
+    REDHAT_SHAPE_PID=$!
+
+    local attempt=0
+    while [[ $attempt -lt 30 ]]; do
+        if curl -sf "http://127.0.0.1:${REDHAT_SHAPE_PORT}/_bzr_ready" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+        attempt=$((attempt + 1))
+    done
+    echo "redhat_shape_start: proxy not ready; log: $REDHAT_SHAPE_LOG" >&2
+    tail -5 "$REDHAT_SHAPE_LOG" >&2 2>/dev/null || true
+    redhat_shape_stop
+    return 1
+}
+
+redhat_shape_stop() {
+    if [[ -n "${REDHAT_SHAPE_PID:-}" ]]; then
+        local pid="$REDHAT_SHAPE_PID"
+        kill "$pid" >/dev/null 2>&1 || true
+        local attempt=0
+        while kill -0 "$pid" >/dev/null 2>&1 && [[ $attempt -lt 30 ]]; do
+            sleep 0.1
+            attempt=$((attempt + 1))
+        done
+        if kill -0 "$pid" >/dev/null 2>&1; then
+            kill -9 "$pid" >/dev/null 2>&1 || true
+        fi
+        wait "$pid" 2>/dev/null || true
+        REDHAT_SHAPE_PID=""
+        if kill -0 "$pid" >/dev/null 2>&1; then
+            echo "redhat_shape_stop: proxy process $pid is still running" >&2
+            return 1
+        fi
+    fi
+    return 0
+}

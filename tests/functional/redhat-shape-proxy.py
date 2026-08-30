@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""Bugzilla proxy that reproduces Red Hat bug response field shapes."""
+
+import http.client
+import http.server
+import json
+import signal
+import sys
+import unittest
+
+_HOP_BY_HOP = frozenset(
+    {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+     "te", "trailers", "transfer-encoding", "upgrade", "host", "content-length"}
+)
+
+
+def shape_bug_response(data):
+    """Return JSON bytes with bug component/version values represented as arrays."""
+    value = json.loads(data)
+    bugs = value.get("bugs") if isinstance(value, dict) else None
+    if isinstance(bugs, list):
+        for bug in bugs:
+            if not isinstance(bug, dict):
+                continue
+            for field in ("component", "version"):
+                field_value = bug.get(field)
+                if isinstance(field_value, str):
+                    values = [] if field_value == "" else [field_value]
+                    if field == "version" and values:
+                        values.append(f"{field_value}-redhat-secondary")
+                    bug[field] = values
+    return json.dumps(value, separators=(",", ":")).encode()
+
+
+def make_handler(backend_port):
+    class Handler(http.server.BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def do_GET(self):
+            if self.path == "/_bzr_ready":
+                self.send_response(204)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+
+            self._forward("GET")
+
+        def do_POST(self):
+            self._forward("POST")
+
+        def _forward(self, method):
+            headers = {key: value for key, value in self.headers.items()
+                       if key.lower() not in _HOP_BY_HOP}
+            content_length = int(self.headers.get("Content-Length", "0"))
+            request_body = self.rfile.read(content_length) if content_length else None
+            conn = http.client.HTTPConnection("127.0.0.1", backend_port, timeout=30)
+            try:
+                conn.request(method, self.path, body=request_body, headers=headers)
+                response = conn.getresponse()
+                body = response.read()
+                response_headers = response.getheaders()
+                status = response.status
+            except (OSError, http.client.HTTPException) as error:
+                self.send_error(502, f"Bugzilla backend unavailable: {error}")
+                return
+            finally:
+                conn.close()
+
+            if 200 <= status < 300 and self.path.startswith("/rest/bug"):
+                try:
+                    body = shape_bug_response(body)
+                except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                    self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
+                    return
+
+            self.send_response(status)
+            for key, value in response_headers:
+                if key.lower() not in _HOP_BY_HOP:
+                    self.send_header(key, value)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    return Handler
+
+
+class ShapeTests(unittest.TestCase):
+    def test_shapes_scalar_empty_and_multi_values(self):
+        shaped = json.loads(shape_bug_response(json.dumps({"bugs": [
+            {"component": "Backend", "version": "rawhide"},
+            {"component": [], "version": ["40", "41"]},
+            {"component": "", "version": ""},
+        ]}).encode()))
+        self.assertEqual(shaped["bugs"][0]["component"], ["Backend"])
+        self.assertEqual(
+            shaped["bugs"][0]["version"], ["rawhide", "rawhide-redhat-secondary"]
+        )
+        self.assertEqual(shaped["bugs"][1]["version"], ["40", "41"])
+        self.assertEqual(shaped["bugs"][2]["component"], [])
+
+    def test_leaves_non_bug_payload_untouched(self):
+        payload = b'{"version":"5.2"}'
+        self.assertEqual(json.loads(shape_bug_response(payload)), {"version": "5.2"})
+
+    def test_rejects_malformed_json(self):
+        with self.assertRaises(json.JSONDecodeError):
+            shape_bug_response(b"not json")
+
+
+def main():
+    if sys.argv[1:] == ["--self-test"]:
+        suite = unittest.defaultTestLoader.loadTestsFromTestCase(ShapeTests)
+        return 0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1
+    if len(sys.argv) != 3:
+        sys.stderr.write("usage: redhat-shape-proxy.py <listen_port> <backend_port>\n")
+        return 2
+    server = http.server.ThreadingHTTPServer(
+        ("127.0.0.1", int(sys.argv[1])), make_handler(int(sys.argv[2]))
+    )
+    def stop_server(_signum, _frame):
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, stop_server)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

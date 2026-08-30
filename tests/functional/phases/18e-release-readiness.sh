@@ -58,7 +58,7 @@ if [[ $_RR_FIXTURE_OK -eq 1 ]]; then
   if assert_success && assert_json '.priority' "Highest" &&
     assert_json '.assigned_to' "$ADMIN_EMAIL" &&
     assert_json '.target_milestone' "---" &&
-    assert_json '.version' "$_RR_VERSION" &&
+    assert_json '.version[0]' "$_RR_VERSION" &&
     assert_json '.deadline' "2026-01-15" &&
     assert_json '.whiteboard' "$_RR_MARKER release-blocker" &&
     assert_json '.depends_on[0]' "$_RR_DEPENDENCY"; then
@@ -131,6 +131,36 @@ if [[ $_RR_SCOPES_OK -eq 1 ]]; then
   test_pass
 else
   test_fail "a release scope failed, omitted the fixture, or lost stable ordering"
+fi
+
+test_begin "123s-a. Red Hat-shaped bug fields normalize to arrays"
+if redhat_shape_start "$BZ_PORT"; then
+  trap 'cleanup; redhat_shape_stop' EXIT
+  _RR_REDHAT_URL="http://127.0.0.1:${REDHAT_SHAPE_PORT}"
+  run_bzr_raw --json --server-url "$_RR_REDHAT_URL" bug list \
+    --product "$_RR_PRODUCT" --limit 100 --paginate --sort bug_id --order asc \
+    --fields id,component,version
+  _RR_REDHAT_OK=1
+  if [[ $BZR_EXIT -ne 0 ]] || ! jq -e --arg component Release --arg version "$_RR_VERSION" '
+      length == 3 and
+      all(.[]; .component == [$component] and
+        .version == [$version, ($version + "-redhat-secondary")])
+    ' "$BZR_STDOUT" >/dev/null; then
+    _RR_REDHAT_OK=0
+  fi
+  run_bzr_raw --json --server-url "$_RR_REDHAT_URL" bug adjacency "$_RR_ROOT"
+  if [[ $BZR_EXIT -ne 0 ]] || ! jq -e --arg version "$_RR_VERSION" '
+      .bugs[0].version == [$version, ($version + "-redhat-secondary")]
+    ' "$BZR_STDOUT" >/dev/null; then
+    _RR_REDHAT_OK=0
+  fi
+  redhat_shape_stop || _RR_REDHAT_OK=0
+  trap cleanup EXIT
+  if [[ $_RR_REDHAT_OK -eq 1 ]]; then test_pass; else
+    test_fail "Red Hat-shaped read failed; proxy log: $REDHAT_SHAPE_LOG"
+  fi
+else
+  test_fail "Red Hat response-shape proxy did not become ready: $REDHAT_SHAPE_LOG"
 fi
 
 test_begin "123t. supplementary release evidence is structured and bounded"

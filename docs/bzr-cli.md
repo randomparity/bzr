@@ -323,6 +323,12 @@ bzr bug list --summary "kernel panic" --product Kernel  # substring on summary
 bzr bug list --product Firefox --changed-since 2026-04-01  # filter by date range
 ```
 
+In JSON and NDJSON bug objects, present `component` and `version` values are
+always arrays of strings. Stock Bugzilla scalar responses normalize to
+one-element arrays; Red Hat-style empty, single, and multi-value arrays are
+preserved in server order. Missing values remain `null`. Table and detail
+output joins multiple values with `, `.
+
 Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`, `--priority`, `--severity`) are repeatable for OR semantics and support a `!` prefix for negation (NOT).
 
 `--summary` is the structured counterpart to [`bzr bug search`](#bzr-bug-search): it does a substring match against the bug's Summary field across all states (open and closed), whereas `bzr bug search` uses Bugzilla's quicksearch and defaults to open bugs only.

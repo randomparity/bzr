@@ -59,6 +59,7 @@ tests/functional/setup-bugzilla.sh stop
 | `BZR_FUNC_TIMEOUT` | `90` | Health check timeout in seconds |
 | `BZR_BIN` | `target/release/bzr` | Path to pre-built bzr binary (skips cargo build) |
 | `BZR_FUNC_TLS_PORT` | `BZR_FUNC_PORT + 1000` | Host port the TLS proxy listens on for the ad-hoc TLS phase |
+| `BZR_FUNC_REDHAT_PORT` | `BZR_FUNC_PORT + 2000` | Host port for the Red Hat response-shape profile |
 
 ## Test Structure
 
