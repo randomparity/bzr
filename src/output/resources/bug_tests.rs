@@ -178,9 +178,9 @@ fn sample_adjacency() -> BugAdjacencyResult {
     }
 }
 
-fn capture_bug_adjacency(format: OutputFormat, result: &BugAdjacencyResult) -> String {
+fn capture_bug_adjacency(format: OutputFormat, mut result: BugAdjacencyResult) -> String {
     let mut buf = Vec::new();
-    write_bug_adjacency(result, format, &mut buf);
+    write_bug_adjacency(&mut result, format, &mut buf);
     String::from_utf8(buf).unwrap()
 }
 
@@ -227,7 +227,7 @@ fn expected_adjacency_payload() -> serde_json::Value {
 
 #[test]
 fn write_bug_adjacency_json_has_the_closed_result_shape() {
-    let output = capture_bug_adjacency(OutputFormat::Json, &sample_adjacency());
+    let output = capture_bug_adjacency(OutputFormat::Json, sample_adjacency());
     let value: serde_json::Value = serde_json::from_str(&output).unwrap();
     assert_eq!(
         value,
@@ -240,7 +240,7 @@ fn write_bug_adjacency_json_has_the_closed_result_shape() {
 
 #[test]
 fn write_bug_adjacency_json_uses_schema_version_0_6_2() {
-    let output = capture_bug_adjacency(OutputFormat::Json, &sample_adjacency());
+    let output = capture_bug_adjacency(OutputFormat::Json, sample_adjacency());
     let value: serde_json::Value = serde_json::from_str(&output).unwrap();
     assert_eq!(value["schema_version"], "0.6.2");
 }
@@ -248,7 +248,7 @@ fn write_bug_adjacency_json_uses_schema_version_0_6_2() {
 #[test]
 fn write_bug_adjacency_ndjson_is_one_compact_result_record() {
     let result = sample_adjacency();
-    let output = capture_bug_adjacency(OutputFormat::Ndjson, &result);
+    let output = capture_bug_adjacency(OutputFormat::Ndjson, result);
     assert_eq!(output.lines().count(), 1);
     assert!(!output.contains("  \""));
     let value: serde_json::Value = serde_json::from_str(&output).unwrap();
@@ -257,7 +257,7 @@ fn write_bug_adjacency_ndjson_is_one_compact_result_record() {
 
 #[test]
 fn write_bug_adjacency_table_has_request_and_canonical_bug_sections() {
-    let output = capture_bug_adjacency(OutputFormat::Table, &sample_adjacency());
+    let output = capture_bug_adjacency(OutputFormat::Table, sample_adjacency());
     assert!(output.contains("Requests"), "request section:\n{output}");
     assert!(output.contains("Canonical bugs"), "bug section:\n{output}");
     assert!(output.contains("00123"), "request order:\n{output}");
@@ -286,6 +286,17 @@ fn write_bug_adjacency_table_has_request_and_canonical_bug_sections() {
             && output.find("42").unwrap() < output.rfind("123").unwrap(),
         "section and row ordering:\n{output}"
     );
+}
+
+#[test]
+fn write_bug_adjacency_normalizes_edge_arrays_in_place() {
+    let mut result = sample_adjacency();
+    let mut output = Vec::new();
+
+    write_bug_adjacency(&mut result, OutputFormat::Json, &mut output);
+
+    assert_eq!(result.bugs[1].blocks, vec![200, 300]);
+    assert_eq!(result.bugs[1].depends_on, vec![10, 20]);
 }
 
 fn sample_record(field: &str, comment_id: Option<u64>) -> HistoryRecord {

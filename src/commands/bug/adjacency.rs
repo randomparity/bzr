@@ -105,11 +105,11 @@ pub(super) async fn handle(
             Ok(request_result(requested.clone(), outcome))
         })
         .collect::<Result<Vec<_>>>()?;
-    let result = BugAdjacencyResult {
+    let mut result = BugAdjacencyResult {
         requests,
         bugs: bugs.into_values().collect(),
     };
-    write_bug_adjacency(&result, format, w.out);
+    write_bug_adjacency(&mut result, format, w.out);
     Ok(())
 }
 
