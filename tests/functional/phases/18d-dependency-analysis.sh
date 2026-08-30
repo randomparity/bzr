@@ -626,8 +626,15 @@ for _DA_ADJ_MODE in rest xmlrpc; do
     jq -S '(.bugs[].last_change_time) |=
       (if type == "string" then
          if test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") then
-           capture("^(?<year>[0-9]{4})-(?<month>[0-9]{2})-(?<day>[0-9]{2})T(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})Z$") |
-           "\(.year)\(.month)\(.day)T\(.hour):\(.minute):\(.second)"
+           . as $timestamp |
+           (try ($timestamp | strptime("%Y-%m-%dT%H:%M:%SZ") |
+             mktime | gmtime | strftime("%Y-%m-%dT%H:%M:%SZ")) catch "") as $round_trip |
+           if $round_trip == $timestamp then
+             capture("^(?<year>[0-9]{4})-(?<month>[0-9]{2})-(?<day>[0-9]{2})T(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})Z$") |
+             "\(.year)\(.month)\(.day)T\(.hour):\(.minute):\(.second)"
+           else
+             error("REST last_change_time must be a valid RFC3339 UTC timestamp")
+           end
          else
            error("REST last_change_time must use RFC3339 UTC format")
          end
@@ -638,7 +645,13 @@ for _DA_ADJ_MODE in rest xmlrpc; do
   else
     jq -S '(.bugs[].last_change_time) |=
       (if type == "string" then
-         if test("^[0-9]{8}T[0-9]{2}:[0-9]{2}:[0-9]{2}$") then .
+         if test("^[0-9]{8}T[0-9]{2}:[0-9]{2}:[0-9]{2}$") then
+           . as $timestamp |
+           (try ($timestamp | strptime("%Y%m%dT%H:%M:%S") |
+             mktime | gmtime | strftime("%Y%m%dT%H:%M:%S")) catch "") as $round_trip |
+           if $round_trip == $timestamp then .
+           else error("XML-RPC last_change_time must be a valid compact ISO-8601 timestamp")
+           end
          else error("XML-RPC last_change_time must use compact ISO-8601 format")
          end
        else error("XML-RPC last_change_time must be a string")
