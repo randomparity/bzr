@@ -2,6 +2,7 @@
 
 mod attachment;
 mod bug;
+mod bug_adjacency;
 mod comment;
 mod group;
 mod mappers;

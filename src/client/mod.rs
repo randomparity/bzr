@@ -47,6 +47,12 @@ pub(super) fn encode_path(segment: &str) -> String {
     utf8_percent_encode(segment, NON_ALPHANUMERIC).to_string()
 }
 
+pub(crate) fn parse_adjacency_numeric(requested: &str) -> Option<i64> {
+    (!requested.is_empty() && requested.bytes().all(|byte| byte.is_ascii_digit()))
+        .then(|| requested.parse::<i64>().ok())
+        .flatten()
+}
+
 enum PreparedAuth {
     Header(HeaderValue),
     QueryParam(String),
@@ -65,11 +71,13 @@ enum PreparedAuth {
 /// - `&str` for resources that accept name-based addressing (e.g. `update_product`, `update_user`)
 pub struct BugzillaClient {
     pub(super) http: reqwest::Client,
+    pub(super) strict_http: reqwest::Client,
     pub(super) base_url: String,
     auth: Option<PreparedAuth>,
     pub(super) api_key: Option<String>,
     pub(super) api_mode: ApiMode,
     pub(super) xmlrpc: XmlRpcClient,
+    pub(super) strict_xmlrpc: Box<XmlRpcClient>,
     /// Email hint for Bugzilla 5.0 compatibility (whoami fallback via user lookup).
     email_hint: Option<String>,
     /// The configured/inline server name this client resolved against, surfaced
@@ -138,6 +146,7 @@ impl BugzillaClient {
         };
 
         let http = crate::tls::build_tls_client(tls_config, request_timeout)?;
+        let strict_http = crate::tls::build_no_redirect_tls_client(tls_config, request_timeout)?;
 
         // Always construct the XML-RPC client — even in REST mode, some
         // methods (e.g. Group.get on Bugzilla 5.3+) require XML-RPC fallback
@@ -149,16 +158,19 @@ impl BugzillaClient {
             );
         }
         let xmlrpc = XmlRpcClient::new(http.clone(), base_url, credential);
+        let strict_xmlrpc = Box::new(XmlRpcClient::new(strict_http.clone(), base_url, credential));
 
         tracing::debug!(base_url, ?auth_method, %api_mode, "created Bugzilla client");
 
         Ok(BugzillaClient {
             http,
+            strict_http,
             base_url: base_url.trim_end_matches('/').to_string(),
             auth,
             api_key: credential.map(String::from),
             api_mode,
             xmlrpc,
+            strict_xmlrpc,
             email_hint: email_hint.map(String::from),
             server_name: server_name.to_string(),
             retry_max,
@@ -195,6 +207,10 @@ impl BugzillaClient {
 
     pub(super) fn xmlrpc_client(&self) -> &XmlRpcClient {
         &self.xmlrpc
+    }
+
+    pub(super) fn strict_xmlrpc_client(&self) -> &XmlRpcClient {
+        &self.strict_xmlrpc
     }
 
     /// Dispatch an operation across the detected API mode. In Hybrid mode the

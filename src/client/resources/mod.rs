@@ -1,5 +1,6 @@
 mod attachment;
 mod bug;
+mod bug_adjacency;
 mod classification;
 mod comment;
 mod component;

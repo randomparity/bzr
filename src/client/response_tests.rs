@@ -49,6 +49,70 @@ fn assert_log_redacted(log: &str, secret: &str) {
 }
 
 #[test]
+fn strict_adjacency_resource_error_accepts_closed_integer_and_decimal_codes() {
+    for (code, expected) in [
+        (
+            serde_json::json!(100),
+            crate::types::BugAdjacencyError::NotFoundAlias,
+        ),
+        (
+            serde_json::json!("100"),
+            crate::types::BugAdjacencyError::NotFoundAlias,
+        ),
+        (
+            serde_json::json!(101),
+            crate::types::BugAdjacencyError::NotFoundId,
+        ),
+        (
+            serde_json::json!("101"),
+            crate::types::BugAdjacencyError::NotFoundId,
+        ),
+        (
+            serde_json::json!(102),
+            crate::types::BugAdjacencyError::Inaccessible,
+        ),
+        (
+            serde_json::json!("102"),
+            crate::types::BugAdjacencyError::Inaccessible,
+        ),
+    ] {
+        let requested = if matches!(expected, crate::types::BugAdjacencyError::NotFoundAlias) {
+            "missing/alias"
+        } else {
+            "42"
+        };
+        let body = serde_json::json!({
+            "error": true,
+            "code": code,
+            "message": "discarded prose",
+            "documentation": "https://example.invalid/docs"
+        })
+        .to_string();
+
+        let outcome = parse_strict_adjacency_resource_error(&body, requested)
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(outcome, expected);
+    }
+}
+
+#[test]
+fn strict_adjacency_resource_error_rejects_open_or_malformed_envelopes() {
+    for body in [
+        serde_json::json!({"error": false, "code": 101}),
+        serde_json::json!({"error": true, "code": 100_500}),
+        serde_json::json!({"error": true, "code": "0101"}),
+        serde_json::json!({"error": true, "code": 101.0}),
+        serde_json::json!({"error": true, "code": 101, "extra": true}),
+        serde_json::json!({"error": true, "code": 101, "bugs": []}),
+        serde_json::json!({"error": true, "code": 101, "message": 7}),
+    ] {
+        assert!(parse_strict_adjacency_resource_error(&body.to_string(), "42").is_err());
+    }
+    assert!(parse_strict_adjacency_resource_error("not json", "42").is_err());
+}
+
+#[test]
 fn trace_response_body_redacts_api_key() {
     let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::TRACE);
     let secret = "TraceSecret123";

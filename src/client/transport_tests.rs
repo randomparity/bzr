@@ -315,6 +315,54 @@ async fn anonymous_client_does_not_retry_401_with_alternate_auth() {
 }
 
 #[tokio::test]
+async fn strict_adjacency_sends_once_without_alternate_auth_or_retry() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/"))
+        .and(wiremock::matchers::header(
+            crate::bugzilla_auth::AUTH_HEADER_NAME,
+            "test-key",
+        ))
+        .and(has_no_auth_query_param)
+        .respond_with(ResponseTemplate::new(401).set_body_string("unauthorized"))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
+        .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+            "error": true,
+            "code": 102
+        })))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let mut client = test_client(&mock.uri());
+    client.set_retry_max(10);
+    assert!(client.get_bug_adjacency("42").await.is_err());
+}
+
+#[tokio::test]
+async fn strict_adjacency_does_not_spend_transient_retry_budget() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/"))
+        .respond_with(ResponseTemplate::new(503).set_body_string("busy"))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let mut client = test_client(&mock.uri());
+    client.set_retry_max(10);
+    assert!(client.get_bug_adjacency("42").await.is_err());
+}
+
+#[tokio::test]
 async fn non_401_errors_do_not_trigger_fallback() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))

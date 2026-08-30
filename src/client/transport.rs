@@ -26,6 +26,22 @@ impl BugzillaClient {
         }
     }
 
+    /// Apply only the configured authentication method and send exactly once.
+    /// The response is left untouched so a focused caller can classify its
+    /// status and body without retries or alternate-auth fallback.
+    pub(super) async fn send_strict_once(
+        &self,
+        builder: RequestBuilder,
+    ) -> Result<reqwest::Response> {
+        let response = self.apply_auth(builder).send().await?;
+        tracing::debug!(
+            url = Self::safe_url(response.url()),
+            status = %response.status(),
+            "strict API response"
+        );
+        Ok(response)
+    }
+
     /// Send a request, applying transient-failure retries (429 / 5xx / connect
     /// timeout) with exponential backoff when `--retry` is enabled. Each attempt
     /// also performs the 401 alternate-auth fallback (see [`Self::send_raw`]).

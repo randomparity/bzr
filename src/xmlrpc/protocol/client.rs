@@ -32,7 +32,24 @@ impl XmlRpcClient {
     pub(crate) async fn call(
         &self,
         method: &str,
+        params: BTreeMap<String, Value>,
+    ) -> Result<Value> {
+        self.call_with_status_policy(method, params, false).await
+    }
+
+    pub(crate) async fn call_strict(
+        &self,
+        method: &str,
+        params: BTreeMap<String, Value>,
+    ) -> Result<Value> {
+        self.call_with_status_policy(method, params, true).await
+    }
+
+    async fn call_with_status_policy(
+        &self,
+        method: &str,
         mut params: BTreeMap<String, Value>,
+        require_success: bool,
     ) -> Result<Value> {
         if let Some(api_key) = self.api_key.as_deref() {
             params.insert(AUTH_QUERY_PARAM.into(), Value::from(api_key));
@@ -56,7 +73,9 @@ impl XmlRpcClient {
             .await?;
 
         let status = resp.status();
-        if status.is_client_error() || status.is_server_error() {
+        if (require_success && !status.is_success())
+            || (!require_success && (status.is_client_error() || status.is_server_error()))
+        {
             let body = match resp.text().await {
                 Ok(body) => body,
                 Err(e) => format!("<failed to read response body: {e}>"),

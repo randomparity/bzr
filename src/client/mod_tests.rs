@@ -30,3 +30,32 @@ fn auth_mode_reflects_credential_presence() {
     let anonymous = test_helpers::test_client_anon("https://bugzilla.example.com");
     assert_eq!(anonymous.auth_mode(), crate::types::AuthMode::Anonymous);
 }
+
+#[tokio::test]
+async fn new_retains_a_no_redirect_client_for_strict_operations() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/start"))
+        .respond_with(ResponseTemplate::new(302).insert_header("location", "/landed"))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/landed"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let client = test_helpers::test_client(&server.uri());
+    let response = client
+        .strict_http
+        .get(format!("{}/start", server.uri()))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), reqwest::StatusCode::FOUND);
+}
