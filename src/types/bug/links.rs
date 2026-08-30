@@ -186,7 +186,7 @@ impl Visitor<'_> for PositiveRelationshipIdVisitor {
 struct RelationshipIdVisitor;
 
 impl<'de> Visitor<'de> for RelationshipIdVisitor {
-    type Value = PositiveRelationshipId;
+    type Value = RelationshipId;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(
@@ -195,7 +195,9 @@ impl<'de> Visitor<'de> for RelationshipIdVisitor {
     }
 
     fn visit_u64<E: de::Error>(self, value: u64) -> Result<Self::Value, E> {
-        PositiveRelationshipIdVisitor.visit_u64(value)
+        PositiveRelationshipIdVisitor
+            .visit_u64(value)
+            .map(|id| RelationshipId(id.0))
     }
 
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
@@ -210,7 +212,7 @@ impl<'de> Visitor<'de> for RelationshipIdVisitor {
                 map.next_value::<IgnoredAny>()?;
             }
         }
-        bug_id.ok_or_else(|| {
+        bug_id.map(|id| RelationshipId(id.0)).ok_or_else(|| {
             de::Error::custom(
                 "expected an object containing a positive integer relationship ID in bug_id",
             )
@@ -218,20 +220,18 @@ impl<'de> Visitor<'de> for RelationshipIdVisitor {
     }
 }
 
-impl<'de> Deserialize<'de> for RelationshipIdVisitorValue {
+struct RelationshipId(u64);
+
+impl<'de> Deserialize<'de> for RelationshipId {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer
-            .deserialize_any(RelationshipIdVisitor)
-            .map(|id| RelationshipIdVisitorValue(id.0))
+        deserializer.deserialize_any(RelationshipIdVisitor)
     }
 }
-
-struct RelationshipIdVisitorValue(u64);
 
 fn deserialize_relationship_ids<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Vec<u64>, D::Error> {
-    Vec::<RelationshipIdVisitorValue>::deserialize(deserializer)
+    Vec::<RelationshipId>::deserialize(deserializer)
         .map(|ids| ids.into_iter().map(|id| id.0).collect())
 }
 
