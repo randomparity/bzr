@@ -63,9 +63,13 @@ Strict adjacency REST sends retain the ordinary transient retry policy but disab
 transparent 401 alternate-auth fallback. The configured client method therefore necessarily
 produced any returned code 102, and `valid_login` applies that same method. A 401 from a stale or
 wrong cached method stays command-fatal instead of silently changing authentication provenance.
-XML-RPC already sends the configured credential in its protocol body and has no header/query
-fallback. A focused test covers configured header auth returning 401 where alternate query auth
-would return 102; the command must fail on the 401 and must not call `valid_login`.
+Adjacency retrieval also defines stricter API-mode routing: `Rest` and `Hybrid` use only the strict
+REST calls, while `XmlRpc` uses only strict XML-RPC. A successful empty REST batch is returned to the
+command for per-ID REST probes; it never triggers XML-RPC comparison. No REST error, including 401,
+connection/HTTP failure, or API code 100500, falls back to XML-RPC. XML-RPC already sends the
+configured credential in its protocol body and has no header/query fallback. Focused tests cover a
+configured header returning 401 where alternate query auth would return 102, REST transport and
+code-100500 failures, and an empty batch; none may invoke XML-RPC or `valid_login`.
 
 Two alternatives were rejected: extending `bug view --permissive` would change its prose-failure
 and request-row contract, while extending `bug links` would mix a bounded retrieval primitive with
@@ -75,9 +79,12 @@ case successes; omissions still need single-ID probes for typed per-request clas
 ## CLI contract
 
 The command accepts 1 through 100 positional strings. Numeric IDs, aliases, leading-zero numeric
-spellings, and repeated arguments remain strings at the CLI boundary. More than 100 requests is an
-input-validation error attributed to `ids` before connection setup. Clap rejects zero positional
-arguments as usage.
+spellings, and repeated arguments remain strings at the CLI boundary. An all-decimal value is a
+numeric request only within `0..=9223372036854775807`, the signed range supported by every
+transport; larger decimal values are an `ids` input-validation error before connection setup. More
+than 100 requests is the same pre-connection validation class. Clap rejects zero positional
+arguments as usage. The strict wire mappings and public schema apply the same maximum to canonical
+and adjacency bug IDs returned by the server.
 
 The command is anonymous-capable, read-only, and does not support field selection, recursion,
 direction selection, or a permissive flag. Both dependency fields are always requested because
@@ -100,10 +107,11 @@ This is the existing dependency collector's detail set, including the three fiel
 supported scope restrictions. No arbitrary custom fields, comments, attachments, or history are
 included.
 
-Every canonical bug object contains all eleven keys. `id` is a required non-negative integer;
-`blocks` and `depends_on` are required arrays of non-negative integers. The eight scalar detail
-fields are required keys whose values are either a string or `null`. REST and XML-RPC both normalize
-a missing or empty scalar to `null`, so equivalent wire observations serialize identically.
+Every canonical bug object contains all eleven keys. `id` is a required integer from `0` through
+`9223372036854775807`; `blocks` and `depends_on` are required arrays whose members have the same
+range. The eight scalar detail fields are required keys whose values are either a non-empty string
+or `null`. REST and XML-RPC both normalize a missing or empty scalar to `null`, so equivalent wire
+observations serialize identically.
 
 ## Result schema and ordering
 
@@ -124,7 +132,7 @@ Pretty JSON uses the existing `{schema_version, data}` envelope. `data` has exac
       "id": 123,
       "summary": "Example",
       "status": "NEW",
-      "resolution": "",
+      "resolution": null,
       "product": "Example Product",
       "version": "unspecified",
       "assigned_to": "owner@example.invalid",
@@ -145,9 +153,11 @@ by exact text and fetched lexically after numeric processing. Alias and numeric 
 separate entries even when both resolve to the same numeric bug.
 
 Each request entry is an exclusive closed union. A success has exactly `requested` and `bug_id`; a
-failure has exactly `requested` and `error`. The failure object has required `type` and optional
-`api_code`; `type` is `not_found` or `inaccessible`, and `api_code`, when present, is 100, 101, or
-102. No entry may contain both `bug_id` and `error` or neither.
+failure has exactly `requested` and `error`. The closed failure object is itself one of exactly
+three correlated variants: `{"type":"not_found"}` with no code, `not_found` with required
+`api_code` 100 or 101, or `inaccessible` with required `api_code` 102. No entry may contain both
+`bug_id` and `error` or neither. Every string-valued scalar is non-empty; empty wire strings have
+already normalized to JSON `null`.
 
 `bugs` is keyed and sorted by numeric `id`; a canonical bug appears once. The first successful
 observation in deterministic fetch order wins: numeric batch rows by canonical ID, then successful
@@ -218,8 +228,8 @@ may change dependencies between reads, the command does not reconcile reciprocal
   and delegates output.
 - `src/types/bug/adjacency.rs` owns the exact request, failure, canonical-bug, and result types. Its
   REST wire form requires both adjacency arrays rather than converting from the tolerant `Bug`.
-- `src/client/resources/bug.rs` adds strict batch and single-bug adjacency methods with the same
-  REST/Hybrid routing policy as the corresponding existing reads, except that strict REST sends
+- `src/client/resources/bug.rs` adds strict batch and single-bug adjacency methods with the strict
+  routing rule: `Rest` and `Hybrid` use REST only, while `XmlRpc` uses XML-RPC only. Strict REST sends
   retain transient retries while disabling transparent alternate-auth fallback.
 - `src/xmlrpc/resources/bug.rs` adds a strict adjacency mapper that requires both arrays and every
   member to be a non-negative integer; existing tolerant bug reads keep their current behavior.
@@ -256,6 +266,8 @@ TLS policy, timeouts, and API-mode selection.
 ### Controls
 
 - Count validation runs before connection and bounds work at 100 distinct argument positions.
+- Numeric validation caps every transport at `i64::MAX` before connection; strict response parsing
+  and the schema apply the same maximum to canonical and adjacency IDs.
 - Numeric IDs are sorted and deduplicated before one bounded search; exact aliases are sorted and
   deduplicated before individual fetches.
 - Credentialed `valid_login` validation runs lazily only after a per-ID 102, uses the configured
@@ -278,8 +290,10 @@ TLS policy, timeouts, and API-mode selection.
 The command does not defend against a configured server returning an extremely large single-bug
 response. The existing client reads complete response bodies, and truncating adjacency would break
 the charter's completeness requirement. General response-byte bounding requires a separate client
-policy and server/protocol analysis. The design also does not change alias URL encoding, auth,
-TLS, retries, or XML-RPC fallback behavior; it reuses those existing boundaries unchanged.
+policy and server/protocol analysis. The design also does not change alias URL encoding, TLS, or
+retry behavior. It deliberately gives adjacency stricter auth and Hybrid routing so required fatal
+errors cannot be hidden; ordinary client methods retain their existing alternate-auth and XML-RPC
+fallback behavior.
 
 ## Verification
 
@@ -301,10 +315,17 @@ TLS, retries, or XML-RPC fallback behavior; it reuses those existing boundaries 
   `NotFound`, while aliases may map to a different canonical ID.
 - Equivalent REST and XML-RPC fixtures serialize byte-equivalent canonical scalar values, including
   empty or missing wire strings normalized to JSON `null`.
-- Schema drift tests cover a maximal success result, all nullable scalar keys, and both success and
-  failure request variants; the registry lists `bug-adjacency` in lexical order.
+- Schema drift tests cover a maximal success result, all nullable scalar keys, and all three
+  correlated failure variants; invalid type/code combinations and empty strings fail; the registry
+  lists `bug-adjacency` in lexical order.
 - Transport tests prove strict adjacency does not follow 401 alternate-auth fallback and that the
   ordinary send path still does.
+- REST, XML-RPC, and Hybrid boundary tests accept `i64::MAX` and reject `i64::MAX + 1` before
+  connection with the same `ids` input-validation error.
+- REST strict-wire tests reject canonical and adjacency response IDs above `i64::MAX`, matching the
+  XML-RPC signed-integer domain and the public schema.
+- Hybrid tests prove REST 401, transport/HTTP failure, code 100500, and an empty REST batch never
+  invoke XML-RPC; the empty batch proceeds to strict per-ID REST probes.
 - Output and functional assertions pin the additive `SCHEMA_VERSION` bump to `0.6.2` everywhere
   ADR 0007 requires synchronized current-contract documentation or fixtures.
 - A controlled-fault test changes one accepted resource code to fatal and must make the focused
