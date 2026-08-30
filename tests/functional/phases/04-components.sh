@@ -54,7 +54,8 @@ if assert_success && assert_json_array_min_length '.' 1 &&
 
 test_begin "15b. component view <product> <component>"
 run_bzr component view FuncTestProd Backend
-if assert_success && assert_json '.name' "Backend"; then test_pass; fi
+if assert_success && assert_json '.name' "Backend" &&
+    assert_json '.default_assignee' "$ADMIN_EMAIL"; then test_pass; fi
 
 test_begin "15c. component list --fields projects keys"
 run_bzr component list --product FuncTestProd --fields id,name

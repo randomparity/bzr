@@ -10,7 +10,7 @@ pub struct Component {
     pub description: Option<String>,
     #[serde(default)]
     pub is_active: Option<bool>,
-    #[serde(default)]
+    #[serde(default, alias = "default_assigned_to")]
     pub default_assignee: Option<String>,
 }
 
