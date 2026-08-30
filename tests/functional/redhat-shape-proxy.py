@@ -16,6 +16,7 @@ _HOP_BY_HOP = frozenset(
     {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
      "te", "trailers", "transfer-encoding", "upgrade", "host", "content-length"}
 )
+_MAX_REQUEST_BODY = 1024 * 1024
 
 
 def shape_bug_response(data):
@@ -55,7 +56,18 @@ def make_handler(backend_port):
         def _forward(self, method):
             headers = {key: value for key, value in self.headers.items()
                        if key.lower() not in _HOP_BY_HOP}
-            content_length = int(self.headers.get("Content-Length", "0"))
+            raw_content_length = self.headers.get("Content-Length", "0")
+            try:
+                content_length = int(raw_content_length)
+            except ValueError:
+                self.send_error(400, "Invalid Content-Length")
+                return
+            if content_length < 0:
+                self.send_error(400, "Invalid Content-Length")
+                return
+            if content_length > _MAX_REQUEST_BODY:
+                self.send_error(413, "Request body exceeds 1 MiB limit")
+                return
             request_body = self.rfile.read(content_length) if content_length else None
             conn = http.client.HTTPConnection("127.0.0.1", backend_port, timeout=30)
             try:
@@ -140,6 +152,25 @@ class ShapeTests(unittest.TestCase):
                     f"http://127.0.0.1:{server.server_port}/rest/version", timeout=2
                 )
             self.assertEqual(error.exception.code, 502)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_rejects_invalid_and_oversized_content_length(self):
+        server, thread = self._start_server(1)
+        try:
+            for content_length, expected_status in (("invalid", 400), ("1048577", 413)):
+                connection = http.client.HTTPConnection(
+                    "127.0.0.1", server.server_port, timeout=2
+                )
+                connection.putrequest("POST", "/rest/bug")
+                connection.putheader("Content-Length", content_length)
+                connection.endheaders()
+                response = connection.getresponse()
+                self.assertEqual(response.status, expected_status)
+                response.read()
+                connection.close()
         finally:
             server.shutdown()
             server.server_close()

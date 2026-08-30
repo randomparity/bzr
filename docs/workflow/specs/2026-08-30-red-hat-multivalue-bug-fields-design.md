@@ -28,7 +28,8 @@ serialization remains derived from the normalized public fields. Output
 renderers consume slices and do not inspect the original wire shape.
 
 The functional phase starts a Python stdlib reverse proxy in front of the
-already-running Bugzilla container. The proxy forwards actual REST GETs,
+already-running Bugzilla container. The proxy forwards actual REST GETs and
+POSTs, rejecting invalid or greater-than-1-MiB request bodies before reading,
 parses successful JSON responses, and rewrites only bug-object `component` and
 `version` values into captured Red Hat-style arrays. A readiness endpoint must
 pass before `bzr bug list` and `bzr bug adjacency` target the proxy. Cleanup is
@@ -52,9 +53,10 @@ embedded-skill consumers, and functional assertions move with it.
 - Boundary: an untrusted Bugzilla response enters serde. Control: accept only
   strings or arrays whose every member is a string; reject null and all other
   JSON types through the existing deserialize error path.
-- Boundary: the test proxy receives loopback GET requests from the test process
-  and forwards to the selected loopback container port. Control: fixed
-  loopback bind/target arguments and no authentication logging.
+- Boundary: the test proxy receives loopback GET and POST requests from the
+  test process and forwards to the selected loopback container port. Control:
+  fixed loopback bind/target arguments, a 1-MiB request-body limit with strict
+  `Content-Length` validation, and no authentication logging.
 - Actors: a configured Bugzilla server controls response JSON; a local test
   operator controls proxy arguments. No new production listener is added.
 - Out of scope: validating the semantic existence of returned component or
