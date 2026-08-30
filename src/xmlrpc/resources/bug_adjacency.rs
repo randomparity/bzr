@@ -107,14 +107,14 @@ fn strict_bug(value: &Value, requested: &str) -> Result<BugAdjacencyBug> {
 
     Ok(BugAdjacencyBug {
         id,
-        summary: strict_scalar(bug.get("summary"), "summary")?,
-        status: strict_scalar(bug.get("status"), "status")?,
-        resolution: strict_scalar(bug.get("resolution"), "resolution")?,
-        product: strict_scalar(bug.get("product"), "product")?,
-        version: strict_scalar(bug.get("version"), "version")?,
-        assigned_to: strict_scalar(bug.get("assigned_to"), "assigned_to")?,
-        last_change_time: strict_scalar(bug.get("last_change_time"), "last_change_time")?,
-        target_milestone: strict_scalar(bug.get("target_milestone"), "target_milestone")?,
+        summary: strict_string_scalar(bug.get("summary"), "summary")?,
+        status: strict_string_scalar(bug.get("status"), "status")?,
+        resolution: strict_string_scalar(bug.get("resolution"), "resolution")?,
+        product: strict_string_scalar(bug.get("product"), "product")?,
+        version: strict_string_scalar(bug.get("version"), "version")?,
+        assigned_to: strict_string_scalar(bug.get("assigned_to"), "assigned_to")?,
+        last_change_time: strict_time_scalar(bug.get("last_change_time"), "last_change_time")?,
+        target_milestone: strict_string_scalar(bug.get("target_milestone"), "target_milestone")?,
         blocks: strict_ids(bug.get("blocks"), "blocks")?,
         depends_on: strict_ids(bug.get("depends_on"), "depends_on")?,
     })
@@ -172,13 +172,25 @@ fn validate_fault_identity(value: Option<&Value>, requested: &str) -> Result<()>
     )))
 }
 
-fn strict_scalar(value: Option<&Value>, field: &str) -> Result<Option<String>> {
+fn strict_string_scalar(value: Option<&Value>, field: &str) -> Result<Option<String>> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let Value::String(text) = value else {
+        return Err(BzrError::DataIntegrity(format!(
+            "strict XML-RPC Bug.get {field} must be a string"
+        )));
+    };
+    Ok((!text.is_empty()).then(|| text.clone()))
+}
+
+fn strict_time_scalar(value: Option<&Value>, field: &str) -> Result<Option<String>> {
     let Some(value) = value else {
         return Ok(None);
     };
     let (Value::String(text) | Value::DateTime(text)) = value else {
         return Err(BzrError::DataIntegrity(format!(
-            "strict XML-RPC Bug.get {field} must be a string"
+            "strict XML-RPC Bug.get {field} must be a string or datetime"
         )));
     };
     Ok((!text.is_empty()).then(|| text.clone()))

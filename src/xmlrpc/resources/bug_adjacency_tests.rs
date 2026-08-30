@@ -300,6 +300,46 @@ fn bug_adjacency_xmlrpc_normalizes_missing_and_empty_scalars_byte_equivalently()
     );
 }
 
+#[test]
+fn bug_adjacency_xmlrpc_rejects_datetime_for_non_time_scalars() {
+    for field in [
+        "summary",
+        "status",
+        "resolution",
+        "product",
+        "version",
+        "assigned_to",
+        "target_milestone",
+    ] {
+        let mut bug = minimal_value_bug(42);
+        bug.insert(field.into(), Value::DateTime("20260830T12:00:00".into()));
+
+        let error = parse_strict_response(&strict_value_bug(bug), "42").unwrap_err();
+        assert!(
+            error.to_string().contains(field),
+            "wrong error for {field}: {error}"
+        );
+    }
+}
+
+#[test]
+fn bug_adjacency_xmlrpc_accepts_datetime_for_last_change_time() {
+    let mut bug = minimal_value_bug(42);
+    bug.insert(
+        "last_change_time".into(),
+        Value::DateTime("20260830T12:00:00".into()),
+    );
+
+    let parsed = parse_strict_response(&strict_value_bug(bug), "42")
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(
+        parsed.last_change_time.as_deref(),
+        Some("20260830T12:00:00")
+    );
+}
+
 #[tokio::test]
 async fn bug_adjacency_xmlrpc_rejects_mismatched_fault_identities() {
     for (requested, response) in [
