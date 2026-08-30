@@ -71,6 +71,11 @@ alternate-auth fallback. The configured client method therefore necessarily prod
 code 102, and `valid_login` applies that same method through the same no-redirect client. A redirect
 or a 401 from a stale or wrong cached method stays command-fatal instead of changing request count
 or authentication provenance.
+
+Strict REST and strict XML-RPC require `status.is_success()` before any error-envelope, JSON,
+XML-RPC, or row parsing. Every non-2xx response is command-fatal, including a 3xx that carries a
+`Location` header and an otherwise schema-valid body. The body cannot supply a canonical
+observation, and output remains buffered and empty.
 Adjacency retrieval also defines stricter API-mode routing: `Rest` and `Hybrid` use only the strict
 REST calls, while `XmlRpc` uses only strict XML-RPC. A successful empty REST batch is returned to the
 command for per-ID REST probes; it never triggers XML-RPC comparison. No REST error, including 401,
@@ -252,7 +257,8 @@ may change dependencies between reads, the command does not reconcile reciprocal
   no-redirect HTTP client; existing tolerant bug reads keep their current behavior.
 - `src/client/transport.rs` exposes the focused no-auth-fallback send path used only by strict
   adjacency REST retrieval. It sends once without redirect, transient, or alternate-auth retries,
-  without changing ordinary command behavior.
+  requires a 2xx response before returning it for parsing, and leaves ordinary command behavior
+  unchanged.
 - `src/client/response.rs` exposes a focused strict-error parser that turns every top-level
   `error: true` envelope into `BzrError::Api` and rejects a non-boolean `error` marker before
   deserializing adjacency rows or credential proof; the shared ADR-0015 warning-with-data parser
@@ -362,7 +368,8 @@ fallback behavior.
   adjacency/proof attempts; a transient strict response is fatal after its first attempt.
 - Same-host redirect tests prove strict REST retrieval, strict XML-RPC retrieval, and credential
   proof each stop at the first redirect response while ordinary callers retain their existing
-  bounded same-host redirect behavior.
+  bounded same-host redirect behavior. REST and XML-RPC redirect fixtures attach valid-looking
+  payload bodies and still produce fatal errors with empty stdout.
 - REST, XML-RPC, and Hybrid boundary tests accept `i64::MAX` and reject `i64::MAX + 1` before
   connection with the same `ids` input-validation error.
 - REST strict-wire tests reject canonical and adjacency response IDs above `i64::MAX`, matching the
