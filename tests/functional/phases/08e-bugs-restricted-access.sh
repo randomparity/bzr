@@ -33,6 +33,7 @@ echo "── Phase 8e: Restricted-bug access (#504) ─────────�
 RESTRICTED_USER="restricted-member@test.bzr"
 RESTRICTED_KEY="FuncTestRestricted0123456789abcdef012345"
 RESTRICTED_GROUP=$(unique_name restrict-grp)
+_RESTRICTED_ALIASES_OK=1
 # 08c unsets its own fixture array, so declare the shared create args here.
 _RA=(--product FuncTestProd --component Backend --op-sys Linux
     --rep-platform PC --description d)
@@ -78,6 +79,19 @@ fi
 rm -f "$_RU_SQL"
 unset _RU_SQL
 
+test_begin "146i1. fixture: explicit restricted REST and XML-RPC aliases"
+for _RESTRICTED_MODE in rest xmlrpc; do
+    run_bzr config set-server "restricted-$_RESTRICTED_MODE" --url "$BZ_URL" \
+        --api-key "$RESTRICTED_KEY" --auth-method query_param \
+        --email "$RESTRICTED_USER" --api "$_RESTRICTED_MODE"
+    [[ $BZR_EXIT -eq 0 ]] || _RESTRICTED_ALIASES_OK=0
+done
+if [[ $_RESTRICTED_ALIASES_OK -eq 1 ]]; then
+    test_pass
+else
+    test_fail "could not configure explicit restricted transport aliases"
+fi
+
 test_begin "146j. fixture: group-restricted bug"
 # The group name is per-run unique, so a plain success assertion is correct
 # here — unlike the account above, this cannot collide on a warm container.
@@ -110,6 +124,29 @@ SQL
 fi
 
 # ── The three access directions ──────────────────────────────────────
+
+for _RESTRICTED_MODE in rest xmlrpc; do
+    test_begin "146j1. credentialed $_RESTRICTED_MODE adjacency proves access error after valid_login"
+    if [[ -n "$RESTRICTED_BUG" ]] && [[ $_RESTRICTED_ALIASES_OK -eq 1 ]]; then
+        # A credentialed code-102 result is emitted only after adjacency has
+        # proved these exact credentials through live rest/valid_login.
+        run_bzr_raw --json --server "restricted-$_RESTRICTED_MODE" \
+            bug adjacency "$RESTRICTED_BUG"
+        if assert_exit_code 0 &&
+            assert_raw_json '.schema_version' '0.6.2' &&
+            assert_json '. == {
+                requests: [{
+                    requested: "'"$RESTRICTED_BUG"'",
+                    error: {type: "inaccessible", api_code: 102}
+                }],
+                bugs: []
+            }' 'true'; then
+            test_pass
+        fi
+    else
+        test_skip "no restricted bug or explicit transport alias"
+    fi
+done
 
 test_begin "146k. anonymous view of a restricted bug reports access, not absence"
 if [[ -n "$RESTRICTED_BUG" ]]; then
@@ -264,5 +301,6 @@ fi
 
 unset RESTRICTED_USER RESTRICTED_KEY RESTRICTED_GROUP
 unset RESTRICTED_PRODUCT RESTRICTED_PROD_BUG _RA
+unset _RESTRICTED_ALIASES_OK _RESTRICTED_MODE
 
 echo ""

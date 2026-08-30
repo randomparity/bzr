@@ -82,6 +82,16 @@ if [[ -f data/params ]]; then
     perl -pi -e "s/'insidergroup' => ''/'insidergroup' => 'admin'/g" data/params 2>/dev/null || true
 fi
 
+# ── Enable bug aliases ──────────────────────────────────
+echo "==> Enabling usebugaliases..."
+if [[ -f data/params.json ]]; then
+    perl -pi -e 's/"usebugaliases"\s*:\s*0/"usebugaliases":1/g' data/params.json 2>/dev/null || true
+fi
+if [[ -f data/params ]]; then
+    perl -pi -e "s/'usebugaliases' => '0'/'usebugaliases' => '1'/g" data/params 2>/dev/null || true
+    perl -pi -e "s/'usebugaliases' => 0/'usebugaliases' => 1/g" data/params 2>/dev/null || true
+fi
+
 # ── Disable outbound mail for functional tests ──────────────────────
 # Comment and attachment mutations trigger bugmail. The functional
 # containers do not run an MTA, so use Bugzilla's built-in no-op mailer.
