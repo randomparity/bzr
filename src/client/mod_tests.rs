@@ -87,4 +87,40 @@ async fn current_credentials_valid_login_proof_requires_configured_email_and_cre
         Err(BzrError::Auth(_))
     ));
     assert!(server.received_requests().await.unwrap().is_empty());
+
+    let empty_email = BugzillaClient::new(BugzillaClientConfig {
+        base_url: &server.uri(),
+        credential: Some("test-key"),
+        auth_method: Some(AuthMethod::Header),
+        api_mode: ApiMode::Rest,
+        email_hint: Some(""),
+        server_name: "test",
+        tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
+    })
+    .unwrap();
+    assert!(matches!(
+        empty_email.prove_current_credentials().await,
+        Err(BzrError::Auth(_))
+    ));
+    assert!(server.received_requests().await.unwrap().is_empty());
+
+    let empty_credential = BugzillaClient::new(BugzillaClientConfig {
+        base_url: &server.uri(),
+        credential: Some(""),
+        auth_method: Some(AuthMethod::Header),
+        api_mode: ApiMode::Rest,
+        email_hint: Some("user@example.com"),
+        server_name: "test",
+        tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
+    })
+    .unwrap();
+    assert!(matches!(
+        empty_credential.prove_current_credentials().await,
+        Err(BzrError::Auth(_))
+    ));
+    assert!(server.received_requests().await.unwrap().is_empty());
 }

@@ -198,17 +198,24 @@ impl BugzillaClient {
     /// The proof uses the current auth method only and disables redirects via
     /// the strict client. It is intentionally not an auth-detection fallback.
     pub async fn prove_current_credentials(&self) -> Result<()> {
-        let login = self.email_hint.as_deref().ok_or_else(|| {
-            BzrError::Auth(
-                "current credential proof requires a configured email for rest/valid_login"
-                    .to_owned(),
-            )
-        })?;
-        if self.api_key.is_none() {
-            return Err(BzrError::Auth(
-                "current credential proof requires a configured credential".to_owned(),
-            ));
-        }
+        let login = self
+            .email_hint
+            .as_deref()
+            .filter(|login| !login.is_empty())
+            .ok_or_else(|| {
+                BzrError::Auth(
+                    "current credential proof requires a configured email for rest/valid_login"
+                        .to_owned(),
+                )
+            })?;
+        self.api_key
+            .as_deref()
+            .filter(|credential| !credential.is_empty())
+            .ok_or_else(|| {
+                BzrError::Auth(
+                    "current credential proof requires a configured credential".to_owned(),
+                )
+            })?;
         let auth = self.auth.as_ref().ok_or_else(|| {
             BzrError::Auth("current credential proof requires a configured auth method".to_owned())
         })?;

@@ -113,6 +113,17 @@ pub(in crate::client) async fn prove_valid_login_current_method(
     }
 
     let body = response.text().await?;
+    let value: serde_json::Value = serde_json::from_str(&body).map_err(|error| {
+        BzrError::Auth(format!(
+            "current credentials received invalid response from rest/valid_login: {error}"
+        ))
+    })?;
+    if value.get("error").is_some() {
+        return Err(BzrError::Auth(
+            "current credentials received invalid response from rest/valid_login: top-level error"
+                .to_owned(),
+        ));
+    }
     let parsed: ValidLoginResponse = serde_json::from_str(&body).map_err(|error| {
         BzrError::Auth(format!(
             "current credentials received invalid response from rest/valid_login: {error}"

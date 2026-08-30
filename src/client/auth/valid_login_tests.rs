@@ -172,3 +172,27 @@ async fn current_proof_rejects_false_malformed_and_redirected_responses() {
         assert!(result.unwrap_err().to_string().contains(expected));
     }
 }
+
+#[tokio::test]
+async fn current_proof_rejects_top_level_error_even_with_true_result() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/valid_login"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"error": true, "result": true})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let result = prove_valid_login_current_method(
+        &strict_http_client(),
+        &server.uri(),
+        "user@example.com",
+        &PreparedAuth::Header(HeaderValue::from_static("test-key")),
+    )
+    .await;
+
+    assert!(matches!(result, Err(BzrError::Auth(_))));
+}
