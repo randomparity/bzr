@@ -624,11 +624,25 @@ for _DA_ADJ_MODE in rest xmlrpc; do
     # spelling for the same instant. Normalize only that wire-level spelling
     # so every adjacency field and ordering decision remains compared.
     jq -S '(.bugs[].last_change_time) |=
-      (if type == "string" then gsub("[-Z]"; "") else . end)' \
+      (if type == "string" then
+         if test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") then
+           capture("^(?<year>[0-9]{4})-(?<month>[0-9]{2})-(?<day>[0-9]{2})T(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})Z$") |
+           "\(.year)\(.month)\(.day)T\(.hour):\(.minute):\(.second)"
+         else
+           error("REST last_change_time must use RFC3339 UTC format")
+         end
+       else
+         error("REST last_change_time must be a string")
+       end)' \
       "$BZR_STDOUT" >"$_DA_ADJ_REST" || _DA_ADJ_PARITY_OK=0
   else
     jq -S '(.bugs[].last_change_time) |=
-      (if type == "string" then gsub("[-Z]"; "") else . end)' \
+      (if type == "string" then
+         if test("^[0-9]{8}T[0-9]{2}:[0-9]{2}:[0-9]{2}$") then .
+         else error("XML-RPC last_change_time must use compact ISO-8601 format")
+         end
+       else error("XML-RPC last_change_time must be a string")
+       end)' \
       "$BZR_STDOUT" >"$_DA_ADJ_XMLRPC" || _DA_ADJ_PARITY_OK=0
   fi
 done
