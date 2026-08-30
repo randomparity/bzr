@@ -37,6 +37,13 @@ mapping remains unchanged for existing commands. This uses one upstream call for
 outcomes while preserving each numeric fault identity and without pretending that a missing
 adjacency field means an empty adjacency list.
 
+The numeric REST call is exactly `GET /rest/bug/` with the trailing slash: Bugzilla routes
+`/rest/bug` to Bug.search and `/rest/bug/` to multi-ID Bug.get on every supported version. It sends
+each sorted, deduplicated numeric value as a repeated `ids` query parameter, plus `permissive=1`
+and the comma-delimited fixed `include_fields` projection. It does not use the search endpoint's
+singular repeated `id` parameter. The individual alias form uses the percent-encoded alias in
+`GET /rest/bug/<alias>` with `permissive=1` and the same fixed projection.
+
 The strict boundary also validates response identity before the command records observations. A
 numeric multi-ID response must contain exactly one outcome for every requested numeric identity:
 one bug or one fault, and no unrequested, duplicate, missing, or mixed identity. A permissive alias
@@ -253,7 +260,9 @@ may change dependencies between reads, the command does not reconcile reciprocal
   REST wire form requires both adjacency arrays rather than converting from the tolerant `Bug`.
 - `src/client/resources/bug.rs` adds strict permissive multi-ID and single-alias Bug.get adjacency
   methods with the strict routing rule: `Rest` and `Hybrid` use REST only, while `XmlRpc` uses
-  XML-RPC only. Strict REST sends disable transient retries and transparent alternate-auth fallback.
+  XML-RPC only. The numeric REST method constructs the load-bearing `bug/` path explicitly and
+  appends one `ids` query pair per sorted, deduplicated ID. Strict REST sends disable transient
+  retries and transparent alternate-auth fallback.
 - `src/xmlrpc/resources/bug.rs` adds a strict adjacency mapper that requires both arrays and every
   member to be a non-negative integer. Its strict calls use an XML-RPC client backed by the focused
   no-redirect HTTP client; existing tolerant bug reads keep their current behavior.
@@ -363,6 +372,9 @@ fallback behavior.
   multiple, mixed, and mismatched permissive alias outcomes are command-fatal. Numeric bug/fault
   identities must match numerically; aliases may map to a canonical bug ID but fault identities
   preserve exact alias text.
+- REST request tests require the numeric method to hit `/rest/bug/`, reject the `/rest/bug` search
+  route, and assert repeated sorted/deduplicated `ids` values, `permissive=1`, and the exact fixed
+  projection. The live three-version functional matrix is the server-level proof of that encoding.
 - Equivalent REST and XML-RPC fixtures serialize byte-equivalent canonical scalar values, including
   empty or missing wire strings normalized to JSON `null`.
 - Schema drift tests cover a maximal success result, all nullable scalar keys, and both
