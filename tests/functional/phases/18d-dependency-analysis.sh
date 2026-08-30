@@ -691,7 +691,7 @@ if redhat_shape_start "$BZ_PORT"; then
     _DA_PRODUCTION_POLICY_OK=0
   fi
 
-  jq -n --arg bzr "$_DA_BZR_CANONICAL" --argjson root "${_DA_ROOT:-0}" '
+  jq -n --arg bzr "$_DA_BZR_CANONICAL" --argjson root "${_DA_BASE:-0}" '
     {
       bounds: {max_depth: 1, max_nodes: 2, max_relationships: 2},
       bzr: $bzr,
@@ -711,7 +711,7 @@ if redhat_shape_start "$BZ_PORT"; then
 
   test_begin "123z. installed collector uses a scoped proof through the production-policy proxy"
   if [[ $_DA_PRODUCTION_POLICY_OK -eq 1 ]] &&
-    jq -e --argjson root "$_DA_ROOT" '
+    jq -e --argjson root "$_DA_BASE" '
       .status == "complete" and
       any(.nodes[]; .id == $root and .state == "known") and
       .limitations == []
