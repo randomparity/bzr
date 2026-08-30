@@ -16,11 +16,11 @@ mod user;
 
 pub(crate) use attachment::{AttachmentAction, UpdateArgs as AttachmentUpdateArgs, UploadArgs};
 pub(crate) use bug::{
-    BugAction, BugActorFilterArgs, BugFilterArgs, CommentArgs, FieldArgs, PageArgs, SortArgs,
+    AdjacencyArgs, CloneArgs, CloseArgs, CreateArgs, DupArgs, HistoryArgs, LinksArgs, ListArgs,
+    MyArgs, ReopenArgs, ResolveArgs, SearchArgs, UpdateArgs, ViewArgs,
 };
 pub(crate) use bug::{
-    CloneArgs, CloseArgs, CreateArgs, DupArgs, HistoryArgs, LinksArgs, ListArgs, MyArgs,
-    ReopenArgs, ResolveArgs, SearchArgs, UpdateArgs, ViewArgs,
+    BugAction, BugActorFilterArgs, BugFilterArgs, CommentArgs, FieldArgs, PageArgs, SortArgs,
 };
 // Flattened create-field arg groups are referenced only by in-crate parser
 // tests (via `crate::cli::CreateFieldArgs`); gated so the re-export is not

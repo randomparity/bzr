@@ -2,9 +2,10 @@
 //! HTTP-200 error classification, multi-envelope tolerance, and redacted
 //! body previews for diagnostics.
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 use crate::error::{BzrError, Result};
+use crate::types::{BugAdjacencyBug, BugAdjacencyError};
 
 use super::BugzillaClient;
 
@@ -16,6 +17,146 @@ struct ErrorResponse {
     code: i64,
     #[serde(default)]
     message: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StrictAdjacencyEnvelope {
+    #[serde(default)]
+    bugs: Vec<StrictAdjacencyBug>,
+    #[serde(default)]
+    faults: Vec<StrictAdjacencyFault>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StrictAdjacencyBug {
+    id: u64,
+    #[serde(default, deserialize_with = "deserialize_optional_detail")]
+    summary: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_detail")]
+    status: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_detail")]
+    resolution: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_detail")]
+    product: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_detail")]
+    version: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_detail")]
+    assigned_to: Option<String>,
+    #[serde(
+        rename = "assigned_to_detail",
+        default,
+        deserialize_with = "deserialize_present_object"
+    )]
+    _assigned_to_detail: Option<serde_json::Map<String, serde_json::Value>>,
+    #[serde(default, deserialize_with = "deserialize_optional_detail")]
+    last_change_time: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_detail")]
+    target_milestone: Option<String>,
+    blocks: Vec<u64>,
+    depends_on: Vec<u64>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StrictAdjacencyFault {
+    id: serde_json::Value,
+    #[serde(rename = "faultCode")]
+    code: i64,
+    #[serde(
+        rename = "faultString",
+        default,
+        deserialize_with = "deserialize_present_string"
+    )]
+    _message: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StrictAdjacencyResourceError {
+    error: bool,
+    #[serde(deserialize_with = "deserialize_strict_resource_code")]
+    code: i64,
+    #[serde(
+        rename = "message",
+        default,
+        deserialize_with = "deserialize_present_string"
+    )]
+    _message: Option<String>,
+    #[serde(
+        rename = "documentation",
+        default,
+        deserialize_with = "deserialize_present_string"
+    )]
+    _documentation: Option<String>,
+}
+
+fn deserialize_optional_detail<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer)
+        .map(|value| value.filter(|detail| !detail.is_empty()))
+}
+
+fn deserialize_present_object<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<serde_json::Map<String, serde_json::Value>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    serde_json::Map::<String, serde_json::Value>::deserialize(deserializer).map(Some)
+}
+
+fn deserialize_present_string<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    String::deserialize(deserializer).map(Some)
+}
+
+fn deserialize_strict_resource_code<'de, D>(deserializer: D) -> std::result::Result<i64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de;
+
+    struct StrictResourceCodeVisitor;
+
+    impl de::Visitor<'_> for StrictResourceCodeVisitor {
+        type Value = i64;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("the integer or exact decimal string 100, 101, or 102")
+        }
+
+        fn visit_i64<E: de::Error>(self, value: i64) -> std::result::Result<i64, E> {
+            matches!(value, 100..=102)
+                .then_some(value)
+                .ok_or_else(|| E::custom("unsupported strict Bug.get resource code"))
+        }
+
+        fn visit_u64<E: de::Error>(self, value: u64) -> std::result::Result<i64, E> {
+            let value = i64::try_from(value).map_err(E::custom)?;
+            self.visit_i64(value)
+        }
+
+        fn visit_str<E: de::Error>(self, value: &str) -> std::result::Result<i64, E> {
+            match value {
+                "100" => Ok(100),
+                "101" => Ok(101),
+                "102" => Ok(102),
+                _ => Err(E::custom("unsupported strict Bug.get resource code")),
+            }
+        }
+    }
+
+    deserializer.deserialize_any(StrictResourceCodeVisitor)
 }
 
 fn default_error_code() -> i64 {
@@ -78,6 +219,37 @@ const DATA_KEYS: &[&str] = &[
 type EnvelopeCandidate<T> = (&'static str, fn(&serde_json::Value) -> Result<T>);
 
 impl BugzillaClient {
+    pub(super) async fn parse_strict_bug_adjacency_response(
+        &self,
+        response: reqwest::Response,
+        requested: &str,
+    ) -> Result<std::result::Result<BugAdjacencyBug, BugAdjacencyError>> {
+        let status = response.status();
+        let body = response.text().await?;
+        if !status.is_success() {
+            if status.is_client_error() {
+                return parse_strict_adjacency_resource_error(&body, requested);
+            }
+            return Err(BzrError::HttpStatus {
+                status: status.as_u16(),
+                body: crate::http::diagnostic_body_preview(&body),
+            });
+        }
+
+        let envelope: StrictAdjacencyEnvelope = serde_json::from_str(&body).map_err(|error| {
+            BzrError::DataIntegrity(format!(
+                "invalid strict Bug.get response for '{requested}': {error}"
+            ))
+        })?;
+        match (envelope.bugs.as_slice(), envelope.faults.as_slice()) {
+            ([bug], []) => Ok(Ok(strict_bug_to_public(bug, requested)?)),
+            ([], [fault]) => Ok(Err(strict_fault_to_public(fault, requested)?)),
+            _ => Err(BzrError::DataIntegrity(format!(
+                "strict Bug.get for '{requested}' must return exactly one bug or fault"
+            ))),
+        }
+    }
+
     /// Check whether a JSON object carries real Bugzilla data alongside any
     /// error fields — i.e. a known data key whose value holds content.
     fn has_data_fields(map: &serde_json::Map<String, serde_json::Value>) -> bool {
@@ -315,6 +487,114 @@ impl BugzillaClient {
         }
         Ok(response)
     }
+}
+
+fn parse_strict_adjacency_resource_error(
+    body: &str,
+    requested: &str,
+) -> Result<std::result::Result<BugAdjacencyBug, BugAdjacencyError>> {
+    let resource: StrictAdjacencyResourceError = serde_json::from_str(body).map_err(|error| {
+        BzrError::DataIntegrity(format!(
+            "invalid strict Bug.get resource error for '{requested}': {error}"
+        ))
+    })?;
+    if !resource.error {
+        return Err(BzrError::DataIntegrity(format!(
+            "strict Bug.get resource response for '{requested}' is not an error"
+        )));
+    }
+    Ok(Err(strict_adjacency_error(resource.code, requested)?))
+}
+
+fn strict_bug_to_public(wire: &StrictAdjacencyBug, requested: &str) -> Result<BugAdjacencyBug> {
+    validate_strict_identity(wire.id, requested, "bug")?;
+    validate_strict_id(wire.id, "bug ID")?;
+    let mut blocks = wire.blocks.clone();
+    let mut depends_on = wire.depends_on.clone();
+    validate_strict_ids(&blocks, "blocks")?;
+    validate_strict_ids(&depends_on, "depends_on")?;
+    blocks.sort_unstable();
+    blocks.dedup();
+    depends_on.sort_unstable();
+    depends_on.dedup();
+    Ok(BugAdjacencyBug {
+        id: wire.id,
+        summary: wire.summary.clone(),
+        status: wire.status.clone(),
+        resolution: wire.resolution.clone(),
+        product: wire.product.clone(),
+        version: wire.version.clone(),
+        assigned_to: wire.assigned_to.clone(),
+        last_change_time: wire.last_change_time.clone(),
+        target_milestone: wire.target_milestone.clone(),
+        blocks,
+        depends_on,
+    })
+}
+
+fn strict_fault_to_public(
+    fault: &StrictAdjacencyFault,
+    requested: &str,
+) -> Result<BugAdjacencyError> {
+    validate_strict_fault_identity(&fault.id, requested)?;
+    strict_adjacency_error(fault.code, requested)
+}
+
+fn strict_adjacency_error(code: i64, requested: &str) -> Result<BugAdjacencyError> {
+    let numeric = super::parse_adjacency_numeric(requested).is_some();
+    match code {
+        100 if !numeric => Ok(BugAdjacencyError::NotFoundAlias),
+        101 if numeric => Ok(BugAdjacencyError::NotFoundId),
+        102 => Ok(BugAdjacencyError::Inaccessible),
+        _ => Err(BzrError::DataIntegrity(format!(
+            "strict Bug.get returned uncorrelated fault code {code} for '{requested}'"
+        ))),
+    }
+}
+
+fn validate_strict_fault_identity(identity: &serde_json::Value, requested: &str) -> Result<()> {
+    if let Some(requested_id) = super::parse_adjacency_numeric(requested) {
+        let observed = identity.as_i64().or_else(|| {
+            identity
+                .as_str()
+                .and_then(|value| value.parse::<i64>().ok())
+        });
+        if observed == Some(requested_id) {
+            return Ok(());
+        }
+    } else if identity.as_str() == Some(requested) {
+        return Ok(());
+    }
+    Err(BzrError::DataIntegrity(format!(
+        "strict Bug.get fault identity does not match requested '{requested}'"
+    )))
+}
+
+fn validate_strict_identity(id: u64, requested: &str, kind: &str) -> Result<()> {
+    if let Some(requested_id) = super::parse_adjacency_numeric(requested) {
+        if id != u64::try_from(requested_id).unwrap_or(u64::MAX) {
+            return Err(BzrError::DataIntegrity(format!(
+                "strict Bug.get {kind} ID {id} does not match requested '{requested}'"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_strict_ids(ids: &[u64], field: &str) -> Result<()> {
+    for id in ids {
+        validate_strict_id(*id, field)?;
+    }
+    Ok(())
+}
+
+fn validate_strict_id(id: u64, field: &str) -> Result<()> {
+    if id > u64::try_from(i64::MAX).unwrap_or(u64::MAX) {
+        return Err(BzrError::DataIntegrity(format!(
+            "strict Bug.get {field} exceeds the signed 64-bit range"
+        )));
+    }
+    Ok(())
 }
 
 /// Whether a Bugzilla data key's value actually carries a result.

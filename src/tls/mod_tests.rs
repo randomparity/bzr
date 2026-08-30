@@ -28,6 +28,32 @@ fn build_tls_client_pinned_succeeds() {
 }
 
 #[test]
+fn build_no_redirect_tls_client_reuses_verification_modes() {
+    let insecure = TlsConfig {
+        insecure: true,
+        ..Default::default()
+    };
+    assert!(build_no_redirect_tls_client(&insecure, crate::http::REQUEST_TIMEOUT).is_ok());
+
+    let pinned = TlsConfig {
+        pin_sha256: Some(crate::tls::fingerprint::compute_fingerprint(b"strict")),
+        pin_issuer_der: Some(base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD,
+            b"issuer",
+        )),
+        server_name: Some("strict.test".into()),
+        ..Default::default()
+    };
+    assert!(build_no_redirect_tls_client(&pinned, crate::http::REQUEST_TIMEOUT).is_ok());
+
+    let missing_ca = TlsConfig {
+        ca_cert_path: Some("/nonexistent/strict-ca.pem".into()),
+        ..Default::default()
+    };
+    assert!(build_no_redirect_tls_client(&missing_ca, crate::http::REQUEST_TIMEOUT).is_err());
+}
+
+#[test]
 fn build_tls_client_bad_pin_fails() {
     let config = TlsConfig {
         pin_sha256: Some("not-a-valid-pin".into()),
@@ -47,6 +73,35 @@ fn build_tls_client_missing_ca_cert_fails() {
         err.to_string().contains("failed to read"),
         "should report missing file: {err}"
     );
+}
+
+#[tokio::test]
+async fn no_redirect_tls_client_stops_at_same_host_redirect() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/start"))
+        .respond_with(ResponseTemplate::new(302).insert_header("location", "/landed"))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/landed"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let client =
+        build_no_redirect_tls_client(&TlsConfig::default(), crate::http::REQUEST_TIMEOUT).unwrap();
+    let response = client
+        .get(format!("{}/start", server.uri()))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), reqwest::StatusCode::FOUND);
 }
 
 /// Stand up two loopback mock servers where `origin` issues a `301` to a

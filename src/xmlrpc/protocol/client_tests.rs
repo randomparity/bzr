@@ -274,3 +274,39 @@ async fn anonymous_xmlrpc_call_omits_api_key() {
     let body = std::str::from_utf8(&requests[0].body).unwrap();
     assert!(!body.contains(crate::bugzilla_auth::AUTH_QUERY_PARAM));
 }
+
+#[tokio::test]
+async fn strict_xmlrpc_non_success_never_parses_valid_looking_body() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(
+            ResponseTemplate::new(302)
+                .insert_header("location", "/landed")
+                .set_body_string(crate::test_helpers::xmlrpc_bug_response(42, "unused")),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/landed"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(
+        crate::tls::build_no_redirect_tls_client(
+            &crate::tls::TlsConfig::default(),
+            crate::http::REQUEST_TIMEOUT,
+        )
+        .unwrap(),
+        &mock.uri(),
+        None,
+    );
+    let error = client
+        .call_strict("Bug.get", BTreeMap::new())
+        .await
+        .unwrap_err();
+    assert!(matches!(error, BzrError::HttpStatus { status: 302, .. }));
+}

@@ -17,7 +17,8 @@ pub(crate) mod user;
 
 pub use attachment::{Attachment, UpdateAttachmentParams, UploadAttachmentParams};
 pub use bug::{
-    partition_filters, Bug, ColumnSpec, CommentUpdate, CreateBugParams, FieldChange, FieldMapping,
+    partition_filters, Bug, BugAdjacencyBug, BugAdjacencyError, BugAdjacencyRequest,
+    BugAdjacencyResult, ColumnSpec, CommentUpdate, CreateBugParams, FieldChange, FieldMapping,
     FilterField, HistoryEntry, HistoryRecord, IdListUpdate, NegationOp, Overrides, SearchParams,
     StringListUpdate, UpdateBugParams, FIELD_MAPPINGS,
 };

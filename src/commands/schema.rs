@@ -31,6 +31,7 @@ pub(crate) const SCHEMAS: &[(&str, &str)] = schema_registry![
     "batch-create-result",
     "batch-result",
     "bug",
+    "bug-adjacency",
     "bug-create-input",
     "bug-update-input",
     "classification",

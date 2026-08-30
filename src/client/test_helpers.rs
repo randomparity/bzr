@@ -40,6 +40,24 @@ pub fn test_client_hybrid(base_url: &str) -> BugzillaClient {
     .unwrap()
 }
 
+pub fn test_client_hybrid_with_timeout(
+    base_url: &str,
+    request_timeout: std::time::Duration,
+) -> BugzillaClient {
+    BugzillaClient::new(BugzillaClientConfig {
+        base_url,
+        credential: Some("test-key"),
+        auth_method: Some(AuthMethod::Header),
+        api_mode: ApiMode::Hybrid,
+        email_hint: None,
+        server_name: "test",
+        tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout,
+        retry_max: 0,
+    })
+    .unwrap()
+}
+
 pub fn test_client_anon(base_url: &str) -> BugzillaClient {
     BugzillaClient::new(BugzillaClientConfig {
         base_url,

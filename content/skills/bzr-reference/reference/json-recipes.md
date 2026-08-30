@@ -1,7 +1,7 @@
 # bzr --json + jq recipes
 
 All read paths support `--json`. Output is wrapped in a versioned envelope —
-`{"schema_version": "0.6.1", "data": <payload>}` — so read fields under `.data`.
+`{"schema_version": "0.6.2", "data": <payload>}` — so read fields under `.data`.
 Pipe to `jq`. (`--output ndjson` records stay bare; see below.)
 
 ```
@@ -38,6 +38,10 @@ bzr whoami --json | jq -r '.data.server_name, .data.auth_mode'
 # Everything blocking a bug, two hops out
 bzr bug links 12345 --recursive --depth 2 --json \
   | jq -r '.data[] | select(.relation=="depends_on") | "\(.id)\t\(.status)\t\(.summary)"'
+
+# Preserve every requested ID/alias outcome while reading complete adjacency
+bzr bug adjacency 00123 release/2026 missing-alias --json \
+  | jq '{requests: .data.requests, bugs: [.data.bugs[] | {id, blocks, depends_on}]}'
 
 # Who last touched the status field (history records are flattened, one per field)
 bzr bug history 12345 --json \

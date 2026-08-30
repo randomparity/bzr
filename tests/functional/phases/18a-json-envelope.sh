@@ -12,7 +12,7 @@
 echo "── Phase 18a: JSON schema_version envelope ─────────────────"
 
 # Keep in lockstep with output::SCHEMA_VERSION.
-SCHEMA_VERSION="0.6.1"
+SCHEMA_VERSION="0.6.2"
 
 # bzr schema --json reports the contract version and wraps the names in `data`.
 test_begin "120a. schema --json reports schema_version"

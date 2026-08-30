@@ -22,7 +22,8 @@ use crate::output::result_types::{
 };
 use crate::test_helpers::CapturedIo;
 use crate::types::{
-    Attachment, AuthMode, BugzillaUser, Classification, Comment, Component, CustomFieldSummary,
+    Attachment, AuthMode, BugAdjacencyBug, BugAdjacencyError, BugAdjacencyRequest,
+    BugAdjacencyResult, BugzillaUser, Classification, Comment, Component, CustomFieldSummary,
     FieldValue, FlagTypeSummary, GroupInfo, HistoryRecord, ServerCapabilities,
     StatusTransitionSummary, WhoamiOutput, WhoamiResponse,
 };
@@ -91,6 +92,126 @@ fn assert_conforms(name: &str, value: &Value) {
 
 fn to_value(value: &impl serde::Serialize) -> Value {
     serde_json::to_value(value).unwrap()
+}
+
+fn schema_accepts(name: &str, value: &Value) -> bool {
+    let schema = schema_for(name);
+    value_matches_schema(&schema, value, &schema)
+}
+
+fn value_matches_schema(schema: &Value, value: &Value, root: &Value) -> bool {
+    if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
+        let pointer = reference.strip_prefix('#').unwrap();
+        return value_matches_schema(root.pointer(pointer).unwrap(), value, root);
+    }
+    if let Some(one_of) = schema.get("oneOf").and_then(Value::as_array) {
+        return one_of
+            .iter()
+            .filter(|variant| value_matches_schema(variant, value, root))
+            .count()
+            == 1;
+    }
+    scalar_constraints_match(schema, value)
+        && array_constraints_match(schema, value, root)
+        && object_constraints_match(schema, value, root)
+}
+
+fn scalar_constraints_match(schema: &Value, value: &Value) -> bool {
+    if schema
+        .get("const")
+        .is_some_and(|expected| value != expected)
+        || schema
+            .get("enum")
+            .and_then(Value::as_array)
+            .is_some_and(|variants| !variants.contains(value))
+    {
+        return false;
+    }
+    let right_type = match schema.get("type").and_then(Value::as_str) {
+        Some("object") => value.is_object(),
+        Some("array") => value.is_array(),
+        Some("string") => value.is_string(),
+        Some("integer") => value.as_i64().is_some() || value.as_u64().is_some(),
+        Some("null") => value.is_null(),
+        Some(_) => false,
+        None => true,
+    };
+    if !right_type {
+        return false;
+    }
+    if let Some(text) = value.as_str() {
+        if let Some(minimum) = schema.get("minLength").and_then(Value::as_u64) {
+            if text.chars().count() < usize::try_from(minimum).unwrap() {
+                return false;
+            }
+        }
+    }
+    if let Some(number) = value
+        .as_i64()
+        .map(i128::from)
+        .or_else(|| value.as_u64().map(i128::from))
+    {
+        if schema
+            .get("minimum")
+            .and_then(Value::as_i64)
+            .is_some_and(|minimum| number < i128::from(minimum))
+            || schema
+                .get("maximum")
+                .and_then(Value::as_u64)
+                .is_some_and(|maximum| number > i128::from(maximum))
+        {
+            return false;
+        }
+    }
+    true
+}
+
+fn array_constraints_match(schema: &Value, value: &Value, root: &Value) -> bool {
+    if let Some(items) = schema.get("items") {
+        if !value.as_array().is_none_or(|values| {
+            values
+                .iter()
+                .all(|item| value_matches_schema(items, item, root))
+        }) {
+            return false;
+        }
+    }
+    true
+}
+
+fn object_constraints_match(schema: &Value, value: &Value, root: &Value) -> bool {
+    if let Some(object) = value.as_object() {
+        let properties = schema.get("properties").and_then(Value::as_object);
+        if schema
+            .get("required")
+            .and_then(Value::as_array)
+            .is_some_and(|required| {
+                required
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .any(|key| !object.contains_key(key))
+            })
+        {
+            return false;
+        }
+        if schema.get("additionalProperties") == Some(&Value::Bool(false))
+            && object
+                .keys()
+                .any(|key| properties.is_none_or(|known| !known.contains_key(key)))
+        {
+            return false;
+        }
+        if properties.is_some_and(|known| {
+            object.iter().any(|(key, item)| {
+                known
+                    .get(key)
+                    .is_some_and(|item_schema| !value_matches_schema(item_schema, item, root))
+            })
+        }) {
+            return false;
+        }
+    }
+    true
 }
 
 /// A representative wire bug, deserialized through `Bug`'s real `Deserialize`.
@@ -174,6 +295,137 @@ fn multi_bug_view_conforms() {
         }],
     };
     assert_conforms("multi-bug-view", &to_value(&result));
+}
+
+#[test]
+fn bug_adjacency_maximal_success_conforms() {
+    let maximal = u64::try_from(i64::MAX).unwrap();
+    let result = BugAdjacencyResult {
+        requests: vec![BugAdjacencyRequest::Success {
+            requested: "release/2026".into(),
+            bug_id: maximal,
+        }],
+        bugs: vec![BugAdjacencyBug {
+            id: maximal,
+            summary: Some("summary".into()),
+            status: Some("NEW".into()),
+            resolution: Some("FIXED".into()),
+            product: Some("Product".into()),
+            version: Some("1.0".into()),
+            assigned_to: Some("owner@example.invalid".into()),
+            last_change_time: Some("2026-08-29T00:00:00Z".into()),
+            target_milestone: Some("---".into()),
+            blocks: vec![0, maximal],
+            depends_on: vec![1],
+        }],
+    };
+    let value = to_value(&result);
+    assert_conforms("bug-adjacency", &value);
+    assert!(schema_accepts("bug-adjacency", &value));
+}
+
+#[test]
+fn bug_adjacency_nullable_scalars_and_failure_variants_conform() {
+    let nullable = json!({
+        "requests": [{"requested": "1", "bug_id": 1}],
+        "bugs": [{
+            "id": 1,
+            "summary": null,
+            "status": null,
+            "resolution": null,
+            "product": null,
+            "version": null,
+            "assigned_to": null,
+            "last_change_time": null,
+            "target_milestone": null,
+            "blocks": [],
+            "depends_on": []
+        }]
+    });
+    assert!(schema_accepts("bug-adjacency", &nullable));
+
+    for error in [
+        BugAdjacencyError::NotFoundAlias,
+        BugAdjacencyError::NotFoundId,
+        BugAdjacencyError::Inaccessible,
+    ] {
+        let result = BugAdjacencyResult {
+            requests: vec![BugAdjacencyRequest::Failure {
+                requested: "missing".into(),
+                error,
+            }],
+            bugs: vec![],
+        };
+        assert!(schema_accepts("bug-adjacency", &to_value(&result)));
+    }
+}
+
+#[test]
+fn bug_adjacency_schema_rejects_invalid_failure_pairings_and_empty_strings() {
+    for value in [
+        json!({
+            "requests": [{
+                "requested": "missing",
+                "error": {"type": "inaccessible", "api_code": 100}
+            }],
+            "bugs": []
+        }),
+        json!({
+            "requests": [{
+                "requested": "missing",
+                "error": {"type": "not_found", "api_code": 102}
+            }],
+            "bugs": []
+        }),
+        json!({"requests": [{"requested": "", "bug_id": 1}], "bugs": []}),
+        json!({
+            "requests": [{"requested": "1", "bug_id": 1}],
+            "bugs": [{
+                "id": 1,
+                "summary": "",
+                "status": null,
+                "resolution": null,
+                "product": null,
+                "version": null,
+                "assigned_to": null,
+                "last_change_time": null,
+                "target_milestone": null,
+                "blocks": [],
+                "depends_on": []
+            }]
+        }),
+    ] {
+        assert!(!schema_accepts("bug-adjacency", &value), "accepted {value}");
+    }
+}
+
+#[test]
+fn bug_adjacency_schema_rejects_undeclared_keys_and_out_of_range_ids() {
+    let maximal = u64::try_from(i64::MAX).unwrap();
+    for value in [
+        json!({"requests": [], "bugs": [], "extra": true}),
+        json!({"requests": [{"requested": "1", "bug_id": 1, "extra": true}], "bugs": []}),
+        json!({"requests": [{"requested": "1", "bug_id": maximal + 1}], "bugs": []}),
+        json!({"requests": [{"requested": "1", "bug_id": -1}], "bugs": []}),
+        json!({
+            "requests": [],
+            "bugs": [{
+                "id": 1,
+                "summary": null,
+                "status": null,
+                "resolution": null,
+                "product": null,
+                "version": null,
+                "assigned_to": null,
+                "last_change_time": null,
+                "target_milestone": null,
+                "blocks": [maximal + 1],
+                "depends_on": []
+            }]
+        }),
+    ] {
+        assert!(!schema_accepts("bug-adjacency", &value), "accepted {value}");
+    }
 }
 
 #[test]
@@ -519,6 +771,7 @@ async fn execute_list_json_is_array_of_names() {
     let parsed = crate::test_helpers::json_envelope_data(io.out_str());
     let names = parsed.as_array().unwrap();
     assert!(names.iter().any(|n| n == "bug"));
+    assert!(names.iter().any(|n| n == "bug-adjacency"));
     assert!(names.iter().any(|n| n == "bug-create-input"));
     assert!(names.iter().any(|n| n == "bug-update-input"));
     assert!(names.iter().any(|n| n == "component-create-input"));

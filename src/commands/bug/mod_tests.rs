@@ -64,11 +64,62 @@ fn capabilities_are_anonymous_for_view() {
 }
 
 #[test]
+fn capabilities_are_anonymous_for_adjacency() {
+    let action = BugAction::Adjacency(crate::cli::AdjacencyArgs {
+        ids: vec!["1".into()],
+    });
+    let capabilities = super::capabilities(&action);
+    assert!(!capabilities.supports_dry_run());
+    assert_eq!(capabilities.credential_requirement(), None);
+}
+
+async fn assert_adjacency_rejected_before_connection(ids: Vec<String>) {
+    let (_lock, _tmp) = crate::test_helpers::setup_empty_config_env().await;
+    let action = BugAction::Adjacency(crate::cli::AdjacencyArgs { ids });
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let error = super::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        crate::error::BzrError::InputValidation { .. }
+    ));
+    assert!(io.out_str().is_empty());
+}
+
+#[tokio::test]
+async fn adjacency_rejects_101_requests_before_connection() {
+    assert_adjacency_rejected_before_connection(vec!["1".to_owned(); 101]).await;
+}
+
+#[tokio::test]
+async fn adjacency_rejects_explicit_empty_request_before_connection() {
+    assert_adjacency_rejected_before_connection(vec![String::new()]).await;
+}
+
+#[tokio::test]
+async fn adjacency_rejects_numeric_value_above_i64_max_before_connection() {
+    assert_adjacency_rejected_before_connection(vec!["9223372036854775808".into()]).await;
+}
+
+#[test]
 fn capabilities_allow_dry_run_and_credentials_for_update() {
     let action = BugAction::Update(crate::cli::UpdateArgs::default());
     let capabilities = super::capabilities(&action);
     assert!(capabilities.supports_dry_run());
     assert_eq!(capabilities.credential_requirement(), Some("bug update"));
+}
+
+#[test]
+fn bug_column_spec_adjacency_has_no_field_selection_path() {
+    let action = BugAction::Adjacency(crate::cli::AdjacencyArgs {
+        ids: vec!["1".into()],
+    });
+    assert!(super::bug_column_spec(&action).is_none());
 }
 
 // ---- bug_column_spec — BugAction::My arm ----

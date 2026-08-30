@@ -105,10 +105,27 @@ pub fn build_tls_client(
     config: &TlsConfig,
     request_timeout: std::time::Duration,
 ) -> crate::error::Result<reqwest::Client> {
+    build_client(config, request_timeout, same_host_redirect_policy())
+}
+
+/// Build a `reqwest::Client` with the configured TLS verification mode and
+/// automatic redirects disabled.
+pub(crate) fn build_no_redirect_tls_client(
+    config: &TlsConfig,
+    request_timeout: std::time::Duration,
+) -> crate::error::Result<reqwest::Client> {
+    build_client(config, request_timeout, reqwest::redirect::Policy::none())
+}
+
+fn build_client(
+    config: &TlsConfig,
+    request_timeout: std::time::Duration,
+    redirect: reqwest::redirect::Policy,
+) -> crate::error::Result<reqwest::Client> {
     let builder = reqwest::Client::builder()
         .connect_timeout(crate::http::CONNECT_TIMEOUT)
         .timeout(request_timeout)
-        .redirect(same_host_redirect_policy());
+        .redirect(redirect);
     apply_tls_verification(builder, config)?
         .build()
         .map_err(crate::error::BzrError::Http)
@@ -126,13 +143,7 @@ pub(crate) fn build_probe_client(
     config: &TlsConfig,
     request_timeout: std::time::Duration,
 ) -> crate::error::Result<reqwest::Client> {
-    let builder = reqwest::Client::builder()
-        .connect_timeout(crate::http::CONNECT_TIMEOUT)
-        .timeout(request_timeout)
-        .redirect(reqwest::redirect::Policy::none());
-    apply_tls_verification(builder, config)?
-        .build()
-        .map_err(crate::error::BzrError::Http)
+    build_no_redirect_tls_client(config, request_timeout)
 }
 
 #[cfg(test)]

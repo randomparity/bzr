@@ -48,6 +48,155 @@ fn assert_log_redacted(log: &str, secret: &str) {
     );
 }
 
+fn minimal_strict_rest_bug() -> serde_json::Value {
+    serde_json::json!({
+        "bugs": [{
+            "id": 42,
+            "blocks": [],
+            "depends_on": []
+        }],
+        "faults": []
+    })
+}
+
+async fn parse_strict_rest_bug(
+    body: serde_json::Value,
+) -> crate::error::Result<
+    std::result::Result<crate::types::BugAdjacencyBug, crate::types::BugAdjacencyError>,
+> {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let client = test_client(&mock.uri());
+    let response = client
+        .http
+        .get(format!("{}/rest/bug/42", mock.uri()))
+        .send()
+        .await
+        .unwrap();
+
+    client
+        .parse_strict_bug_adjacency_response(response, "42")
+        .await
+}
+
+#[tokio::test]
+async fn bug_adjacency_rest_ignores_structured_assignee_detail_byte_equivalently() {
+    let without = parse_strict_rest_bug(minimal_strict_rest_bug())
+        .await
+        .unwrap()
+        .unwrap();
+    let mut body = minimal_strict_rest_bug();
+    body["bugs"][0]["assigned_to_detail"] = serde_json::json!({
+        "unfamiliar_string": "value",
+        "unfamiliar_null": null,
+        "unfamiliar_array": [1, true, {"nested": "value"}],
+        "unfamiliar_object": {"deeper": [null, 2]}
+    });
+    let with = parse_strict_rest_bug(body).await.unwrap().unwrap();
+
+    assert_eq!(
+        serde_json::to_vec(&without).unwrap(),
+        serde_json::to_vec(&with).unwrap()
+    );
+}
+
+#[tokio::test]
+async fn bug_adjacency_rest_rejects_non_object_assignee_detail() {
+    for detail in [
+        serde_json::json!("scalar"),
+        serde_json::json!(["array"]),
+        serde_json::Value::Null,
+    ] {
+        let mut body = minimal_strict_rest_bug();
+        body["bugs"][0]["assigned_to_detail"] = detail;
+
+        assert!(matches!(
+            parse_strict_rest_bug(body).await,
+            Err(crate::error::BzrError::DataIntegrity(_))
+        ));
+    }
+}
+
+#[tokio::test]
+async fn bug_adjacency_rest_still_rejects_unrelated_unknown_bug_key() {
+    let mut body = minimal_strict_rest_bug();
+    body["bugs"][0]["reporter_detail"] = serde_json::json!({});
+
+    assert!(matches!(
+        parse_strict_rest_bug(body).await,
+        Err(crate::error::BzrError::DataIntegrity(_))
+    ));
+}
+
+#[test]
+fn strict_adjacency_resource_error_accepts_closed_integer_and_decimal_codes() {
+    for (code, expected) in [
+        (
+            serde_json::json!(100),
+            crate::types::BugAdjacencyError::NotFoundAlias,
+        ),
+        (
+            serde_json::json!("100"),
+            crate::types::BugAdjacencyError::NotFoundAlias,
+        ),
+        (
+            serde_json::json!(101),
+            crate::types::BugAdjacencyError::NotFoundId,
+        ),
+        (
+            serde_json::json!("101"),
+            crate::types::BugAdjacencyError::NotFoundId,
+        ),
+        (
+            serde_json::json!(102),
+            crate::types::BugAdjacencyError::Inaccessible,
+        ),
+        (
+            serde_json::json!("102"),
+            crate::types::BugAdjacencyError::Inaccessible,
+        ),
+    ] {
+        let requested = if matches!(expected, crate::types::BugAdjacencyError::NotFoundAlias) {
+            "missing/alias"
+        } else {
+            "42"
+        };
+        let body = serde_json::json!({
+            "error": true,
+            "code": code,
+            "message": "discarded prose",
+            "documentation": "https://example.invalid/docs"
+        })
+        .to_string();
+
+        let outcome = parse_strict_adjacency_resource_error(&body, requested)
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(outcome, expected);
+    }
+}
+
+#[test]
+fn strict_adjacency_resource_error_rejects_open_or_malformed_envelopes() {
+    for body in [
+        serde_json::json!({"error": false, "code": 101}),
+        serde_json::json!({"error": true, "code": 100_500}),
+        serde_json::json!({"error": true, "code": "0101"}),
+        serde_json::json!({"error": true, "code": 101.0}),
+        serde_json::json!({"error": true, "code": 101, "extra": true}),
+        serde_json::json!({"error": true, "code": 101, "bugs": []}),
+        serde_json::json!({"error": true, "code": 101, "message": 7}),
+    ] {
+        assert!(parse_strict_adjacency_resource_error(&body.to_string(), "42").is_err());
+    }
+    assert!(parse_strict_adjacency_resource_error("not json", "42").is_err());
+}
+
 #[test]
 fn trace_response_body_redacts_api_key() {
     let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::TRACE);

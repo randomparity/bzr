@@ -6,16 +6,19 @@ use serde_json::Value;
 
 use super::flag::Flag;
 
+mod adjacency;
 mod fields;
 mod links;
 mod payload;
 mod search;
 
+pub use adjacency::{BugAdjacencyBug, BugAdjacencyError, BugAdjacencyRequest, BugAdjacencyResult};
 pub use fields::{
     apply_exclude, canonical_excludes, canonical_field_list, default_selected_fields,
     field_selected, partition_include, selected_custom_detail_fields, selected_keys, BugField,
     ColumnSpec, SelectedBugField, BUG_FIELDS,
 };
+
 pub use links::{
     BugLink, BugLinksNode, LinkRelation, LINKS_ID_CHUNK, LINKS_INCLUDE_FIELDS, LINKS_MAX_NODES,
 };

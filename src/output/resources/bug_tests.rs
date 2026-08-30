@@ -4,7 +4,10 @@ use super::*;
 use crate::commands::runtime::search::fields::{
     validate_json_field_selection, validate_table_columns, warn_unknown_fields,
 };
-use crate::types::bug::{BugLink, ColumnSpec, LinkRelation, BUG_FIELDS};
+use crate::types::bug::{
+    BugAdjacencyBug, BugAdjacencyError, BugAdjacencyRequest, BugAdjacencyResult, BugLink,
+    ColumnSpec, LinkRelation, BUG_FIELDS,
+};
 use crate::types::{Bug, FieldChange, Flag, HistoryEntry};
 
 fn review_flag(status: &str, requestee: Option<&str>) -> Flag {
@@ -114,6 +117,186 @@ fn capture_history_json(records: &[HistoryRecord], format: OutputFormat) -> Stri
     let mut buf = Vec::new();
     write_history_json(records, format, &mut buf);
     String::from_utf8(buf).unwrap()
+}
+
+fn sample_adjacency() -> BugAdjacencyResult {
+    BugAdjacencyResult {
+        requests: vec![
+            BugAdjacencyRequest::Success {
+                requested: "00123".into(),
+                bug_id: 123,
+            },
+            BugAdjacencyRequest::Success {
+                requested: "release-alias".into(),
+                bug_id: 123,
+            },
+            BugAdjacencyRequest::Success {
+                requested: "release-alias".into(),
+                bug_id: 123,
+            },
+            BugAdjacencyRequest::Failure {
+                requested: "missing-alias".into(),
+                error: BugAdjacencyError::NotFoundAlias,
+            },
+            BugAdjacencyRequest::Failure {
+                requested: "999999".into(),
+                error: BugAdjacencyError::NotFoundId,
+            },
+            BugAdjacencyRequest::Failure {
+                requested: "restricted".into(),
+                error: BugAdjacencyError::Inaccessible,
+            },
+        ],
+        bugs: vec![
+            BugAdjacencyBug {
+                id: 42,
+                summary: None,
+                status: None,
+                resolution: None,
+                product: None,
+                version: None,
+                assigned_to: None,
+                last_change_time: None,
+                target_milestone: None,
+                blocks: vec![],
+                depends_on: vec![],
+            },
+            BugAdjacencyBug {
+                id: 123,
+                summary: Some("Example".into()),
+                status: Some("NEW".into()),
+                resolution: None,
+                product: Some("Example Product".into()),
+                version: Some("unspecified".into()),
+                assigned_to: Some("owner@example.invalid".into()),
+                last_change_time: Some("2026-08-29T00:00:00Z".into()),
+                target_milestone: Some("---".into()),
+                blocks: vec![300, 200, 200],
+                depends_on: vec![20, 10, 20],
+            },
+        ],
+    }
+}
+
+fn capture_bug_adjacency(format: OutputFormat, mut result: BugAdjacencyResult) -> String {
+    let mut buf = Vec::new();
+    write_bug_adjacency(&mut result, format, &mut buf);
+    String::from_utf8(buf).unwrap()
+}
+
+fn expected_adjacency_payload() -> serde_json::Value {
+    serde_json::json!({
+        "requests": [
+            {"requested": "00123", "bug_id": 123},
+            {"requested": "release-alias", "bug_id": 123},
+            {"requested": "release-alias", "bug_id": 123},
+            {"requested": "missing-alias", "error": {"type": "not_found", "api_code": 100}},
+            {"requested": "999999", "error": {"type": "not_found", "api_code": 101}},
+            {"requested": "restricted", "error": {"type": "inaccessible", "api_code": 102}}
+        ],
+        "bugs": [
+            {
+                "id": 42,
+                "summary": null,
+                "status": null,
+                "resolution": null,
+                "product": null,
+                "version": null,
+                "assigned_to": null,
+                "last_change_time": null,
+                "target_milestone": null,
+                "blocks": [],
+                "depends_on": []
+            },
+            {
+                "id": 123,
+                "summary": "Example",
+                "status": "NEW",
+                "resolution": null,
+                "product": "Example Product",
+                "version": "unspecified",
+                "assigned_to": "owner@example.invalid",
+                "last_change_time": "2026-08-29T00:00:00Z",
+                "target_milestone": "---",
+                "blocks": [200, 300],
+                "depends_on": [10, 20]
+            }
+        ]
+    })
+}
+
+#[test]
+fn write_bug_adjacency_json_has_the_closed_result_shape() {
+    let output = capture_bug_adjacency(OutputFormat::Json, sample_adjacency());
+    let value: serde_json::Value = serde_json::from_str(&output).unwrap();
+    assert_eq!(
+        value,
+        serde_json::json!({
+            "schema_version": crate::output::SCHEMA_VERSION,
+            "data": expected_adjacency_payload(),
+        })
+    );
+}
+
+#[test]
+fn write_bug_adjacency_json_uses_schema_version_0_6_2() {
+    let output = capture_bug_adjacency(OutputFormat::Json, sample_adjacency());
+    let value: serde_json::Value = serde_json::from_str(&output).unwrap();
+    assert_eq!(value["schema_version"], "0.6.2");
+}
+
+#[test]
+fn write_bug_adjacency_ndjson_is_one_compact_result_record() {
+    let result = sample_adjacency();
+    let output = capture_bug_adjacency(OutputFormat::Ndjson, result);
+    assert_eq!(output.lines().count(), 1);
+    assert!(!output.contains("  \""));
+    let value: serde_json::Value = serde_json::from_str(&output).unwrap();
+    assert_eq!(value, expected_adjacency_payload());
+}
+
+#[test]
+fn write_bug_adjacency_table_has_request_and_canonical_bug_sections() {
+    let output = capture_bug_adjacency(OutputFormat::Table, sample_adjacency());
+    assert!(output.contains("Requests"), "request section:\n{output}");
+    assert!(output.contains("Canonical bugs"), "bug section:\n{output}");
+    assert!(output.contains("00123"), "request order:\n{output}");
+    assert!(output.contains("release-alias"), "alias request:\n{output}");
+    assert_eq!(
+        output.matches("release-alias").count(),
+        2,
+        "duplicates:\n{output}"
+    );
+    assert!(
+        output.contains("NOT FOUND (100)"),
+        "not found alias:\n{output}"
+    );
+    assert!(output.contains("NOT FOUND (101)"), "not found:\n{output}");
+    assert!(
+        output.contains("INACCESSIBLE (102)"),
+        "inaccessible:\n{output}"
+    );
+    assert!(output.contains("200, 300"), "blocks:\n{output}");
+    assert!(output.contains("10, 20"), "depends_on:\n{output}");
+    assert!(
+        output.find("00123").unwrap() < output.find("release-alias").unwrap()
+            && output.rfind("release-alias").unwrap() < output.find("missing-alias").unwrap()
+            && output.find("missing-alias").unwrap() < output.find("Canonical bugs").unwrap()
+            && output.find("Canonical bugs").unwrap() < output.find("42").unwrap()
+            && output.find("42").unwrap() < output.rfind("123").unwrap(),
+        "section and row ordering:\n{output}"
+    );
+}
+
+#[test]
+fn write_bug_adjacency_normalizes_edge_arrays_in_place() {
+    let mut result = sample_adjacency();
+    let mut output = Vec::new();
+
+    write_bug_adjacency(&mut result, OutputFormat::Json, &mut output);
+
+    assert_eq!(result.bugs[1].blocks, vec![200, 300]);
+    assert_eq!(result.bugs[1].depends_on, vec![10, 20]);
 }
 
 fn sample_record(field: &str, comment_id: Option<u64>) -> HistoryRecord {

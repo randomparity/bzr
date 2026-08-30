@@ -46,12 +46,15 @@ fi
 # can discover the root, then follow its dependency fields without creating or
 # updating anything.
 _DA_MARKER="bzr-dependency-analysis-demo-v1"
+_DA_ALIAS="adj/$BZ_VERSION-$$"
+_DA_MISSING_ALIAS="missing/$BZ_VERSION-$$"
 _DA_CREATE=(--product FuncTestProd --component Backend --op-sys Linux
   --rep-platform PC --description "dependency analysis fixture")
 _DA_HOSTILE_SUMMARY='<script>alert(1)</script> [click](https://evil.invalid)'
 _DA_HOSTILE_SUMMARY+=' ``` %%{init: {"theme":"dark"}}%%'
 _DA_BASE=$(make_bug "${_DA_CREATE[@]}" --summary "$_DA_HOSTILE_SUMMARY")
-_DA_LEFT=$(make_bug "${_DA_CREATE[@]}" --summary "dependency branch left")
+_DA_LEFT=$(make_bug "${_DA_CREATE[@]}" --summary "dependency branch left" \
+  --alias "$_DA_ALIAS")
 _DA_RIGHT=$(make_bug "${_DA_CREATE[@]}" --summary "dependency branch right")
 _DA_RESOLVED_PARENT=$(make_bug "${_DA_CREATE[@]}" --summary "resolved blocker parent")
 _DA_RESOLVED=$(make_bug "${_DA_CREATE[@]}" --summary "resolved blocker")
@@ -94,6 +97,17 @@ if [[ $_DA_FIXTURE_OK -eq 1 ]] && [[ -n $RESTRICTED_BUG ]]; then
   fi
 else
   test_fail "could not provision the dependency-analysis fixture"
+fi
+
+test_begin "123l1. slash alias persists through bug list search"
+if [[ $_DA_FIXTURE_OK -eq 1 ]]; then
+  run_bzr bug list --alias "$_DA_ALIAS"
+  if assert_success && assert_json_array_length '.' 1 &&
+    assert_json '.[0].id' "$_DA_LEFT"; then
+    test_pass
+  fi
+else
+  test_skip "no dependency-analysis fixture"
 fi
 
 _DA_POLICY="$FUNC_CONFIG_DIR/dependency-live.policy.json"
@@ -509,8 +523,155 @@ else
   test_fail "installed policy crossed a credential or server-universe trust boundary"
 fi
 
+# The collector checks above intentionally exercise its unchanged traversal
+# contract before these extra relationships are added. Adjacency then reuses
+# the same live public bugs to prove complete, sorted arrays in both directions
+# without changing the collector's expected graph.
+_DA_ADJ_FIXTURE_OK=1
+run_bzr bug update "$_DA_LEFT" --depends-on-add "$_DA_RESOLVED_PARENT"
+[[ $BZR_EXIT -eq 0 ]] || _DA_ADJ_FIXTURE_OK=0
+run_bzr bug update "$_DA_LEFT" --blocks-add "$_DA_RIGHT"
+[[ $BZR_EXIT -eq 0 ]] || _DA_ADJ_FIXTURE_OK=0
+
+test_begin "123r. live adjacency fixture has two complete directions"
+if [[ $_DA_ADJ_FIXTURE_OK -eq 1 ]]; then
+  test_pass
+else
+  test_fail "could not extend the live graph for adjacency coverage"
+fi
+
+_DA_ADJ_REST="$FUNC_CONFIG_DIR/dependency-adjacency-rest.json"
+_DA_ADJ_XMLRPC="$FUNC_CONFIG_DIR/dependency-adjacency-xmlrpc.json"
+_DA_ADJ_PARITY_OK=1
+for _DA_ADJ_MODE in rest xmlrpc; do
+  _DA_ADJ_SERVER="dependency-$_DA_ADJ_MODE-public"
+
+  test_begin "123s. $_DA_ADJ_MODE numeric and slash-alias requests both resolve"
+  run_bzr_raw --json --server "$_DA_ADJ_SERVER" \
+    bug adjacency "$_DA_ROOT" "$_DA_ALIAS"
+  if assert_exit_code 0 &&
+    assert_raw_json '.schema_version' '0.6.2' &&
+    assert_json '.requests == [
+      {requested: "'"$_DA_ROOT"'", bug_id: '"$_DA_ROOT"'},
+      {requested: "'"$_DA_ALIAS"'", bug_id: '"$_DA_LEFT"'}
+    ]' 'true' &&
+    assert_json '[.bugs[].id] == (['"$_DA_ROOT"', '"$_DA_LEFT"'] | sort)' 'true'; then
+    test_pass
+  fi
+
+  test_begin "123t. $_DA_ADJ_MODE alias and numeric identities converge once"
+  run_bzr_raw --json --server "$_DA_ADJ_SERVER" \
+    bug adjacency "$_DA_ALIAS" "$_DA_LEFT"
+  if assert_exit_code 0 &&
+    assert_json '.requests == [
+      {requested: "'"$_DA_ALIAS"'", bug_id: '"$_DA_LEFT"'},
+      {requested: "'"$_DA_LEFT"'", bug_id: '"$_DA_LEFT"'}
+    ]' 'true' &&
+    assert_json '.bugs | length' '1' &&
+    assert_json '.bugs[0].id' "$_DA_LEFT" &&
+    assert_json '.bugs[0].blocks == (['"$_DA_ROOT"', '"$_DA_RIGHT"'] | sort)' 'true' &&
+    assert_json '.bugs[0].depends_on == (['"$_DA_BASE"', '"$_DA_RESOLVED_PARENT"'] | sort)' 'true'; then
+    test_pass
+  fi
+
+  test_begin "123u. $_DA_ADJ_MODE mixed resource failures retain typed identities and exit zero"
+  run_bzr_raw --json --server "$_DA_ADJ_SERVER" \
+    bug adjacency "$_DA_ROOT" "$_DA_MISSING" "$_DA_MISSING_ALIAS"
+  if assert_exit_code 0 &&
+    assert_json '.requests == [
+      {requested: "'"$_DA_ROOT"'", bug_id: '"$_DA_ROOT"'},
+      {requested: "'"$_DA_MISSING"'", error: {type: "not_found", api_code: 101}},
+      {requested: "'"$_DA_MISSING_ALIAS"'", error: {type: "not_found", api_code: 100}}
+    ]' 'true' &&
+    assert_json '[.bugs[].id] == ['"$_DA_ROOT"']' 'true'; then
+    test_pass
+  fi
+
+  test_begin "123v. $_DA_ADJ_MODE all-failure result is closed and exits zero"
+  run_bzr_raw --json --server "$_DA_ADJ_SERVER" \
+    bug adjacency "$_DA_MISSING" "$_DA_MISSING_ALIAS"
+  if assert_exit_code 0 &&
+    assert_json '. == {
+      requests: [
+        {requested: "'"$_DA_MISSING"'", error: {type: "not_found", api_code: 101}},
+        {requested: "'"$_DA_MISSING_ALIAS"'", error: {type: "not_found", api_code: 100}}
+      ],
+      bugs: []
+    }' 'true'; then
+    test_pass
+  fi
+
+  test_begin "123w. $_DA_ADJ_MODE anonymous restricted bug is typed inaccessible"
+  run_bzr_raw --json --server "$_DA_ADJ_SERVER" bug adjacency "$RESTRICTED_BUG"
+  if assert_exit_code 0 &&
+    assert_json '. == {
+      requests: [{
+        requested: "'"$RESTRICTED_BUG"'",
+        error: {type: "inaccessible", api_code: 102}
+      }],
+      bugs: []
+    }' 'true'; then
+    test_pass
+  fi
+
+  run_bzr_raw --json --server "$_DA_ADJ_SERVER" \
+    bug adjacency "$_DA_ROOT" "$_DA_ALIAS" "$_DA_MISSING" \
+    "$_DA_MISSING_ALIAS" "$RESTRICTED_BUG"
+  if [[ $BZR_EXIT -ne 0 ]]; then
+    _DA_ADJ_PARITY_OK=0
+  elif [[ $_DA_ADJ_MODE == rest ]]; then
+    # REST uses RFC 3339 while XML-RPC uses Bugzilla's compact ISO-8601
+    # spelling for the same instant. Normalize only that wire-level spelling
+    # so every adjacency field and ordering decision remains compared.
+    jq -S '(.bugs[].last_change_time) |=
+      (if type == "string" then
+         if test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") then
+           . as $timestamp |
+           (try ($timestamp | strptime("%Y-%m-%dT%H:%M:%SZ") |
+             mktime | gmtime | strftime("%Y-%m-%dT%H:%M:%SZ")) catch "") as $round_trip |
+           if $round_trip == $timestamp then
+             capture("^(?<year>[0-9]{4})-(?<month>[0-9]{2})-(?<day>[0-9]{2})T(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})Z$") |
+             "\(.year)\(.month)\(.day)T\(.hour):\(.minute):\(.second)"
+           else
+             error("REST last_change_time must be a valid RFC3339 UTC timestamp")
+           end
+         else
+           error("REST last_change_time must use RFC3339 UTC format")
+         end
+       else
+         error("REST last_change_time must be a string")
+       end)' \
+      "$BZR_STDOUT" >"$_DA_ADJ_REST" || _DA_ADJ_PARITY_OK=0
+  else
+    jq -S '(.bugs[].last_change_time) |=
+      (if type == "string" then
+         if test("^[0-9]{8}T[0-9]{2}:[0-9]{2}:[0-9]{2}$") then
+           . as $timestamp |
+           (try ($timestamp | strptime("%Y%m%dT%H:%M:%S") |
+             mktime | gmtime | strftime("%Y%m%dT%H:%M:%S")) catch "") as $round_trip |
+           if $round_trip == $timestamp then .
+           else error("XML-RPC last_change_time must be a valid compact ISO-8601 timestamp")
+           end
+         else error("XML-RPC last_change_time must use compact ISO-8601 format")
+         end
+       else error("XML-RPC last_change_time must be a string")
+       end)' \
+      "$BZR_STDOUT" >"$_DA_ADJ_XMLRPC" || _DA_ADJ_PARITY_OK=0
+  fi
+done
+
+test_begin "123x. live REST and XML-RPC adjacency payloads have transport parity"
+if [[ $_DA_ADJ_PARITY_OK -eq 1 ]] && [[ -f $_DA_ADJ_REST ]] &&
+  [[ -f $_DA_ADJ_XMLRPC ]] && cmp -s "$_DA_ADJ_REST" "$_DA_ADJ_XMLRPC"; then
+  test_pass
+else
+  test_fail "REST and XML-RPC adjacency payloads differ"
+fi
+
 unset RESTRICTED_BUG
-unset _DA_ANALYSIS _DA_ANALYZE _DA_BASE _DA_BZR_CANONICAL _DA_COLLECT _DA_CONFIG
+unset _DA_ADJ_FIXTURE_OK _DA_ADJ_MODE _DA_ADJ_PARITY_OK _DA_ADJ_REST
+unset _DA_ADJ_SERVER _DA_ADJ_XMLRPC
+unset _DA_ALIAS _DA_ANALYSIS _DA_ANALYZE _DA_BASE _DA_BZR_CANONICAL _DA_COLLECT _DA_CONFIG
 unset _DA_COLLECTION _DA_CREATE _DA_CYCLE _DA_DIAGRAM
 unset _DA_CREDENTIAL_URL_COLLECTION _DA_CREDENTIAL_URL_ERROR _DA_CREDENTIAL_URL_EXIT
 unset _DA_CREDENTIAL_URL_POLICY
@@ -519,7 +680,7 @@ unset _DA_EXTRA_SERVER_POLICY
 unset _DA_FIXTURE_OK
 unset _DA_HOSTILE_SUMMARY _DA_INACCESSIBLE_ANALYSIS _DA_INACCESSIBLE_COLLECTION
 unset _DA_INACCESSIBLE_OK _DA_INACCESSIBLE_POLICY _DA_LEFT _DA_MARKER
-unset _DA_MISSING _DA_MISSING_ANALYSIS _DA_MISSING_COLLECTION _DA_MISSING_OK
+unset _DA_MISSING _DA_MISSING_ALIAS _DA_MISSING_ANALYSIS _DA_MISSING_COLLECTION _DA_MISSING_OK
 unset _DA_MISSING_POLICY _DA_PATH _DA_PATH_CANONICAL _DA_PATHS_OK _DA_PIPELINE_OK
 unset _DA_POLICY _DA_PUBLIC_DEFAULT_ASSIGNEE _DA_RENDER _DA_REPORT
 unset _DA_POLICY_SECRET
