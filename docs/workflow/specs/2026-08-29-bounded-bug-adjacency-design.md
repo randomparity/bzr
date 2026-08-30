@@ -384,6 +384,8 @@ fallback behavior.
   accepting a valid boolean or integer-one result.
 - Output and functional assertions pin the additive `SCHEMA_VERSION` bump to `0.6.2` everywhere
   ADR 0007 requires synchronized current-contract documentation or fixtures.
+- `python3 -m unittest content/skills/bzr-dependency-analysis/tests/test_collect.py` executes the
+  synchronized collector unit suite directly and reports all tests `OK`.
 - A controlled-fault test changes one accepted resource code to fatal and must make the focused
   mixed-result test fail before the fault is reverted.
 
@@ -417,7 +419,8 @@ container version. Run the installed dependency-analysis collector against the n
 after the `0.6.2` bump so its accepted version is exercised live rather than only through replay
 fixtures.
 
-Run `make lint`, `make test`, and `make functional-test-all` before delivery. The host is arm64;
-the declared project targets are x86_64/aarch64 Linux, powerpc64le Linux, s390x Linux,
-aarch64 macOS, and x86_64/aarch64 Windows. The host differs from part of the target matrix; CI and
-the existing cross-build configuration remain responsible for non-host compilation.
+Run `python3 -m unittest content/skills/bzr-dependency-analysis/tests/test_collect.py`, `make lint`,
+`make test`, and `make functional-test-all` before delivery. The host is arm64; the declared project
+targets are x86_64/aarch64 Linux, powerpc64le Linux, s390x Linux, aarch64 macOS, and
+x86_64/aarch64 Windows. The host differs from part of the target matrix; CI and the existing
+cross-build configuration remain responsible for non-host compilation.
