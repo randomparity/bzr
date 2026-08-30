@@ -137,4 +137,50 @@ if [[ -n "$LINK_A" ]] && [[ -n "$LINK_C" ]]; then
     fi
 else test_skip "no link nodes"; fi
 
+# Red Hat Bugzilla returns `duplicates` as bug objects, unlike stock Bugzilla's
+# numeric array. Host the captured minimal wire shape inside the same Bugzilla
+# container so the real binary exercises vendor-shaped HTTP responses without
+# depending on an external production service.
+_RH_RUNTIME=$(container_runtime)
+_RH_CONTAINER=$(bugzilla_container_name)
+_RH_FIXTURE="$SCRIPT_DIR/fixtures/redhat-links.cgi"
+_RH_REMOTE=/var/www/html/bugzilla/redhat-links.cgi
+_RH_READY=0
+if "$_RH_RUNTIME" cp "$_RH_FIXTURE" "$_RH_CONTAINER:$_RH_REMOTE" &&
+    "$_RH_RUNTIME" exec "$_RH_CONTAINER" chmod 755 "$_RH_REMOTE"; then
+    _RH_READY=1
+fi
+
+test_begin "53s. Red Hat object-valued duplicate: one hop"
+if [[ $_RH_READY -eq 1 ]]; then
+    run_bzr_raw --json --server-url "$BZ_URL/redhat-links.cgi" --api rest \
+        bug links 998
+    if assert_success &&
+        assert_json 'length' "1" &&
+        assert_json '.[0].id' "1117050" &&
+        assert_json '.[0].relation' "duplicates" &&
+        assert_json '.[0].depth' "1"; then
+        test_pass
+    fi
+else test_fail "could not install Red Hat response fixture"; fi
+
+test_begin "53t. Red Hat object-valued duplicate: recursive depth 2"
+if [[ $_RH_READY -eq 1 ]]; then
+    run_bzr_raw --json --server-url "$BZ_URL/redhat-links.cgi" --api rest \
+        bug links 998 --recursive --depth 2
+    if assert_success &&
+        assert_json 'length' "2" &&
+        assert_json '.[0].id' "1117050" &&
+        assert_json '.[0].depth' "1" &&
+        assert_json '.[1].id' "1200000" &&
+        assert_json '.[1].depth' "2"; then
+        test_pass
+    fi
+else test_fail "could not install Red Hat response fixture"; fi
+
+if [[ $_RH_READY -eq 1 ]]; then
+    "$_RH_RUNTIME" exec "$_RH_CONTAINER" rm -f "$_RH_REMOTE"
+fi
+unset _RH_RUNTIME _RH_CONTAINER _RH_FIXTURE _RH_REMOTE _RH_READY
+
 echo ""
