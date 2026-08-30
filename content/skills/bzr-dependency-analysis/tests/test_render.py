@@ -96,6 +96,24 @@ class RendererTestCase(unittest.TestCase):
         self.assertNotIn("token=secret", output)
         self.assertIn("Collection commands: bug search, bug view, query run", output)
 
+    def test_da07_markdown_preserves_inert_punctuation(self):
+        source = json.loads((FIXTURES / "hostile.analysis.json").read_text())
+        source["provenance"][0]["source"] = (
+            "release-v1.2#3 + {team} | (nightly)"
+        )
+        result, rendered = self.run_renderer(source, "markdown")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output = rendered.decode("utf-8")
+        for expected in (
+            "Schema: bzr-dependency-analysis/v1",
+            "Analysis timestamp: 2026-08-28T12:00:00Z",
+            "Structural roots: primary#80",
+            "Omitted relationships (lower bound): 0",
+            "release-v1.2#3 + {team} | (nightly)",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, output)
+
     def test_da07_mermaid_hostile_values_remain_inside_quoted_tokens(self):
         output = self.render_fixture("mermaid").decode("utf-8")
         self.assertEqual(output.splitlines()[0], "flowchart TD")
@@ -179,7 +197,7 @@ class RendererTestCase(unittest.TestCase):
         markdown_result, markdown = self.run_renderer(source, "markdown")
         self.assertEqual(markdown_result.returncode, 0, markdown_result.stderr)
         self.assertIn(
-            b"Unassigned&#45;assignee policy: primary=nobody&#95;&#91;default&#93;@example&#46;test",
+            b"Unassigned-assignee policy: primary=nobody&#95;&#91;default&#93;@example.test",
             markdown,
         )
         mermaid_result, mermaid = self.run_renderer(source, "mermaid")
