@@ -395,7 +395,7 @@ if [[ $_DA_REPLAY_OK -eq 1 ]] &&
       .nodes[0].id == 10 and .nodes[0].server == "primary" and
       .nodes[0].requested_aliases == ["delivery"]
     ' "$_DA_REPLAY_ANALYSIS" >/dev/null &&
-  grep -q 'primary&#35;10' "$_DA_REPLAY_REPORT" &&
+  grep -q 'primary#10' "$_DA_REPLAY_REPORT" &&
   grep -q 'primary&#35;10' "$_DA_REPLAY_DIAGRAM"; then
   test_pass
 else

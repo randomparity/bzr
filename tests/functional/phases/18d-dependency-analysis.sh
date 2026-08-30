@@ -190,9 +190,9 @@ if [[ $_DA_PIPELINE_OK -eq 1 ]] &&
   grep -Fq -- '- Graph cap reached: false' "$_DA_REPORT" &&
   grep -Fq -- '- Omitted discovered identities: 0' "$_DA_REPORT" &&
   grep -Fq -- '- Relationship cap reached: false' "$_DA_REPORT" &&
-  grep -Fq -- '- Omitted relationships &#40;lower bound&#41;: 0' "$_DA_REPORT" &&
+  grep -Fq -- '- Omitted relationships (lower bound): 0' "$_DA_REPORT" &&
   grep -Fq -- '- Traversal direction: both' "$_DA_REPORT" &&
-  grep -Fq -- '- Unassigned&#45;assignee policy: public=' "$_DA_REPORT" &&
+  grep -Fq -- '- Unassigned-assignee policy: public=' "$_DA_REPORT" &&
   grep -Fq -- '- Longest dependency chain components:' "$_DA_REPORT" &&
   grep -Fq -- '- Bottlenecks:' "$_DA_REPORT" &&
   grep -Fq -- '- Execution assumptions:' "$_DA_REPORT" &&
