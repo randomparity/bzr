@@ -11,8 +11,9 @@ use crate::output::formatting::{
 };
 use crate::types::bug::{
     apply_exclude, canonical_excludes, canonical_field_list, default_selected_fields,
-    field_selected, partition_include, selected_custom_detail_fields, Bug, BugField, BugLink,
-    ColumnSpec, HistoryEntry, HistoryRecord, SelectedBugField,
+    field_selected, partition_include, selected_custom_detail_fields, Bug, BugAdjacencyError,
+    BugAdjacencyRequest, BugAdjacencyResult, BugField, BugLink, ColumnSpec, HistoryEntry,
+    HistoryRecord, SelectedBugField,
 };
 use crate::types::output::OutputFormat;
 
@@ -419,6 +420,82 @@ pub fn write_bug_links<W: Write + ?Sized>(links: &[BugLink], format: OutputForma
         }
         let _ = writeln!(out, "{}", builder.build());
     });
+}
+
+/// Render a bounded adjacency result as a structured payload or two fixed table sections.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "The adjacency command calls this writer in the later orchestration slice."
+    )
+)]
+pub fn write_bug_adjacency<W: Write + ?Sized>(
+    result: &BugAdjacencyResult,
+    format: OutputFormat,
+    out: &mut W,
+) {
+    disable_color_for_tests();
+    match format {
+        OutputFormat::Json | OutputFormat::Ndjson => write_json_family(result, format, out),
+        OutputFormat::Table => write_bug_adjacency_table(result, out),
+    }
+}
+
+fn write_bug_adjacency_table(result: &BugAdjacencyResult, out: &mut (impl Write + ?Sized)) {
+    let _ = writeln!(out, "Requests");
+    let mut requests = Builder::default();
+    requests.push_record(["REQUESTED", "RESULT"]);
+    for request in &result.requests {
+        let (requested, outcome) = match request {
+            BugAdjacencyRequest::Success { requested, bug_id } => (requested, bug_id.to_string()),
+            BugAdjacencyRequest::Failure { requested, error } => {
+                (requested, format_adjacency_error(*error))
+            }
+        };
+        requests.push_record([requested.clone(), outcome]);
+    }
+    let _ = writeln!(out, "{}", requests.build());
+
+    let _ = writeln!(out, "\nCanonical bugs");
+    let mut bugs = Builder::default();
+    bugs.push_record([
+        "ID",
+        "SUMMARY",
+        "STATUS",
+        "RESOLUTION",
+        "PRODUCT",
+        "VERSION",
+        "ASSIGNEE",
+        "LAST CHANGE TIME",
+        "TARGET MILESTONE",
+        "BLOCKS",
+        "DEPENDS ON",
+    ]);
+    for bug in &result.bugs {
+        bugs.push_record([
+            bug.id.to_string(),
+            bug.summary.clone().unwrap_or_default(),
+            bug.status.clone().unwrap_or_default(),
+            bug.resolution.clone().unwrap_or_default(),
+            bug.product.clone().unwrap_or_default(),
+            bug.version.clone().unwrap_or_default(),
+            bug.assigned_to.clone().unwrap_or_default(),
+            bug.last_change_time.clone().unwrap_or_default(),
+            bug.target_milestone.clone().unwrap_or_default(),
+            join_ids(&bug.blocks),
+            join_ids(&bug.depends_on),
+        ]);
+    }
+    let _ = writeln!(out, "{}", bugs.build());
+}
+
+fn format_adjacency_error(error: BugAdjacencyError) -> String {
+    let label = match error {
+        BugAdjacencyError::NotFoundAlias | BugAdjacencyError::NotFoundId => "NOT FOUND",
+        BugAdjacencyError::Inaccessible => "INACCESSIBLE",
+    };
+    format!("{label} ({})", error.api_code())
 }
 
 /// One row in a multi-ID `bzr bug view` output stream.
