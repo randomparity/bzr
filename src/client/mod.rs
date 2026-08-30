@@ -193,6 +193,29 @@ impl BugzillaClient {
         }
     }
 
+    /// Prove the configured credentials through `rest/valid_login` once.
+    ///
+    /// The proof uses the current auth method only and disables redirects via
+    /// the strict client. It is intentionally not an auth-detection fallback.
+    pub async fn prove_current_credentials(&self) -> Result<()> {
+        let login = self.email_hint.as_deref().ok_or_else(|| {
+            BzrError::Auth(
+                "current credential proof requires a configured email for rest/valid_login"
+                    .to_owned(),
+            )
+        })?;
+        if self.api_key.is_none() {
+            return Err(BzrError::Auth(
+                "current credential proof requires a configured credential".to_owned(),
+            ));
+        }
+        let auth = self.auth.as_ref().ok_or_else(|| {
+            BzrError::Auth("current credential proof requires a configured auth method".to_owned())
+        })?;
+
+        auth::prove_valid_login_current_method(&self.strict_http, &self.base_url, login, auth).await
+    }
+
     /// Override the transient-retry budget. Used by tests to exercise the
     /// retry path without mutating the process-wide `--retry` global (which
     /// would race other tests).

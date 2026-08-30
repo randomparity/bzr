@@ -68,6 +68,7 @@ use reqwest::header::HeaderValue;
 use crate::error::{BzrError, Result};
 use crate::types::transport::{ApiMode, AuthMethod};
 
+pub(super) use self::valid_login::prove_valid_login_current_method;
 use self::valid_login::{detect_valid_login_auth, verify_header_auth_via_rest, ValidLoginOutcome};
 use self::whoami::{detect_whoami_auth, WhoamiOutcome};
 

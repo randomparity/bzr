@@ -1,7 +1,10 @@
 #![expect(clippy::unwrap_used)]
 
+use crate::bugzilla_auth::{AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
 use crate::client::test_helpers::test_client;
-use wiremock::matchers::{method, path, query_param};
+use crate::client::{BugzillaClient, BugzillaClientConfig};
+use crate::types::transport::{ApiMode, AuthMethod};
+use wiremock::matchers::{header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const EXPECTED_FIELDS: &str = "id,summary,status,resolution,product,version,assigned_to,last_change_time,target_milestone,blocks,depends_on";
@@ -20,6 +23,41 @@ fn complete_bug(id: u64) -> serde_json::Value {
         "blocks": [9, 8, 9],
         "depends_on": [3, 2, 3]
     })
+}
+
+#[tokio::test]
+async fn adjacency_access_proof_uses_current_auth_once() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/valid_login"))
+        .and(query_param("login", "user@example.com"))
+        .and(header(AUTH_HEADER_NAME, "test-key"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": 1})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/valid_login"))
+        .and(query_param(AUTH_QUERY_PARAM, "test-key"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": true})))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let client = BugzillaClient::new(BugzillaClientConfig {
+        base_url: &server.uri(),
+        credential: Some("test-key"),
+        auth_method: Some(AuthMethod::Header),
+        api_mode: ApiMode::Rest,
+        email_hint: Some("user@example.com"),
+        server_name: "test",
+        tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
+    })
+    .unwrap();
+
+    client.prove_current_credentials().await.unwrap();
 }
 
 #[tokio::test]

@@ -59,3 +59,32 @@ async fn new_retains_a_no_redirect_client_for_strict_operations() {
         .unwrap();
     assert_eq!(response.status(), reqwest::StatusCode::FOUND);
 }
+
+#[tokio::test]
+async fn current_credentials_valid_login_proof_requires_configured_email_and_credential() {
+    let server = wiremock::MockServer::start().await;
+
+    let no_email = test_helpers::test_client(&server.uri());
+    assert!(matches!(
+        no_email.prove_current_credentials().await,
+        Err(BzrError::Auth(_))
+    ));
+
+    let anonymous = BugzillaClient::new(BugzillaClientConfig {
+        base_url: &server.uri(),
+        credential: None,
+        auth_method: None,
+        api_mode: ApiMode::Rest,
+        email_hint: Some("user@example.com"),
+        server_name: "test",
+        tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
+    })
+    .unwrap();
+    assert!(matches!(
+        anonymous.prove_current_credentials().await,
+        Err(BzrError::Auth(_))
+    ));
+    assert!(server.received_requests().await.unwrap().is_empty());
+}

@@ -2,6 +2,8 @@ use reqwest::header::HeaderValue;
 use serde::Deserialize;
 
 use crate::bugzilla_auth::{AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
+use crate::client::PreparedAuth;
+use crate::error::BzrError;
 use crate::types::transport::AuthMethod;
 
 use super::MalformedProbeResponse;
@@ -83,6 +85,46 @@ pub(super) async fn detect_valid_login_auth(
         ValidLoginOutcome::AuthRejected,
         ValidLoginOutcome::MalformedResponse,
     )
+}
+
+/// Prove the configured credential with exactly its current auth method.
+///
+/// This is deliberately separate from auth detection: it sends one request,
+/// never tries the alternate method, and treats every non-conclusive response
+/// as an authentication error.
+pub(in crate::client) async fn prove_valid_login_current_method(
+    http: &reqwest::Client,
+    base: &str,
+    login: &str,
+    auth: &PreparedAuth,
+) -> crate::error::Result<()> {
+    let url = format!("{base}/rest/valid_login");
+    let request = http.get(url).query(&[("login", login)]);
+    let request = match auth {
+        PreparedAuth::Header(key) => request.header(AUTH_HEADER_NAME, key.clone()),
+        PreparedAuth::QueryParam(key) => request.query(&[(AUTH_QUERY_PARAM, key)]),
+    };
+    let response = request.send().await?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(BzrError::Auth(format!(
+            "current credentials received unexpected HTTP status {status} from rest/valid_login"
+        )));
+    }
+
+    let body = response.text().await?;
+    let parsed: ValidLoginResponse = serde_json::from_str(&body).map_err(|error| {
+        BzrError::Auth(format!(
+            "current credentials received invalid response from rest/valid_login: {error}"
+        ))
+    })?;
+    if parsed.result.is_valid() {
+        Ok(())
+    } else {
+        Err(BzrError::Auth(
+            "current credentials did not confirm via rest/valid_login".to_owned(),
+        ))
+    }
 }
 
 async fn probe_valid_login(
