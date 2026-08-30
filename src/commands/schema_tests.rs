@@ -311,7 +311,7 @@ fn bug_adjacency_maximal_success_conforms() {
             status: Some("NEW".into()),
             resolution: Some("FIXED".into()),
             product: Some("Product".into()),
-            version: Some("1.0".into()),
+            version: Some(vec!["1.0".into()]),
             assigned_to: Some("owner@example.invalid".into()),
             last_change_time: Some("2026-08-29T00:00:00Z".into()),
             target_milestone: Some("---".into()),

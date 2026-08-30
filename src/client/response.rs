@@ -5,6 +5,7 @@
 use serde::{Deserialize, Deserializer};
 
 use crate::error::{BzrError, Result};
+use crate::types::bug::deserialize_optional_string_list;
 use crate::types::{BugAdjacencyBug, BugAdjacencyError};
 
 use super::BugzillaClient;
@@ -40,8 +41,8 @@ struct StrictAdjacencyBug {
     resolution: Option<String>,
     #[serde(default, deserialize_with = "deserialize_optional_detail")]
     product: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_optional_detail")]
-    version: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_string_list")]
+    version: Option<Vec<String>>,
     #[serde(default, deserialize_with = "deserialize_optional_detail")]
     assigned_to: Option<String>,
     #[serde(

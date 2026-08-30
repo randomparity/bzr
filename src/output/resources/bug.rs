@@ -28,6 +28,10 @@ fn join_ids(ids: &[u64]) -> String {
         .join(", ")
 }
 
+fn join_strings(values: Option<&[String]>) -> String {
+    values.map(|values| values.join(", ")).unwrap_or_default()
+}
+
 /// Resolve `spec` into the ordered list of columns to render. Unknown
 /// include tokens are reported as a warning on `err`. If every requested
 /// token is unknown, falls back to the default column set so output stays
@@ -111,9 +115,9 @@ fn render_builtin_field(field: BugField, bug: &Bug) -> String {
         BugField::Summary => truncate(bug.summary.as_deref().unwrap_or(""), SUMMARY_TRUNCATE_WIDTH),
         BugField::Severity => bug.severity.clone().unwrap_or_default(),
         BugField::Product => bug.product.clone().unwrap_or_default(),
-        BugField::Component => bug.component.clone().unwrap_or_default(),
+        BugField::Component => join_strings(bug.component.as_deref()),
         BugField::Resolution => bug.resolution.clone().unwrap_or_default(),
-        BugField::Version => bug.version.clone().unwrap_or_default(),
+        BugField::Version => join_strings(bug.version.as_deref()),
         BugField::Creator => bug.creator.clone().unwrap_or_default(),
         BugField::CreationTime => bug.creation_time.clone().unwrap_or_default(),
         BugField::LastChangeTime => bug.last_change_time.clone().unwrap_or_default(),
@@ -190,6 +194,7 @@ enum DetailValue {
     OptionalText(fn(&Bug) -> Option<&str>),
     OptionalId(fn(&Bug) -> Option<u64>),
     StringList(fn(&Bug) -> &[String]),
+    OptionalStringList(fn(&Bug) -> Option<&[String]>),
     IdList(fn(&Bug) -> &[u64]),
     TargetMilestone,
     Flags,
@@ -226,7 +231,7 @@ const BUILTIN_DETAIL_FIELDS: &[BuiltinDetailField] = &[
     BuiltinDetailField {
         field: BugField::Component,
         label: "Component",
-        value: DetailValue::OptionalText(|bug| bug.component.as_deref()),
+        value: DetailValue::OptionalStringList(|bug| bug.component.as_deref()),
     },
     BuiltinDetailField {
         field: BugField::TargetMilestone,
@@ -295,6 +300,13 @@ fn render_builtin_detail_field(field: BuiltinDetailField, bug: &Bug) -> Option<D
         DetailValue::OptionalId(accessor) => accessor(bug)?.to_string(),
         DetailValue::StringList(accessor) => {
             let values = accessor(bug);
+            if values.is_empty() {
+                return None;
+            }
+            values.join(", ")
+        }
+        DetailValue::OptionalStringList(accessor) => {
+            let values = accessor(bug)?;
             if values.is_empty() {
                 return None;
             }
@@ -482,7 +494,7 @@ fn write_bug_adjacency_table(result: &BugAdjacencyResult, out: &mut (impl Write 
             bug.status.clone().unwrap_or_default(),
             bug.resolution.clone().unwrap_or_default(),
             bug.product.clone().unwrap_or_default(),
-            bug.version.clone().unwrap_or_default(),
+            join_strings(bug.version.as_deref()),
             bug.assigned_to.clone().unwrap_or_default(),
             bug.last_change_time.clone().unwrap_or_default(),
             bug.target_milestone.clone().unwrap_or_default(),

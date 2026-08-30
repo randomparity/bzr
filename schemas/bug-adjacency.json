@@ -76,6 +76,17 @@
         }
       ]
     },
+    "nullableStringArray": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "requestError": {
       "oneOf": [
         {
@@ -134,7 +145,7 @@
           "$ref": "#/$defs/nullableString"
         },
         "version": {
-          "$ref": "#/$defs/nullableString"
+          "$ref": "#/$defs/nullableStringArray"
         },
         "assigned_to": {
           "$ref": "#/$defs/nullableString"

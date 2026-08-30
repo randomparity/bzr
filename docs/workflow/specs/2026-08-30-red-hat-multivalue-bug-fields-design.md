@@ -14,7 +14,8 @@ normalize unrelated fields.
 
 `Bug.component`, `Bug.version`, and `BugAdjacencyBug.version` become
 `Option<Vec<String>>`. Their JSON schema is `null` or an array of strings.
-Deserialization maps a scalar string to one element and preserves arrays,
+Deserialization maps a non-empty scalar string to one element, retains the
+existing absent interpretation of an empty scalar, and preserves arrays,
 including empty and multi-value arrays, in server order. Missing fields remain
 `None`. Explicit null and every non-string/non-string-array shape fail instead
 of being coerced. Table and detail renderers join present values with `, `.

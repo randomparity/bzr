@@ -46,7 +46,7 @@ pub(super) async fn handle(
     let clone_description =
         resolve_source_description(&client, source.id, description.as_deref()).await?;
     let source_product = required_source_field(source.product, "product")?;
-    let source_component = required_source_field(source.component, "component")?;
+    let source_component = required_single_source_field(source.component, "component")?;
     let source_summary = required_source_field(source.summary, "summary")?;
 
     let mut blocks = Vec::new();
@@ -64,7 +64,7 @@ pub(super) async fn handle(
         summary: summary.clone().unwrap_or(source_summary),
         version: version
             .clone()
-            .or(source.version)
+            .or(optional_single_source_field(source.version, "version")?)
             .unwrap_or_else(|| "unspecified".to_string()),
         description: clone_description,
         priority: priority.clone().or(source.priority),
@@ -144,6 +144,25 @@ async fn resolve_source_description(
 
 fn required_source_field(value: Option<String>, field: &str) -> Result<String> {
     value.ok_or_else(|| {
+        crate::error::BzrError::DataIntegrity(format!("source bug missing {field} field"))
+    })
+}
+
+fn optional_single_source_field(value: Option<Vec<String>>, field: &str) -> Result<Option<String>> {
+    let Some(values) = value else {
+        return Ok(None);
+    };
+    match values.as_slice() {
+        [] => Ok(None),
+        [value] => Ok(Some(value.clone())),
+        _ => Err(crate::error::BzrError::DataIntegrity(format!(
+            "source bug has multiple {field} values; supply --{field} explicitly"
+        ))),
+    }
+}
+
+fn required_single_source_field(value: Option<Vec<String>>, field: &str) -> Result<String> {
+    optional_single_source_field(value, field)?.ok_or_else(|| {
         crate::error::BzrError::DataIntegrity(format!("source bug missing {field} field"))
     })
 }

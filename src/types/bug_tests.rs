@@ -34,6 +34,48 @@ fn bug_deserializes_full() {
 }
 
 #[test]
+fn bug_deserializes_scalar_and_array_component_version_as_lists() {
+    let scalar: Bug =
+        serde_json::from_str(r#"{"id":1,"component":"General","version":"rawhide"}"#).unwrap();
+    assert_eq!(
+        scalar.component.as_deref(),
+        Some(["General".into()].as_slice())
+    );
+    assert_eq!(
+        scalar.version.as_deref(),
+        Some(["rawhide".into()].as_slice())
+    );
+
+    let arrays: Bug =
+        serde_json::from_str(r#"{"id":2,"component":[],"version":["40","rawhide"]}"#).unwrap();
+    assert_eq!(arrays.component.as_deref(), Some([].as_slice()));
+    assert_eq!(
+        arrays.version.as_deref(),
+        Some(["40".into(), "rawhide".into()].as_slice())
+    );
+
+    let json = serde_json::to_value(arrays).unwrap();
+    assert_eq!(json["component"], serde_json::json!([]));
+    assert_eq!(json["version"], serde_json::json!(["40", "rawhide"]));
+}
+
+#[test]
+fn bug_rejects_malformed_component_and_version_lists() {
+    for json in [
+        r#"{"id":1,"component":null}"#,
+        r#"{"id":1,"component":7}"#,
+        r#"{"id":1,"component":{}}"#,
+        r#"{"id":1,"version":["rawhide",7]}"#,
+        r#"{"id":1,"version":[["rawhide"]]}"#,
+    ] {
+        assert!(
+            serde_json::from_str::<Bug>(json).is_err(),
+            "accepted {json}"
+        );
+    }
+}
+
+#[test]
 fn bug_deserializes_deadline() {
     let json = r#"{"id": 42, "deadline": "2026-12-31"}"#;
     let bug: Bug = serde_json::from_str(json).unwrap();

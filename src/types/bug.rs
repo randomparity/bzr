@@ -46,8 +46,8 @@ pub struct Bug {
     pub dupe_of: Option<u64>,
     pub deadline: Option<String>,
     pub product: Option<String>,
-    pub component: Option<String>,
-    pub version: Option<String>,
+    pub component: Option<Vec<String>>,
+    pub version: Option<Vec<String>>,
     pub assigned_to: Option<String>,
     pub priority: Option<String>,
     pub severity: Option<String>,
@@ -82,10 +82,10 @@ struct BugWire {
     deadline: Option<String>,
     #[serde(default)]
     product: Option<String>,
-    #[serde(default)]
-    component: Option<String>,
-    #[serde(default)]
-    version: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_string_list")]
+    component: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "deserialize_optional_string_list")]
+    version: Option<Vec<String>>,
     #[serde(default)]
     assigned_to: Option<String>,
     #[serde(default)]
@@ -120,6 +120,28 @@ struct BugWire {
     flags: Vec<Flag>,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum StringOrList {
+    String(String),
+    List(Vec<String>),
+}
+
+pub(crate) fn deserialize_optional_string_list<'de, D>(
+    deserializer: D,
+) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    StringOrList::deserialize(deserializer).map(|value| {
+        Some(match value {
+            StringOrList::String(value) if value.is_empty() => return None,
+            StringOrList::String(value) => vec![value],
+            StringOrList::List(values) => values,
+        })
+    })
 }
 
 impl From<BugWire> for Bug {

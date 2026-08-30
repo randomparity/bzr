@@ -17,7 +17,8 @@ of the published `bug` JSON contract; `version` is also part of the narrower
 
 The read model represents `component` and `version` as `Option<Vec<String>>`.
 JSON output is therefore `null` when absent and an array when present: a stock
-scalar becomes a one-element array, an empty server array remains empty, and a
+non-empty scalar becomes a one-element array, an empty stock scalar retains its
+existing absent/null behavior, an empty server array remains empty, and a
 multi-element array preserves its order. Human-readable output joins values
 with `, `. A shared strict deserializer accepts only a string or an array of
 strings; null, numeric, object, nested-array, or mixed-element values fail.

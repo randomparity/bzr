@@ -111,7 +111,7 @@ fn strict_bug(value: &Value, requested: &str) -> Result<BugAdjacencyBug> {
         status: strict_string_scalar(bug.get("status"), "status")?,
         resolution: strict_string_scalar(bug.get("resolution"), "resolution")?,
         product: strict_string_scalar(bug.get("product"), "product")?,
-        version: strict_string_scalar(bug.get("version"), "version")?,
+        version: strict_string_scalar(bug.get("version"), "version")?.map(|value| vec![value]),
         assigned_to: strict_string_scalar(bug.get("assigned_to"), "assigned_to")?,
         last_change_time: strict_time_scalar(bug.get("last_change_time"), "last_change_time")?,
         target_milestone: strict_string_scalar(bug.get("target_milestone"), "target_milestone")?,
