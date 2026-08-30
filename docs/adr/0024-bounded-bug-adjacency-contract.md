@@ -17,38 +17,47 @@ required contract on every supported server.
 ## Decision
 
 Add `bzr bug adjacency <ID_OR_ALIAS>...` as a non-traversing command with a maximum of 100 request
-arguments. Before classifying code 102, a credentialed invocation validates its current identity
-through the existing `whoami` boundary; a failed or unavailable identity check is command-fatal.
-An anonymous invocation has no credential that can fail. The command then performs the existing
-single-bug lookup once per distinct textual request and emits one versioned result containing:
+arguments. The command parses and sorts distinct numeric requests, retrieves their successful rows
+through one existing `search_bugs` call, and probes only omitted numeric requests through `get_bug`
+for typed faults. A batch code 100, 101, or 102 triggers the same per-ID probes because the batch
+fault cannot be attributed safely. Distinct aliases are fetched individually in lexical order
+because a canonical-only batch response cannot preserve alias identity.
+
+When a credentialed per-ID lookup returns code 102, the command lazily validates its current
+identity through the existing `whoami` boundary before downgrading the fault; failed or unavailable
+validation leaves that 102 command-fatal. An anonymous invocation has no credential that can fail.
+The command emits one versioned result containing:
 
 - `requests` in argument order, preserving each original string and either its canonical `bug_id`
   or a typed `error`;
 - `bugs` sorted by canonical numeric ID, with one node per successful canonical bug; and
 - each node's complete `blocks` and `depends_on` arrays, sorted and deduplicated numerically.
 
-After that preflight, codes 100 and 101 serialize as `not_found`; code 102 serializes as
+After that validation, codes 100 and 101 serialize as `not_found`; code 102 serializes as
 `inaccessible`. A client-side `NotFound` is also `not_found` without an `api_code`. Every other API
 error and every auth, TLS, connection, HTTP, deserialization, and transport error aborts the
-command without a success body. The command reuses the existing `BugzillaClient::get_bug` and
-`BugzillaClient::whoami` protocol/fallback boundaries and assembles the batch in the command
-layer; it adds no graph traversal or analysis policy.
+command without a success body. The command reuses the existing `BugzillaClient::search_bugs`,
+`BugzillaClient::get_bug`, and `BugzillaClient::whoami` protocol/fallback boundaries and assembles
+the result in the command layer; it adds no graph traversal or analysis policy.
 
 ## Consequences
 
 - Consumers replace many process invocations with one bounded invocation while retaining the
-  per-ID fault classification available from single-ID Bug.get behavior. It removes repeated
-  process, configuration, and connection setup, but still performs up to 100 sequential upstream
-  single-bug calls and therefore retains their cumulative latency and retry exposure.
+  per-ID fault classification available from single-ID Bug.get behavior. The all-visible numeric
+  path uses one upstream search. The worst case uses one batch plus 100 sequential alias or omitted
+  numeric probes and therefore still carries cumulative latency and retry exposure.
 - Alias and numeric requests may both map to one `bugs` entry; the `requests` mapping preserves
   why that node was requested.
 - The 100-request limit is a judgmental safety ceiling: it keeps one invocation useful for a
   sizeable frontier while preventing an unbounded number of sequential calls. A server can still
   return a large adjacency array for one bug: completeness and a hard per-array cap are mutually
   exclusive without server support, so the command does not claim a byte or edge bound.
-- Completeness is per successful Bug.get response at that request's observation time. The result
-  is not an atomic snapshot, and the command neither reconciles nor fabricates reciprocal edges;
+- Completeness is per successful search or Bug.get response at that observation time. The result is
+  not an atomic snapshot, and the command neither reconciles nor fabricates reciprocal edges;
   `last_change_time` is observation evidence, not a batch timestamp.
+- A canonical node retains its first successful observation in deterministic fetch order: numeric
+  batch rows by ID, then aliases lexically. Later requests mapping to that ID never overwrite or
+  union fields, so input permutation and concurrent changes cannot select an implicit merge rule.
 - Pretty JSON inherits the repository's `schema_version` envelope; NDJSON remains intentionally
   unenveloped under the existing output contract.
 
@@ -64,11 +73,13 @@ layer; it adds no graph traversal or analysis policy.
 - **Keep the status quo of one `bzr bug view` process per bug.** judgment: it preserves typed
   single-ID behavior but fails the chartered one-operation aggregate and repeats process,
   configuration, connection, and output-envelope work for every bug.
-- **Use one multi-ID Bugzilla REST request.** verified: `make functional-test-all` runs
-  `tests/functional/phases/18d-dependency-analysis.sh` on `bz50`, `bz52`, and `bz53`; cases 123n,
-  123o, 123o2, and 123o3 at merge commit
-  `2021055150121e8913a86b3368973c0b6f49bef8` establish the successful-preflight boundary for typed
-  single-ID missing/inaccessible results and fatal rejected credentials. Issue #573 records the
-  complementary observed multi-ID omission/prose behavior that motivated this primitive.
+- **Perform only individual lookups.** verified: `rg -n "pub async fn search_bugs" \
+  src/client/resources/bug.rs` at commit
+  `9a7c05735c81107c5f1e74e727eba59a1b293ebb` finds the installed multi-ID numeric search boundary.
+  Reusing it for successes and probing only omissions meets the typed-failure contract with fewer
+  common-case server round trips than individual-only retrieval.
+- **Treat the batch response alone as complete.** verified: issue #573's observed supported-server
+  behavior and `src/client/resources/bug.rs`'s `BugListResponse { bugs }` shape provide no
+  per-request failure channel, so omitted requests still need single-ID probes for stable codes.
 - **Add traversal or relationship caps.** judgment: graph traversal is explicitly excluded, and
   truncating a returned adjacency list would violate the required complete-observation contract.
