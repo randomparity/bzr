@@ -10,36 +10,36 @@ Dependency consumers need one read-only `bzr` invocation that preserves each req
 alias, returns each successful canonical bug once with complete `blocks` and `depends_on` lists,
 and turns only Bugzilla's resource-scoped codes 100, 101, and 102 into typed per-request results.
 `bug view --permissive` retains prose failures and duplicate canonical bugs, while `bug links`
-performs traversal and omits roots and repeated observations. Bugzilla's permissive multi-ID
-`Bug.get` response does carry identity-bearing faults, but the shared tolerant `Bug` mapping cannot
+performs traversal and omits roots and repeated observations. XML-RPC permissive `Bug.get` returns
+identity-bearing faults inside a successful response, but supported REST servers return the same
+resource codes as top-level non-success responses. The shared tolerant `Bug` mapping also cannot
 distinguish an absent or malformed adjacency field from an empty one. The existing retrieval result
 therefore cannot provide the required contract on every supported server.
 
 ## Decision
 
 Add `bzr bug adjacency <ID_OR_ALIAS>...` as a non-traversing command with a maximum of 100 request
-arguments. The command parses and sorts distinct numeric requests and retrieves their rows and
-identity-bearing faults through one adjacency-specific multi-ID `Bug.get` call. Distinct aliases
-use individual adjacency-specific `Bug.get` calls because successful alias results contain only
-the canonical bug ID. Both forms use Bug.get's supported `permissive` protocol parameter, so a
-resource failure is returned inside a 2xx `faults` array on Bugzilla 5.0, 5.2, and 5.3 instead of
-as its ordinary 400/401/404 status. Both forms request the fixed projection and reject a
-successful bug row unless `blocks` and `depends_on` are present
-arrays containing only non-negative integer bug IDs. They use focused strict REST and XML-RPC
+arguments. The command parses, deduplicates, and sorts numeric requests, then exact aliases, and
+retrieves every distinct request through an adjacency-specific single-ID `Bug.get`. REST carries
+the request as one `ids` query value on `/rest/bug/`; XML-RPC carries it as a one-element `ids`
+array. Neither transport puts an alias in a URL path segment. Both forms request the fixed
+projection and reject a successful bug row unless `blocks` and `depends_on` are present arrays
+containing only non-negative integer bug IDs. They use focused strict REST and XML-RPC
 response mappings so the shared tolerant `Bug` behavior remains unchanged for existing commands.
-Only a 2xx transport status can reach those mappings; every non-2xx, including a redirect carrying
-a valid-looking body, is command-fatal before parsing.
+XML-RPC and ordinary strict REST handling accept only 2xx statuses. The sole exception is an
+individually correlated adjacency REST get whose 4xx response is a closed top-level Bugzilla error
+envelope containing resource code 100, 101, or 102; that request itself supplies the missing
+correlation identity.
+Every other non-2xx, including one with success-looking data, is command-fatal before row parsing.
 
-A numeric multi-ID response must contain exactly one outcome for each requested numeric identity:
-either one identity-valid bug row or one identity-valid fault, with no unrequested, duplicate,
-missing, or mixed identity. A permissive alias response must likewise contain exactly one outcome:
-one bug and no faults, or one fault and no bugs. A numeric bug row or fault ID must equal the
-numeric request; aliases may resolve to any canonical bug ID, while an alias fault must preserve
-the exact requested alias. Invalid outcome sets are command-fatal data-integrity errors. Distinct
-aliases are fetched individually in lexical order because a successful Bug.get row does not echo
-the alias that selected it.
+Each 2xx response must contain exactly one outcome: one identity-valid bug and no faults, or one
+identity-valid fault and no bugs. A numeric bug row or fault ID must equal the numeric request;
+aliases may resolve to any canonical bug ID, while an alias fault must preserve the exact requested
+alias. A recognized REST non-2xx resource envelope has no returned outcome identity, so correlation
+is valid only because the request contains exactly one `ids` value. Missing, multiple, mixed,
+extra, or mismatched outcomes are command-fatal data-integrity errors.
 
-When a credentialed permissive fault returns code 102, the command lazily validates the configured
+When a credentialed resource outcome returns code 102, the command lazily validates the configured
 email and current credential through Bugzilla's `valid_login` endpoint using the client's current
 auth method. Only `result: true` (or Bugzilla's equivalent integer `1`) proves that the 102 is
 resource-scoped. A missing email, rejected credential, malformed response, or unavailable
@@ -53,7 +53,7 @@ proof; proof is not cached across responses. The command emits one versioned res
 - `bugs` sorted by canonical numeric ID, with one node per successful canonical bug; and
 - each node's complete `blocks` and `depends_on` arrays, sorted and deduplicated numerically.
 
-After that validation, faults 100 and 101 serialize as `not_found`; fault 102 serializes as
+After that validation, resource codes 100 and 101 serialize as `not_found`; code 102 serializes as
 `inaccessible`. Every other fault or API error and every auth, TLS, connection, HTTP,
 deserialization, and transport error aborts the command without a success body. The command adds
 focused adjacency retrieval methods beside the existing tolerant bug methods and exposes the
@@ -62,10 +62,10 @@ traversal or analysis policy.
 
 ## Consequences
 
-- Consumers replace many process invocations with one bounded invocation while retaining the
-  per-ID fault classification available from permissive Bug.get behavior. The all-numeric path
-  uses one upstream multi-get. The worst case uses 100 sequential alias gets and 100 credential
-  proofs: 200 upstream calls. It therefore still carries cumulative latency exposure. These
+- Consumers replace many process invocations with one bounded invocation while retaining per-ID
+  resource-fault classification across both configured transports. Every distinct request uses
+  one upstream get. The worst case uses 100 sequential gets and 100 credential proofs: 200 upstream
+  calls. It therefore still carries cumulative latency exposure. These
   adjacency retrieval and proof calls do not use transient retries or automatic redirects, so 200
   is a physical application-request ceiling after shared connection establishment;
   connection/version/TLS probes are outside the operation's retrieval
@@ -76,12 +76,12 @@ traversal or analysis policy.
   sizeable frontier while preventing an unbounded number of sequential calls. A server can still
   return a large adjacency array for one bug: completeness and a hard per-array cap are mutually
   exclusive without server support, so the command does not claim a byte or edge bound.
-- Completeness is per successful search or Bug.get response at that observation time. The result is
+- Completeness is per successful Bug.get response at that observation time. The result is
   not an atomic snapshot, and the command neither reconciles nor fabricates reciprocal edges;
   `last_change_time` is observation evidence, not a batch timestamp.
-- A canonical node retains its first successful observation in deterministic fetch order: numeric
-  multi-get rows by canonical ID, then successful alias gets lexically. Requests are mapped only
-  after those phases.
+- A canonical node retains its first successful observation in deterministic fetch order:
+  successful numeric gets by requested numeric ID, then successful alias gets lexically. Requests
+  are mapped only after those phases.
   Later requests mapping to that ID never overwrite or union fields, so input permutation and
   concurrent changes cannot select an implicit merge rule.
 - The new public payload is additive, so `SCHEMA_VERSION` advances from `0.6.1` to `0.6.2` under
@@ -101,12 +101,11 @@ traversal or analysis policy.
 - **Keep the status quo of one `bzr bug view` process per bug.** judgment: it preserves typed
   single-ID behavior but fails the chartered one-operation aggregate and repeats process,
   configuration, connection, and output-envelope work for every bug.
-- **Perform only individual lookups.** verified: the supported Bugzilla 5.0, 5.2, and 5.3
-  `Bug.get` implementations iterate over the supplied `ids` and, with `permissive`, return both
-  successful `bugs` and identity-bearing `faults`. One numeric multi-get therefore preserves typed
-  outcomes with fewer server round trips than individual-only retrieval.
-- **Use `Bug.search` for the numeric batch.** rejected: search returns only successful rows, so
-  omissions need additional Bug.get probes. Protocol-native permissive multi-ID Bug.get returns
-  the same successes and correlated resource faults in one response.
+- **Use permissive multi-ID Bug.get for numerics.** rejected: XML-RPC returns identity-bearing
+  faults, but supported REST servers return a top-level non-2xx error for a resource failure even
+  with `permissive`. One request per distinct identity is therefore required to correlate the
+  authorized REST non-2xx exception without parsing server prose.
+- **Use `Bug.search` for a numeric batch.** rejected: search returns only successful rows, so
+  omissions still require Bug.get and cannot distinguish absence from inaccessibility.
 - **Add traversal or relationship caps.** judgment: graph traversal is explicitly excluded, and
   truncating a returned adjacency list would violate the required complete-observation contract.

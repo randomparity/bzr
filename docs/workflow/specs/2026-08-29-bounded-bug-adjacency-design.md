@@ -26,31 +26,30 @@ The smallest contract that satisfies the issue is a new sibling of `bug view` an
 bzr --json bug adjacency <ID_OR_ALIAS>...
 ```
 
-`bug adjacency` is a bounded multi-get, not a graph operation. It sends distinct numeric IDs in one
-focused strict multi-ID Bug.get call and fetches distinct aliases individually because successful
-alias results do not echo the requested alias. Both forms use the protocol's supported
-`permissive` parameter. On Bugzilla 5.0, 5.2, and 5.3, permissive Bug.get returns resource failures
-inside a 2xx `faults` array instead of the ordinary code-100/101/102 HTTP status. Both variants
-request the fixed projection and reject successful REST or XML-RPC bug rows unless `blocks` and
+`bug adjacency` is a bounded collection operation, not a graph operation. It fetches every distinct
+numeric ID and exact alias through an individual strict Bug.get call, numerics in ascending value
+order and aliases lexically afterward. Both transports use the protocol's `permissive` parameter.
+XML-RPC returns resource failures as identity-bearing faults inside a 2xx response. Supported REST
+servers instead return codes 100, 101, and 102 as top-level non-2xx errors even with `permissive`.
+The one-request-per-identity REST shape supplies safe correlation for those three authorized codes.
+Both transports request the fixed projection and reject successful bug rows unless `blocks` and
 `depends_on` are present arrays containing only non-negative integer IDs. The shared tolerant `Bug`
-mapping remains unchanged for existing commands. This uses one upstream call for all numeric
-outcomes while preserving each numeric fault identity and without pretending that a missing
-adjacency field means an empty adjacency list.
+mapping remains unchanged for existing commands.
 
-The numeric REST call is exactly `GET /rest/bug/` with the trailing slash: Bugzilla routes
-`/rest/bug` to Bug.search and `/rest/bug/` to multi-ID Bug.get on every supported version. It sends
-each sorted, deduplicated numeric value as a repeated `ids` query parameter, plus `permissive=1`
-and the comma-delimited fixed `include_fields` projection. It does not use the search endpoint's
-singular repeated `id` parameter. The individual alias form uses the percent-encoded alias in
-`GET /rest/bug/<alias>` with `permissive=1` and the same fixed projection.
+Every REST call is exactly `GET /rest/bug/` with the trailing slash and exactly one `ids` query
+value, plus `permissive=1` and the comma-delimited fixed `include_fields` projection. Bugzilla routes
+`/rest/bug` to Bug.search and `/rest/bug/` to Bug.get on every supported version. Numeric values and
+aliases, including aliases containing `/`, travel as query data rather than path segments. XML-RPC
+sends the same single request identity as a one-element `ids` array with `permissive` true and the
+fixed field projection.
 
-The strict boundary also validates response identity before the command records observations. A
-numeric multi-ID response must contain exactly one outcome for every requested numeric identity:
-one bug or one fault, and no unrequested, duplicate, missing, or mixed identity. A permissive alias
-response must contain exactly one outcome: one bug and no faults, or one fault and no bugs. A
-numeric bug or fault identity must equal the requested numeric value; an alias may resolve to any
-canonical bug ID, while an alias fault must preserve the exact requested string. Invalid outcome
-sets are command-fatal data-integrity errors and never become inputs to the first-observation rule.
+The strict boundary validates every 2xx response before the command records an observation. It must
+contain exactly one outcome: one bug and no faults, or one fault and no bugs. A numeric bug or fault
+identity must equal the requested numeric value; an alias may resolve to any canonical bug ID,
+while an alias fault must preserve the exact requested string. A recognized REST non-2xx resource
+envelope does not echo the identity, so it is correlated solely by the invariant that this focused
+request contains exactly one `ids` value. Empty, multiple, mixed, extra, or mismatched 2xx outcomes
+and malformed non-2xx envelopes are command-fatal data-integrity errors.
 
 If a credentialed outcome returns code 102, the handler lazily validates the configured email
 and current credential through `rest/valid_login`. For REST it applies the same auth method that
@@ -66,9 +65,10 @@ credentialed reads without configured email add no eager prerequisite; they beco
 102 needs classification. Anonymous clients have no credential failure to distinguish. The handler
 does not cache a successful proof: every credentialed code 102 gets a contemporaneous
 `valid_login` call, including repeated 102s in the same invocation. It commits output only after
-every request finishes. The worst case is 100 sequential alias gets and 100 credential proofs: 200
-physical application requests after shared connection establishment. This tightens the authorized
-201-call maximum without reducing supported inputs or outcomes.
+every request finishes. The worst case has 100 distinct restricted requests: 100 sequential gets
+and 100 credential proofs, for 200 physical application requests after shared connection
+establishment. Duplicate arguments cannot increase that count because exact requests are fetched
+once. This tightens the authorized 201-call maximum without reducing supported inputs or outcomes.
 Adjacency retrieval and proof calls do not use transient retries or automatic redirects;
 connection, version, auth, and TLS probes occur before retrieval and are outside this operation
 budget. ADR
@@ -82,23 +82,27 @@ code 102, and `valid_login` applies that same method through the same no-redirec
 or a 401 from a stale or wrong cached method stays command-fatal instead of changing request count
 or authentication provenance.
 
-Strict REST and strict XML-RPC require `status.is_success()` before any error-envelope, JSON,
-XML-RPC, fault, or row parsing. Every non-2xx response is command-fatal, including ordinary
-Bugzilla 400/401/404 resource errors and a 3xx that carries a `Location` header and an otherwise
-schema-valid body. Typed resource results come only from a 2xx permissive response's strict
-`faults` entry. A non-2xx body cannot supply an outcome, and output remains buffered and empty.
+Strict XML-RPC and every REST operation except the focused individual adjacency get require
+`status.is_success()` before any error-envelope, JSON, XML-RPC, fault, or row parsing. The focused
+REST get examines a 4xx body only as a closed Bugzilla error envelope: its only keys are required
+boolean `error: true`, required integer `code` 100, 101, or 102, and an optional string `message`.
+Only that exact shape becomes the correlated request's resource outcome. Every other non-2xx,
+including redirects, 5xx, code 410 or 100500, malformed envelopes, and success-looking bodies, is
+command-fatal with empty stdout. A 2xx typed fault must still satisfy the strict identity-bearing
+outcome rules.
 Adjacency retrieval also defines stricter API-mode routing: `Rest` and `Hybrid` use only the strict
-REST calls, while `XmlRpc` uses only strict XML-RPC. A successful empty numeric REST response is a
-fatal missing-outcome error; it never triggers XML-RPC comparison. No REST error, including 401,
+REST calls, while `XmlRpc` uses only strict XML-RPC. A successful empty REST response is a fatal
+missing-outcome error; it never triggers XML-RPC comparison. No REST error, including 401,
 connection/HTTP failure, or API code 100500, falls back to XML-RPC. XML-RPC already sends the
 configured credential in its protocol body and has no header/query fallback. Focused tests cover a
 configured header returning 401 where alternate query auth would return 102, REST transport and
-code-100500 failures, and an empty numeric response; none may invoke XML-RPC or `valid_login`.
+code-100500 failures, and an empty response; none may invoke XML-RPC or `valid_login`.
 
 Two alternatives were rejected: extending `bug view --permissive` would change its prose-failure
 and request-row contract, while extending `bug links` would mix a bounded retrieval primitive with
-traversal policy and still inherit its root/revisit omissions. Protocol-native permissive
-multi-ID Bug.get supplies numeric successes and identity-bearing faults in one response.
+traversal policy and still inherit its root/revisit omissions. Multi-ID Bug.get was rejected for
+REST because supported servers return the first resource failure as an uncorrelated top-level
+non-2xx error; individual gets are the minimum shape that makes the authorized exception typed.
 
 ## CLI contract
 
@@ -185,9 +189,9 @@ required `api_code` 102. No entry may contain both `bug_id` and `error` or neith
 string-valued scalar is non-empty; empty wire strings have already normalized to JSON `null`.
 
 `bugs` is keyed and sorted by numeric `id`; a canonical bug appears once. The first successful
-observation in deterministic fetch order wins: numeric multi-get rows by canonical ID, then
-successful alias probes lexically. Requests are mapped only after those phases. Later observations
-that resolve to the same ID map
+observation in deterministic fetch order wins: successful numeric gets by requested numeric ID,
+then successful alias gets lexically. Requests are mapped only after those phases. Later
+observations that resolve to the same ID map
 their request but do not overwrite or union the node. `blocks` and `depends_on` are independently
 sorted ascending and deduplicated. These rules make canonical node content and adjacency ordering
 independent of argument and Bugzilla response order except for genuine concurrent server mutation
@@ -225,11 +229,11 @@ lazy identity validation:
 | Bugzilla code 102 (access denied) | `inaccessible` | `102` |
 Per-request failures contain no server message. This avoids turning attacker- or administrator-
 controlled prose into a stable machine contract and avoids duplicating credential-redaction logic.
-A numeric response containing only classified failures is still a successful report and exits zero.
+An invocation containing only classified failures is still a successful report and exits zero.
 
-Every other `BzrError` or permissive fault aborts the command. A top-level response error has no
-per-ID identity and is always fatal, including code 100, 101, or 102. A credentialed permissive
-fault 102 is
+Every other `BzrError` or permissive fault aborts the command. A top-level response error is typed
+only when it is the strict code-100/101/102 envelope from an individual adjacency REST get; every
+other top-level response error is fatal. A credentialed resource code 102 is
 also fatal unless `valid_login` conclusively accepts the configured email and current credential
 under the same auth method; missing email, `false`, malformed output, API failure, and transport
 failure are never converted into request results. The handler buffers requests and bugs and writes
@@ -239,10 +243,11 @@ Connection, authentication negotiation, API-mode selection, and TLS trust happen
 handler.
 
 Strict adjacency REST parsing does not use the shared ADR-0015 populated-data warning downgrade.
-It inspects the raw JSON envelope before typed row deserialization: any top-level `error: true`
-becomes its `BzrError::Api` even when `bugs` is populated. Every top-level error and every alias error
-outside a well-formed permissive `faults` outcome is command-fatal. Existing REST callers retain the
-shared warning-with-data behavior.
+It inspects the raw JSON envelope before typed row deserialization. On 2xx, any top-level
+`error: true` is fatal even when `bugs` is populated. On non-2xx, only the closed resource envelope
+and three authorized codes become the individually correlated request outcome; populated data,
+unknown properties that imply a mixed outcome, or any other code is fatal. Existing REST callers
+retain the shared warning-with-data behavior.
 
 Each successful bug record is complete for the Bug.get response whose observation won
 the canonical-node rule. Sequential responses are not an atomic Bugzilla snapshot: another actor
@@ -253,27 +258,27 @@ may change dependencies between reads, the command does not reconcile reciprocal
 
 - `src/cli/bug/adjacency.rs` defines the positional arguments and help text; `bug/mod.rs` adds the
   action.
-- `src/commands/bug/adjacency.rs` validates the cap, collects numeric requests through the strict
-  multi-ID adjacency path, fetches aliases individually, maps typed failures, deduplicates bugs,
+- `src/commands/bug/adjacency.rs` validates the cap, fetches every distinct numeric request then
+  every distinct alias through the strict single-request path, maps failures, deduplicates bugs,
   and delegates output.
 - `src/types/bug/adjacency.rs` owns the exact request, failure, canonical-bug, and result types. Its
   REST wire form requires both adjacency arrays rather than converting from the tolerant `Bug`.
-- `src/client/resources/bug.rs` adds strict permissive multi-ID and single-alias Bug.get adjacency
-  methods with the strict routing rule: `Rest` and `Hybrid` use REST only, while `XmlRpc` uses
-  XML-RPC only. The numeric REST method constructs the load-bearing `bug/` path explicitly and
-  appends one `ids` query pair per sorted, deduplicated ID. Strict REST sends disable transient
-  retries and transparent alternate-auth fallback.
+- `src/client/resources/bug.rs` adds one strict single-request Bug.get adjacency method with the
+  routing rule: `Rest` and `Hybrid` use REST only, while `XmlRpc` uses XML-RPC only. The REST method
+  constructs the load-bearing `bug/` path explicitly and appends exactly one `ids` query pair for
+  either a numeric ID or alias. Strict REST sends disable transient retries and transparent
+  alternate-auth fallback.
 - `src/xmlrpc/resources/bug.rs` adds a strict adjacency mapper that requires both arrays and every
   member to be a non-negative integer. Its strict calls use an XML-RPC client backed by the focused
   no-redirect HTTP client; existing tolerant bug reads keep their current behavior.
 - `src/client/transport.rs` exposes the focused no-auth-fallback send path used only by strict
   adjacency REST retrieval. It sends once without redirect, transient, or alternate-auth retries,
-  requires a 2xx response before returning it for parsing, and leaves ordinary command behavior
-  unchanged.
-- `src/client/response.rs` exposes a focused strict-error parser that turns every top-level
-  `error: true` envelope into `BzrError::Api` and rejects a non-boolean `error` marker before
-  deserializing adjacency rows or credential proof; the shared ADR-0015 warning-with-data parser
-  remains unchanged.
+  returns the untouched status and response for focused classification, and leaves ordinary command
+  behavior unchanged.
+- `src/client/response.rs` exposes focused parsers for strict 2xx outcomes and the closed non-2xx
+  adjacency resource envelope. They reject undeclared envelope keys, a non-boolean `error` marker,
+  and mixed success/error data before deserializing adjacency rows or credential proof; the shared
+  ADR-0015 warning-with-data parser remains unchanged.
 - `src/tls/mod.rs` builds the focused no-redirect client from the same certificate, CA, issuer, pin,
   timeout, and insecurity policy as the ordinary client. `BugzillaClient` and its strict XML-RPC
   adapter retain that client only for bounded adjacency retrieval and proof.
@@ -310,12 +315,12 @@ TLS policy, timeouts, and API-mode selection.
 ### Controls
 
 - Count validation runs before connection and bounds work at 100 distinct argument positions.
-- Empty positional strings are rejected as `ids` input errors before connection and cannot reach an
-  alias URL or the published result.
+- Empty positional strings are rejected as `ids` input errors before connection and cannot reach a
+  request query/body or the published result.
 - Numeric validation caps every transport at `i64::MAX` before connection; strict response parsing
   and the schema apply the same maximum to canonical and adjacency IDs.
-- Numeric IDs are sorted and deduplicated before one bounded multi-get; exact aliases are sorted and
-  deduplicated before individual fetches.
+- Numeric IDs are sorted and deduplicated before individual gets; exact aliases are sorted and
+  deduplicated before their individual gets.
 - Credentialed `valid_login` validation runs lazily only after a per-ID 102, uses the configured
   email plus current credential and auth method, and treats missing or inconclusive proof as fatal.
   Every credentialed 102 gets a fresh proof; no invocation-level proof cache can mask revocation or
@@ -328,10 +333,10 @@ TLS policy, timeouts, and API-mode selection.
   application-request budget at 200; ordinary client calls retain their retry and alternate-auth
   policies.
 - The strict adjacency wire type rejects absent, non-array, negative, or non-integer adjacency
-  members. Its retrieval boundary also rejects extra, duplicate, missing, or mixed numeric
-  identities and every permissive alias response without exactly one identity-matched bug-or-fault
-  outcome. Existing
-  `Bug` deserialization remains tolerant for its current callers.
+  members. Its retrieval boundary rejects every 2xx response without exactly one
+  identity-matched bug-or-fault outcome and every non-2xx response except the closed three-code
+  resource envelope from a single-identity REST get. Existing `Bug` deserialization remains
+  tolerant for its current callers.
 - Only codes 100, 101, and 102 are downgraded, and the mapping is exhaustive and test-pinned.
 - Failure records copy only the stable type and numeric code, never server prose.
 - Canonical `BTreeMap` storage and explicit adjacency sorting/deduplication remove server-order
@@ -343,10 +348,10 @@ TLS policy, timeouts, and API-mode selection.
 The command does not defend against a configured server returning an extremely large single-bug
 response. The existing client reads complete response bodies, and truncating adjacency would break
 the charter's completeness requirement. General response-byte bounding requires a separate client
-policy and server/protocol analysis. The design also does not change alias URL encoding, TLS, or
-retry behavior. It deliberately gives adjacency stricter auth and Hybrid routing so required fatal
-errors cannot be hidden; ordinary client methods retain their existing alternate-auth and XML-RPC
-fallback behavior.
+policy and server/protocol analysis. The design does not change ordinary commands' alias URL
+encoding, TLS, or retry behavior. It deliberately gives adjacency stricter auth and Hybrid routing
+so required fatal errors cannot be hidden; ordinary client methods retain their existing
+alternate-auth and XML-RPC fallback behavior.
 
 ## Verification
 
@@ -354,9 +359,9 @@ fallback behavior.
 
 - CLI parsing accepts mixed numeric/alias inputs and rejects missing inputs; a command-level test
   passes an explicit empty argv element and proves an `ids` error before connection.
-- Command tests prove one-call numeric retrieval with visible and faulted IDs; top-level codes
-  100/101/102 are fatal without `valid_login`; the 101/102 mixed-success schema from correlated
-  permissive faults; code 100 alias failure;
+- Command tests prove individually correlated numeric and alias retrieval; REST top-level codes
+  100/101/102 become typed only at that boundary; the 101/102 mixed-success schema from correlated
+  REST errors and XML-RPC permissive faults; code 100 alias failure;
   all-failure success; lazy credentialed 102 validation; successful credentialed Bugzilla 5.0 reads
   without email and without `valid_login`; stale or wrong cached auth cannot turn a credentialed 102
   into `inaccessible`; missing email and inconclusive `valid_login` are fatal; code 410 fatal
@@ -368,13 +373,17 @@ fallback behavior.
   identity, numeric node order, and sorted/deduplicated adjacency arrays.
 - REST and XML-RPC client tests prove missing adjacency fields and malformed or negative edge
   members are fatal rather than silently shortened or converted to empty arrays.
-- REST and XML-RPC tests prove extra, duplicate, missing, and mixed numeric identities plus empty,
-  multiple, mixed, and mismatched permissive alias outcomes are command-fatal. Numeric bug/fault
-  identities must match numerically; aliases may map to a canonical bug ID but fault identities
-  preserve exact alias text.
-- REST request tests require the numeric method to hit `/rest/bug/`, reject the `/rest/bug` search
-  route, and assert repeated sorted/deduplicated `ids` values, `permissive=1`, and the exact fixed
-  projection. The live three-version functional matrix is the server-level proof of that encoding.
+- REST and XML-RPC tests prove empty, multiple, mixed, extra, and mismatched 2xx outcomes are
+  command-fatal. Numeric bug/fault identities must match numerically; aliases may map to a
+  canonical bug ID but fault identities preserve exact alias text.
+- REST request tests require every method to hit `/rest/bug/`, reject `/rest/bug` search and
+  `/rest/bug/<alias>` routing, and assert exactly one `ids` value, `permissive=1`, and the fixed
+  projection. A slash-containing alias is pinned as query data. The live three-version functional
+  matrix is the server-level proof of that encoding.
+- REST non-2xx tests accept only 4xx strict top-level error envelopes with code 100, 101, or 102
+  from the focused get. They reject missing or non-boolean `error`, wrong code types, unknown or
+  extra keys beyond optional string `message`, redirects, 5xx, and success-looking bodies with empty
+  stdout.
 - Equivalent REST and XML-RPC fixtures serialize byte-equivalent canonical scalar values, including
   empty or missing wire strings normalized to JSON `null`.
 - Schema drift tests cover a maximal success result, all nullable scalar keys, and both
@@ -391,11 +400,11 @@ fallback behavior.
   connection with the same `ids` input-validation error.
 - REST strict-wire tests reject canonical and adjacency response IDs above `i64::MAX`, matching the
   XML-RPC signed-integer domain and the public schema.
-- Hybrid tests prove REST 401, transport/HTTP failure, code 100500, and an empty numeric REST
+- Hybrid tests prove REST 401, transport/HTTP failure, code 100500, and an empty REST
   response never invoke XML-RPC; the empty response is a fatal missing-outcome error.
-- Strict response tests prove populated-data top-level error envelopes, including code 100/101/102,
-  410, and 100500, are fatal before typed row deserialization. Existing callers retain their
-  ADR-0015 warning behavior.
+- Strict response tests prove 2xx populated-data top-level error envelopes, including code
+  100/101/102, 410, and 100500, are fatal before typed row deserialization. Existing callers retain
+  their ADR-0015 warning behavior.
 - Proof-response tests reject `error: true` with `result: true` and non-boolean `error` values before
   accepting a valid boolean or integer-one result.
 - Output and functional assertions pin the additive `SCHEMA_VERSION` bump to `0.6.2` everywhere
