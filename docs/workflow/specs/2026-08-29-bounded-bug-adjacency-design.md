@@ -401,11 +401,13 @@ bisectable and makes the live matrix evidence rather than part of the fix.
 - REST and XML-RPC client tests prove missing adjacency fields and malformed or negative edge
   members are fatal rather than silently shortened or converted to empty arrays.
 - Paired REST and XML-RPC tests prove object/struct-valued `assigned_to_detail` is ignored while
-  preserving the exact eleven-field public result. Each accepted fixture contains unexpected
-  nested keys whose values deliberately span strings, null, arrays, and nested objects/structs,
-  proving the decoder inspects only the outer container rather than adopting a nested schema.
-  Sibling tests reject scalar, array, and null outer companion values and continue rejecting every
-  other unknown bug-row key.
+  preserving the exact eleven-field public result. The REST fixture's unexpected nested keys span
+  strings, null, arrays, and nested objects. The XML-RPC fixture spans unfamiliar keys across its
+  representable scalar values, arrays, and nested structs; it does not require unsupported XML-RPC
+  nil semantics. Together they prove the adjacency decoder inspects only the outer container
+  rather than adopting a nested schema. Sibling tests reject scalar, array, and null REST outer
+  companion values, reject non-struct XML-RPC outer values, and continue rejecting every other
+  unknown bug-row key.
 - REST and XML-RPC tests prove empty, multiple, mixed, extra, and mismatched 2xx outcomes are
   command-fatal. Numeric bug/fault identities must match numerically; aliases may map to a
   canonical bug ID but fault identities preserve exact alias text.
