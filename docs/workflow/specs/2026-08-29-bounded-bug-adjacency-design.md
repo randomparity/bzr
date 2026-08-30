@@ -31,13 +31,17 @@ through the existing `search_bugs` boundary, then probes only omitted numerics a
 through `get_bug`. This uses one upstream call for the common all-visible numeric case without
 pretending the canonical-only batch response can carry a failure for each request.
 
-If a credentialed per-ID probe returns code 102, the handler lazily calls the existing `whoami`
-boundary, including Bugzilla 5.0's configured-email fallback. Only a successful identity check
-makes that 102 resource-scoped; an unavailable check leaves it fatal. Successful Bugzilla 5.0
-reads without configured email never call `whoami`, so the command adds no eager prerequisite.
-Anonymous clients have no credential failure to distinguish. The handler commits output only after
-every request finishes. It removes repeated process startup and connection discovery but retains a
-worst case of one batch plus 100 sequential omission/alias probes. ADR
+If a credentialed per-ID probe returns code 102, the handler lazily validates the configured email
+and current credential through `rest/valid_login`, applying the same auth method that produced the
+Bug.get response. Only `result: true` or Bugzilla's equivalent integer `1` makes that 102
+resource-scoped. A missing configured email, rejected credential, malformed response, or transport
+failure leaves the 102 command-fatal. The check does not use Bugzilla 5.0's `whoami` fallback:
+anonymous user lookup can return a user and therefore cannot prove authentication. Successful
+credentialed reads without configured email add no eager prerequisite; they become fatal only if a
+102 needs classification. Anonymous clients have no credential failure to distinguish. The handler
+commits output only after every request finishes. It removes repeated process startup and
+connection discovery but retains a worst case of one batch plus 100 sequential omission/alias
+probes. ADR
 [0024](../../adr/0024-bounded-bug-adjacency-contract.md) records why this is a new command instead
 of a mode on either existing command.
 
@@ -114,12 +118,13 @@ by exact text and fetched lexically after numeric processing. Alias and numeric 
 separate entries even when both resolve to the same numeric bug.
 
 `bugs` is keyed and sorted by numeric `id`; a canonical bug appears once. The first successful
-observation in deterministic fetch order wins: numeric batch rows by ID, then aliases lexically.
-Later observations that resolve to the same ID map their request but do not overwrite or union the
-node. `blocks` and `depends_on` are independently sorted ascending and deduplicated. These rules
-make canonical node content and adjacency ordering independent of argument and Bugzilla response
-order except for genuine concurrent server mutation before the deterministic winning observation.
-Other values are scalars.
+observation in deterministic fetch order wins: numeric batch rows by canonical ID, then successful
+omitted or fallback numeric probes by requested numeric ID, then successful alias probes lexically.
+Requests are mapped only after those phases. Later observations that resolve to the same ID map
+their request but do not overwrite or union the node. `blocks` and `depends_on` are independently
+sorted ascending and deduplicated. These rules make canonical node content and adjacency ordering
+independent of argument and Bugzilla response order except for genuine concurrent server mutation
+before the deterministic winning observation. Other values are scalars.
 
 Table output prints two deterministic sections: a request mapping in argument order and a
 canonical bug table in numeric order. Each bug row renders complete comma-separated `blocks` and
@@ -143,12 +148,14 @@ controlled prose into a stable machine contract and avoids duplicating credentia
 A batch containing only classified failures is still a successful report and exits zero.
 
 Every other `BzrError` aborts the command. A batch-level 100, 101, or 102 has no per-ID identity, so
-it triggers individual probes rather than becoming a request result. A `whoami` failure after a
-credentialed per-ID 102 is always fatal and never converted into a request result. The handler
-buffers requests and bugs and writes nothing until collection succeeds, so a fatal response never
-leaves a partial success document on stdout. The ordinary structured command error remains on
-stderr with its normal exit code. Connection, authentication negotiation, API-mode selection, and
-TLS trust happen once before the handler.
+it triggers individual probes rather than becoming a request result. A credentialed per-ID 102 is
+also fatal unless `valid_login` conclusively accepts the configured email and current credential
+under the same auth method; missing email, `false`, malformed output, API failure, and transport
+failure are never converted into request results. The handler buffers requests and bugs and writes
+nothing until collection succeeds, so a fatal response never leaves a partial success document on
+stdout. The ordinary structured command error remains on stderr with its normal exit code.
+Connection, authentication negotiation, API-mode selection, and TLS trust happen once before the
+handler.
 
 Each successful bug record is complete for the search or Bug.get response whose observation won
 the canonical-node rule. Sequential responses are not an atomic Bugzilla snapshot: another actor
@@ -166,8 +173,9 @@ may change dependencies between reads, the command does not reconcile reciprocal
   canonicalization from the existing `Bug` type.
 - `src/output/resources/bug.rs` renders the two table sections and uses the shared JSON-family
   formatter for structured output.
-- Existing `BugzillaClient::search_bugs`, `get_bug`, and `whoami` remain the protocol boundaries.
-  No client abstraction is added.
+- Existing `BugzillaClient::search_bugs` and `get_bug` remain the retrieval boundaries. A focused
+  `BugzillaClient` credential-validation method reuses the installed `valid_login` response rules
+  while applying the client's current auth method; it neither re-detects nor changes that method.
 
 ## Trust boundaries and controls
 
@@ -191,7 +199,8 @@ TLS policy, timeouts, and API-mode selection.
 - Count validation runs before connection and bounds work at 100 distinct argument positions.
 - Numeric IDs are sorted and deduplicated before one bounded search; exact aliases are sorted and
   deduplicated before individual fetches.
-- Credentialed `whoami` validation runs lazily only after a per-ID 102; a failure is command-fatal.
+- Credentialed `valid_login` validation runs lazily only after a per-ID 102, uses the configured
+  email plus current credential and auth method, and treats missing or inconclusive proof as fatal.
   Anonymous mode carries no credential whose rejection could be confused with resource denial.
 - `Bug` deserialization remains at the existing client boundary; the new code accepts no alternate
   wire schema.
@@ -217,8 +226,9 @@ TLS, retries, or XML-RPC fallback behavior; it reuses those existing boundaries 
 - Command tests prove one-batch visible numeric retrieval; probes only for omitted numerics;
   resource-code batch fallback; the 101/102 mixed-success schema; code 100 alias failure;
   all-failure success; lazy credentialed 102 validation; successful credentialed Bugzilla 5.0 reads
-  without email and without `whoami`; code 410 fatal behavior; transport fatal behavior with empty
-  stdout; and exact-input caching.
+  without email and without `valid_login`; stale or wrong cached auth cannot turn a credentialed 102
+  into `inaccessible`; missing email and inconclusive `valid_login` are fatal; code 410 fatal
+  behavior; transport fatal behavior with empty stdout; and exact-input caching.
 - Command/output tests prove alias-plus-numeric convergence, one canonical bug, positional request
   identity, numeric node order, and sorted/deduplicated adjacency arrays.
 - A controlled-fault test changes one accepted resource code to fatal and must make the focused

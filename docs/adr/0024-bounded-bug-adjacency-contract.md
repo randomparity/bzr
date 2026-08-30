@@ -23,10 +23,13 @@ for typed faults. A batch code 100, 101, or 102 triggers the same per-ID probes 
 fault cannot be attributed safely. Distinct aliases are fetched individually in lexical order
 because a canonical-only batch response cannot preserve alias identity.
 
-When a credentialed per-ID lookup returns code 102, the command lazily validates its current
-identity through the existing `whoami` boundary before downgrading the fault; failed or unavailable
-validation leaves that 102 command-fatal. An anonymous invocation has no credential that can fail.
-The command emits one versioned result containing:
+When a credentialed per-ID lookup returns code 102, the command lazily validates the configured
+email and current credential through Bugzilla's `valid_login` endpoint using the client's current
+auth method. Only `result: true` (or Bugzilla's equivalent integer `1`) proves that the 102 is
+resource-scoped. A missing email, rejected credential, malformed response, or unavailable
+validation leaves that 102 command-fatal. In particular, the Bugzilla 5.0 `whoami` user-lookup
+fallback is not an authentication proof because that lookup can succeed anonymously. An anonymous
+invocation has no credential that can fail. The command emits one versioned result containing:
 
 - `requests` in argument order, preserving each original string and either its canonical `bug_id`
   or a typed `error`;
@@ -36,9 +39,9 @@ The command emits one versioned result containing:
 After that validation, codes 100 and 101 serialize as `not_found`; code 102 serializes as
 `inaccessible`. A client-side `NotFound` is also `not_found` without an `api_code`. Every other API
 error and every auth, TLS, connection, HTTP, deserialization, and transport error aborts the
-command without a success body. The command reuses the existing `BugzillaClient::search_bugs`,
-`BugzillaClient::get_bug`, and `BugzillaClient::whoami` protocol/fallback boundaries and assembles
-the result in the command layer; it adds no graph traversal or analysis policy.
+command without a success body. The command reuses the existing `BugzillaClient::search_bugs` and
+`BugzillaClient::get_bug` boundaries and exposes the existing `valid_login` response handling as a
+current-client credential check; it adds no graph traversal or analysis policy.
 
 ## Consequences
 
@@ -56,8 +59,10 @@ the result in the command layer; it adds no graph traversal or analysis policy.
   not an atomic snapshot, and the command neither reconciles nor fabricates reciprocal edges;
   `last_change_time` is observation evidence, not a batch timestamp.
 - A canonical node retains its first successful observation in deterministic fetch order: numeric
-  batch rows by ID, then aliases lexically. Later requests mapping to that ID never overwrite or
-  union fields, so input permutation and concurrent changes cannot select an implicit merge rule.
+  batch rows by canonical ID, then successful omitted or fallback numeric probes by requested
+  numeric ID, then successful alias probes lexically. Requests are mapped only after those phases.
+  Later requests mapping to that ID never overwrite or union fields, so input permutation and
+  concurrent changes cannot select an implicit merge rule.
 - Pretty JSON inherits the repository's `schema_version` envelope; NDJSON remains intentionally
   unenveloped under the existing output contract.
 
