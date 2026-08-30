@@ -25,6 +25,10 @@ cargo install --path .             # Install locally
 
 Git hooks: `make install-hooks` installs a pre-commit hook (`cargo fmt --check` + `cargo clippy`) and a pre-push hook (`make test`, the quiet suite). Run `make setup` to install everything, including hooks.
 
+Functional tests start Bugzilla containers with fixed ports. Be cautious
+when running multiple workflows simultaneously as they may interfere with
+each other during this test phase.
+
 Test output selection for agent loops: `make test` runs quiet by default —
 a summary line per suite, with failing tests still printing their captured
 output and a full failure summary — which is the right default for routine
