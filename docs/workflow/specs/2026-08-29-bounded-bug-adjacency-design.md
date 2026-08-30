@@ -419,32 +419,38 @@ alternate-auth and XML-RPC fallback behavior.
 ### Functional matrix
 
 Extend functional phases used by every supported container version. Create two related public bugs
-and one restricted bug, then assert:
+and one restricted bug, assign one public bug a valid slash-containing alias, then assert:
 
-1. numeric IDs and an alias resolve in one invocation;
-2. alias plus its numeric ID produce two request entries and one canonical bug;
+1. numeric IDs and the slash-containing alias resolve in one invocation through explicit REST and
+   XML-RPC server aliases;
+2. the slash-containing alias plus its numeric ID produce two request entries and one canonical
+   bug;
 3. both adjacency arrays contain the complete expected IDs in numeric order;
 4. a missing numeric ID is a typed `not_found` request with code 101;
-5. the restricted bug is a typed `inaccessible` request with code 102 under the credentialless
+5. a missing slash-containing alias retains its exact request identity and is typed `not_found`
+   with code 100 through both REST and XML-RPC;
+6. the restricted bug is a typed `inaccessible` request with code 102 under the credentialless
    server path;
-6. the mixed operation exits zero; and
-7. an unsupported/auth-flavored API error remains covered as command-fatal in the focused command
+7. each mixed or all-failure resource operation exits zero with the closed public failure shape;
+   and
+8. an unsupported/auth-flavored API error remains covered as command-fatal in the focused command
    suite because the stock functional servers do not provide a safe way to synthesize it.
 
 Before those cases run, each version entrypoint enables Bugzilla's `usebugaliases` parameter in its
 generated `data/params.json` or `data/params` file before Apache starts. The phase creates a bug with
-an alias and first uses existing `bug view <alias>` behavior to prove the server persisted and
-resolves it; a skipped, silently ignored, or unresolved alias fails before adjacency assertions.
+an alias containing `/` and first uses existing `bug list --alias <alias>` search behavior to prove
+the server persisted it without relying on the direct-path `bug view` route. A skipped, silently
+ignored, or unresolved alias fails before adjacency assertions.
 
 Before phase 08e grants membership, add `restricted-rest` and `restricted-xmlrpc` server aliases
 using the non-member's configured email and API key with explicit API modes. Invoke
 `bug adjacency` on the restricted bug through both and assert typed code 102; that result is possible
 only after each path's live `valid_login` proof. The focused two-102 request-count test pins one proof
 per response. Reuse phase 18d's anonymous explicit REST and XML-RPC aliases to run public-success,
-missing-ID, and credentialless-inaccessible cases through both transports on each supported
-container version. Run the installed dependency-analysis collector against the newly built binary
-after the `0.6.2` bump so its accepted version is exercised live rather than only through replay
-fixtures.
+slash-alias success, missing-ID code 101, missing-alias code 100, and
+credentialless-inaccessible cases through both transports on each supported container version.
+Run the installed dependency-analysis collector against the newly built binary after the `0.6.2`
+bump so its accepted version is exercised live rather than only through replay fixtures.
 
 Run `python3 -m unittest content/skills/bzr-dependency-analysis/tests/test_collect.py`, `make lint`,
 `make test`, and `make functional-test-all` before delivery. The host is arm64; the declared project
