@@ -43,6 +43,10 @@ Bugzilla defines set semantics. Proxy startup readiness, upstream failure, and
 malformed upstream JSON fail explicitly. The phase records the proxy log path
 on failure and asserts that the proxy process is gone after cleanup.
 
+The normalized array representation is a breaking public JSON retype, so ADR
+0007 requires `SCHEMA_VERSION` `0.6.2` to advance to `1.0.0`; current docs,
+embedded-skill consumers, and functional assertions move with it.
+
 ## Threat model
 
 - Boundary: an untrusted Bugzilla response enters serde. Control: accept only

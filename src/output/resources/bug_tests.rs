@@ -242,7 +242,7 @@ fn write_bug_adjacency_json_has_the_closed_result_shape() {
 fn write_bug_adjacency_json_uses_schema_version_0_6_2() {
     let output = capture_bug_adjacency(OutputFormat::Json, sample_adjacency());
     let value: serde_json::Value = serde_json::from_str(&output).unwrap();
-    assert_eq!(value["schema_version"], "0.6.2");
+    assert_eq!(value["schema_version"], "1.0.0");
 }
 
 #[test]

@@ -550,7 +550,7 @@ for _DA_ADJ_MODE in rest xmlrpc; do
   run_bzr_raw --json --server "$_DA_ADJ_SERVER" \
     bug adjacency "$_DA_ROOT" "$_DA_ALIAS"
   if assert_exit_code 0 &&
-    assert_raw_json '.schema_version' '0.6.2' &&
+    assert_raw_json '.schema_version' '1.0.0' &&
     assert_json '.requests == [
       {requested: "'"$_DA_ROOT"'", bug_id: '"$_DA_ROOT"'},
       {requested: "'"$_DA_ALIAS"'", bug_id: '"$_DA_LEFT"'}

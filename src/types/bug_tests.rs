@@ -60,6 +60,17 @@ fn bug_deserializes_scalar_and_array_component_version_as_lists() {
 }
 
 #[test]
+fn bug_deserializes_empty_scalar_component_version_as_absent() {
+    let bug: Bug = serde_json::from_str(r#"{"id":1,"component":"","version":""}"#).unwrap();
+
+    assert_eq!(bug.component, None);
+    assert_eq!(bug.version, None);
+    let json = serde_json::to_value(bug).unwrap();
+    assert_eq!(json["component"], serde_json::Value::Null);
+    assert_eq!(json["version"], serde_json::Value::Null);
+}
+
+#[test]
 fn bug_rejects_malformed_component_and_version_lists() {
     for json in [
         r#"{"id":1,"component":null}"#,

@@ -22,6 +22,8 @@ existing absent/null behavior, an empty server array remains empty, and a
 multi-element array preserves its order. Human-readable output joins values
 with `, `. A shared strict deserializer accepts only a string or an array of
 strings; null, numeric, object, nested-array, or mixed-element values fail.
+Because this is a breaking retype of published JSON fields, ADR 0007 requires
+the envelope `SCHEMA_VERSION` to advance from `0.6.2` to `1.0.0`.
 
 The functional harness retains its stock Bugzilla runs and adds a stdlib HTTP
 response-shaping proxy for a Red Hat compatibility scenario. The proxy forwards
@@ -33,6 +35,7 @@ under test without depending on a public production service.
 
 - Consumers receive one deterministic JSON type for every present value.
 - Rust callers and published schemas must handle lists instead of scalar text.
+- Envelope-aware consumers can detect the breaking contract at version `1.0.0`.
 - Stock and Red Hat wire shapes share validation and output behavior.
 - The compatibility proxy is an explicit captured deployment profile, not a
   claim that stock Bugzilla itself emits Red Hat's extension shape.

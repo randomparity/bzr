@@ -41,7 +41,8 @@ and readable output retains every value.
 ## Task 2: Publish and prove the contract
 
 Files: modify `schemas/bug.json`, `schemas/bug-adjacency.json`,
-`src/commands/schema_tests.rs`, `docs/bzr-cli.md`; add
+`src/commands/schema_tests.rs`, `src/output/mod.rs`, current schema-version
+consumers and assertions, and `docs/bzr-cli.md`; add
 `tests/functional/redhat-shape-proxy.py`; modify `tests/functional/lib.sh`,
 `tests/functional/phases/18e-release-readiness.sh`, and functional documentation.
 
@@ -52,19 +53,21 @@ phase targets it through an inline server URL and terminates it on completion.
 1. Change schema fixtures to array-or-null and add conformance assertions. Run
    `make test-one T=bug_object`; expect failure before implementation and pass
    afterward.
-2. Document the normalized output and the captured deployment-profile test.
-3. Add proxy unit self-tests for scalar-to-array, empty/multi preservation,
+2. Advance the breaking JSON envelope contract from `0.6.2` to `1.0.0` under
+   ADR 0007 and update current consumers, assertions, and documentation.
+3. Document the normalized output and the captured deployment-profile test.
+4. Add proxy unit self-tests for scalar-to-array, empty/multi preservation,
    untouched non-bug data, readiness, malformed upstream JSON, and upstream
    failure; run `python3 tests/functional/redhat-shape-proxy.py --self-test`.
-4. Add lifecycle helpers that launch the proxy, wait for readiness, compose
+5. Add lifecycle helpers that launch the proxy, wait for readiness, compose
    cleanup with the runner's existing EXIT trap, record the log path on
    failure, terminate the proxy, assert it is gone, and restore the prior trap.
-5. Extend release-readiness with list/search and adjacency calls through the
+6. Extend release-readiness with list/search and adjacency calls through the
    proxy, asserting arrays and exact values. The phase order is launch,
    readiness, CLI calls, teardown assertion, and trap restoration. Run
    `make functional-test`; expect the new scenario and existing stock phase to
    pass.
-6. Run `make test-fast`, `make lint`, `make test`, and
+7. Run `make test-fast`, `make lint`, `make test`, and
    `make functional-test-all`; expect exit 0. Commit as
    `test(functional): cover Red Hat bug response shapes`.
 

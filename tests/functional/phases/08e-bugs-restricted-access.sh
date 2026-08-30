@@ -133,7 +133,7 @@ for _RESTRICTED_MODE in rest xmlrpc; do
         run_bzr_raw --json --server "restricted-$_RESTRICTED_MODE" \
             bug adjacency "$RESTRICTED_BUG"
         if assert_exit_code 0 &&
-            assert_raw_json '.schema_version' '0.6.2' &&
+            assert_raw_json '.schema_version' '1.0.0' &&
             assert_json '. == {
                 requests: [{
                     requested: "'"$RESTRICTED_BUG"'",
