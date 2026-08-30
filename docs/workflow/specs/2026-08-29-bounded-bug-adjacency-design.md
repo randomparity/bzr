@@ -26,12 +26,16 @@ The smallest contract that satisfies the issue is a new sibling of `bug view` an
 bzr --json bug adjacency <ID_OR_ALIAS>...
 ```
 
-`bug adjacency` is a bounded multi-get, not a graph operation. It calls the existing single-bug
-client boundary for each distinct textual request, classifies only the allowed resource faults,
-and commits output only after every request finishes. This preserves the server behavior that
-provides typed codes while removing repeated process startup and connection discovery from the
-consumer. ADR [0024](../../adr/0024-bounded-bug-adjacency-contract.md) records why this is a new
-command instead of a mode on either existing command.
+`bug adjacency` is a bounded multi-get, not a graph operation. For a credentialed client it first
+calls the existing `whoami` boundary, including Bugzilla 5.0's configured-email fallback, so stale
+or rejected credentials fail before code 102 can be classified as resource-scoped. Anonymous
+clients have no credential failure to distinguish. It then calls the existing single-bug client
+boundary for each distinct textual request, classifies only the allowed resource faults, and
+commits output only after every request finishes. This preserves the server behavior that provides
+typed codes while removing repeated process startup and connection discovery from the consumer.
+It does not reduce the worst-case 100 sequential upstream reads. ADR
+[0024](../../adr/0024-bounded-bug-adjacency-contract.md) records why this is a new command instead
+of a mode on either existing command.
 
 Two alternatives were rejected: extending `bug view --permissive` would change its prose-failure
 and request-row contract, while extending `bug links` would mix a bounded retrieval primitive with
@@ -115,7 +119,8 @@ whole result as one compact record without an envelope.
 
 ## Failure contract
 
-The command maps only these per-request results:
+The command maps only these per-request results after the credentialed identity preflight (when
+applicable) succeeds:
 
 | Source | `error.type` | `api_code` |
 |---|---|---|
@@ -128,10 +133,17 @@ Per-request failures contain no server message. This avoids turning attacker- or
 controlled prose into a stable machine contract and avoids duplicating credential-redaction logic.
 A batch containing only classified failures is still a successful report and exits zero.
 
-Every other `BzrError` aborts the command. The handler buffers requests and bugs and writes nothing
-until collection succeeds, so a fatal response never leaves a partial success document on stdout.
-The ordinary structured command error remains on stderr with its normal exit code. Connection,
-authentication negotiation, API-mode selection, and TLS trust happen once before the handler.
+Every other `BzrError` aborts the command. `whoami` failure on a credentialed client is always in
+that fatal set; it is never converted into a request result. The handler buffers requests and bugs
+and writes nothing until collection succeeds, so a fatal response never leaves a partial success
+document on stdout. The ordinary structured command error remains on stderr with its normal exit
+code. Connection, authentication negotiation, API-mode selection, and TLS trust happen once before
+the handler.
+
+Each successful bug record is complete for its own Bug.get response. Sequential responses are not
+an atomic Bugzilla snapshot: another actor may change dependencies between reads, the command does
+not reconcile reciprocal arrays, and `last_change_time` is the consumer's per-node observation
+evidence rather than a batch timestamp.
 
 ## Components
 
@@ -165,6 +177,8 @@ TLS policy, timeouts, and API-mode selection.
 
 - Count validation runs before connection and bounds work at 100 distinct argument positions.
 - Exact-string caching prevents repeated identical input from multiplying remote work.
+- Credentialed `whoami` validation runs before all bug reads; a failure is command-fatal. Anonymous
+  mode carries no credential whose rejection could be confused with resource denial.
 - `Bug` deserialization remains at the existing client boundary; the new code accepts no alternate
   wire schema.
 - Only codes 100, 101, and 102 are downgraded, and the mapping is exhaustive and test-pinned.
@@ -187,7 +201,8 @@ TLS, retries, or XML-RPC fallback behavior; it reuses those existing boundaries 
 
 - CLI parsing accepts mixed numeric/alias inputs and rejects missing inputs.
 - Command tests prove the 101/102 mixed-success schema, code 100 alias failure, all-failure success,
-  code 410 fatal behavior, transport fatal behavior with empty stdout, and exact-input caching.
+  credentialed preflight success, credentialed preflight rejection before bug reads, code 410 fatal
+  behavior, transport fatal behavior with empty stdout, and exact-input caching.
 - Command/output tests prove alias-plus-numeric convergence, one canonical bug, positional request
   identity, numeric node order, and sorted/deduplicated adjacency arrays.
 - A controlled-fault test changes one accepted resource code to fatal and must make the focused
