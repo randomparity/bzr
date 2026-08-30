@@ -27,28 +27,29 @@ serialization remains derived from the normalized public fields. Output
 renderers consume slices and do not inspect the original wire shape.
 
 The functional phase starts a Python stdlib reverse proxy in front of the
-already-running Bugzilla container. The proxy forwards an actual REST search,
+already-running Bugzilla container. The proxy forwards actual REST GETs,
 parses successful JSON responses, and rewrites only bug-object `component` and
-`version` values into captured Red Hat-style arrays. `bzr bug list` and
-`bzr bug adjacency` then target the proxy. Cleanup is registered with the
-existing phase lifecycle. Stock functional arms continue unchanged.
+`version` values into captured Red Hat-style arrays. A readiness endpoint must
+pass before `bzr bug list` and `bzr bug adjacency` target the proxy. Cleanup is
+composed with and restored to the existing phase lifecycle, including an early
+phase failure. Stock functional arms continue unchanged.
 
 ## Error handling
 
 The deserializer reports the field as requiring a string or an array of
 strings. Array order and duplicates are preserved because neither the issue nor
-Bugzilla defines set semantics. Proxy startup, forwarding, JSON parsing, and
-shutdown fail the functional scenario explicitly and leave diagnostic logs.
+Bugzilla defines set semantics. Proxy startup readiness, upstream failure, and
+malformed upstream JSON fail explicitly. The phase records the proxy log path
+on failure and asserts that the proxy process is gone after cleanup.
 
 ## Threat model
 
 - Boundary: an untrusted Bugzilla response enters serde. Control: accept only
   strings or arrays whose every member is a string; reject null and all other
   JSON types through the existing deserialize error path.
-- Boundary: the test proxy receives loopback HTTP from the test process and
-  forwards to the selected loopback container port. Control: fixed loopback
-  bind/target arguments, bounded request bodies, hop-by-hop header filtering,
-  and no authentication logging.
+- Boundary: the test proxy receives loopback GET requests from the test process
+  and forwards to the selected loopback container port. Control: fixed
+  loopback bind/target arguments and no authentication logging.
 - Actors: a configured Bugzilla server controls response JSON; a local test
   operator controls proxy arguments. No new production listener is added.
 - Out of scope: validating the semantic existence of returned component or
@@ -61,6 +62,8 @@ shutdown fail the functional scenario explicitly and leave diagnostic logs.
 - Resource/command tests cover Red Hat-shaped search/list output.
 - Strict adjacency tests cover scalar and array `version` plus malformed data.
 - Schema tests require array-or-null contracts.
+- Proxy self-tests cover rewriting, readiness, malformed upstream JSON, and
+  upstream failure. The phase verifies cleanup and names the diagnostic log.
 - Functional tests run stock coverage and a Red Hat-shaped proxy scenario over
   a real local Bugzilla for list/search and adjacency.
 

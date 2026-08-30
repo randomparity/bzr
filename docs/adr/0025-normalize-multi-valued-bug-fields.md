@@ -9,8 +9,9 @@ Accepted
 Stock Bugzilla serializes a bug's `component` and `version` as strings. Red Hat
 Bugzilla serializes the same requested fields as arrays, including arrays with
 more than one value. Treating them as strings rejects valid production reads;
-choosing only one array member would discard server data. These fields are part
-of the published `bug` and `bug-adjacency` JSON contracts.
+choosing only one array member would discard server data. Both fields are part
+of the published `bug` JSON contract; `version` is also part of the narrower
+`bug-adjacency` contract.
 
 ## Decision
 
