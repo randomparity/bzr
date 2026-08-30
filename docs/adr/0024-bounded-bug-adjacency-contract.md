@@ -26,6 +26,12 @@ array. Neither transport puts an alias in a URL path segment. Both forms request
 projection and reject a successful bug row unless `blocks` and `depends_on` are present arrays
 containing only non-negative integer bug IDs. They use focused strict REST and XML-RPC
 response mappings so the shared tolerant `Bug` behavior remains unchanged for existing commands.
+Supported Bugzilla servers automatically add `assigned_to_detail` whenever the fixed projection
+requests `assigned_to`. The strict mappings admit that one optional companion key only when its
+value is a REST object or XML-RPC struct, validate its container shape, and then discard it. It is
+not a twelfth public field. Every other undeclared bug-row key remains a command-fatal integrity
+error, and the mappings do not depend on or expose the companion object's version-dependent
+members.
 XML-RPC and ordinary strict REST handling accept only 2xx statuses. The sole exception is an
 individually correlated adjacency REST get whose 4xx response is a closed top-level Bugzilla error
 envelope containing resource code 100, 101, or 102; that request itself supplies the missing
@@ -86,6 +92,10 @@ traversal or analysis policy.
   are mapped only after those phases.
   Later requests mapping to that ID never overwrite or union fields, so input permutation and
   concurrent changes cannot select an implicit merge rule.
+- The accepted wire row is intentionally one key wider than the public node: Bugzilla's
+  `assigned_to_detail` projection companion is validated as structured data and ignored. This
+  preserves strict rejection of unrelated row expansion without publishing a server-version-
+  dependent user-detail schema.
 - The new public payload is additive, so `SCHEMA_VERSION` advances from `0.6.1` to `0.6.2` under
   ADR 0007. The constant, CLI reference examples, and functional assertions advance together.
   Pretty JSON inherits the envelope; NDJSON remains intentionally unenveloped under the existing

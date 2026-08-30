@@ -36,6 +36,14 @@ Both transports request the fixed projection and reject successful bug rows unle
 `depends_on` are present arrays containing only non-negative integer IDs. The shared tolerant `Bug`
 mapping remains unchanged for existing commands.
 
+Live Bugzilla 5.0 evidence established that both transports automatically add an
+`assigned_to_detail` companion whenever `assigned_to` appears in `include_fields`. The focused
+wire row therefore permits that one additional optional key. REST requires its value to be a JSON
+object; XML-RPC requires a struct. The decoder validates only that container type and discards the
+value because its nested membership varies by supported server and is neither needed nor exposed.
+Every other undeclared bug-row key stays fatal. The closed public node remains the eleven fields
+below; `assigned_to_detail` is not serialized, compared, merged, or used to derive `assigned_to`.
+
 Every REST call is exactly `GET /rest/bug/` with the trailing slash and exactly one `ids` query
 value, plus `permissive=1` and the comma-delimited fixed `include_fields` projection. Bugzilla routes
 `/rest/bug` to Bug.search and `/rest/bug/` to Bug.get on every supported version. Numeric values and
@@ -136,7 +144,8 @@ reciprocal observations. The fixed canonical bug projection is:
 
 This is the existing dependency collector's detail set, including the three fields needed for its
 supported scope restrictions. No arbitrary custom fields, comments, attachments, or history are
-included.
+included. Bugzilla's automatically injected `assigned_to_detail` is an accepted wire-only
+companion, not part of this requested or public field set.
 
 Every canonical bug object contains all eleven keys. `id` is a required integer from `0` through
 `9223372036854775807`; `blocks` and `depends_on` are required arrays whose members have the same
@@ -278,8 +287,13 @@ may change dependencies between reads, the command does not reconcile reciprocal
   behavior unchanged.
 - `src/client/response.rs` exposes focused parsers for strict 2xx outcomes and the closed non-2xx
   adjacency resource envelope. They reject undeclared envelope keys, a non-boolean `error` marker,
-  and mixed success/error data before deserializing adjacency rows or credential proof; the shared
-  ADR-0015 warning-with-data parser remains unchanged.
+  and mixed success/error data before deserializing adjacency rows or credential proof. A strict
+  REST row accepts only the eleven projected keys plus optional object-valued
+  `assigned_to_detail`, which it ignores; the shared ADR-0015 warning-with-data parser remains
+  unchanged.
+- `src/xmlrpc/resources/bug_adjacency.rs` applies the same row exception to an optional
+  struct-valued `assigned_to_detail`; all other undeclared row keys and a non-struct companion are
+  fatal, and the companion never enters the public result.
 - `src/tls/mod.rs` builds the focused no-redirect client from the same certificate, CA, issuer, pin,
   timeout, and insecurity policy as the ordinary client. `BugzillaClient` and its strict XML-RPC
   adapter retain that client only for bounded adjacency retrieval and proof.
@@ -334,7 +348,9 @@ TLS policy, timeouts, and API-mode selection.
   application-request budget at 200; ordinary client calls retain their retry and alternate-auth
   policies.
 - The strict adjacency wire type rejects absent, non-array, negative, or non-integer adjacency
-  members. Its retrieval boundary rejects every 2xx response without exactly one
+  members. It accepts and ignores only object/struct-valued `assigned_to_detail`, the companion
+  Bugzilla injects for the requested assignee field, while rejecting every other unknown bug-row
+  key. Its retrieval boundary rejects every 2xx response without exactly one
   identity-matched bug-or-fault outcome and every non-2xx response except the closed three-code
   resource envelope from a single-identity REST get. Existing `Bug` deserialization remains
   tolerant for its current callers.
@@ -374,6 +390,9 @@ alternate-auth and XML-RPC fallback behavior.
   identity, numeric node order, and sorted/deduplicated adjacency arrays.
 - REST and XML-RPC client tests prove missing adjacency fields and malformed or negative edge
   members are fatal rather than silently shortened or converted to empty arrays.
+- Paired REST and XML-RPC tests prove object/struct-valued `assigned_to_detail` is ignored while
+  preserving the exact eleven-field public result. Sibling tests reject scalar, array, and null
+  companion values and continue rejecting every other unknown bug-row key.
 - REST and XML-RPC tests prove empty, multiple, mixed, extra, and mismatched 2xx outcomes are
   command-fatal. Numeric bug/fault identities must match numerically; aliases may map to a
   canonical bug ID but fault identities preserve exact alias text.
