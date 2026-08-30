@@ -17,13 +17,13 @@ make test                          # Run tests (quiet output; failures still pri
 make test-verbose                  # Run tests with full cargo output (or: VERBOSE=1 make test)
 cargo fmt                          # Format code
 cargo clippy -- -D warnings        # Lint (warnings are errors)
-make lint                          # Format + clippy in one step
+make lint                          # Format, clippy, and guardrail checks in one step
 make setup                         # Full dev environment setup
 make functional-test-all           # Run functional tests against real Bugzilla containers
 cargo install --path .             # Install locally
 ```
 
-Git hooks: `make install-hooks` installs a pre-commit hook (`cargo fmt --check` + `cargo clippy`) and a pre-push hook (`make test`, the quiet suite). Run `make setup` to install everything, including hooks.
+Git hooks: `make install-hooks` installs a pre-commit hook (`cargo fmt -- --check`, `cargo clippy --all-targets --features test-helpers -- -D warnings`, and `make check-test-layout`) and a pre-push hook (`make test`, the quiet suite). Run `make setup` to install everything, including hooks.
 
 Functional tests start Bugzilla containers with fixed ports. Be cautious
 when running multiple workflows simultaneously as they may interfere with
@@ -54,7 +54,7 @@ Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches the
 
 ### Key modules
 
-- **`cli/`** — clap derive structs split into per-resource submodules. `mod.rs` defines `Cli`, `Commands`, and re-exports all `*Action` enums. Per-resource files (`bug.rs`, `comment.rs`, `attachment.rs`, `config.rs`, `product.rs`, `field.rs`, `user.rs`, `group.rs`, `server.rs`, `classification.rs`, `component.rs`, `template.rs`, `query.rs`) each define one action enum.
+- **`cli/`** — clap derive structs split into per-resource submodules. `mod.rs` defines `Cli`, `Commands`, and re-exports all `*Action` enums. Most resources are single files (`comment.rs`, `attachment.rs`, `config.rs`, `product.rs`, `field.rs`, `user.rs`, `group.rs`, `server.rs`, `classification.rs`, `component.rs`, `template.rs`, `query.rs`, `skills.rs`) each defining one action enum; `bug/` is a directory whose `mod.rs` defines `BugAction` plus shared args, with per-action files (`view.rs`, `create.rs`, `clone.rs`, `adjacency.rs`, `history.rs`, `links.rs`, `list.rs`, `my.rs`, `search.rs`, `update/`, `verbs.rs`). `fields.rs` holds the shared `ProjectionArgs`.
 - **`client/`** — `mod.rs` defines `BugzillaClient`,
   `BugzillaClientConfig`, client construction, shared dispatch helpers, and
   cross-resource helpers. `request.rs`, `response.rs`, and `transport.rs` own
@@ -102,26 +102,33 @@ Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches the
   server, output format, API mode, dry-run, confirmation, inline-server,
   config-path, timeout, and retry settings. Network commands follow the
   pattern: load config → resolve auth → connect client → call API → print
-  output. Local-only commands under `commands/config/` use the same context
-  boundary but do local I/O, while `whoami.rs` has no action enum. Cross-cutting command
-  infrastructure lives under `commands/runtime/`: `runtime::invocation` owns
-  per-command state, capability policy, and inline server configuration;
-  `runtime::input` owns payload loading, Bugzilla URL import, attachment input,
-  and flag parsing; `runtime::interaction` owns confirmation prompts and
-  `$EDITOR`; `runtime::search` owns query execution, field projection, and
-  paging; `runtime::shared` owns connection and body-source helpers; and
-  `runtime::mutation` owns the shared admin create/update driver. See
-  `src/commands/mod.rs` for the complete list of command modules.
+  output. Larger resources are directories with one file per action
+  (`bug/`, `config/`, `user/`, `template/`, `query/`, `product/`, `group/`,
+  `component/`, `comment/`, `attachment/`); the rest are flat files
+  (`field.rs`, `classification.rs`, `server.rs`, `completion.rs`, `skills.rs`,
+  `schema.rs`, `whoami.rs`). Local-only commands under `commands/config/` use
+  the same context boundary but do local I/O, while `whoami.rs` has no action
+  enum. Cross-cutting command infrastructure lives under `commands/runtime/`:
+  `runtime::invocation` owns per-command state, capability policy, and inline
+  server configuration; `runtime::input` owns payload loading, Bugzilla URL
+  import, attachment input, and flag parsing; `runtime::interaction` owns
+  confirmation prompts and `$EDITOR`; `runtime::search` owns query execution,
+  field projection, and paging; `runtime::shared` owns connection and
+  body-source helpers; and `runtime::mutation` owns the shared admin
+  create/update driver. See `src/commands/mod.rs` for the complete list of
+  command modules.
 
 ### Conventions
 
 - User-facing CLI output should go through `Writers` (`w.out`/`w.err`) and the
   output helpers, which ultimately use `writeln!(io::stdout(), …)` /
   `writeln!(io::stderr(), …)` rather than `println!`/`eprintln!`. This keeps
-  command output testable with `test_helpers::capture_stdout`, which redirects
-  fd 1 via `dup2`; `println!` goes through cargo test's per-test stdout capture
-  and bypasses fd 1. Discard the `Result` with `let _ = writeln!(…)` if the
-  function isn't already in a context that allows `.expect()`.
+  command output testable with `test_helpers::CapturedIo`, which owns
+  `Vec<u8>` stdout/stderr buffers and borrows them through a `Writers`
+  constructor (`out_str()`/`err_str()` for assertions); `println!` goes
+  through cargo test's per-test stdout capture and bypasses fd 1. Discard the
+  `Result` with `let _ = writeln!(…)` if the function isn't already in a
+  context that allows `.expect()`.
 - Direct `println!`/`eprintln!` is reserved for non-CLI process integration:
   Cargo directives in `build.rs` and `xtask` status output. Do not add
   `#[expect(clippy::print_stdout)]` or `#[expect(clippy::print_stderr)]` in
@@ -145,8 +152,9 @@ Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches the
     `make functional-test-all` (all supported Bugzilla versions) or, at minimum,
     `make functional-test` (default version). If Docker/podman is genuinely
     unavailable in your environment, say so explicitly in the PR body and state
-    which tier you could not run — never silently skip it. CI does not gate these
-    (they need containers), so the discipline is on the author, not the pipeline.
+    which tier you could not run — never silently skip it. CI does not gate
+    these on PRs (they need containers; a scheduled workflow runs them daily),
+    so the discipline is on the author, not the pipeline.
 - Clippy pedantic is enabled with strict rules (see `[lints.clippy]` in Cargo.toml). `unwrap_used` is denied, `expect_used` and `allow_attributes` are warned.
 - CLI reference documentation lives in `docs/bzr-cli.md`. When adding a new command, update that file.
 - `CHANGELOG.md` is **generated from conventional commits at release time**
