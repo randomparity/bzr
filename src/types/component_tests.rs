@@ -18,6 +18,34 @@ fn component_deserializes_without_assignee() {
 }
 
 #[test]
+fn component_deserializes_bugzilla_default_assigned_to() {
+    let component: Component = serde_json::from_value(serde_json::json!({
+        "id": 11,
+        "default_assigned_to": "q4-ada@example.test"
+    }))
+    .unwrap();
+
+    assert_eq!(
+        component.default_assignee.as_deref(),
+        Some("q4-ada@example.test")
+    );
+}
+
+#[test]
+fn component_deserializes_default_assignee() {
+    let component: Component = serde_json::from_value(serde_json::json!({
+        "id": 11,
+        "default_assignee": "q4-ada@example.test"
+    }))
+    .unwrap();
+
+    assert_eq!(
+        component.default_assignee.as_deref(),
+        Some("q4-ada@example.test")
+    );
+}
+
+#[test]
 fn component_fields_matches_serialized_keys() {
     let c = Component {
         id: 1,
