@@ -343,7 +343,8 @@ fallback behavior.
 - CLI parsing accepts mixed numeric/alias inputs and rejects missing inputs; a command-level test
   passes an explicit empty argv element and proves an `ids` error before connection.
 - Command tests prove one-batch visible numeric retrieval; probes only for omitted numerics;
-  resource-code batch fallback; the 101/102 mixed-success schema; code 100 alias failure;
+  batch codes 100/101/102 are fatal without per-ID probes or `valid_login`; the 101/102
+  mixed-success schema from permissive single faults; code 100 alias failure;
   all-failure success; lazy credentialed 102 validation; successful credentialed Bugzilla 5.0 reads
   without email and without `valid_login`; stale or wrong cached auth cannot turn a credentialed 102
   into `inaccessible`; missing email and inconclusive `valid_login` are fatal; code 410 fatal
