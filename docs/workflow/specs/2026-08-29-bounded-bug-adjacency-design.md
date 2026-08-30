@@ -85,11 +85,12 @@ or authentication provenance.
 Strict XML-RPC and every REST operation except the focused individual adjacency get require
 `status.is_success()` before any error-envelope, JSON, XML-RPC, fault, or row parsing. The focused
 REST get examines a 4xx body only as a closed Bugzilla error envelope: its only keys are required
-boolean `error: true`, required integer `code` 100, 101, or 102, and an optional string `message`.
-Only that exact shape becomes the correlated request's resource outcome. Every other non-2xx,
-including redirects, 5xx, code 410 or 100500, malformed envelopes, and success-looking bodies, is
-command-fatal with empty stdout. A 2xx typed fault must still satisfy the strict identity-bearing
-outcome rules.
+boolean `error: true`; required `code` as JSON integer 100, 101, or 102 or the exact decimal string
+`"100"`, `"101"`, or `"102"`; and optional string `message` and `documentation`. The parser
+normalizes only those six code representations and discards both prose fields. Only that exact
+shape becomes the correlated request's resource outcome. Every other non-2xx, including redirects,
+5xx, code 410 or 100500, malformed envelopes, and success-looking bodies, is command-fatal with
+empty stdout. A 2xx typed fault must still satisfy the strict identity-bearing outcome rules.
 Adjacency retrieval also defines stricter API-mode routing: `Rest` and `Hybrid` use only the strict
 REST calls, while `XmlRpc` uses only strict XML-RPC. A successful empty REST response is a fatal
 missing-outcome error; it never triggers XML-RPC comparison. No REST error, including 401,
@@ -380,10 +381,11 @@ alternate-auth and XML-RPC fallback behavior.
   `/rest/bug/<alias>` routing, and assert exactly one `ids` value, `permissive=1`, and the fixed
   projection. A slash-containing alias is pinned as query data. The live three-version functional
   matrix is the server-level proof of that encoding.
-- REST non-2xx tests accept only 4xx strict top-level error envelopes with code 100, 101, or 102
-  from the focused get. They reject missing or non-boolean `error`, wrong code types, unknown or
-  extra keys beyond optional string `message`, redirects, 5xx, and success-looking bodies with empty
-  stdout.
+- REST non-2xx tests accept only 4xx strict top-level error envelopes with code 100, 101, or 102 as
+  JSON integers or exact decimal strings from the focused get. Version-pinned fixtures cover both
+  code forms and optional string `message` and `documentation`. Tests reject missing or non-boolean
+  `error`, every other code spelling or type, unknown keys, non-string prose fields, redirects, 5xx,
+  and success-looking bodies with empty stdout.
 - Equivalent REST and XML-RPC fixtures serialize byte-equivalent canonical scalar values, including
   empty or missing wire strings normalized to JSON `null`.
 - Schema drift tests cover a maximal success result, all nullable scalar keys, and both

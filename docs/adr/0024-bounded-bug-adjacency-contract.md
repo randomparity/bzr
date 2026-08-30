@@ -29,7 +29,9 @@ response mappings so the shared tolerant `Bug` behavior remains unchanged for ex
 XML-RPC and ordinary strict REST handling accept only 2xx statuses. The sole exception is an
 individually correlated adjacency REST get whose 4xx response is a closed top-level Bugzilla error
 envelope containing resource code 100, 101, or 102; that request itself supplies the missing
-correlation identity.
+correlation identity. The closed wire form accepts `code` as either a JSON integer or the exact
+decimal string `"100"`, `"101"`, or `"102"`, and allows Bugzilla's optional string `message` and
+`documentation` fields. It discards both prose fields and normalizes only those three codes.
 Every other non-2xx, including one with success-looking data, is command-fatal before row parsing.
 
 Each 2xx response must contain exactly one outcome: one identity-valid bug and no faults, or one
