@@ -36,11 +36,12 @@ all-visible numeric case without pretending the canonical-only batch response ca
 for each request or that a missing adjacency field means an empty adjacency list.
 
 The strict boundary also validates response identity before the command records observations. A
-batch may contain at most one row for each requested numeric ID and no unrequested ID. A strict
-single-bug response must contain exactly one row; a numeric probe's returned ID must equal the
-requested numeric value, while an alias may resolve to any canonical ID. Extra, duplicate,
-multi-row, or mismatched numeric responses are command-fatal data-integrity errors rather than
-inputs to the first-observation rule.
+batch may contain at most one row for each requested numeric ID and no unrequested ID. A zero-row
+single response becomes the existing typed `NotFound`; exactly one row is identity-validated, and
+more than one row is a command-fatal data-integrity error. A numeric probe's returned ID must equal
+the requested numeric value, while an alias may resolve to any canonical ID. Extra or duplicate
+batch rows, multi-row single responses, and mismatched numeric responses never become inputs to the
+first-observation rule.
 
 If a credentialed per-ID probe returns code 102, the handler lazily validates the configured email
 and current credential through `rest/valid_login`, applying the same auth method that produced the
@@ -257,8 +258,8 @@ TLS, retries, or XML-RPC fallback behavior; it reuses those existing boundaries 
 - REST and XML-RPC client tests prove missing adjacency fields and malformed or negative edge
   members are fatal rather than silently shortened or converted to empty arrays.
 - REST and XML-RPC tests prove extra and duplicate batch rows, multi-row single responses, and
-  numeric request/response ID mismatches are command-fatal, while aliases may map to a different
-  canonical ID.
+  numeric request/response ID mismatches are command-fatal; zero-row single responses are typed
+  `NotFound`, while aliases may map to a different canonical ID.
 - Output and functional assertions pin the additive `SCHEMA_VERSION` bump to `0.6.2` everywhere
   ADR 0007 requires synchronized current-contract documentation or fixtures.
 - A controlled-fault test changes one accepted resource code to fatal and must make the focused
