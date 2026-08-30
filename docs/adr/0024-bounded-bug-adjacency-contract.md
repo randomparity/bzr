@@ -38,7 +38,8 @@ auth method. Only `result: true` (or Bugzilla's equivalent integer `1`) proves t
 resource-scoped. A missing email, rejected credential, malformed response, or unavailable
 validation leaves that 102 command-fatal. In particular, the Bugzilla 5.0 `whoami` user-lookup
 fallback is not an authentication proof because that lookup can succeed anonymously. An anonymous
-invocation has no credential that can fail. The command emits one versioned result containing:
+invocation has no credential that can fail. Each credentialed code 102 gets its own contemporaneous
+proof; proof is not cached across responses. The command emits one versioned result containing:
 
 - `requests` in argument order, preserving each original string and either its canonical `bug_id`
   or a typed `error`;
@@ -56,8 +57,9 @@ current-client credential check; it adds no graph traversal or analysis policy.
 
 - Consumers replace many process invocations with one bounded invocation while retaining the
   per-ID fault classification available from single-ID Bug.get behavior. The all-visible numeric
-  path uses one upstream search. The worst case uses one batch plus 100 sequential alias or omitted
-  numeric probes and therefore still carries cumulative latency and retry exposure.
+  path uses one upstream search. The worst case uses one batch, 100 sequential alias or omitted
+  numeric probes, and 100 credential proofs: 201 upstream calls. It therefore still carries
+  cumulative latency and retry exposure.
 - Alias and numeric requests may both map to one `bugs` entry; the `requests` mapping preserves
   why that node was requested.
 - The 100-request limit is a judgmental safety ceiling: it keeps one invocation useful for a

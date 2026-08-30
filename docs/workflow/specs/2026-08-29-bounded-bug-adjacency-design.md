@@ -53,9 +53,10 @@ failure leaves the 102 command-fatal. The check does not use Bugzilla 5.0's `who
 anonymous user lookup can return a user and therefore cannot prove authentication. Successful
 credentialed reads without configured email add no eager prerequisite; they become fatal only if a
 102 needs classification. Anonymous clients have no credential failure to distinguish. The handler
-commits output only after every request finishes. It removes repeated process startup and
-connection discovery but retains a worst case of one batch plus 100 sequential omission/alias
-probes. ADR
+does not cache a successful proof: every credentialed code 102 gets a contemporaneous
+`valid_login` call, including repeated 102s in the same invocation. It commits output only after
+every request finishes. The worst case is one batch, 100 sequential omission/alias probes, and 100
+credential proofs: 201 upstream calls. ADR
 [0024](../../adr/0024-bounded-bug-adjacency-contract.md) records why this is a new command instead
 of a mode on either existing command.
 
@@ -245,6 +246,8 @@ may change dependencies between reads, the command does not reconcile reciprocal
 - `src/output/mod.rs`, current CLI documentation, the embedded dependency-analysis collector and
   its fixtures, the embedded JSON reference, and functional schema fixtures advance together to
   `SCHEMA_VERSION` `0.6.2`.
+- `tests/functional/versions/bz50/entrypoint.sh`, `bz52/entrypoint.sh`, and `bz53/entrypoint.sh`
+  enable `usebugaliases` in each disposable server's generated parameter file before Apache starts.
 
 ## Trust boundaries and controls
 
@@ -272,7 +275,9 @@ TLS policy, timeouts, and API-mode selection.
   deduplicated before individual fetches.
 - Credentialed `valid_login` validation runs lazily only after a per-ID 102, uses the configured
   email plus current credential and auth method, and treats missing or inconclusive proof as fatal.
-  Anonymous mode carries no credential whose rejection could be confused with resource denial.
+  Every credentialed 102 gets a fresh proof; no invocation-level proof cache can mask revocation or
+  a later validation failure. Anonymous mode carries no credential whose rejection could be
+  confused with resource denial.
 - Strict REST retrieval cannot switch auth methods after a 401, preserving the provenance needed
   by the lazy validation rule; ordinary client calls retain their current alternate-auth fallback.
 - The strict adjacency wire type rejects absent, non-array, negative, or non-integer adjacency
@@ -306,6 +311,9 @@ fallback behavior.
   without email and without `valid_login`; stale or wrong cached auth cannot turn a credentialed 102
   into `inaccessible`; missing email and inconclusive `valid_login` are fatal; code 410 fatal
   behavior; transport fatal behavior with empty stdout; and exact-input caching.
+- A two-restricted-ID command test proves two credentialed code 102 responses make two
+  `valid_login` calls; the second proof's failure aborts without stdout even after the first proof
+  succeeded.
 - Command/output tests prove alias-plus-numeric convergence, one canonical bug, positional request
   identity, numeric node order, and sorted/deduplicated adjacency arrays.
 - REST and XML-RPC client tests prove missing adjacency fields and malformed or negative edge
@@ -345,6 +353,11 @@ and one restricted bug, then assert:
 6. the mixed operation exits zero; and
 7. an unsupported/auth-flavored API error remains covered as command-fatal in the focused command
    suite because the stock functional servers do not provide a safe way to synthesize it.
+
+Before those cases run, each version entrypoint enables Bugzilla's `usebugaliases` parameter in its
+generated `data/params.json` or `data/params` file before Apache starts. The phase creates a bug with
+an alias and first uses existing `bug view <alias>` behavior to prove the server persisted and
+resolves it; a skipped, silently ignored, or unresolved alias fails before adjacency assertions.
 
 Reuse phase 08e's credentialed non-member before membership is granted: invoke `bug adjacency` on
 the restricted bug and assert typed code 102 only after the live `valid_login` proof succeeds. Reuse
