@@ -48,8 +48,10 @@ and current credential through `rest/valid_login`. For REST it applies the same 
 produced Bug.get. XML-RPC always sends the credential in its request body, so `valid_login` applies
 the client's configured REST auth method as a conservative independent credential proof; inability
 to prove it remains fatal. Only `result: true` or Bugzilla's equivalent integer `1` makes that 102
-resource-scoped. A missing configured email, rejected credential, malformed response, or transport
-failure leaves the 102 command-fatal. The check does not use Bugzilla 5.0's `whoami` fallback:
+resource-scoped. The focused proof parser inspects the raw JSON envelope before reading `result`:
+top-level `error: true`, a non-boolean `error` marker, rejected credentials, malformed response,
+non-success status, redirect, or transport failure leaves the 102 command-fatal. The check does not
+use Bugzilla 5.0's `whoami` fallback:
 anonymous user lookup can return a user and therefore cannot prove authentication. Successful
 credentialed reads without configured email add no eager prerequisite; they become fatal only if a
 102 needs classification. Anonymous clients have no credential failure to distinguish. The handler
@@ -57,15 +59,18 @@ does not cache a successful proof: every credentialed code 102 gets a contempora
 `valid_login` call, including repeated 102s in the same invocation. It commits output only after
 every request finishes. The worst case is one batch, 100 sequential omission/alias probes, and 100
 credential proofs: 201 physical application requests after shared connection establishment.
-Adjacency retrieval and proof calls do not use transient retries; connection, version, auth, and
-TLS probes occur before retrieval and are outside this operation budget. ADR
+Adjacency retrieval and proof calls do not use transient retries or automatic redirects;
+connection, version, auth, and TLS probes occur before retrieval and are outside this operation
+budget. ADR
 [0024](../../adr/0024-bounded-bug-adjacency-contract.md) records why this is a new command instead
 of a mode on either existing command.
 
-Strict adjacency REST sends disable both transient retries and the transport's transparent 401
+Strict adjacency REST sends use a focused HTTP client built from the same TLS policy with automatic
+redirects disabled. They also disable transient retries and the transport's transparent 401
 alternate-auth fallback. The configured client method therefore necessarily produced any returned
-code 102, and `valid_login` applies that same method. A 401 from a stale or wrong cached method stays
-command-fatal instead of silently changing authentication provenance.
+code 102, and `valid_login` applies that same method through the same no-redirect client. A redirect
+or a 401 from a stale or wrong cached method stays command-fatal instead of changing request count
+or authentication provenance.
 Adjacency retrieval also defines stricter API-mode routing: `Rest` and `Hybrid` use only the strict
 REST calls, while `XmlRpc` uses only strict XML-RPC. A successful empty REST batch is returned to the
 command for per-ID REST probes; it never triggers XML-RPC comparison. No REST error, including 401,
@@ -243,13 +248,18 @@ may change dependencies between reads, the command does not reconcile reciprocal
   routing rule: `Rest` and `Hybrid` use REST only, while `XmlRpc` uses XML-RPC only. Strict REST sends
   disable transient retries and transparent alternate-auth fallback.
 - `src/xmlrpc/resources/bug.rs` adds a strict adjacency mapper that requires both arrays and every
-  member to be a non-negative integer; existing tolerant bug reads keep their current behavior.
+  member to be a non-negative integer. Its strict calls use an XML-RPC client backed by the focused
+  no-redirect HTTP client; existing tolerant bug reads keep their current behavior.
 - `src/client/transport.rs` exposes the focused no-auth-fallback send path used only by strict
-  adjacency REST retrieval. It sends once without transient or alternate-auth retries, without
-  changing ordinary command behavior.
+  adjacency REST retrieval. It sends once without redirect, transient, or alternate-auth retries,
+  without changing ordinary command behavior.
 - `src/client/response.rs` exposes a focused strict-error parser that turns every top-level
-  `error: true` envelope into `BzrError::Api` before deserializing adjacency rows; the shared
-  ADR-0015 warning-with-data parser remains unchanged.
+  `error: true` envelope into `BzrError::Api` and rejects a non-boolean `error` marker before
+  deserializing adjacency rows or credential proof; the shared ADR-0015 warning-with-data parser
+  remains unchanged.
+- `src/tls/mod.rs` builds the focused no-redirect client from the same certificate, CA, issuer, pin,
+  timeout, and insecurity policy as the ordinary client. `BugzillaClient` and its strict XML-RPC
+  adapter retain that client only for bounded adjacency retrieval and proof.
 - `src/output/resources/bug.rs` renders the two table sections and uses the shared JSON-family
   formatter for structured output.
 - A focused `BugzillaClient` credential-validation method reuses the installed `valid_login`
@@ -294,6 +304,8 @@ TLS policy, timeouts, and API-mode selection.
   Every credentialed 102 gets a fresh proof; no invocation-level proof cache can mask revocation or
   a later validation failure. Anonymous mode carries no credential whose rejection could be
   confused with resource denial.
+- Credential proof parses `error` before `result`; `error: true` plus `result: true`, a malformed
+  error marker, and redirects are fatal rather than authentication proof.
 - Strict REST retrieval cannot switch auth methods after a 401, preserving the provenance needed
   by the lazy validation rule. It also cannot retry a transient failure, keeping the physical
   application-request budget at 201; ordinary client calls retain their retry and alternate-auth
@@ -348,6 +360,9 @@ fallback behavior.
 - Transport tests prove strict adjacency does not follow 401 alternate-auth fallback and that the
   ordinary send path still does. With `--retry 10`, 100 classified inputs still produce at most 201
   adjacency/proof attempts; a transient strict response is fatal after its first attempt.
+- Same-host redirect tests prove strict REST retrieval, strict XML-RPC retrieval, and credential
+  proof each stop at the first redirect response while ordinary callers retain their existing
+  bounded same-host redirect behavior.
 - REST, XML-RPC, and Hybrid boundary tests accept `i64::MAX` and reject `i64::MAX + 1` before
   connection with the same `ids` input-validation error.
 - REST strict-wire tests reject canonical and adjacency response IDs above `i64::MAX`, matching the
@@ -357,6 +372,8 @@ fallback behavior.
 - Strict response tests prove populated-data envelopes with batch code 100/101/102 trigger probes,
   while populated-data code 410 or 100500 is fatal before typed row deserialization. Existing
   callers retain their ADR-0015 warning behavior.
+- Proof-response tests reject `error: true` with `result: true` and non-boolean `error` values before
+  accepting a valid boolean or integer-one result.
 - Output and functional assertions pin the additive `SCHEMA_VERSION` bump to `0.6.2` everywhere
   ADR 0007 requires synchronized current-contract documentation or fixtures.
 - A controlled-fault test changes one accepted resource code to fatal and must make the focused

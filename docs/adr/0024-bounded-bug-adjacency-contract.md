@@ -60,8 +60,9 @@ current-client credential check; it adds no graph traversal or analysis policy.
   path uses one upstream search. The worst case uses one batch, 100 sequential alias or omitted
   numeric probes, and 100 credential proofs: 201 upstream calls. It therefore still carries
   cumulative latency exposure. These adjacency retrieval and proof calls do not use transient
-  retries, so 201 is a physical application-request ceiling after shared connection establishment;
-  connection/version/TLS probes are outside the operation's retrieval budget.
+  retries or automatic redirects, so 201 is a physical application-request ceiling after shared
+  connection establishment; connection/version/TLS probes are outside the operation's retrieval
+  budget.
 - Alias and numeric requests may both map to one `bugs` entry; the `requests` mapping preserves
   why that node was requested.
 - The 100-request limit is a judgmental safety ceiling: it keeps one invocation useful for a
