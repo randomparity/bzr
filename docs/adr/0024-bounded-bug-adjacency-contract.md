@@ -20,21 +20,25 @@ therefore cannot provide the required contract on every supported server.
 Add `bzr bug adjacency <ID_OR_ALIAS>...` as a non-traversing command with a maximum of 100 request
 arguments. The command parses and sorts distinct numeric requests, retrieves their successful rows
 through one adjacency-specific batch call, and probes only omitted numeric requests through its
-adjacency-specific single-bug call for typed faults. Both calls request the fixed projection and
-reject a successful response unless `blocks` and `depends_on` are present arrays containing only
-non-negative integer bug IDs. They use focused strict REST and XML-RPC response mappings so the
-shared tolerant `Bug` behavior remains unchanged for existing commands. Only a 2xx transport status
-can reach those mappings; every non-2xx, including a redirect carrying a valid-looking body, is
-command-fatal before parsing. A batch must contain at
-most one row for each requested numeric ID and no unrequested ID. A zero-row single-bug response
-becomes the existing typed `NotFound`; a response with exactly one row is identity-validated, and
-more than one row is a command-fatal data-integrity error. A numeric probe's returned ID must equal
-its request; aliases may resolve to any canonical ID. A batch code 100, 101, or 102 triggers the
-same per-ID probes because the batch fault cannot be attributed safely. Distinct aliases are
-fetched individually in lexical order because a canonical-only batch response cannot preserve
-alias identity.
+adjacency-specific single-bug call for typed faults. Single probes use Bug.get's supported
+`permissive` protocol parameter, so a resource failure is returned inside a 2xx `faults` array on
+Bugzilla 5.0, 5.2, and 5.3 instead of as its ordinary 400/401/404 status. Both calls request the
+fixed projection and reject a successful bug row unless `blocks` and `depends_on` are present
+arrays containing only non-negative integer bug IDs. They use focused strict REST and XML-RPC
+response mappings so the shared tolerant `Bug` behavior remains unchanged for existing commands.
+Only a 2xx transport status can reach those mappings; every non-2xx, including a redirect carrying
+a valid-looking body, is command-fatal before parsing.
 
-When a credentialed per-ID lookup returns code 102, the command lazily validates the configured
+A batch must contain at most one row for each requested numeric ID and no unrequested ID. Its
+top-level error is always command-fatal because it has no per-request identity. A permissive single
+response must contain exactly one outcome: one identity-valid bug with no faults, or one fault whose
+identity matches the request with no bugs. A numeric bug row or fault ID must equal the numeric
+request; aliases may resolve to any canonical bug ID, while an alias fault must preserve the exact
+requested alias. Missing, multiple, mixed, or mismatched outcomes are command-fatal data-integrity
+errors. Distinct aliases are fetched individually in lexical order because a canonical-only batch
+response cannot preserve alias identity.
+
+When a credentialed permissive fault returns code 102, the command lazily validates the configured
 email and current credential through Bugzilla's `valid_login` endpoint using the client's current
 auth method. Only `result: true` (or Bugzilla's equivalent integer `1`) proves that the 102 is
 resource-scoped. A missing email, rejected credential, malformed response, or unavailable
@@ -48,12 +52,12 @@ proof; proof is not cached across responses. The command emits one versioned res
 - `bugs` sorted by canonical numeric ID, with one node per successful canonical bug; and
 - each node's complete `blocks` and `depends_on` arrays, sorted and deduplicated numerically.
 
-After that validation, codes 100 and 101 serialize as `not_found`; code 102 serializes as
-`inaccessible`. A client-side `NotFound` is also `not_found` without an `api_code`. Every other API
-error and every auth, TLS, connection, HTTP, deserialization, and transport error aborts the
-command without a success body. The command adds focused adjacency retrieval methods beside the
-existing tolerant bug methods and exposes the existing `valid_login` response handling as a
-current-client credential check; it adds no graph traversal or analysis policy.
+After that validation, faults 100 and 101 serialize as `not_found`; fault 102 serializes as
+`inaccessible`. Every other fault or API error and every auth, TLS, connection, HTTP,
+deserialization, and transport error aborts the command without a success body. The command adds
+focused adjacency retrieval methods beside the existing tolerant bug methods and exposes the
+existing `valid_login` response handling as a current-client credential check; it adds no graph
+traversal or analysis policy.
 
 ## Consequences
 

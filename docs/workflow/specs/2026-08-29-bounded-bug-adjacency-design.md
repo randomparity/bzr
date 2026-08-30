@@ -28,20 +28,22 @@ bzr --json bug adjacency <ID_OR_ALIAS>...
 
 `bug adjacency` is a bounded multi-get, not a graph operation. It batches distinct numeric IDs
 through a focused strict adjacency variant of the existing search transport, then probes only
-omitted numerics and distinct aliases through its matching strict single-bug variant. Both variants
-request the fixed projection and reject successful REST or XML-RPC responses unless `blocks` and
+omitted numerics and distinct aliases through a strict Bug.get call with the protocol's supported
+`permissive` parameter. On Bugzilla 5.0, 5.2, and 5.3, permissive Bug.get returns resource failures
+inside a 2xx `faults` array instead of the ordinary code-100/101/102 HTTP status. Both variants
+request the fixed projection and reject successful REST or XML-RPC bug rows unless `blocks` and
 `depends_on` are present arrays containing only non-negative integer IDs. The shared tolerant `Bug`
 mapping remains unchanged for existing commands. This uses one upstream call for the common
 all-visible numeric case without pretending the canonical-only batch response can carry a failure
 for each request or that a missing adjacency field means an empty adjacency list.
 
 The strict boundary also validates response identity before the command records observations. A
-batch may contain at most one row for each requested numeric ID and no unrequested ID. A zero-row
-single response becomes the existing typed `NotFound`; exactly one row is identity-validated, and
-more than one row is a command-fatal data-integrity error. A numeric probe's returned ID must equal
-the requested numeric value, while an alias may resolve to any canonical ID. Extra or duplicate
-batch rows, multi-row single responses, and mismatched numeric responses never become inputs to the
-first-observation rule.
+batch may contain at most one row for each requested numeric ID and no unrequested ID. A permissive
+single response must contain exactly one outcome: one bug and no faults, or one fault and no bugs.
+A numeric bug or fault identity must equal the requested numeric value; an alias may resolve to any
+canonical bug ID, while an alias fault must preserve the exact requested string. Empty, multiple,
+mixed, extra, duplicate, or mismatched outcomes are command-fatal data-integrity errors and never
+become inputs to the first-observation rule.
 
 If a credentialed per-ID probe returns code 102, the handler lazily validates the configured email
 and current credential through `rest/valid_login`. For REST it applies the same auth method that
@@ -73,9 +75,10 @@ or a 401 from a stale or wrong cached method stays command-fatal instead of chan
 or authentication provenance.
 
 Strict REST and strict XML-RPC require `status.is_success()` before any error-envelope, JSON,
-XML-RPC, or row parsing. Every non-2xx response is command-fatal, including a 3xx that carries a
-`Location` header and an otherwise schema-valid body. The body cannot supply a canonical
-observation, and output remains buffered and empty.
+XML-RPC, fault, or row parsing. Every non-2xx response is command-fatal, including ordinary
+Bugzilla 400/401/404 resource errors and a 3xx that carries a `Location` header and an otherwise
+schema-valid body. Typed resource results come only from a 2xx permissive single response's strict
+`faults` entry. A non-2xx body cannot supply an outcome, and output remains buffered and empty.
 Adjacency retrieval also defines stricter API-mode routing: `Rest` and `Hybrid` use only the strict
 REST calls, while `XmlRpc` uses only strict XML-RPC. A successful empty REST batch is returned to the
 command for per-ID REST probes; it never triggers XML-RPC comparison. No REST error, including 401,
@@ -169,10 +172,9 @@ separate entries even when both resolve to the same numeric bug.
 
 Each request entry is an exclusive closed union. A success has exactly `requested` and `bug_id`; a
 failure has exactly `requested` and `error`. The closed failure object is itself one of exactly
-three correlated variants: `{"type":"not_found"}` with no code, `not_found` with required
-`api_code` 100 or 101, or `inaccessible` with required `api_code` 102. No entry may contain both
-`bug_id` and `error` or neither. Every string-valued scalar is non-empty; empty wire strings have
-already normalized to JSON `null`.
+two correlated variants: `not_found` with required `api_code` 100 or 101, or `inaccessible` with
+required `api_code` 102. No entry may contain both `bug_id` and `error` or neither. Every
+string-valued scalar is non-empty; empty wire strings have already normalized to JSON `null`.
 
 `bugs` is keyed and sorted by numeric `id`; a canonical bug appears once. The first successful
 observation in deterministic fetch order wins: numeric batch rows by canonical ID, then successful
@@ -205,22 +207,20 @@ tests.
 
 ## Failure contract
 
-The command maps only these per-request results. A credentialed code 102 must first pass lazy
-identity validation:
+The command maps only these per-request permissive faults. A credentialed code 102 must first pass
+lazy identity validation:
 
 | Source | `error.type` | `api_code` |
 |---|---|---|
 | Bugzilla code 100 (invalid alias) | `not_found` | `100` |
 | Bugzilla code 101 (invalid bug ID) | `not_found` | `101` |
 | Bugzilla code 102 (access denied) | `inaccessible` | `102` |
-| Existing client `NotFound { resource: "bug" }` | `not_found` | absent |
-
 Per-request failures contain no server message. This avoids turning attacker- or administrator-
 controlled prose into a stable machine contract and avoids duplicating credential-redaction logic.
 A batch containing only classified failures is still a successful report and exits zero.
 
-Every other `BzrError` aborts the command. A batch-level 100, 101, or 102 has no per-ID identity, so
-it triggers individual probes rather than becoming a request result. A credentialed per-ID 102 is
+Every other `BzrError` or permissive fault aborts the command. A batch error has no per-ID identity
+and is always fatal, including code 100, 101, or 102. A credentialed per-ID permissive fault 102 is
 also fatal unless `valid_login` conclusively accepts the configured email and current credential
 under the same auth method; missing email, `false`, malformed output, API failure, and transport
 failure are never converted into request results. The handler buffers requests and bugs and writes
@@ -231,9 +231,9 @@ handler.
 
 Strict adjacency REST parsing does not use the shared ADR-0015 populated-data warning downgrade.
 It inspects the raw JSON envelope before typed row deserialization: any top-level `error: true`
-becomes its `BzrError::Api` even when `bugs` is populated. Batch codes 100, 101, and 102 then trigger
-deterministic individual probes; any other batch or single error is command-fatal. Existing REST
-callers retain the shared warning-with-data behavior.
+becomes its `BzrError::Api` even when `bugs` is populated. Every batch error and every single error
+outside a well-formed permissive `faults` outcome is command-fatal. Existing REST callers retain the
+shared warning-with-data behavior.
 
 Each successful bug record is complete for the search or Bug.get response whose observation won
 the canonical-node rule. Sequential responses are not an atomic Bugzilla snapshot: another actor
@@ -249,9 +249,9 @@ may change dependencies between reads, the command does not reconcile reciprocal
   and delegates output.
 - `src/types/bug/adjacency.rs` owns the exact request, failure, canonical-bug, and result types. Its
   REST wire form requires both adjacency arrays rather than converting from the tolerant `Bug`.
-- `src/client/resources/bug.rs` adds strict batch and single-bug adjacency methods with the strict
-  routing rule: `Rest` and `Hybrid` use REST only, while `XmlRpc` uses XML-RPC only. Strict REST sends
-  disable transient retries and transparent alternate-auth fallback.
+- `src/client/resources/bug.rs` adds strict batch search and permissive single-Bug.get adjacency
+  methods with the strict routing rule: `Rest` and `Hybrid` use REST only, while `XmlRpc` uses
+  XML-RPC only. Strict REST sends disable transient retries and transparent alternate-auth fallback.
 - `src/xmlrpc/resources/bug.rs` adds a strict adjacency mapper that requires both arrays and every
   member to be a non-negative integer. Its strict calls use an XML-RPC client backed by the focused
   no-redirect HTTP client; existing tolerant bug reads keep their current behavior.
@@ -317,9 +317,9 @@ TLS policy, timeouts, and API-mode selection.
   application-request budget at 201; ordinary client calls retain their retry and alternate-auth
   policies.
 - The strict adjacency wire type rejects absent, non-array, negative, or non-integer adjacency
-  members. Its retrieval boundary also rejects extra or duplicate batch identities, multi-row
-  single responses, and numeric response/request ID mismatches. Existing `Bug` deserialization
-  remains tolerant for its current callers.
+  members. Its retrieval boundary also rejects extra or duplicate batch identities and every
+  permissive single response without exactly one identity-matched bug-or-fault outcome. Existing
+  `Bug` deserialization remains tolerant for its current callers.
 - Only codes 100, 101, and 102 are downgraded, and the mapping is exhaustive and test-pinned.
 - Failure records copy only the stable type and numeric code, never server prose.
 - Canonical `BTreeMap` storage and explicit adjacency sorting/deduplication remove server-order
@@ -355,12 +355,12 @@ fallback behavior.
   identity, numeric node order, and sorted/deduplicated adjacency arrays.
 - REST and XML-RPC client tests prove missing adjacency fields and malformed or negative edge
   members are fatal rather than silently shortened or converted to empty arrays.
-- REST and XML-RPC tests prove extra and duplicate batch rows, multi-row single responses, and
-  numeric request/response ID mismatches are command-fatal; zero-row single responses are typed
-  `NotFound`, while aliases may map to a different canonical ID.
+- REST and XML-RPC tests prove extra and duplicate batch rows plus empty, multiple, mixed, and
+  mismatched permissive single outcomes are command-fatal. Numeric bug/fault identities must match
+  numerically; aliases may map to a canonical bug ID but fault identities preserve exact alias text.
 - Equivalent REST and XML-RPC fixtures serialize byte-equivalent canonical scalar values, including
   empty or missing wire strings normalized to JSON `null`.
-- Schema drift tests cover a maximal success result, all nullable scalar keys, and all three
+- Schema drift tests cover a maximal success result, all nullable scalar keys, and both
   correlated failure variants; invalid type/code combinations and empty strings fail; the registry
   lists `bug-adjacency` in lexical order.
 - Transport tests prove strict adjacency does not follow 401 alternate-auth fallback and that the
@@ -376,9 +376,9 @@ fallback behavior.
   XML-RPC signed-integer domain and the public schema.
 - Hybrid tests prove REST 401, transport/HTTP failure, code 100500, and an empty REST batch never
   invoke XML-RPC; the empty batch proceeds to strict per-ID REST probes.
-- Strict response tests prove populated-data envelopes with batch code 100/101/102 trigger probes,
-  while populated-data code 410 or 100500 is fatal before typed row deserialization. Existing
-  callers retain their ADR-0015 warning behavior.
+- Strict response tests prove populated-data batch error envelopes, including code 100/101/102,
+  410, and 100500, are fatal before typed row deserialization. Existing callers retain their
+  ADR-0015 warning behavior.
 - Proof-response tests reject `error: true` with `result: true` and non-boolean `error` values before
   accepting a valid boolean or integer-one result.
 - Output and functional assertions pin the additive `SCHEMA_VERSION` bump to `0.6.2` everywhere
