@@ -44,8 +44,10 @@ batch rows, multi-row single responses, and mismatched numeric responses never b
 first-observation rule.
 
 If a credentialed per-ID probe returns code 102, the handler lazily validates the configured email
-and current credential through `rest/valid_login`, applying the same auth method that produced the
-Bug.get response. Only `result: true` or Bugzilla's equivalent integer `1` makes that 102
+and current credential through `rest/valid_login`. For REST it applies the same auth method that
+produced Bug.get. XML-RPC always sends the credential in its request body, so `valid_login` applies
+the client's configured REST auth method as a conservative independent credential proof; inability
+to prove it remains fatal. Only `result: true` or Bugzilla's equivalent integer `1` makes that 102
 resource-scoped. A missing configured email, rejected credential, malformed response, or transport
 failure leaves the 102 command-fatal. The check does not use Bugzilla 5.0's `whoami` fallback:
 anonymous user lookup can return a user and therefore cannot prove authentication. Successful
@@ -56,6 +58,14 @@ connection discovery but retains a worst case of one batch plus 100 sequential o
 probes. ADR
 [0024](../../adr/0024-bounded-bug-adjacency-contract.md) records why this is a new command instead
 of a mode on either existing command.
+
+Strict adjacency REST sends retain the ordinary transient retry policy but disable the transport's
+transparent 401 alternate-auth fallback. The configured client method therefore necessarily
+produced any returned code 102, and `valid_login` applies that same method. A 401 from a stale or
+wrong cached method stays command-fatal instead of silently changing authentication provenance.
+XML-RPC already sends the configured credential in its protocol body and has no header/query
+fallback. A focused test covers configured header auth returning 401 where alternate query auth
+would return 102; the command must fail on the 401 and must not call `valid_login`.
 
 Two alternatives were rejected: extending `bug view --permissive` would change its prose-failure
 and request-row contract, while extending `bug links` would mix a bounded retrieval primitive with
@@ -89,6 +99,11 @@ reciprocal observations. The fixed canonical bug projection is:
 This is the existing dependency collector's detail set, including the three fields needed for its
 supported scope restrictions. No arbitrary custom fields, comments, attachments, or history are
 included.
+
+Every canonical bug object contains all eleven keys. `id` is a required non-negative integer;
+`blocks` and `depends_on` are required arrays of non-negative integers. The eight scalar detail
+fields are required keys whose values are either a string or `null`. REST and XML-RPC both normalize
+a missing or empty scalar to `null`, so equivalent wire observations serialize identically.
 
 ## Result schema and ordering
 
@@ -129,6 +144,11 @@ leading-zero and decimal spellings still retain separate request entries. Aliase
 by exact text and fetched lexically after numeric processing. Alias and numeric spellings remain
 separate entries even when both resolve to the same numeric bug.
 
+Each request entry is an exclusive closed union. A success has exactly `requested` and `bug_id`; a
+failure has exactly `requested` and `error`. The failure object has required `type` and optional
+`api_code`; `type` is `not_found` or `inaccessible`, and `api_code`, when present, is 100, 101, or
+102. No entry may contain both `bug_id` and `error` or neither.
+
 `bugs` is keyed and sorted by numeric `id`; a canonical bug appears once. The first successful
 observation in deterministic fetch order wins: numeric batch rows by canonical ID, then successful
 omitted or fallback numeric probes by requested numeric ID, then successful alias probes lexically.
@@ -144,10 +164,19 @@ canonical bug table in numeric order. Each bug row renders complete comma-separa
 whole result as one compact record without an envelope.
 
 The new payload is an additive public-contract change, so the implementation bumps
-`output::SCHEMA_VERSION` from `0.6.1` to `0.6.2` under ADR 0007. The `docs/bzr-cli.md` envelope and
-error examples, `tests/functional/phases/18a-json-envelope.sh`, and embedded-skill functional
-fixtures in `tests/functional/phases/18c-skills-install.sh` advance in the same change. Existing
-historical ADR and design examples retain the versions they documented.
+`output::SCHEMA_VERSION` from `0.6.1` to `0.6.2` under ADR 0007. All live consumers advance in the
+same change: `docs/bzr-cli.md`; `tests/functional/phases/18a-json-envelope.sh`;
+`content/skills/bzr-dependency-analysis/scripts/collect.py`; its unit fixtures and recording runner;
+the installed-skill replay in `tests/functional/phases/18c-skills-install.sh`; and
+`content/skills/bzr-reference/reference/json-recipes.md`. The functional dependency-analysis
+pipeline must run the installed collector against the newly built `0.6.2` binary, not only replayed
+envelopes. Existing historical ADR and design examples retain the versions they documented.
+
+Publish the closed payload contract as `bzr schema bug-adjacency`. The schema requires the top-level
+`requests` and `bugs` arrays, the exclusive request-entry union, all canonical bug keys and their
+nullability, and rejects undeclared properties. Register it in the sorted schema registry and pin
+representative maximal success, nullable-scalar, and per-request failure values in the schema drift
+tests.
 
 ## Failure contract
 
@@ -190,14 +219,22 @@ may change dependencies between reads, the command does not reconcile reciprocal
 - `src/types/bug/adjacency.rs` owns the exact request, failure, canonical-bug, and result types. Its
   REST wire form requires both adjacency arrays rather than converting from the tolerant `Bug`.
 - `src/client/resources/bug.rs` adds strict batch and single-bug adjacency methods with the same
-  REST/Hybrid routing policy as the corresponding existing reads.
+  REST/Hybrid routing policy as the corresponding existing reads, except that strict REST sends
+  retain transient retries while disabling transparent alternate-auth fallback.
 - `src/xmlrpc/resources/bug.rs` adds a strict adjacency mapper that requires both arrays and every
   member to be a non-negative integer; existing tolerant bug reads keep their current behavior.
+- `src/client/transport.rs` exposes the focused no-auth-fallback send path used only by strict
+  adjacency REST retrieval, without changing ordinary command behavior.
 - `src/output/resources/bug.rs` renders the two table sections and uses the shared JSON-family
   formatter for structured output.
 - A focused `BugzillaClient` credential-validation method reuses the installed `valid_login`
   response rules while applying the client's current auth method; it neither re-detects nor
   changes that method.
+- `schemas/bug-adjacency.json` and the sorted registry/drift samples in
+  `src/commands/schema.rs` and `src/commands/schema_tests.rs` publish and pin the exact payload.
+- `src/output/mod.rs`, current CLI documentation, the embedded dependency-analysis collector and
+  its fixtures, the embedded JSON reference, and functional schema fixtures advance together to
+  `SCHEMA_VERSION` `0.6.2`.
 
 ## Trust boundaries and controls
 
@@ -224,6 +261,8 @@ TLS policy, timeouts, and API-mode selection.
 - Credentialed `valid_login` validation runs lazily only after a per-ID 102, uses the configured
   email plus current credential and auth method, and treats missing or inconclusive proof as fatal.
   Anonymous mode carries no credential whose rejection could be confused with resource denial.
+- Strict REST retrieval cannot switch auth methods after a 401, preserving the provenance needed
+  by the lazy validation rule; ordinary client calls retain their current alternate-auth fallback.
 - The strict adjacency wire type rejects absent, non-array, negative, or non-integer adjacency
   members. Its retrieval boundary also rejects extra or duplicate batch identities, multi-row
   single responses, and numeric response/request ID mismatches. Existing `Bug` deserialization
@@ -260,6 +299,12 @@ TLS, retries, or XML-RPC fallback behavior; it reuses those existing boundaries 
 - REST and XML-RPC tests prove extra and duplicate batch rows, multi-row single responses, and
   numeric request/response ID mismatches are command-fatal; zero-row single responses are typed
   `NotFound`, while aliases may map to a different canonical ID.
+- Equivalent REST and XML-RPC fixtures serialize byte-equivalent canonical scalar values, including
+  empty or missing wire strings normalized to JSON `null`.
+- Schema drift tests cover a maximal success result, all nullable scalar keys, and both success and
+  failure request variants; the registry lists `bug-adjacency` in lexical order.
+- Transport tests prove strict adjacency does not follow 401 alternate-auth fallback and that the
+  ordinary send path still does.
 - Output and functional assertions pin the additive `SCHEMA_VERSION` bump to `0.6.2` everywhere
   ADR 0007 requires synchronized current-contract documentation or fixtures.
 - A controlled-fault test changes one accepted resource code to fatal and must make the focused
@@ -267,8 +312,8 @@ TLS, retries, or XML-RPC fallback behavior; it reuses those existing boundaries 
 
 ### Functional matrix
 
-Extend a functional phase used by every supported container version. Create two related public
-bugs and one restricted bug, then assert:
+Extend functional phases used by every supported container version. Create two related public bugs
+and one restricted bug, then assert:
 
 1. numeric IDs and an alias resolve in one invocation;
 2. alias plus its numeric ID produce two request entries and one canonical bug;
@@ -279,6 +324,13 @@ bugs and one restricted bug, then assert:
 6. the mixed operation exits zero; and
 7. an unsupported/auth-flavored API error remains covered as command-fatal in the focused command
    suite because the stock functional servers do not provide a safe way to synthesize it.
+
+Reuse phase 08e's credentialed non-member before membership is granted: invoke `bug adjacency` on
+the restricted bug and assert typed code 102 only after the live `valid_login` proof succeeds. Reuse
+phase 18d's explicit REST and XML-RPC server aliases to run the public-success, missing-ID, and
+inaccessible cases through both transports on each supported container version. Run the installed
+dependency-analysis collector against the newly built binary after the `0.6.2` bump so its accepted
+version is exercised live rather than only through replay fixtures.
 
 Run `make lint`, `make test`, and `make functional-test-all` before delivery. The host is arm64;
 the declared project targets are x86_64/aarch64 Linux, powerpc64le Linux, s390x Linux,
