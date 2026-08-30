@@ -5,8 +5,12 @@ import http.client
 import http.server
 import json
 import signal
+import socket
 import sys
+import threading
 import unittest
+import urllib.error
+import urllib.request
 
 _HOP_BY_HOP = frozenset(
     {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
@@ -26,7 +30,7 @@ def shape_bug_response(data):
                 field_value = bug.get(field)
                 if isinstance(field_value, str):
                     values = [] if field_value == "" else [field_value]
-                    if field == "version" and values:
+                    if values:
                         values.append(f"{field_value}-redhat-secondary")
                     bug[field] = values
     return json.dumps(value, separators=(",", ":")).encode()
@@ -94,7 +98,10 @@ class ShapeTests(unittest.TestCase):
             {"component": [], "version": ["40", "41"]},
             {"component": "", "version": ""},
         ]}).encode()))
-        self.assertEqual(shaped["bugs"][0]["component"], ["Backend"])
+        self.assertEqual(
+            shaped["bugs"][0]["component"],
+            ["Backend", "Backend-redhat-secondary"],
+        )
         self.assertEqual(
             shaped["bugs"][0]["version"], ["rawhide", "rawhide-redhat-secondary"]
         )
@@ -108,6 +115,44 @@ class ShapeTests(unittest.TestCase):
     def test_rejects_malformed_json(self):
         with self.assertRaises(json.JSONDecodeError):
             shape_bug_response(b"not json")
+
+    def test_readiness_endpoint(self):
+        server, thread = self._start_server(1)
+        try:
+            response = urllib.request.urlopen(
+                f"http://127.0.0.1:{server.server_port}/_bzr_ready", timeout=2
+            )
+            self.assertEqual(response.status, 204)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_unavailable_backend_returns_502(self):
+        blocker = socket.socket()
+        blocker.bind(("127.0.0.1", 0))
+        unavailable_port = blocker.getsockname()[1]
+        blocker.close()
+        server, thread = self._start_server(unavailable_port)
+        try:
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(
+                    f"http://127.0.0.1:{server.server_port}/rest/version", timeout=2
+                )
+            self.assertEqual(error.exception.code, 502)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    @staticmethod
+    def _start_server(backend_port):
+        server = http.server.ThreadingHTTPServer(
+            ("127.0.0.1", 0), make_handler(backend_port)
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        return server, thread
 
 
 def main():

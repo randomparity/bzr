@@ -3,9 +3,49 @@
 use wiremock::matchers::{body_partial_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
+use super::{resolve_optional_clone_field, resolve_required_clone_field};
 use crate::cli::BugAction;
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
+
+#[test]
+fn clone_source_multi_values_require_explicit_overrides() {
+    let component = resolve_required_clone_field(
+        None,
+        Some(vec!["Backend".into(), "Installer".into()]),
+        "component",
+    );
+    let version =
+        resolve_optional_clone_field(None, Some(vec!["40".into(), "rawhide".into()]), "version");
+
+    assert!(component.is_err());
+    assert!(version.is_err());
+}
+
+#[test]
+fn clone_explicit_overrides_bypass_multi_value_source_fields() {
+    let component = "Chosen component".to_string();
+    let version = "Chosen version".to_string();
+
+    assert_eq!(
+        resolve_required_clone_field(
+            Some(&component),
+            Some(vec!["Backend".into(), "Installer".into()]),
+            "component",
+        )
+        .unwrap(),
+        component
+    );
+    assert_eq!(
+        resolve_optional_clone_field(
+            Some(&version),
+            Some(vec!["40".into(), "rawhide".into()]),
+            "version",
+        )
+        .unwrap(),
+        Some(version)
+    );
+}
 
 fn clone_args(id: &str) -> crate::cli::CloneArgs {
     crate::cli::CloneArgs {

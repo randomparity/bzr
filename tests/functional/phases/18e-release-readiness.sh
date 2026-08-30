@@ -143,7 +143,16 @@ if redhat_shape_start "$BZ_PORT"; then
   _RR_REDHAT_OK=1
   if [[ $BZR_EXIT -ne 0 ]] || ! jq -e --arg component Release --arg version "$_RR_VERSION" '
       length == 3 and
-      all(.[]; .component == [$component] and
+      all(.[]; .component == [$component, ($component + "-redhat-secondary")] and
+        .version == [$version, ($version + "-redhat-secondary")])
+    ' "$BZR_STDOUT" >/dev/null; then
+    _RR_REDHAT_OK=0
+  fi
+  run_bzr_raw --json --server-url "$_RR_REDHAT_URL" bug search \
+    --from-url "$_RR_URL" --limit 100 --paginate --fields id,component,version
+  if [[ $BZR_EXIT -ne 0 ]] || ! jq -e --arg component Release --arg version "$_RR_VERSION" '
+      length == 3 and
+      all(.[]; .component == [$component, ($component + "-redhat-secondary")] and
         .version == [$version, ($version + "-redhat-secondary")])
     ' "$BZR_STDOUT" >/dev/null; then
     _RR_REDHAT_OK=0
