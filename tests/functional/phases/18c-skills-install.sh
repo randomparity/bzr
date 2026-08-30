@@ -335,6 +335,7 @@ jq -n '{
   responses: [{
     argv: [
       "--server", "primary", "--json", "bug", "list",
+      "--id", "10",
       "--limit", "1", "--offset", "0", "--fields", "id",
       "--sort", "bug_id", "--order", "asc"
     ],
@@ -383,6 +384,7 @@ if [[ $_DA_REPLAY_OK -eq 1 ]] &&
   cmp -s "$_DA_REPLAY_EXPECTED" "$_DA_REPLAY_COLLECTION" &&
   jq -s -e 'length == 2 and .[0] == [
       "--server", "primary", "--json", "bug", "list",
+      "--id", "10",
       "--limit", "1", "--offset", "0", "--fields", "id",
       "--sort", "bug_id", "--order", "asc"
     ] and .[1] == [
