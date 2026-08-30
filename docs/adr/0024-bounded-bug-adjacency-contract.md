@@ -23,8 +23,11 @@ through one adjacency-specific batch call, and probes only omitted numeric reque
 adjacency-specific single-bug call for typed faults. Both calls request the fixed projection and
 reject a successful response unless `blocks` and `depends_on` are present arrays containing only
 non-negative integer bug IDs. They use focused strict REST and XML-RPC response mappings so the
-shared tolerant `Bug` behavior remains unchanged for existing commands. A batch code 100, 101, or
-102 triggers the same per-ID probes because the batch fault cannot be attributed safely. Distinct
+shared tolerant `Bug` behavior remains unchanged for existing commands. A batch must contain at
+most one row for each requested numeric ID and no unrequested ID. A single-bug response must contain
+exactly one row, and a numeric probe's returned ID must equal its request; aliases may resolve to
+any canonical ID. Violations are command-fatal data-integrity errors. A batch code 100, 101, or 102
+triggers the same per-ID probes because the batch fault cannot be attributed safely. Distinct
 aliases are fetched individually in lexical order because a canonical-only batch response cannot
 preserve alias identity.
 

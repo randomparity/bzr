@@ -35,6 +35,13 @@ mapping remains unchanged for existing commands. This uses one upstream call for
 all-visible numeric case without pretending the canonical-only batch response can carry a failure
 for each request or that a missing adjacency field means an empty adjacency list.
 
+The strict boundary also validates response identity before the command records observations. A
+batch may contain at most one row for each requested numeric ID and no unrequested ID. A strict
+single-bug response must contain exactly one row; a numeric probe's returned ID must equal the
+requested numeric value, while an alias may resolve to any canonical ID. Extra, duplicate,
+multi-row, or mismatched numeric responses are command-fatal data-integrity errors rather than
+inputs to the first-observation rule.
+
 If a credentialed per-ID probe returns code 102, the handler lazily validates the configured email
 and current credential through `rest/valid_login`, applying the same auth method that produced the
 Bug.get response. Only `result: true` or Bugzilla's equivalent integer `1` makes that 102
@@ -217,7 +224,9 @@ TLS policy, timeouts, and API-mode selection.
   email plus current credential and auth method, and treats missing or inconclusive proof as fatal.
   Anonymous mode carries no credential whose rejection could be confused with resource denial.
 - The strict adjacency wire type rejects absent, non-array, negative, or non-integer adjacency
-  members. Existing `Bug` deserialization remains tolerant for its current callers.
+  members. Its retrieval boundary also rejects extra or duplicate batch identities, multi-row
+  single responses, and numeric response/request ID mismatches. Existing `Bug` deserialization
+  remains tolerant for its current callers.
 - Only codes 100, 101, and 102 are downgraded, and the mapping is exhaustive and test-pinned.
 - Failure records copy only the stable type and numeric code, never server prose.
 - Canonical `BTreeMap` storage and explicit adjacency sorting/deduplication remove server-order
@@ -247,6 +256,9 @@ TLS, retries, or XML-RPC fallback behavior; it reuses those existing boundaries 
   identity, numeric node order, and sorted/deduplicated adjacency arrays.
 - REST and XML-RPC client tests prove missing adjacency fields and malformed or negative edge
   members are fatal rather than silently shortened or converted to empty arrays.
+- REST and XML-RPC tests prove extra and duplicate batch rows, multi-row single responses, and
+  numeric request/response ID mismatches are command-fatal, while aliases may map to a different
+  canonical ID.
 - Output and functional assertions pin the additive `SCHEMA_VERSION` bump to `0.6.2` everywhere
   ADR 0007 requires synchronized current-contract documentation or fixtures.
 - A controlled-fault test changes one accepted resource code to fatal and must make the focused
