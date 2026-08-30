@@ -106,6 +106,7 @@ pub fn write_config_to(tmp: &tempfile::TempDir, contents: &str) -> std::path::Pa
     {
         use std::os::unix::fs::PermissionsExt;
 
+        std::fs::set_permissions(tmp.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
         std::fs::set_permissions(&config_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
         std::fs::set_permissions(&config_path, std::fs::Permissions::from_mode(0o600)).unwrap();
     }

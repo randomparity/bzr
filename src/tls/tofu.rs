@@ -152,6 +152,10 @@ pub(crate) fn prompt_tofu(
     fingerprint: &str,
     issuer: &str,
 ) -> Result<Option<bool>> {
+    if !io::stdin().is_terminal() {
+        return Ok(None);
+    }
+
     let _ = writeln!(io::stderr());
     let _ = writeln!(
         io::stderr(),
@@ -177,6 +181,10 @@ pub(crate) fn prompt_rotation(
     new_pin: &str,
     issuer: &str,
 ) -> Result<bool> {
+    if !io::stdin().is_terminal() {
+        return Ok(false);
+    }
+
     let _ = writeln!(io::stderr());
     let _ = writeln!(
         io::stderr(),

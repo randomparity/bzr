@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::BugAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::{setup_test_env, write_config_to};
 use crate::types::OutputFormat;
 
 fn make_view_action(ids: &[&str], permissive: bool) -> BugAction {
@@ -834,13 +834,10 @@ async fn resolve_bug_urls_works_without_credentials() {
     // validation; `--web` only needs the URL, so it must still resolve.
     let _lock = crate::ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    let config_dir = tmp.path().join("bzr");
-    std::fs::create_dir_all(&config_dir).unwrap();
-    std::fs::write(
-        config_dir.join("config.toml"),
+    write_config_to(
+        &tmp,
         "default_server = \"nocreds\"\n\n[servers.nocreds]\nurl = \"https://bz.example.com\"\n",
-    )
-    .unwrap();
+    );
     // SAFETY: ENV_LOCK serializes env access across tests.
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
