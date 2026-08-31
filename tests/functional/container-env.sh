@@ -4,7 +4,7 @@
 # directly. No source-time side effects (no mktemp, no trap) — callers
 # that need those (lib.sh) add them separately.
 
-BZ_VERSION="${BZ_VERSION:-${BZR_BZ_VERSION:-bz50}}"
+BZ_VERSION="${BZR_BZ_VERSION:-bz50}"
 
 container_runtime() {
 	if command -v podman >/dev/null 2>&1; then
@@ -24,7 +24,7 @@ container_runtime() {
 # SCRIPT_DIR must be set by the caller before sourcing this file.
 bugzilla_checkout_id() {
 	local root
-	root=$(cd "$SCRIPT_DIR/../.." && pwd) || return 1
+	root=$(cd "$SCRIPT_DIR/../.." && pwd -P) || return 1
 	printf '%s' "$root" | cksum | cut -d' ' -f1
 	return 0
 }
