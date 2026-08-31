@@ -55,8 +55,8 @@ tests/functional/setup-bugzilla.sh stop
 |----------|---------|-------------|
 | `BZR_FUNC_PORT` | `(runtime-assigned)` | Host port mapped to container port 80 (overrides the runtime-assigned default when set) |
 | `BZR_FUNC_CONTAINER` | `bzr-func-test-<version>-<checkout-id>` | Container name |
-| `BZR_FUNC_IMAGE` | `localhost/bzr-func-test-bz:latest` | Image name |
-| `BZR_FUNC_TIMEOUT` | `90` | Health check timeout in seconds |
+| `BZR_FUNC_IMAGE` | `localhost/bzr-func-<version>:latest` | Image name |
+| `BZR_FUNC_TIMEOUT` | `90` (`240` for bz52/bz53) | Health check timeout in seconds |
 | `BZR_BIN` | `target/release/bzr` | Path to pre-built bzr binary (skips cargo build) |
 | `BZR_FUNC_TLS_PORT` | `(resolved backend port) + 1000` | Host port the TLS proxy listens on for the ad-hoc TLS phase |
 | `BZR_FUNC_REDHAT_PORT` | `(resolved backend port) + 2000` | Host port for the Red Hat response-shape profile |
@@ -126,6 +126,20 @@ Bugzilla's `checksetup.pl` can take 30-60s on first run. Increase timeout with `
 No longer occurs by default — each invocation gets a runtime-assigned
 host port. Set `BZR_FUNC_PORT` to pin an exact one if needed (e.g. to
 attach a debugger to a known address).
+
+**`BZR_FUNC_PORT` does not match the running container's actual port:**
+If a container from a prior run is still up, a follow-up invocation with
+`BZR_FUNC_PORT` set to a different port now errors instead of silently
+proceeding, since the running container's port cannot change. Run
+`tests/functional/setup-bugzilla.sh stop` first, then start again with the
+desired `BZR_FUNC_PORT`.
+
+**Orphaned containers left behind by a deleted worktree or clone:**
+Container names are checkout-scoped, so a container started from a worktree
+or clone that no longer exists is not discoverable by any make target or
+`setup-bugzilla.sh` invocation. Find them with `podman ps -a --filter
+name=bzr-func-test-` (or `docker`) and remove with `podman rm -f <name>`
+(or `docker`).
 
 **Tests fail after image rebuild:**
 The container starts fresh each time. If tests fail, check `tests/functional/setup-bugzilla.sh logs` for Bugzilla errors.
