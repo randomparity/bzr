@@ -128,7 +128,9 @@ merge; private pre/post functional transcripts prove migration equivalence.
    - an intervening command between assignment and source;
    - direct and derived `CURRENT_TEST_GROUP` access in a phase;
    - legacy numeric, malformed, variable-bearing, duplicate, missing-description, and extra-arg
-     calls, at both column zero and indentation.
+     calls, at both column zero and indentation;
+   - noncanonical occurrences such as `false || test_begin ...` and
+     `if false; then test_begin ...; fi`, proving shell syntax cannot bypass the inventory.
 
    The canonical valid runner fixture is:
 
@@ -156,9 +158,11 @@ merge; private pre/post functional transcripts prove migration equivalence.
      matching the canonical lines in Global constraints;
    - run `rg -n 'CURRENT_TEST_GROUP'` over phase files and distinguish match (contract error), exit
      1 (no match), and every other exit (tool failure);
-   - collect every line matching `^[[:space:]]*test_begin([[:space:]]|$)` and distinguish no match
-     or tool failure from valid output;
-   - validate each complete line against `call_re`, then maintain a newline-delimited
+   - inventory every textual `test_begin` occurrence in each phase file, distinguish no match from
+     tool failure, and require every occurrence to be consumed by the canonical complete-line
+     validator; reject occurrences embedded in other shell syntax instead of silently omitting
+     them;
+   - validate each consumed complete line against `call_re`, then maintain a newline-delimited
      `<phase>/<slug>` set to reject duplicate literal IDs without associative arrays;
    - accumulate actionable `file:line` errors and return 1 if any occurred.
 
@@ -200,7 +204,12 @@ merge; private pre/post functional transcripts prove migration equivalence.
    - a second distinct slug succeeds;
    - missing group, one or three arguments, invalid group examples `08--bugs`, `08_Bugs`, and
      `bugs-08`, malformed slug examples, and a repeated full ID return nonzero with the offending
-     value in stderr.
+     value in stderr;
+   - for each rejected missing/invalid group, arity, and malformed-slug call, seed both
+     `CURRENT_TEST` and `SEEN_TEST_IDS`, assert both remain byte-for-byte unchanged, then retry the
+     same slug with valid inputs and prove it succeeds;
+   - for duplicate-ID rejection, assert both state values remain exactly at their already-valid
+     pre-call values, then prove a distinct valid ID can still be added.
 
 2. Run the runtime-only test mode.
    Expected: nonzero because the existing helper accepts one argument and prints the legacy text.
@@ -262,7 +271,10 @@ merge; private pre/post functional transcripts prove migration equivalence.
    `test_begin` with an explicit mode-prefixed literal slug and the original interpolated
    description; an unexpected mode prints an error and returns nonzero. This produces twelve source
    declarations but preserves one runtime declaration per loop iteration.
-6. Wire the target in `Makefile`:
+6. Update `tests/functional/README.md` in the same atomic migration with the `<phase>/<slug>` output
+   example, exact slug rules, literal-only and uniqueness requirements, description/ID
+   independence, and insertion guidance.
+7. Wire the target in `Makefile`:
 
    ```make
    check-functional-test-ids:
@@ -270,18 +282,28 @@ merge; private pre/post functional transcripts prove migration equivalence.
 	   bash tools/check-functional-test-ids.sh .
    ```
 
-   Add it to `.PHONY`, `lint`, and the installed pre-commit body. Add
+   Add it to `.PHONY`, `lint`, and the installed pre-commit body. Extend `check-shell` with
+   `shellcheck -s bash tests/functional/lib.sh tests/functional/run-tests.sh
+   tests/functional/phases/*.sh` and
+   `bash -n tests/functional/lib.sh tests/functional/run-tests.sh
+   tests/functional/phases/*.sh`; retain the established shfmt scope because the functional
+   harness uses its own four-space style. Fix the three pre-existing ShellCheck findings exposed
+   by this newly activated coverage without changing behavior. Add
    `make check-functional-test-ids` as its own step in CI's `test-layout` job, which already
    installs `rg`. Then run `make check-functional-test-ids`. Expected: exit 0, no legacy labels,
    no slug expansions, no duplicate full IDs, 37 matching phase groups, and exact runner/source
    binding.
-7. Inspect the complete runtime-and-phase diff and confirm descriptions/assertion bodies are
-   unchanged. Run the existing `make lint` and `make test` gates, then commit the atomic interface
-   migration:
+8. Inspect the complete runtime, phase, and README diff and confirm descriptions, assertion bodies,
+   and execution order are unchanged. Run `make check-functional-test-ids`, `make check-shell`,
+   `make lint`, and `make test`. Do not commit yet: Task 5 first proves the complete working tree
+   against the live pre-migration transcript.
+
+   After Task 5's comparison passes, commit the atomic interface migration:
 
    ```bash
    git add tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/phases/*.sh \
-     tools/check-functional-test-ids-tests.sh Makefile .github/workflows/ci.yml
+     tests/functional/README.md tools/check-functional-test-ids-tests.sh Makefile \
+     .github/workflows/ci.yml
    git commit -m "test(functional): adopt semantic test references"
    ```
 
@@ -291,8 +313,10 @@ merge; private pre/post functional transcripts prove migration equivalence.
   mode branches.
 - Every ID is literal, unique within its phase, semantic, and independent of source order.
 - Functional descriptions, test bodies, and execution order are unchanged.
+- The runtime interface, callers, guard wiring, shell coverage, and authoring contract land in one
+  revertible commit after the live proof is green.
 
-## Task 5: Document and prove the migration
+## Task 5: Prove and commit the migration
 
 ### Interfaces
 
@@ -301,9 +325,7 @@ merge; private pre/post functional transcripts prove migration equivalence.
 
 ### Steps
 
-1. Update `tests/functional/README.md` with the `<phase>/<slug>` output example, exact slug rules,
-   literal-only and uniqueness requirements, description/ID independence, and insertion guidance.
-2. Run focused/local gates:
+1. Run focused/local gates:
 
    ```bash
    make check-functional-test-ids
@@ -313,7 +335,7 @@ merge; private pre/post functional transcripts prove migration equivalence.
    ```
 
    Expected: each exits 0 with no warning.
-3. Run the post-migration all-version suite with the same host and capture method as Task 1:
+2. Run the post-migration all-version suite with the same host and capture method as Task 1:
 
    ```bash
    set -o pipefail
@@ -321,7 +343,7 @@ merge; private pre/post functional transcripts prove migration equivalence.
    ```
 
    Expected: exit 0 and green summaries for all versions.
-4. Apply Task 1's exact `awk` normalizer to `functional-after.log`, write a private mode-0600
+3. Apply Task 1's exact `awk` normalizer to `functional-after.log`, write a private mode-0600
    `functional-after.normalized`, then run:
 
    ```bash
@@ -329,15 +351,10 @@ merge; private pre/post functional transcripts prove migration equivalence.
    ```
 
    Expected: exit 0. A mismatch is investigated; the baseline is never updated to accept it.
-5. Commit documentation after green proof:
-
-   ```bash
-   git add tests/functional/README.md
-   git commit -m "docs(test): explain semantic functional references"
-   ```
-
-6. Re-read `git diff main...HEAD` for description, assertion, and ordering drift. Run the full local
-   gates once more if the documentation commit or review changed executable files.
+4. Commit the atomic migration using Task 4's exact `git add` and commit command only after the
+   normalized comparison is green.
+5. Re-read `git diff main...HEAD` for description, assertion, and ordering drift. Run the full local
+   gates once more if review changed executable files.
 
 ### Acceptance criteria
 
@@ -349,11 +366,13 @@ merge; private pre/post functional transcripts prove migration equivalence.
 
 ## Rollback
 
-The inactive guard and the atomic runtime/caller migration are isolated commits. Before
-publication, reverting the atomic migration and then the guard restores the old harness; no
-persisted data or external schema is involved. Functional containers may be stopped with
-`make functional-stop-all`; private transcripts are disposed through the Quest/Forge artifact
-lifecycle after review publication.
+The inactive guard and the atomic runtime/caller/README migration are isolated commits. Before
+publication, reverting the atomic migration first restores the old runtime, callers, authoring
+contract, Make/CI wiring, and shell coverage; reverting the inactive guard second removes its
+scripts. Retain both private transcripts until rollback diagnosis is complete. No persisted data or
+external schema is involved. Functional containers may be stopped with `make functional-stop-all`;
+private transcripts are disposed through the Quest/Forge artifact lifecycle after review
+publication.
 
 ## Durable workflow context
 
