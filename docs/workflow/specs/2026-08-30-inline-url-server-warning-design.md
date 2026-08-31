@@ -44,21 +44,25 @@ Add an optional active-server URL argument to URL parsing. The bug-search caller
 server URL from `CommandContext`; query save/update and fuzz callers pass no active URL and retain
 their behavior.
 
-Resolution remains ordered around the existing persisted match:
+Resolution preserves the persisted match while making invocation diagnostics follow the active
+destination:
 
 1. Find a configured server whose hostname matches the imported URL and preserve its name in the
    saved query.
-2. Parse the optional active inline URL and compare only its normalized hostname.
+2. Parse the optional active inline URL. If it is invalid or has no hostname, return an actionable
+   `invalid inline server URL` input error before emitting any mismatch diagnostic. The parse error
+   never includes the raw URL, userinfo, or query string.
 3. If the inline hostname matches, emit no warning and allow an empty/default-less config.
 4. If an inline server exists but its hostname differs, continue with the inline destination and
    warn that the imported hostname differs from the inline hostname and that the inline server is
-   being used.
+   being used. This warning applies even when the imported hostname also matches a configured
+   server, because the explicit inline destination still wins routing.
 5. With no inline server, preserve the existing configured/default match, warning, and error paths.
 
-An inline URL already passes global invocation validation before command execution. The parser
-will nevertheless treat an unparseable optional active URL as non-matching and emit guidance using
-only its hostname when available; connection setup remains the owner of actionable inline URL
-validation. No inline URL is copied into `SavedQuery`.
+Connection setup still performs full `ServerConfig` validation before transport. The earlier parse
+here establishes only the hostname needed for import diagnostics and fails closed when that
+hostname cannot be established. No inline URL is copied into `SavedQuery` or rendered in a
+diagnostic.
 
 ## Error and output behavior
 
@@ -74,8 +78,9 @@ state remain unchanged.
 
 - **Existing boundary used, not widened:** the operator-controlled `--from-url` string is parsed by
   `url::Url`, restricted to a `buglist.cgi` path, and sanitized before persistence.
-- **Existing boundary used, not widened:** the operator-controlled `--server-url` has already been
-  accepted into `CommandContext`; connection setup remains responsible for validating and using it.
+- **Existing boundary used, not widened:** the operator-controlled `--server-url` is carried raw in
+  `CommandContext`. URL import validates that it is parseable and has a hostname before comparing;
+  connection setup remains responsible for full server-config validation and using it.
 - **Added comparison:** the parser reads only normalized hostnames from both URLs. It does not join
   paths, forward imported credentials, or derive the connection destination from the imported URL.
 
@@ -83,8 +88,9 @@ state remain unchanged.
 
 The local operator controls both CLI values; a copied Bugzilla URL may contain untrusted query
 parameters. `url::Url` parsing, the existing `buglist.cgi` path check, credential-name filtering,
-and `sanitize_url` remain the controls. Host comparison changes diagnostics only; connection
-selection continues to trust the explicit inline server from `CommandContext`.
+and `sanitize_url` remain the controls. An invalid inline URL produces an error that omits the raw
+value. Host comparison changes diagnostics only; connection selection continues to trust the
+explicit inline server from `CommandContext` after its existing full validation.
 
 ### Out of scope
 
@@ -96,12 +102,17 @@ URL authoritative for routing and does not change TLS or credential handling.
 
 - Unit tests prove a matching inline hostname succeeds without a configured/default server and
   leaves `query.server` unset.
-- Unit tests prove a mismatched inline hostname still succeeds with the inline destination
-  available; the command-level test captures the accurate warning where practical.
+- Unit tests prove a mismatched inline hostname still succeeds with an empty/default-less config
+  and emits stable guidance naming both hostnames and the inline destination.
+- A parser test passes an invalid inline URL containing userinfo and credential-like query data;
+  it asserts an actionable error, no mismatch warning, and no raw value in captured tracing.
 - Existing configured match, default fallback, no-default error, and credential sanitization tests
   remain green.
 - A search command unit test uses `CommandContext::with_inline_server` with an empty config to prove
   the request reaches the explicit inline mock.
+- A precedence test configures server A, imports an A-host URL, and supplies inline server B. It
+  asserts the mismatch warning, proves only B receives the REST request, and saves A's configured
+  name in the query. This distinguishes persistence metadata from the active request destination.
 - A functional test passes both `--server-url "$BZ_URL"` and a matching `--from-url` while pointing
   `--config` at a new empty path. It asserts success, real Bugzilla data, and absence of the old
   mismatch warning. The empty config is the production-fidelity correction: it prevents earlier
@@ -115,4 +126,3 @@ URL authoritative for routing and does not change TLS or credential handling.
   `make functional-test-all`
 - Host: arm64 macOS/BSD userland; targets include x86_64, arm64, powerpc64le, s390x, Windows, and
   macOS release targets. Host architecture is included in declared targets.
-
