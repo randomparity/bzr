@@ -44,6 +44,7 @@ jobs:
       - name: Install ripgrep
         run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: make check-test-layout
+      - run: make check-functional-test-ids
       - run: make check-no-spawn
 
   clippy:

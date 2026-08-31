@@ -8,27 +8,27 @@
 # ══════════════════════════════════════════════════════════════════════
 echo "── Phase 2: Server & Auth ──────────────────────────────────"
 
-test_begin "7. server info"
+test_begin "server-info" "server info"
 run_bzr server info
 if assert_success && assert_json_exists '.version'; then test_pass; fi
 
-test_begin "7b. server capabilities"
+test_begin "server-capabilities" "server capabilities"
 run_bzr server capabilities
 if assert_success && assert_json_exists '.version' &&
     assert_json_array_min_length '.api_modes' 1 &&
     assert_json_array_min_length '.status_transitions' 1; then test_pass; fi
 
-test_begin "8. whoami"
+test_begin "whoami" "whoami"
 run_bzr whoami
 if assert_success && assert_json_exists '.id' &&
     assert_json_exists '.server_name' &&
     assert_json '.auth_mode' 'api_key'; then test_pass; fi
 
-test_begin "8a. --server auto whoami"
+test_begin "server-auto-whoami" "--server auto whoami"
 run_bzr_raw --json --server auto whoami
 if assert_success && assert_json_exists '.id'; then test_pass; fi
 
-test_begin "8b. fixture flag types exist"
+test_begin "fixture-flag-types-exist" "fixture flag types exist"
 _FLAG_SQL=$(mktemp /tmp/bzr-func-flags.XXXXXX.sql)
 cat >"$_FLAG_SQL" <<'SQL'
 INSERT INTO flagtypes
@@ -64,30 +64,30 @@ fi
 rm -f "$_FLAG_SQL"
 unset _FLAG_SQL
 
-test_begin "8c. credentialless named server info"
+test_begin "credentialless-named-server-info" "credentialless named server info"
 run_bzr_raw --json --server public server info
 if assert_success && assert_json_exists '.version'; then test_pass; fi
 
-test_begin "8c2. credentialless named server capabilities (attachment size null)"
+test_begin "credentialless-named-server-capabilities-attachment-size-null" "credentialless named server capabilities (attachment size null)"
 run_bzr_raw --json --server public server capabilities
 if assert_success && assert_json_exists '.version' &&
     assert_json '.max_attachment_size' 'null'; then test_pass; fi
 
-test_begin "8d. credentialless named whoami fails before network auth"
+test_begin "credentialless-named-whoami-fails-before-network-auth" "credentialless named whoami fails before network auth"
 run_bzr_raw --json --server public whoami
 if assert_exit_code 3 && assert_stderr_contains "requires credentials"; then test_pass; fi
 
-test_begin "8e. credentialless named write fails before mutation"
+test_begin "credentialless-named-write-fails-before-mutation" "credentialless named write fails before mutation"
 run_bzr_raw --json --server public bug create \
     --product FuncTestProd --component Backend --summary "public write" \
     --description "should not write" --op-sys Linux --rep-platform PC
 if assert_exit_code 3 && assert_stderr_contains "requires credentials"; then test_pass; fi
 
-test_begin "8f. inline credentialless server info"
+test_begin "inline-credentialless-server-info" "inline credentialless server info"
 run_bzr_raw --json --server-url "$BZ_URL" server info
 if assert_success && assert_json_exists '.version'; then test_pass; fi
 
-test_begin "8g. inline credentialed whoami"
+test_begin "inline-credentialed-whoami" "inline credentialed whoami"
 export BZR_FUNC_INLINE_KEY="$API_KEY"
 run_bzr_raw --json --server-url "$BZ_URL" \
     --server-api-key-env BZR_FUNC_INLINE_KEY --server-email "$ADMIN_EMAIL" whoami

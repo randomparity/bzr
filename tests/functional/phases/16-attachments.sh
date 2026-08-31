@@ -8,11 +8,11 @@
 # ══════════════════════════════════════════════════════════════════════
 echo "── Phase 15: Attachments ───────────────────────────────────"
 
-test_begin "95. create temp file"
+test_begin "create-temp-file" "create temp file"
 echo "bzr functional test content $(date +%s)" >/tmp/bzr-func-test.txt
 test_pass
 
-test_begin "96. attachment upload"
+test_begin "attachment-upload" "attachment upload"
 if [[ -n "$BUG1" ]]; then
     run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt --summary "Test file"
     if assert_success && assert_json_exists '.id'; then
@@ -21,26 +21,26 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "97. attachment list"
+test_begin "attachment-list" "attachment list"
 if [[ -n "$BUG1" ]]; then
     run_bzr attachment list "$BUG1"
     if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "97a. attachment list --fields projects keys"
+test_begin "attachment-list-fields-projects-keys" "attachment list --fields projects keys"
 if [[ -n "$BUG1" ]]; then
     run_bzr attachment list "$BUG1" --fields file_name,size
     if assert_success && assert_json '.[0] | keys | length' 2 &&
         assert_json_exists '.[0].file_name'; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "97b. attachment list --fields unknown exits 7"
+test_begin "attachment-list-fields-unknown-exits-7" "attachment list --fields unknown exits 7"
 if [[ -n "$BUG1" ]]; then
     run_bzr attachment list "$BUG1" --fields bogus_xyz
     if assert_exit_code 7; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "98. attachment download"
+test_begin "attachment-download" "attachment download"
 if [[ -n "${ATTACH_ID:-}" ]] && [[ "$ATTACH_ID" != "null" ]]; then
     rm -f /tmp/bzr-func-downloaded.txt
     run_bzr attachment download "$ATTACH_ID" --out /tmp/bzr-func-downloaded.txt
@@ -51,7 +51,7 @@ else
     test_skip "no attachment ID"
 fi
 
-test_begin "98a. attachment download --out - streams raw bytes"
+test_begin "attachment-download-out-streams-raw-bytes" "attachment download --out - streams raw bytes"
 if [[ -n "${ATTACH_ID:-}" ]] && [[ "$ATTACH_ID" != "null" ]]; then
     run_bzr_raw attachment download "$ATTACH_ID" --out -
     if assert_success && assert_stdout_equals_file /tmp/bzr-func-test.txt; then test_pass; fi
@@ -59,7 +59,7 @@ else
     test_skip "no attachment ID"
 fi
 
-test_begin "99. attachment update"
+test_begin "attachment-update" "attachment update"
 if [[ -n "${ATTACH_ID:-}" ]] && [[ "$ATTACH_ID" != "null" ]]; then
     run_bzr attachment update "$ATTACH_ID" --summary "Updated summary" --obsolete
     if assert_success; then test_pass; fi
@@ -67,13 +67,13 @@ else
     test_skip "no attachment ID"
 fi
 
-test_begin "100. attachment upload (explicit MIME)"
+test_begin "attachment-upload-explicit-mime" "attachment upload (explicit MIME)"
 if [[ -n "$BUG1" ]]; then
     run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt --content-type text/plain
     if assert_success; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "100f. attachment upload --comment posts comment in same call"
+test_begin "attachment-upload-comment-posts-comment-in-same-call" "attachment upload --comment posts comment in same call"
 if [[ -n "$BUG1" ]]; then
     run_bzr comment list "$BUG1"
     if assert_success; then
@@ -97,7 +97,7 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "100g. attachment upload --patch marks attachment as a patch"
+test_begin "attachment-upload-patch-marks-attachment-as-a-patch" "attachment upload --patch marks attachment as a patch"
 if [[ -n "$BUG1" ]]; then
     run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
         --summary "patch test" --patch
@@ -110,7 +110,7 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "100h. attachment upload --comment-private flips comment privacy"
+test_begin "attachment-upload-comment-private-flips-comment-privacy" "attachment upload --comment-private flips comment privacy"
 if [[ -n "$BUG1" ]]; then
     run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
         --summary "private comment test" \
@@ -135,7 +135,7 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "100k. attachment upload --comment-file"
+test_begin "attachment-upload-comment-file" "attachment upload --comment-file"
 if [[ -n "$BUG1" ]]; then
     _ACF=$(mktemp /tmp/bzr-func-attachment-comment.XXXXXX)
     printf 'attachment comment from file' >"$_ACF"
@@ -148,7 +148,7 @@ if [[ -n "$BUG1" ]]; then
     rm -f "$_ACF"
 else test_skip "no BUG1"; fi
 
-test_begin "100l. attachment upload --comment-file -"
+test_begin "attachment-upload-comment-file-stdin" "attachment upload --comment-file -"
 if [[ -n "$BUG1" ]]; then
     _ACF=$(mktemp /tmp/bzr-func-attachment-comment.XXXXXX)
     printf 'attachment comment from stdin' >"$_ACF"
@@ -161,7 +161,7 @@ if [[ -n "$BUG1" ]]; then
     rm -f "$_ACF"
 else test_skip "no BUG1"; fi
 
-test_begin "100m. attachment upload empty --comment-file rejected"
+test_begin "attachment-upload-empty-comment-file-rejected" "attachment upload empty --comment-file rejected"
 if [[ -n "$BUG1" ]]; then
     _ACF=$(mktemp /tmp/bzr-func-attachment-comment.XXXXXX)
     printf '   ' >"$_ACF"
@@ -172,7 +172,7 @@ if [[ -n "$BUG1" ]]; then
 else test_skip "no BUG1"; fi
 unset _ACF
 
-test_begin "100i. attachment download --bug bulk into per-bug subdir"
+test_begin "attachment-download-bug-bulk-into-per-bug-subdir" "attachment download --bug bulk into per-bug subdir"
 if [[ -n "$BUG1" ]]; then
     BULK_DIR="$(mktemp -d /tmp/bzr-func-bulk.XXXXXX)"
     run_bzr attachment download --bug "$BUG1" --out-dir "$BULK_DIR"
@@ -194,7 +194,7 @@ if [[ -n "$BUG1" ]]; then
     rm -rf "$BULK_DIR"
 else test_skip "no BUG1"; fi
 
-test_begin "100j. attachment download mixes --bug and positional IDs"
+test_begin "attachment-download-mixes-bug-and-positional-ids" "attachment download mixes --bug and positional IDs"
 if [[ -n "$BUG1" ]] && [[ -n "${ATTACH_ID:-}" ]] && [[ "$ATTACH_ID" != "null" ]]; then
     MIX_DIR="$(mktemp -d /tmp/bzr-func-mix.XXXXXX)"
     # Use BUG1 (multi-attachment) AND a specific ATTACH_ID (which also
@@ -228,7 +228,7 @@ _AB=$(make_bug --product FuncTestProd --component Backend --op-sys Linux --rep-p
 _AF=$(mktemp /tmp/bzr-func-att.XXXXXX)
 printf 'attachment bytes' >"$_AF"
 
-test_begin "150. attachment view metadata"
+test_begin "attachment-view-metadata" "attachment view metadata"
 run_bzr attachment upload "$_AB" "$_AF" --summary "viewme"
 if assert_success; then
     _AID=$(jq -r '.id // .attachment_id // (.ids[0] // empty)' "$BZR_STDOUT" 2>/dev/null)
@@ -236,7 +236,7 @@ if assert_success; then
     if assert_success && assert_json '.summary' "viewme"; then test_pass; fi
 fi
 
-test_begin "151. attachment update --file-name round-trips"
+test_begin "attachment-update-file-name-round-trips" "attachment update --file-name round-trips"
 if [[ -n "${_AID:-}" ]]; then
     run_bzr attachment update "$_AID" --file-name "renamed-att.bin"
     if assert_success; then
@@ -245,7 +245,7 @@ if [[ -n "${_AID:-}" ]]; then
     fi
 else test_skip "no attachment id"; fi
 
-test_begin "152. attachment update --content-type and --flag"
+test_begin "attachment-update-content-type-and-flag" "attachment update --content-type and --flag"
 if [[ -n "${_AID:-}" ]]; then
     run_bzr attachment update "$_AID" --content-type text/plain --flag 'bzr_attachment_review?'
     if assert_success; then

@@ -8,7 +8,7 @@
 # ══════════════════════════════════════════════════════════════════════
 echo "── Phase 16: Global Options ────────────────────────────────"
 
-test_begin "101. --output table"
+test_begin "output-table" "--output table"
 if [[ -n "$BUG1" ]]; then
     run_bzr_raw --output table bug view "$BUG1"
     if assert_success; then
@@ -22,13 +22,13 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "102. --quiet"
+test_begin "quiet" "--quiet"
 if [[ -n "$BUG1" ]]; then
     run_bzr_raw --quiet bug view "$BUG1"
     if assert_success && assert_stdout_empty; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "102a. --quiet suppresses stderr tracing"
+test_begin "quiet-suppresses-stderr-tracing" "--quiet suppresses stderr tracing"
 if [[ -n "$BUG1" ]]; then
     run_bzr_raw --quiet -vvv bug view "$BUG1"
     if assert_success && assert_stdout_empty && assert_stderr_empty; then
@@ -36,19 +36,19 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "102b. --quiet preserves error exit code"
+test_begin "quiet-preserves-error-exit-code" "--quiet preserves error exit code"
 if true; then
     run_bzr_raw --quiet bug view 999999
     if assert_failure && assert_stdout_empty; then test_pass; fi
 fi
 
-test_begin "102c. --quiet + --json suppresses stdout"
+test_begin "quiet-json-suppresses-stdout" "--quiet + --json suppresses stdout"
 if [[ -n "$BUG1" ]]; then
     run_bzr_raw --quiet --json bug view "$BUG1"
     if assert_success && assert_stdout_empty; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "102d. verbose response-body diagnostics redact API keys"
+test_begin "verbose-response-body-diagnostics-redact-api-keys" "verbose response-body diagnostics redact API keys"
 _TRACE_SECRET="TraceEchoSecret0123456789"
 _TRACE_BUG=$(make_bug --product FuncTestProd --component Backend --op-sys Linux \
     --rep-platform PC --description d \
@@ -61,16 +61,16 @@ if [[ -n "$_TRACE_BUG" ]]; then
 else test_fail "could not create trace redaction fixture"; fi
 unset _TRACE_SECRET _TRACE_BUG
 
-test_begin "103. --server test whoami"
+test_begin "server-test-whoami" "--server test whoami"
 run_bzr_raw --server test whoami
 if assert_success; then test_pass; fi
 
 # --output ndjson: empty list emits zero lines; with data, one value per line.
-test_begin "103a. --output ndjson (empty list emits no lines)"
+test_begin "output-ndjson-empty-list-emits-no-lines" "--output ndjson (empty list emits no lines)"
 run_bzr_raw --output ndjson bug list --whiteboard "nomatch$$x${RANDOM}"
 if assert_success && assert_ndjson_line_count 0; then test_pass; fi
 
-test_begin "103b. --output ndjson (one value per line)"
+test_begin "output-ndjson-one-value-per-line" "--output ndjson (one value per line)"
 _NM="nd$$x${RANDOM}"
 make_bug --marker "$_NM" --product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d --summary "ndjson 1" >/dev/null
 make_bug --marker "$_NM" --product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d --summary "ndjson 2" >/dev/null
@@ -79,7 +79,7 @@ if assert_success && assert_ndjson_line_count 2; then test_pass; fi
 unset _NM
 
 # --dry-run previews a mutation without writing it.
-test_begin "103c. --dry-run bug create previews without writing"
+test_begin "dry-run-bug-create-previews-without-writing" "--dry-run bug create previews without writing"
 _DM="dry$$x${RANDOM}"
 run_bzr --dry-run bug create --product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d --whiteboard "$_DM" --summary "dryrun preview"
 if assert_success && assert_json '.action' "dry-run"; then
@@ -88,7 +88,7 @@ if assert_success && assert_json '.action' "dry-run"; then
 fi
 unset _DM
 
-test_begin "103d. --dry-run product create previews without writing"
+test_begin "dry-run-product-create-previews-without-writing" "--dry-run product create previews without writing"
 _DP=$(unique_name dryprod)
 run_bzr --dry-run product create --name "$_DP" --description "dry product"
 if assert_success && assert_json '.resource' "product" && assert_json '.action' "dry-run"; then
@@ -97,7 +97,7 @@ if assert_success && assert_json '.resource' "product" && assert_json '.action' 
 fi
 unset _DP
 
-test_begin "103e. --dry-run component update by name resolves but does not write"
+test_begin "dry-run-component-update-by-name-resolves-but-does-not-write" "--dry-run component update by name resolves but does not write"
 run_bzr --dry-run component update --product FuncTestProd --component Backend \
     --description "dry component update"
 if [[ $BZR_EXIT -eq 0 ]]; then
@@ -109,13 +109,13 @@ else
     assert_success
 fi
 
-test_begin "103f. --dry-run user update previews without writing"
+test_begin "dry-run-user-update-previews-without-writing" "--dry-run user update previews without writing"
 run_bzr --dry-run user update testuser@test.bzr --disable-login false
 if assert_success && assert_json '.resource' "user" && assert_json '.action' "dry-run"; then
     test_pass
 fi
 
-test_begin "103g. --dry-run group update previews without writing"
+test_begin "dry-run-group-update-previews-without-writing" "--dry-run group update previews without writing"
 run_bzr --dry-run group update functest-grp --description "dry group update"
 if assert_success && assert_json '.resource' "group" && assert_json '.action' "dry-run"; then
     run_bzr group view functest-grp
