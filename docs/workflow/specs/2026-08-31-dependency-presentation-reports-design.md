@@ -16,11 +16,14 @@ project-manager reporting artifact-safety contract owns output escaping, link va
 self-containment. An active artifact capability owns HTML construction and its normal open/render
 verification workflow; `bzr` and `render.py` do not gain an HTML mode.
 
-The skill installs together with `bzr-project-manager-reporting`, so the dependency skill can read
-the sibling safety reference before creating HTML. A deterministic analysis/HTML fixture pair
-exercises the composition contract without shipping a second report renderer. Contract tests
-validate the fixture's required sections, inert hostile text, local-only presentation resources,
-expected-host bug links, graph semantics, boundary disclosures, and truncation disclosures.
+The canonical payload includes `bzr-project-manager-reporting`, but installation is not a
+transactional guarantee that a compatible sibling reference is readable. The dependency skill
+must resolve and read that reference before creating HTML. A missing, unreadable, or incompatible
+reference makes safe HTML unavailable and routes to Markdown with the limitation stated. A
+deterministic analysis/HTML fixture pair exercises the composition contract without shipping a
+second report renderer. Contract tests validate the fixture's required sections, inert hostile
+text, local-only presentation resources, expected-host bug links, graph semantics, boundary
+disclosures, and truncation disclosures.
 
 ## Capability routing and data flow
 
@@ -31,8 +34,10 @@ expected-host bug links, graph semantics, boundary disclosures, and truncation d
    self-contained HTML and open or render the local result for visual inspection.
 3. When no such capability exists, explain the missing capability and render the existing Markdown
    report. Mermaid remains an optional source artifact, not the primary presentation fallback.
-4. Before HTML composition, read the project-manager artifact-safety reference and the new
-   dependency presentation template. Consume only the validated analysis document.
+4. Before HTML composition, resolve and read the project-manager artifact-safety reference and the
+   new dependency presentation template. If either is absent, unreadable, or incompatible, report
+   that safe HTML composition is unavailable and render Markdown. Consume only the validated
+   analysis document.
 5. Create one self-contained page, open it through the same active artifact capability, and inspect
    both wide and narrow layouts. Correct visible clipping, overlap, illegible labels, broken
    hierarchy, or missing limitation/provenance content before delivery.
@@ -165,7 +170,8 @@ is recorded explicitly rather than inferred from parser success.
 ### Controls
 
 - Read and apply `bzr-project-manager-reporting/reference/artifact-safety.md`; escape every text and
-  attribute sink with the writer rather than interpolating markup.
+  attribute sink with the writer rather than interpolating markup. Treat a missing, unreadable, or
+  incompatible sibling reference as capability absence and use Markdown.
 - Build links from validated numeric IDs and sanitized configured bases, parse them, and require
   HTTP or HTTPS plus the expected host before emitting an anchor.
 - Keep CSS and SVG inline and reject every remote or executable content category listed above.
