@@ -1,3 +1,6 @@
+use std::fmt;
+
+use serde::de::{self, Deserializer, Visitor};
 use serde::Deserialize;
 
 use crate::client::encode_path;
@@ -5,11 +8,64 @@ use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
 use crate::types::product::{CreateProductParams, Product, ProductListType, UpdateProductParams};
 
-#[derive(Deserialize)]
-struct ProductAccessibleResponse {
-    ids: Vec<u64>,
+struct ProductIdVisitor;
+
+impl Visitor<'_> for ProductIdVisitor {
+    type Value = u64;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a positive integer or decimal numeric string product ID")
+    }
+
+    fn visit_u64<E: de::Error>(self, value: u64) -> std::result::Result<Self::Value, E> {
+        if value == 0 {
+            return Err(E::custom("expected a positive integer product ID"));
+        }
+        Ok(value)
+    }
+
+    fn visit_i64<E: de::Error>(self, value: i64) -> std::result::Result<Self::Value, E> {
+        if value <= 0 {
+            return Err(E::custom("expected a positive integer product ID"));
+        }
+        u64::try_from(value).map_err(|_| E::custom("expected a positive integer product ID"))
+    }
+
+    fn visit_str<E: de::Error>(self, value: &str) -> std::result::Result<Self::Value, E> {
+        let parsed: u64 = value
+            .parse()
+            .map_err(|_| E::custom("expected a positive integer product ID"))?;
+        if parsed == 0 {
+            return Err(E::custom("expected a positive integer product ID"));
+        }
+        Ok(parsed)
+    }
 }
 
+fn deserialize_product_ids<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<Vec<u64>, D::Error> {
+    struct ProductIdWrapper(u64);
+
+    impl<'de> Deserialize<'de> for ProductIdWrapper {
+        fn deserialize<D2: Deserializer<'de>>(
+            deserializer: D2,
+        ) -> std::result::Result<Self, D2::Error> {
+            deserializer
+                .deserialize_any(ProductIdVisitor)
+                .map(ProductIdWrapper)
+        }
+    }
+
+    let wrappers: Vec<ProductIdWrapper> = Vec::deserialize(deserializer)?;
+    Ok(wrappers.into_iter().map(|w| w.0).collect())
+}
+
+#[derive(Deserialize)]
+struct ProductAccessibleResponse {
+    #[serde(deserialize_with = "deserialize_product_ids")]
+    ids: Vec<u64>,
+}
 #[derive(Deserialize)]
 struct ProductResponse {
     products: Vec<Product>,
