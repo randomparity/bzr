@@ -9,7 +9,7 @@
 # warning for them here.
 # SC1091: lib.sh is resolved from the computed script directory.
 # SC2329: cleanup is invoked through the EXIT trap.
-# shellcheck disable=SC1091,SC2034,SC2329
+# shellcheck disable=SC1090,SC1091,SC2034,SC2329
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -45,6 +45,7 @@ TMPL_BUG=""
 COMMENT_ID=""
 ATTACH_ID=""
 RESTRICTED_BUG=""
+CURRENT_TEST_GROUP=""
 
 # ── Config isolation ─────────────────────────────────────────────────
 FUNC_CONFIG_DIR=$(mktemp -d /tmp/bzr-func-config.XXXXXX)
@@ -73,6 +74,7 @@ for _phase in \
     18b-http-error-preview 18c-skills-install 18d-dependency-analysis \
     18e-release-readiness 18f-project-manager-reporting 99-sequences; do
     # shellcheck source=/dev/null
+    CURRENT_TEST_GROUP="$_phase"
     source "$SCRIPT_DIR/phases/${_phase}.sh"
 done
 

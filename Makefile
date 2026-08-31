@@ -2,7 +2,7 @@ CARGO ?= cargo
 RUST_MIN_VERSION := 1.89.0
 
 .PHONY: setup check-rust ensure-components ensure-coverage-prereqs ensure-mutants-prereq install-hooks \
-        build release test test-verbose test-fast test-one coverage fmt clippy lint check-build-script check-test-layout \
+        build release test test-verbose test-fast test-one coverage fmt clippy lint check-build-script check-test-layout check-functional-test-ids \
         check-no-spawn check-release-security-notes check-shell clean help man \
         skills-test \
         mutants mutants-fast mutants-list audit-mutant-skips \
@@ -62,11 +62,11 @@ install-hooks: ## Install git pre-commit and pre-push hooks
 	@echo "Installing git hooks..."
 	@HOOKS_DIR=$$(git rev-parse --git-path hooks) && \
 	mkdir -p "$$HOOKS_DIR" && \
-	printf '#!/bin/sh\nset -eu\ncargo fmt -- --check || { echo "Run cargo fmt before committing."; exit 1; }\ncargo clippy --all-targets --features test-helpers -- -D warnings\nmake check-test-layout\n' > "$$HOOKS_DIR/pre-commit" && \
+	printf '#!/bin/sh\nset -eu\ncargo fmt -- --check || { echo "Run cargo fmt before committing."; exit 1; }\ncargo clippy --all-targets --features test-helpers -- -D warnings\nmake check-test-layout\nmake check-functional-test-ids\n' > "$$HOOKS_DIR/pre-commit" && \
 	chmod +x "$$HOOKS_DIR/pre-commit" && \
 	printf '#!/bin/sh\nset -eu\nmake test\n' > "$$HOOKS_DIR/pre-push" && \
 	chmod +x "$$HOOKS_DIR/pre-push" && \
-	echo "Installed pre-commit (fmt + clippy + test-layout) and pre-push (test) hooks."
+	echo "Installed pre-commit (fmt + clippy + test-layout + functional IDs) and pre-push (test) hooks."
 
 ## Development
 
@@ -109,7 +109,7 @@ fmt: ## Format source code
 clippy: ## Run clippy lints
 	$(CARGO) clippy --all-targets --features test-helpers -- -D warnings
 
-lint: fmt clippy check-build-script check-test-layout check-no-spawn check-release-security-notes check-shell ## Run all linters
+lint: fmt clippy check-build-script check-test-layout check-functional-test-ids check-no-spawn check-release-security-notes check-shell ## Run all linters
 
 check-build-script: ## Run dependency-free build-script validation tests
 	@mkdir -p target
@@ -126,6 +126,11 @@ check-test-layout: ## Verify all test code lives in sibling *_tests.rs files
 	  exit 1; \
 	fi
 
+check-functional-test-ids: ## Validate stable semantic references in functional tests
+	@command -v rg >/dev/null || { echo "ERROR: ripgrep (rg) is required for this guard"; exit 1; }
+	bash tools/check-functional-test-ids-tests.sh
+	bash tools/check-functional-test-ids.sh .
+
 check-no-spawn: ## Guard the single-threaded-runtime assumption (CONC-3)
 	@command -v rg >/dev/null || { echo "ERROR: ripgrep (rg) is required for this guard"; exit 1; }
 	bash tools/check-no-spawn.sh .
@@ -139,6 +144,8 @@ check-shell: ## Lint shell scripts (shellcheck + shfmt, POSIX and bash)
 	@command -v shfmt >/dev/null || { echo "ERROR: shfmt is required for this guard"; echo "  Install: brew install shfmt  |  https://github.com/mvdan/sh/releases"; exit 1; }
 	shellcheck -s sh install.sh tests/installer/smoke.sh
 	shellcheck -s bash tools/*.sh
+	shellcheck -s bash tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/phases/*.sh
+	bash -n tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/phases/*.sh
 	shfmt -d -ln posix -i 2 install.sh tests/installer/smoke.sh
 	shfmt -d -ln bash -i 2 tools/*.sh
 

@@ -38,7 +38,7 @@ _RESTRICTED_ALIASES_OK=1
 _RA=(--product FuncTestProd --component Backend --op-sys Linux
     --rep-platform PC --description d)
 
-test_begin "146i. fixture: second credentialed identity"
+test_begin "fixture-second-credentialed-identity" "fixture: second credentialed identity"
 # Create best-effort: the account survives in a reused container, and
 # Bugzilla's duplicate-account wording ("There is already an account with the
 # login name …") differs from other resources' "already exists". Verify the
@@ -79,7 +79,7 @@ fi
 rm -f "$_RU_SQL"
 unset _RU_SQL
 
-test_begin "146i1. fixture: explicit restricted REST and XML-RPC aliases"
+test_begin "fixture-explicit-restricted-rest-and-xml-rpc-aliases" "fixture: explicit restricted REST and XML-RPC aliases"
 for _RESTRICTED_MODE in rest xmlrpc; do
     run_bzr config set-server "restricted-$_RESTRICTED_MODE" --url "$BZ_URL" \
         --api-key "$RESTRICTED_KEY" --auth-method query_param \
@@ -92,7 +92,7 @@ else
     test_fail "could not configure explicit restricted transport aliases"
 fi
 
-test_begin "146j. fixture: group-restricted bug"
+test_begin "fixture-group-restricted-bug" "fixture: group-restricted bug"
 # The group name is per-run unique, so a plain success assertion is correct
 # here — unlike the account above, this cannot collide on a warm container.
 run_bzr group create --name "$RESTRICTED_GROUP" --description "restricted access"
@@ -126,7 +126,18 @@ fi
 # ── The three access directions ──────────────────────────────────────
 
 for _RESTRICTED_MODE in rest xmlrpc; do
-    test_begin "146j1. credentialed $_RESTRICTED_MODE adjacency proves access error after valid_login"
+    case "$_RESTRICTED_MODE" in
+    rest)
+        test_begin "rest-credentialed-adjacency-proves-access-error-after-valid-login" "credentialed rest adjacency proves access error after valid_login"
+        ;;
+    xmlrpc)
+        test_begin "xmlrpc-credentialed-adjacency-proves-access-error-after-valid-login" "credentialed xmlrpc adjacency proves access error after valid_login"
+        ;;
+    *)
+        printf 'unexpected restricted adjacency mode: %s\n' "$_RESTRICTED_MODE" >&2
+        return 1
+        ;;
+    esac
     if [[ -n "$RESTRICTED_BUG" ]] && [[ $_RESTRICTED_ALIASES_OK -eq 1 ]]; then
         # A credentialed code-102 result is emitted only after adjacency has
         # proved these exact credentials through live rest/valid_login.
@@ -148,7 +159,7 @@ for _RESTRICTED_MODE in rest xmlrpc; do
     fi
 done
 
-test_begin "146k. anonymous view of a restricted bug reports access, not absence"
+test_begin "anonymous-view-of-a-restricted-bug-reports-access-not-absence" "anonymous view of a restricted bug reports access, not absence"
 if [[ -n "$RESTRICTED_BUG" ]]; then
     run_bzr_raw --json --server public bug view "$RESTRICTED_BUG"
     # The contract #504 broke: an access failure must not be reported as
@@ -161,7 +172,7 @@ if [[ -n "$RESTRICTED_BUG" ]]; then
     fi
 else test_skip "no restricted bug"; fi
 
-test_begin "146l. authenticated non-member gets an access error, not absence"
+test_begin "authenticated-non-member-gets-an-access-error-not-absence" "authenticated non-member gets an access error, not absence"
 if [[ -n "$RESTRICTED_BUG" ]]; then
     run_bzr_raw --json --server restricted bug view "$RESTRICTED_BUG"
     if assert_exit_code 4 &&
@@ -172,7 +183,7 @@ if [[ -n "$RESTRICTED_BUG" ]]; then
     fi
 else test_skip "no restricted bug"; fi
 
-test_begin "146m. group member sees the restricted bug"
+test_begin "group-member-sees-the-restricted-bug" "group member sees the restricted bug"
 # The reporter's actual scenario, and the direction the suite could not
 # reach before: access granted purely by group membership, not by being the
 # bug's reporter or an admin.
@@ -186,7 +197,7 @@ if [[ -n "$RESTRICTED_BUG" ]]; then
     fi
 else test_skip "no restricted bug"; fi
 
-test_begin "146n. member view is stable across repeated invocations"
+test_begin "member-view-is-stable-across-repeated-invocations" "member view is stable across repeated invocations"
 # #504 was reported as intermittent. A loop cannot prove absence of a race,
 # but it does catch a fix that only works on a cold cache or first request.
 if [[ -n "$RESTRICTED_BUG" ]]; then
@@ -213,7 +224,7 @@ else test_skip "no restricted bug"; fi
 RESTRICTED_PRODUCT=$(unique_name RestrictProd)
 RESTRICTED_PROD_BUG=""
 
-test_begin "146o. fixture: product with a mandatory group"
+test_begin "fixture-product-with-a-mandatory-group" "fixture: product with a mandatory group"
 run_bzr product create --name "$RESTRICTED_PRODUCT" \
     --description "product-level restriction" --version 1.0
 if assert_success; then
@@ -239,7 +250,7 @@ SQL
     fi
 fi
 
-test_begin "146p. bug in a restricted product: member sees it, anonymous gets 102"
+test_begin "bug-in-a-restricted-product-member-sees-it-anonymous-gets-102" "bug in a restricted product: member sees it, anonymous gets 102"
 RESTRICTED_PROD_BUG=$(make_bug --product "$RESTRICTED_PRODUCT" \
     --component RestrictComp --summary "product-restricted probe" \
     --version 1.0 --op-sys Linux --rep-platform PC --description d)
@@ -255,7 +266,7 @@ if [[ -n "$RESTRICTED_PROD_BUG" ]]; then
     fi
 else test_skip "no product-restricted bug"; fi
 
-test_begin "146q. anonymous product view relays the server's empty result"
+test_begin "anonymous-product-view-relays-the-server-s-empty-result" "anonymous product view relays the server's empty result"
 # Contrast with 146m, and the reason ADR 0015 is about *masking* rather than
 # about not-found: Bugzilla answers an anonymous product lookup with
 # `{"products":[]}` and HTTP 200 — no error payload at all. Reporting
@@ -274,7 +285,7 @@ fi
 # The redaction itself is asserted by unit tests (`src/error_tests.rs`,
 # `src/client/response_tests.rs`), which can synthesize the echo no real server
 # produces.
-test_begin "146r. credentialed API error keeps its message and omits the key (#505, #509)"
+test_begin "credentialed-api-error-keeps-its-message-and-omits-the-key" "credentialed API error keeps its message and omits the key (#505, #509)"
 run_bzr_raw --json --server restricted bug view 999999999
 if assert_exit_code 4 &&
     assert_stderr_json '.error.api_code' "101" &&

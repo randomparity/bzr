@@ -12,7 +12,7 @@
 # (for #125), which is also the precondition for private attachments.
 echo "── Phase 15b: Private attachments (Hybrid mode) ──────────────"
 
-test_begin "100a. attachment upload --private"
+test_begin "attachment-upload-private" "attachment upload --private"
 if [[ -n "$BUG1" ]]; then
     run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
         --summary "Private test attachment" --private
@@ -22,7 +22,7 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "100b. attachment list returns private attachment in Hybrid mode"
+test_begin "attachment-list-returns-private-attachment-in-hybrid-mode" "attachment list returns private attachment in Hybrid mode"
 if [[ -n "$BUG1" ]]; then
     run_bzr --api hybrid attachment list "$BUG1"
     # Several public attachments are uploaded earlier in the run and this
@@ -35,7 +35,7 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "100c. attachment list returns private attachment in XML-RPC mode"
+test_begin "attachment-list-returns-private-attachment-in-xml-rpc-mode" "attachment list returns private attachment in XML-RPC mode"
 if [[ -n "$BUG1" ]]; then
     run_bzr --api xmlrpc attachment list "$BUG1"
     if assert_success &&
@@ -45,7 +45,7 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "100d. attachment download (private) in Hybrid mode"
+test_begin "attachment-download-private-in-hybrid-mode" "attachment download (private) in Hybrid mode"
 if [[ -n "${PRIVATE_ATTACH_ID:-}" ]] && [[ "$PRIVATE_ATTACH_ID" != "null" ]]; then
     rm -f /tmp/bzr-func-private-hybrid.txt
     run_bzr --api hybrid attachment download "$PRIVATE_ATTACH_ID" \
@@ -57,7 +57,7 @@ else
     test_skip "no private attachment ID"
 fi
 
-test_begin "100e. attachment download (private) in XML-RPC mode"
+test_begin "attachment-download-private-in-xml-rpc-mode" "attachment download (private) in XML-RPC mode"
 if [[ -n "${PRIVATE_ATTACH_ID:-}" ]] && [[ "$PRIVATE_ATTACH_ID" != "null" ]]; then
     rm -f /tmp/bzr-func-private-xmlrpc.txt
     run_bzr --api xmlrpc attachment download "$PRIVATE_ATTACH_ID" \

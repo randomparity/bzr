@@ -24,7 +24,7 @@ _PM_QA=$(make_bug "${_PM_CREATE[@]}" --summary "QA validation" \
 _PM_DOCS=$(make_bug "${_PM_CREATE[@]}" --summary "Documentation readiness" \
   --whiteboard "$_PM_MARKER docs ready for review")
 
-test_begin "125a. PM fixture records mutable whiteboard and durable comment"
+test_begin "pm-fixture-records-mutable-whiteboard-and-durable-comment" "PM fixture records mutable whiteboard and durable comment"
 if [[ -n $_PM_BLOCKER && -n $_PM_QA && -n $_PM_DOCS ]]; then
     run_bzr bug update "$_PM_BLOCKER" --status IN_PROGRESS
     [[ $BZR_EXIT -eq 0 ]] || _PM_BLOCKER=""
@@ -40,7 +40,7 @@ if [[ -n $_PM_BLOCKER ]]; then
     fi
 fi
 
-test_begin "125b. PM Custom Search saves and paginates projected JSON"
+test_begin "pm-custom-search-saves-and-paginates-projected-json" "PM Custom Search saves and paginates projected JSON"
 _PM_URL="${_PM_PUBLIC_URL}/buglist.cgi?product=FuncTestProd&f1=status_whiteboard&o1=substring&v1=${_PM_MARKER}&query_format=advanced"
 run_bzr query save "$_PM_QUERY" --from-url "$_PM_URL"
 if [[ $_PM_ALT_REMOVED -eq 0 && $_PM_PROFILE_OK -eq 0 ]] && assert_success; then
@@ -55,7 +55,7 @@ if [[ $_PM_ALT_REMOVED -eq 0 && $_PM_PROFILE_OK -eq 0 ]] && assert_success; then
     fi
 fi
 
-test_begin "125c. PM Custom Search emits bare projected NDJSON rows"
+test_begin "pm-custom-search-emits-bare-projected-ndjson-rows" "PM Custom Search emits bare projected NDJSON rows"
 run_bzr_raw --output ndjson bug search --from-url "$_PM_URL" \
     --fields id,summary,status,assigned_to,target_milestone,last_change_time,whiteboard \
     --paginate

@@ -81,6 +81,29 @@ The suite creates real Bugzilla data in the running container and reads it back
 through the CLI. Count and paging assertions use per-run unique whiteboard
 markers so repeated runs against an already-started container stay stable.
 
+## Stable Test References
+
+Every test prints a stable `<phase>/<slug>` reference independently of its
+human-readable description, for example:
+
+```text
+TEST  [08-bugs/bug-create-bug-one] bug create (bug one) ... PASS
+```
+
+Phase files declare tests with two literal arguments:
+
+```bash
+test_begin "bug-create-bug-one" "bug create (bug one)"
+```
+
+The runner supplies the phase group. Slugs must be lowercase ASCII words
+separated by single hyphens (`[a-z0-9]+(-[a-z0-9]+)*`), must not use shell
+expansion, and must be unique within their phase. Choose a slug for the tested
+behavior rather than its position or transient fixture data. Descriptions may
+change without changing the reference; inserting or reordering a test never
+requires renaming other references. Run `make check-functional-test-ids` after
+adding or moving a functional test.
+
 ## TLS Fixture (ad-hoc `--server-tls-*` flags)
 
 Phase `02c-tls-inline` exercises the stateless TLS trust controls

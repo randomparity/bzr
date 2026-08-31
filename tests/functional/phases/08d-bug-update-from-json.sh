@@ -8,7 +8,7 @@ echo "── Phase 8d: Bug update --from-json ───────────�
 _UJ_DIR=$(mktemp -d /tmp/bzr-func-bug-update-json.XXXXXX)
 _UJ_CREATE=(--product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d)
 
-test_begin "152. bug update --from-json object with positional ID"
+test_begin "bug-update-from-json-object-with-positional-id" "bug update --from-json object with positional ID"
 _UJ_ONE=$(make_bug "${_UJ_CREATE[@]}" --summary "update json object")
 write_json_fixture "$_UJ_DIR/object.json" \
     '{"priority":"High","whiteboard":"json-object","url":"http://example.com/json-object"}'
@@ -20,7 +20,7 @@ if assert_success; then
         assert_json '.url' "http://example.com/json-object"; then test_pass; fi
 fi
 
-test_begin "153. bug update --from-json object target from JSON"
+test_begin "bug-update-from-json-object-target-from-json" "bug update --from-json object target from JSON"
 _UJ_TWO=$(make_bug "${_UJ_CREATE[@]}" --summary "update json target")
 write_json_fixture "$_UJ_DIR/target.json" \
     "{\"id\":$_UJ_TWO,\"severity\":\"major\",\"whiteboard\":\"json-target\"}"
@@ -31,7 +31,7 @@ if assert_success; then
         assert_json '.whiteboard' "json-target"; then test_pass; fi
 fi
 
-test_begin "154. bug update --from-json array partial failure"
+test_begin "bug-update-from-json-array-partial-failure" "bug update --from-json array partial failure"
 _UJ_THREE=$(make_bug "${_UJ_CREATE[@]}" --summary "update json array valid")
 write_json_fixture "$_UJ_DIR/array.json" \
     "[{\"id\":$_UJ_THREE,\"priority\":\"Low\"},{\"id\":999999,\"priority\":\"High\"}]"
@@ -45,14 +45,14 @@ fi
 
 # #462: a partial-failure batch with --progress emits per-item batch events and
 # the terminal error event on stderr, and suppresses done (it is a failure).
-test_begin "154a. bug update --from-json array --progress ndjson on failure"
+test_begin "bug-update-from-json-array-progress-ndjson-on-failure" "bug update --from-json array --progress ndjson on failure"
 run_bzr bug update --from-json "$_UJ_DIR/array.json" --progress ndjson
 if assert_exit_code 11 &&
     assert_stderr_contains '"event":"batch"' &&
     assert_stderr_contains '"event":"error"' &&
     assert_stderr_not_contains '"event":"done"'; then test_pass; fi
 
-test_begin "155. bug update --from-json stdin with CLI override"
+test_begin "bug-update-from-json-stdin-with-cli-override" "bug update --from-json stdin with CLI override"
 _UJ_FOUR=$(make_bug "${_UJ_CREATE[@]}" --summary "update json override")
 write_json_fixture "$_UJ_DIR/stdin.json" \
     "{\"id\":$_UJ_FOUR,\"priority\":\"Low\",\"whiteboard\":\"json-loses\"}"
@@ -63,13 +63,13 @@ if assert_success; then
         assert_json '.whiteboard' "cli-wins"; then test_pass; fi
 fi
 
-test_begin "156. bug update --from-json unknown key"
+test_begin "bug-update-from-json-unknown-key" "bug update --from-json unknown key"
 _UJ_FIVE=$(make_bug "${_UJ_CREATE[@]}" --summary "update json bad")
 write_json_fixture "$_UJ_DIR/bad.json" "{\"id\":$_UJ_FIVE,\"bogus\":true}"
 run_bzr bug update --from-json "$_UJ_DIR/bad.json"
 if assert_exit_code 7 && assert_stderr_contains "unknown field"; then test_pass; fi
 
-test_begin "157. bug update --from-json no-op rejected"
+test_begin "bug-update-from-json-no-op-rejected" "bug update --from-json no-op rejected"
 _UJ_SIX=$(make_bug "${_UJ_CREATE[@]}" --summary "update json noop")
 write_json_fixture "$_UJ_DIR/noop.json" "{\"id\":$_UJ_SIX}"
 run_bzr bug update --from-json "$_UJ_DIR/noop.json"

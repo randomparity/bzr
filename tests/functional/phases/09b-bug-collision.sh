@@ -15,7 +15,7 @@ echo "── Phase 9b: Mid-air collision guard ───────────
 
 _CC=(--product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d)
 
-test_begin "147. bug update --expect-unchanged-since happy path"
+test_begin "bug-update-expect-unchanged-since-happy-path" "bug update --expect-unchanged-since happy path"
 CID=$(make_bug "${_CC[@]}" --summary "collision happy")
 run_bzr bug view "$CID"
 # Capture last_change_time only after confirming the view succeeded — otherwise
@@ -29,7 +29,7 @@ if assert_success; then
     fi
 fi
 
-test_begin "148. bug update --expect-unchanged-since detects collision (exit 14)"
+test_begin "bug-update-expect-unchanged-since-detects-collision-exit-14" "bug update --expect-unchanged-since detects collision (exit 14)"
 CID=$(make_bug "${_CC[@]}" --summary "collision detect")
 run_bzr bug view "$CID"
 if assert_success; then

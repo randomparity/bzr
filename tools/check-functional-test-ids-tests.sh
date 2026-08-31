@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Fixture bodies intentionally contain literal shell expansions for the checker to inspect.
-# shellcheck disable=SC2016
+# Fixture bodies intentionally contain literal shell expansions for the checker to inspect;
+# runtime globals are consumed by the dynamically sourced functional library.
+# shellcheck disable=SC1091,SC2016,SC2034
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -57,6 +58,116 @@ expect_rejected() {
     return 1
   fi
 }
+
+run_runtime_tests() (
+  source "$SCRIPT_DIR/../tests/functional/lib.sh"
+  GREEN='' RED='' YELLOW='' CYAN='' RESET=''
+
+  runtime_output="$FIXTURES/runtime.stdout"
+  runtime_error="$FIXTURES/runtime.stderr"
+
+  fail_runtime() {
+    printf 'runtime semantic-ID test failed: %s\n' "$*" >&2
+    return 1
+  }
+
+  expect_runtime_rejected() {
+    local name=$1
+    local expected_error=$2
+    local group=$3
+    shift 3
+    CURRENT_TEST='sentinel current test'
+    SEEN_TEST_IDS=$'\n08-bugs/already-seen\n'
+    CURRENT_TEST_GROUP=$group
+    local before_current=$CURRENT_TEST
+    local before_seen=$SEEN_TEST_IDS
+    set +e
+    test_begin "$@" >"$runtime_output" 2>"$runtime_error"
+    local status=$?
+    set -e
+    [[ $status -eq 2 ]] || fail_runtime "$name returned $status instead of 2"
+    grep -Fq "$expected_error" "$runtime_error" ||
+      fail_runtime "$name stderr did not contain '$expected_error'"
+    [[ $CURRENT_TEST == "$before_current" ]] ||
+      fail_runtime "$name changed CURRENT_TEST"
+    [[ $SEEN_TEST_IDS == "$before_seen" ]] ||
+      fail_runtime "$name changed SEEN_TEST_IDS"
+  }
+
+  CURRENT_TEST_GROUP=08-bugs
+  test_begin create-first-bug 'bug create (bug one)' >"$runtime_output"
+  [[ $(<"$runtime_output") == '  TEST  [08-bugs/create-first-bug] bug create (bug one) ... ' ]] ||
+    fail_runtime 'valid call output differs from the semantic reference contract'
+  [[ $CURRENT_TEST == 'bug create (bug one)' ]] ||
+    fail_runtime 'valid call did not set CURRENT_TEST to the description'
+  test_begin create-second-bug 'bug create (bug two)' >"$runtime_output"
+  [[ $SEEN_TEST_IDS == *$'\n08-bugs/create-first-bug\n'* ]] ||
+    fail_runtime 'first valid ID was not recorded'
+  [[ $SEEN_TEST_IDS == *$'\n08-bugs/create-second-bug\n'* ]] ||
+    fail_runtime 'second valid ID was not recorded'
+
+  expect_runtime_rejected missing-group "invalid functional test group ''" '' \
+    retry-after-missing-group 'retry after missing group'
+  CURRENT_TEST_GROUP=08-bugs
+  test_begin retry-after-missing-group 'retry after missing group' >"$runtime_output"
+
+  expect_runtime_rejected one-argument 'expected exactly 2 arguments, got 1' 08-bugs \
+    retry-after-one-argument
+  CURRENT_TEST_GROUP=08-bugs
+  test_begin retry-after-one-argument 'retry after one argument' >"$runtime_output"
+
+  expect_runtime_rejected three-arguments 'expected exactly 2 arguments, got 3' 08-bugs \
+    retry-after-three-arguments description extra
+  CURRENT_TEST_GROUP=08-bugs
+  test_begin retry-after-three-arguments 'retry after three arguments' >"$runtime_output"
+
+  group_index=0
+  for invalid_group in 08--bugs 08_Bugs bugs-08; do
+    expect_runtime_rejected "invalid-group-$invalid_group" \
+      "invalid functional test group '$invalid_group'" "$invalid_group" \
+      retry-after-invalid-group 'retry after invalid group'
+    CURRENT_TEST_GROUP=08-bugs
+    test_begin retry-after-invalid-group-$group_index \
+      'retry after invalid group' >"$runtime_output"
+    group_index=$((group_index + 1))
+  done
+
+  slug_index=0
+  for invalid_slug in Bad_Slug double--hyphen leading- trailing-; do
+    expect_runtime_rejected "invalid-slug-$invalid_slug" \
+      "invalid functional test slug '$invalid_slug'" 08-bugs \
+      "$invalid_slug" 'invalid slug'
+    CURRENT_TEST_GROUP=08-bugs
+    test_begin corrected-invalid-slug-$slug_index \
+      'retry after invalid slug' >"$runtime_output"
+    slug_index=$((slug_index + 1))
+  done
+
+  CURRENT_TEST='already seen description'
+  CURRENT_TEST_GROUP=08-bugs
+  SEEN_TEST_IDS=$'\n08-bugs/already-seen\n'
+  duplicate_before_current=$CURRENT_TEST
+  duplicate_before_seen=$SEEN_TEST_IDS
+  set +e
+  test_begin already-seen 'duplicate description' >"$runtime_output" 2>"$runtime_error"
+  duplicate_status=$?
+  set -e
+  [[ $duplicate_status -eq 2 ]] || fail_runtime 'duplicate ID did not return 2'
+  grep -Fq "duplicate functional test ID '08-bugs/already-seen'" "$runtime_error" ||
+    fail_runtime 'duplicate ID stderr omitted the full ID'
+  [[ $CURRENT_TEST == "$duplicate_before_current" ]] ||
+    fail_runtime 'duplicate ID changed CURRENT_TEST'
+  [[ $SEEN_TEST_IDS == "$duplicate_before_seen" ]] ||
+    fail_runtime 'duplicate ID changed SEEN_TEST_IDS'
+  test_begin distinct-after-duplicate 'distinct after duplicate' >"$runtime_output"
+
+  printf 'semantic functional-test runtime tests passed\n'
+)
+
+if [[ ${1:-} == --runtime-only ]]; then
+  run_runtime_tests
+  exit
+fi
 
 valid=$(new_fixture valid)
 expect_allowed valid "$valid"
@@ -153,4 +264,5 @@ printf '%s\n' \
   >"$duplicate_id/tests/functional/phases/08-bugs.sh"
 expect_rejected duplicate-id "$duplicate_id" "duplicate functional test ID: 08-bugs/create-bug"
 
+run_runtime_tests
 printf 'semantic functional-test ID checker fixtures passed\n'

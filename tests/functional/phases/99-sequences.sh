@@ -11,7 +11,7 @@ echo "── Phase 16b: Complex sequences ────────────�
 # 104 — an update carrying no change fields must be rejected (exit 7) and
 # must NOT issue an empty PUT that mutates last_change_time. Guards against
 # the silent no-op update.
-test_begin "104. bug update with no change fields is rejected (exit 7)"
+test_begin "bug-update-with-no-change-fields-is-rejected-exit-7" "bug update with no change fields is rejected (exit 7)"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "No-op update guard" --description "noop guard" \
     --priority Normal --severity normal --op-sys All --rep-platform All
@@ -26,7 +26,7 @@ else test_skip "create failed"; fi
 
 # 105 — full lifecycle with state verification at each transition, plus the
 # atomic --comment landing on the resolve step.
-test_begin "105. bug lifecycle state verification (new → confirmed → resolved)"
+test_begin "bug-lifecycle-state-verification-new-confirmed-resolved" "bug lifecycle state verification (new → confirmed → resolved)"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Lifecycle bug" --description "lifecycle" \
     --priority Normal --severity normal --op-sys All --rep-platform All
@@ -57,7 +57,7 @@ else test_skip "create failed"; fi
 # 106 — one mutated bug read back through every transport. Catches REST /
 # hybrid / XML-RPC field divergence (e.g. XML-RPC parsing of populated and
 # empty fields).
-test_begin "106. cross-transport read parity (rest / hybrid / xmlrpc)"
+test_begin "cross-transport-read-parity-rest-hybrid-xmlrpc" "cross-transport read parity (rest / hybrid / xmlrpc)"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Parity bug" --description "parity" \
     --priority High --severity normal --op-sys All --rep-platform All
@@ -86,7 +86,7 @@ else test_skip "create failed"; fi
 
 # 107 — a batch update mixing a valid id with a non-existent one must exit 11
 # (partial failure), report each leg, AND still commit the valid leg.
-test_begin "107. batch update partial failure (exit 11) commits valid leg"
+test_begin "batch-update-partial-failure-exit-11-commits-valid-leg" "batch update partial failure (exit 11) commits valid leg"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Batch valid leg" --description "batch" \
     --priority Normal --severity normal --op-sys All --rep-platform All
@@ -103,7 +103,7 @@ else test_skip "create failed"; fi
 
 # 108 — clone must carry the source description into the clone's comment #0
 # (description), not silently drop it.
-test_begin "108. clone preserves source description in comment #0"
+test_begin "clone-preserves-source-description-in-comment" "clone preserves source description in comment #0"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Clone description source" --description "CLONE-DESC-MARKER-108" \
     --priority Normal --severity normal --op-sys Linux --rep-platform PC

@@ -25,14 +25,14 @@ printf '%s' '[{"product":"FuncTestProd","component":"Backend","summary":"fj arr 
 printf '%s' '{"product":"FuncTestProd","component":"Backend","summary":"x","op_sys":"Linux","rep_platform":"PC","description":"d","boguskey":1}' >"$_FJ/bad.json"
 printf '%s' '{"product":"FuncTestProd","component":"Backend","summary":"json sum","op_sys":"Linux","rep_platform":"PC","description":"d"}' >"$_FJ/override.json"
 
-test_begin "142. bug create metadata fields round-trip (url/whiteboard/cc)"
+test_begin "bug-create-metadata-fields-round-trip-url-whiteboard-cc" "bug create metadata fields round-trip (url/whiteboard/cc)"
 _WB="cf$$x${RANDOM}"
 CFID=$(make_bug "${_CF[@]}" --summary "create meta" --url "http://example.com/cf" --whiteboard "$_WB" --cc admin@test.bzr)
 run_bzr bug view "$CFID"
 if assert_success && assert_json '.url' "http://example.com/cf" &&
     assert_json '.whiteboard' "$_WB" && assert_json_contains '.cc | join(",")' "admin@test.bzr"; then test_pass; fi
 
-test_begin "143. bug create --from-json object via stdin (-)"
+test_begin "bug-create-from-json-object-via-stdin" "bug create --from-json object via stdin (-)"
 run_bzr bug create --from-json - <"$_FJ/obj.json"
 if assert_success; then
     FID=$(jq -r '.id' "$BZR_STDOUT")
@@ -40,23 +40,23 @@ if assert_success; then
     if assert_json '.summary' "fj object" && assert_json '.priority' "High"; then test_pass; fi
 fi
 
-test_begin "144. bug create --from-json array creates multiple bugs"
+test_begin "bug-create-from-json-array-creates-multiple-bugs" "bug create --from-json array creates multiple bugs"
 run_bzr bug create --from-json "$_FJ/arr.json"
 if assert_success && assert_json '.created | length' "2" && assert_json '.failed | length' "0"; then test_pass; fi
 
 # #462: --progress ndjson streams batch/done events on stderr for the array form;
 # stdout stays the clean partial-failure result object.
-test_begin "144a. bug create --from-json array --progress ndjson streams events"
+test_begin "bug-create-from-json-array-progress-ndjson-streams-events" "bug create --from-json array --progress ndjson streams events"
 run_bzr bug create --from-json "$_FJ/arr.json" --progress ndjson
 if assert_success && assert_json '.created | length' "2" &&
     assert_stderr_contains '"event":"batch"' &&
     assert_stderr_contains '"event":"done"'; then test_pass; fi
 
-test_begin "145. bug create --from-json unknown key (exit 7)"
+test_begin "bug-create-from-json-unknown-key-exit-7" "bug create --from-json unknown key (exit 7)"
 run_bzr bug create --from-json "$_FJ/bad.json"
 if assert_exit_code 7 && assert_stderr_contains "unknown field"; then test_pass; fi
 
-test_begin "146. bug create --from-json with CLI flag override"
+test_begin "bug-create-from-json-with-cli-flag-override" "bug create --from-json with CLI flag override"
 run_bzr bug create --from-json - --summary "cli wins" <"$_FJ/override.json"
 if assert_success; then
     OID=$(jq -r '.id' "$BZR_STDOUT")
@@ -66,7 +66,7 @@ fi
 
 # --keywords round-trip. The fix-needed keyword is seeded only on bz52+; gate so
 # older Bugzilla (no keyword definition) skips cleanly rather than erroring.
-test_begin "146a. bug create --keywords round-trips"
+test_begin "bug-create-keywords-round-trips" "bug create --keywords round-trips"
 if require_version 520 "fix-needed keyword seeded on bz52+"; then
     KID=$(make_bug "${_CF[@]}" --summary "kw create" --keywords fix-needed)
     run_bzr bug view "$KID"
@@ -74,7 +74,7 @@ if require_version 520 "fix-needed keyword seeded on bz52+"; then
 fi
 unset KID
 
-test_begin "146b. bug create --target-milestone and --deadline round-trip"
+test_begin "bug-create-target-milestone-and-deadline-round-trip" "bug create --target-milestone and --deadline round-trip"
 MID=$(make_bug "${_CF[@]}" --summary "milestone create" \
     --target-milestone=--- --deadline 2026-12-30)
 run_bzr bug view "$MID"
@@ -82,7 +82,7 @@ if assert_success &&
     assert_json '.target_milestone' "---" &&
     assert_json '.deadline' "2026-12-30"; then test_pass; fi
 
-test_begin "146c. bug create --groups restricts public access"
+test_begin "bug-create-groups-restricts-public-access" "bug create --groups restricts public access"
 _GROUP_WB=$(unique_name group-restrict)
 GID=$(make_bug --marker "$_GROUP_WB" "${_CF[@]}" --summary "group create" --groups functest-grp)
 if [[ -n "$GID" ]]; then
@@ -102,7 +102,7 @@ if [[ -n "$GID" ]]; then
     fi
 fi
 
-test_begin "146d. bug create --flag round-trips"
+test_begin "bug-create-flag-round-trips" "bug create --flag round-trips"
 FID=$(make_bug "${_CF[@]}" --summary "flag create" --flag 'bzr_bug_review?')
 run_bzr bug view "$FID"
 if assert_success &&
@@ -113,7 +113,7 @@ _CA_FILE="$_FJ/trace.log"
 printf 'boot trace %s\n' "$RANDOM" >"$_CA_FILE"
 _CA_MARK="compound$$x${RANDOM}"
 
-test_begin "146e. bug create --with-comment --with-attachment (compound flags)"
+test_begin "bug-create-with-comment-with-attachment-compound-flags" "bug create --with-comment --with-attachment (compound flags)"
 CCID=$(make_bug "${_CF[@]}" --summary "compound create" \
     --with-comment "${_CA_MARK} reproduced" \
     --with-attachment "$_CA_FILE" --attachment-description "boot trace log")
@@ -126,7 +126,7 @@ if [[ -n "$CCID" ]]; then
     fi
 fi
 
-test_begin "146f. bug create compound --dry-run previews comment + attachment"
+test_begin "bug-create-compound-dry-run-previews-comment-attachment" "bug create compound --dry-run previews comment + attachment"
 run_bzr bug create "${_CF[@]}" --summary "compound dry" \
     --with-comment "dry note" --with-attachment "$_CA_FILE" --attachment-description "dry trace" \
     --dry-run
@@ -134,7 +134,7 @@ if assert_success && assert_json '.action' "dry-run" &&
     assert_json '.changes.comment' "dry note" &&
     assert_json_exists '.changes.attachments[0].file_name'; then test_pass; fi
 
-test_begin "146g. bug create --from-json with comment + attachments"
+test_begin "bug-create-from-json-with-comment-attachments" "bug create --from-json with comment + attachments"
 printf '%s' "{\"product\":\"FuncTestProd\",\"component\":\"Backend\",\"summary\":\"fj compound\",\"op_sys\":\"Linux\",\"rep_platform\":\"PC\",\"description\":\"d\",\"comment\":{\"body\":\"${_CA_MARK} json\"},\"attachments\":[{\"file\":\"$_CA_FILE\",\"description\":\"json trace sum\"}]}" >"$_FJ/compound.json"
 run_bzr bug create --from-json "$_FJ/compound.json"
 if assert_success; then
@@ -147,7 +147,7 @@ if assert_success; then
     fi
 fi
 
-test_begin "146h. bug create --with-comment empty body exits 7"
+test_begin "bug-create-with-comment-empty-body-exits-7" "bug create --with-comment empty body exits 7"
 run_bzr bug create "${_CF[@]}" --summary "empty compound comment" --with-comment "   "
 if assert_exit_code 7; then test_pass; fi
 

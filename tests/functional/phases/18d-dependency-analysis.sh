@@ -22,16 +22,18 @@ done
 _DA_BZR_CANONICAL=$(cd "$(dirname "$BZR_BIN")" && pwd -P)/$(basename "$BZR_BIN")
 _DA_CONFIG="$XDG_CONFIG_HOME/bzr/config.toml"
 _DA_REJECTED_KEY="FuncTestRejected0123456789abcdef01234567"
-printf '\n[servers.dependency-rest-public]\nurl = "%s"\napi_mode = "rest"\n' \
-  "$BZ_URL" >>"$_DA_CONFIG"
-printf '\n[servers.dependency-xmlrpc-public]\nurl = "%s"\napi_mode = "xmlrpc"\n' \
-  "$BZ_URL" >>"$_DA_CONFIG"
-printf '\n[servers.dependency-rest-rejected]\nurl = "%s"\napi_key = "%s"\nauth_method = "query_param"\napi_mode = "rest"\n' \
-  "$BZ_URL" "$_DA_REJECTED_KEY" >>"$_DA_CONFIG"
-printf '\n[servers.dependency-xmlrpc-rejected]\nurl = "%s"\napi_key = "%s"\nauth_method = "query_param"\napi_mode = "xmlrpc"\n' \
-  "$BZ_URL" "$_DA_REJECTED_KEY" >>"$_DA_CONFIG"
+{
+  printf '\n[servers.dependency-rest-public]\nurl = "%s"\napi_mode = "rest"\n' \
+    "$BZ_URL"
+  printf '\n[servers.dependency-xmlrpc-public]\nurl = "%s"\napi_mode = "xmlrpc"\n' \
+    "$BZ_URL"
+  printf '\n[servers.dependency-rest-rejected]\nurl = "%s"\napi_key = "%s"\nauth_method = "query_param"\napi_mode = "rest"\n' \
+    "$BZ_URL" "$_DA_REJECTED_KEY"
+  printf '\n[servers.dependency-xmlrpc-rejected]\nurl = "%s"\napi_key = "%s"\nauth_method = "query_param"\napi_mode = "xmlrpc"\n' \
+    "$BZ_URL" "$_DA_REJECTED_KEY"
+} >>"$_DA_CONFIG"
 
-test_begin "123k. live pipeline resolves only installed helpers and release bzr"
+test_begin "live-pipeline-resolves-only-installed-helpers-and-release-bzr" "live pipeline resolves only installed helpers and release bzr"
 if [[ $_DA_PATHS_OK -eq 1 ]] && [[ -f "$_DA_COLLECT" ]] &&
   [[ -f "$_DA_ANALYZE" ]] && [[ -f "$_DA_RENDER" ]] &&
   [[ -f "$_DA_CYCLE" ]] && [[ -x "$_DA_BZR_CANONICAL" ]] &&
@@ -81,7 +83,7 @@ else
   [[ $BZR_EXIT -eq 0 ]] || _DA_FIXTURE_OK=0
 fi
 
-test_begin "123l. disposable live fixture forms a marked diamond and resolved blocker"
+test_begin "disposable-live-fixture-forms-a-marked-diamond-and-resolved-blocker" "disposable live fixture forms a marked diamond and resolved blocker"
 if [[ $_DA_FIXTURE_OK -eq 1 ]] && [[ -n $RESTRICTED_BUG ]]; then
   run_bzr bug view "$_DA_ROOT"
   _DA_TEST_DEFAULT_ASSIGNEE=$(jq -r '.assigned_to // empty' "$BZR_STDOUT")
@@ -99,7 +101,7 @@ else
   test_fail "could not provision the dependency-analysis fixture"
 fi
 
-test_begin "123l1. slash alias persists through bug list search"
+test_begin "slash-alias-persists-through-bug-list-search" "slash alias persists through bug list search"
 if [[ $_DA_FIXTURE_OK -eq 1 ]]; then
   run_bzr bug list --alias "$_DA_ALIAS"
   if assert_success && assert_json_array_length '.' 1 &&
@@ -149,7 +151,7 @@ python3 "$_DA_RENDER" --input "$_DA_ANALYSIS" --format markdown \
 python3 "$_DA_RENDER" --input "$_DA_ANALYSIS" --format mermaid \
   --output "$_DA_DIAGRAM" || _DA_PIPELINE_OK=0
 
-test_begin "123m. installed live pipeline preserves identities, bounds, and resolved policy"
+test_begin "installed-live-pipeline-preserves-identities-bounds-and-resolved-policy" "installed live pipeline preserves identities, bounds, and resolved policy"
 if [[ $_DA_PIPELINE_OK -eq 1 ]] &&
   jq -e --argjson root "$_DA_ROOT" --argjson base "$_DA_BASE" \
     --argjson left "$_DA_LEFT" --argjson right "$_DA_RIGHT" \
@@ -251,7 +253,7 @@ python3 "$_DA_COLLECT" --policy "$_DA_MISSING_POLICY" \
 python3 "$_DA_ANALYZE" --input "$_DA_MISSING_COLLECTION" \
   --output "$_DA_MISSING_ANALYSIS" || _DA_MISSING_OK=0
 
-test_begin "123n. REST and XML-RPC missing roots are sanitized and nonfatal"
+test_begin "rest-and-xml-rpc-missing-roots-are-sanitized-and-nonfatal" "REST and XML-RPC missing roots are sanitized and nonfatal"
 if [[ $_DA_MISSING_OK -eq 1 ]] &&
   jq -e --argjson root "$_DA_ROOT" --argjson missing "$_DA_MISSING" '
       ([.nodes[] | select(
@@ -294,7 +296,7 @@ python3 "$_DA_COLLECT" --policy "$_DA_INACCESSIBLE_POLICY" \
 python3 "$_DA_ANALYZE" --input "$_DA_INACCESSIBLE_COLLECTION" \
   --output "$_DA_INACCESSIBLE_ANALYSIS" || _DA_INACCESSIBLE_OK=0
 
-test_begin "123o. credentialless inaccessible root is distinct, sanitized, and nonfatal"
+test_begin "credentialless-inaccessible-root-is-distinct-sanitized-and-nonfatal" "credentialless inaccessible root is distinct, sanitized, and nonfatal"
 if [[ $_DA_INACCESSIBLE_OK -eq 1 ]] &&
   jq -e --argjson root "$_DA_ROOT" --argjson restricted "$RESTRICTED_BUG" '
       ([.nodes[] | select(
@@ -334,7 +336,7 @@ _DA_XMLRPC_INACCESSIBLE_OK=1
 python3 "$_DA_COLLECT" --policy "$_DA_XMLRPC_INACCESSIBLE_POLICY" \
   --output "$_DA_XMLRPC_INACCESSIBLE_COLLECTION" || _DA_XMLRPC_INACCESSIBLE_OK=0
 
-test_begin "123o2. XML-RPC inaccessible 102 is resource-scoped after preflight"
+test_begin "xml-rpc-inaccessible-102-is-resource-scoped-after-preflight" "XML-RPC inaccessible 102 is resource-scoped after preflight"
 if [[ $_DA_XMLRPC_INACCESSIBLE_OK -eq 1 ]] &&
   jq -e --argjson root "$_DA_ROOT" --argjson restricted "$RESTRICTED_BUG" '
       ([.nodes[] | select(
@@ -390,7 +392,7 @@ else
   _DA_REJECTED_XMLRPC_EXIT=$?
 fi
 
-test_begin "123o3. rejected credentials fail sanitized preflight before resource reads"
+test_begin "rejected-credentials-fail-sanitized-preflight-before-resource-reads" "rejected credentials fail sanitized preflight before resource reads"
 if [[ $_DA_REJECTED_REST_EXIT -eq 1 ]] && [[ $_DA_REJECTED_XMLRPC_EXIT -eq 1 ]] &&
   jq -e '
       .status == "partial" and .limitations == ["collection-api"] and
@@ -439,7 +441,7 @@ python3 "$_DA_COLLECT" --policy "$_DA_RELATIONSHIP_POLICY" \
 python3 "$_DA_ANALYZE" --input "$_DA_RELATIONSHIP_COLLECTION" --allow-partial \
   --output "$_DA_RELATIONSHIP_ANALYSIS" || _DA_RELATIONSHIP_OK=0
 
-test_begin "123p. installed live relationship cap retains a bounded partial prefix"
+test_begin "installed-live-relationship-cap-retains-a-bounded-partial-prefix" "installed live relationship cap retains a bounded partial prefix"
 if [[ $_DA_RELATIONSHIP_OK -eq 1 ]] &&
   jq -e --argjson root "$_DA_ROOT" '
       .status == "partial" and
@@ -509,7 +511,7 @@ else
   _DA_EXTRA_SERVER_EXIT=$?
 fi
 
-test_begin "123q. installed policy rejects credential URLs and unused servers before retrieval"
+test_begin "installed-policy-rejects-credential-urls-and-unused-servers-before-retrieval" "installed policy rejects credential URLs and unused servers before retrieval"
 if [[ $_DA_CREDENTIAL_URL_EXIT -eq 2 ]] && [[ $_DA_EXTRA_SERVER_EXIT -eq 2 ]] &&
   [[ ! -e $_DA_CREDENTIAL_URL_COLLECTION ]] && [[ ! -e $_DA_EXTRA_SERVER_COLLECTION ]] &&
   grep -Fxq 'policy error: scopes[0].url must not include credentials' \
@@ -533,7 +535,7 @@ run_bzr bug update "$_DA_LEFT" --depends-on-add "$_DA_RESOLVED_PARENT"
 run_bzr bug update "$_DA_LEFT" --blocks-add "$_DA_RIGHT"
 [[ $BZR_EXIT -eq 0 ]] || _DA_ADJ_FIXTURE_OK=0
 
-test_begin "123r. live adjacency fixture has two complete directions"
+test_begin "live-adjacency-fixture-has-two-complete-directions" "live adjacency fixture has two complete directions"
 if [[ $_DA_ADJ_FIXTURE_OK -eq 1 ]]; then
   test_pass
 else
@@ -546,7 +548,18 @@ _DA_ADJ_PARITY_OK=1
 for _DA_ADJ_MODE in rest xmlrpc; do
   _DA_ADJ_SERVER="dependency-$_DA_ADJ_MODE-public"
 
-  test_begin "123s. $_DA_ADJ_MODE numeric and slash-alias requests both resolve"
+  case "$_DA_ADJ_MODE" in
+  rest)
+    test_begin "rest-numeric-and-slash-alias-requests-both-resolve" "rest numeric and slash-alias requests both resolve"
+    ;;
+  xmlrpc)
+    test_begin "xmlrpc-numeric-and-slash-alias-requests-both-resolve" "xmlrpc numeric and slash-alias requests both resolve"
+    ;;
+  *)
+    printf 'unexpected dependency adjacency mode: %s\n' "$_DA_ADJ_MODE" >&2
+    return 1
+    ;;
+  esac
   run_bzr_raw --json --server "$_DA_ADJ_SERVER" \
     bug adjacency "$_DA_ROOT" "$_DA_ALIAS"
   if assert_exit_code 0 &&
@@ -559,7 +572,18 @@ for _DA_ADJ_MODE in rest xmlrpc; do
     test_pass
   fi
 
-  test_begin "123t. $_DA_ADJ_MODE alias and numeric identities converge once"
+  case "$_DA_ADJ_MODE" in
+  rest)
+    test_begin "rest-alias-and-numeric-identities-converge-once" "rest alias and numeric identities converge once"
+    ;;
+  xmlrpc)
+    test_begin "xmlrpc-alias-and-numeric-identities-converge-once" "xmlrpc alias and numeric identities converge once"
+    ;;
+  *)
+    printf 'unexpected dependency adjacency mode: %s\n' "$_DA_ADJ_MODE" >&2
+    return 1
+    ;;
+  esac
   run_bzr_raw --json --server "$_DA_ADJ_SERVER" \
     bug adjacency "$_DA_ALIAS" "$_DA_LEFT"
   if assert_exit_code 0 &&
@@ -574,7 +598,18 @@ for _DA_ADJ_MODE in rest xmlrpc; do
     test_pass
   fi
 
-  test_begin "123u. $_DA_ADJ_MODE mixed resource failures retain typed identities and exit zero"
+  case "$_DA_ADJ_MODE" in
+  rest)
+    test_begin "rest-mixed-resource-failures-retain-typed-identities-and-exit-zero" "rest mixed resource failures retain typed identities and exit zero"
+    ;;
+  xmlrpc)
+    test_begin "xmlrpc-mixed-resource-failures-retain-typed-identities-and-exit-zero" "xmlrpc mixed resource failures retain typed identities and exit zero"
+    ;;
+  *)
+    printf 'unexpected dependency adjacency mode: %s\n' "$_DA_ADJ_MODE" >&2
+    return 1
+    ;;
+  esac
   run_bzr_raw --json --server "$_DA_ADJ_SERVER" \
     bug adjacency "$_DA_ROOT" "$_DA_MISSING" "$_DA_MISSING_ALIAS"
   if assert_exit_code 0 &&
@@ -587,7 +622,18 @@ for _DA_ADJ_MODE in rest xmlrpc; do
     test_pass
   fi
 
-  test_begin "123v. $_DA_ADJ_MODE all-failure result is closed and exits zero"
+  case "$_DA_ADJ_MODE" in
+  rest)
+    test_begin "rest-all-failure-result-is-closed-and-exits-zero" "rest all-failure result is closed and exits zero"
+    ;;
+  xmlrpc)
+    test_begin "xmlrpc-all-failure-result-is-closed-and-exits-zero" "xmlrpc all-failure result is closed and exits zero"
+    ;;
+  *)
+    printf 'unexpected dependency adjacency mode: %s\n' "$_DA_ADJ_MODE" >&2
+    return 1
+    ;;
+  esac
   run_bzr_raw --json --server "$_DA_ADJ_SERVER" \
     bug adjacency "$_DA_MISSING" "$_DA_MISSING_ALIAS"
   if assert_exit_code 0 &&
@@ -601,7 +647,18 @@ for _DA_ADJ_MODE in rest xmlrpc; do
     test_pass
   fi
 
-  test_begin "123w. $_DA_ADJ_MODE anonymous restricted bug is typed inaccessible"
+  case "$_DA_ADJ_MODE" in
+  rest)
+    test_begin "rest-anonymous-restricted-bug-is-typed-inaccessible" "rest anonymous restricted bug is typed inaccessible"
+    ;;
+  xmlrpc)
+    test_begin "xmlrpc-anonymous-restricted-bug-is-typed-inaccessible" "xmlrpc anonymous restricted bug is typed inaccessible"
+    ;;
+  *)
+    printf 'unexpected dependency adjacency mode: %s\n' "$_DA_ADJ_MODE" >&2
+    return 1
+    ;;
+  esac
   run_bzr_raw --json --server "$_DA_ADJ_SERVER" bug adjacency "$RESTRICTED_BUG"
   if assert_exit_code 0 &&
     assert_json '. == {
@@ -660,7 +717,7 @@ for _DA_ADJ_MODE in rest xmlrpc; do
   fi
 done
 
-test_begin "123x. live REST and XML-RPC adjacency payloads have transport parity"
+test_begin "live-rest-and-xml-rpc-adjacency-payloads-have-transport-parity" "live REST and XML-RPC adjacency payloads have transport parity"
 if [[ $_DA_ADJ_PARITY_OK -eq 1 ]] && [[ -f $_DA_ADJ_REST ]] &&
   [[ -f $_DA_ADJ_XMLRPC ]] && cmp -s "$_DA_ADJ_REST" "$_DA_ADJ_XMLRPC"; then
   test_pass
@@ -680,7 +737,7 @@ if redhat_shape_start "$BZ_PORT"; then
   printf '\n[servers.dependency-production-policy]\nurl = "%s"\napi_mode = "rest"\n' \
     "$_DA_PRODUCTION_POLICY_URL" >>"$_DA_CONFIG"
 
-  test_begin "123y. production-policy proxy rejects the legacy termless preflight"
+  test_begin "production-policy-proxy-rejects-the-legacy-termless-preflight" "production-policy proxy rejects the legacy termless preflight"
   run_bzr_raw --json --server dependency-production-policy bug list \
     --limit 1 --offset 0 --fields id --sort bug_id --order asc
   if assert_exit_code 4 && jq -e '
@@ -709,7 +766,7 @@ if redhat_shape_start "$BZ_PORT"; then
     _DA_PRODUCTION_POLICY_OK=0
   fi
 
-  test_begin "123z. installed collector uses a scoped proof through the production-policy proxy"
+  test_begin "installed-collector-uses-a-scoped-proof-through-the-production-policy-proxy" "installed collector uses a scoped proof through the production-policy proxy"
   if [[ $_DA_PRODUCTION_POLICY_OK -eq 1 ]] &&
     jq -e --argjson root "$_DA_BASE" '
       .status == "complete" and
@@ -747,7 +804,7 @@ if redhat_shape_start "$BZ_PORT"; then
     _DA_PRODUCTION_POLICY_FAILURE_EXIT=$?
   fi
 
-  test_begin "123z1. installed collector preserves production code 1000 as API failure"
+  test_begin "installed-collector-preserves-production-code-1000-as-api-failure" "installed collector preserves production code 1000 as API failure"
   if [[ $_DA_PRODUCTION_POLICY_FAILURE_EXIT -eq 1 ]] &&
     jq -e '
       .status == "partial" and .limitations == ["collection-api"] and
@@ -762,11 +819,11 @@ if redhat_shape_start "$BZ_PORT"; then
   redhat_shape_stop || _DA_PRODUCTION_POLICY_OK=0
   trap cleanup EXIT
 else
-  test_begin "123y. production-policy proxy rejects the legacy termless preflight"
+  test_begin "production-policy-proxy-start-failed" "production-policy proxy rejects the legacy termless preflight"
   test_fail "production-policy proxy did not become ready: $REDHAT_SHAPE_LOG"
-  test_begin "123z. installed collector uses a scoped proof through the production-policy proxy"
+  test_begin "scoped-proof-skipped-proxy-unavailable" "installed collector uses a scoped proof through the production-policy proxy"
   test_skip "production-policy proxy unavailable"
-  test_begin "123z1. installed collector preserves production code 1000 as API failure"
+  test_begin "api-failure-classification-skipped-proxy-unavailable" "installed collector preserves production code 1000 as API failure"
   test_skip "production-policy proxy unavailable"
 fi
 

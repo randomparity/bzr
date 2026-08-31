@@ -17,7 +17,7 @@ echo "── Phase 11b: Bug verbs (resolve, dup) ──────────�
 
 _VERB_CREATE=(--product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d)
 
-test_begin "130. bug resolve (default FIXED)"
+test_begin "bug-resolve-default-fixed" "bug resolve (default FIXED)"
 VID=$(make_bug "${_VERB_CREATE[@]}" --summary "verb resolve default")
 run_bzr bug resolve "$VID"
 if assert_success; then
@@ -25,7 +25,7 @@ if assert_success; then
     if assert_json '.status' "RESOLVED" && assert_json '.resolution' "FIXED"; then test_pass; fi
 fi
 
-test_begin "131. bug resolve --as WONTFIX"
+test_begin "bug-resolve-as-wontfix" "bug resolve --as WONTFIX"
 VID=$(make_bug "${_VERB_CREATE[@]}" --summary "verb resolve wontfix")
 run_bzr bug resolve "$VID" --as WONTFIX
 if assert_success; then
@@ -33,7 +33,7 @@ if assert_success; then
     if assert_json '.status' "RESOLVED" && assert_json '.resolution' "WONTFIX"; then test_pass; fi
 fi
 
-test_begin "132. bug resolve --comment lands an atomic comment"
+test_begin "bug-resolve-comment-lands-an-atomic-comment" "bug resolve --comment lands an atomic comment"
 VID=$(make_bug "${_VERB_CREATE[@]}" --summary "verb resolve comment")
 run_bzr bug resolve "$VID" --as FIXED --comment "resolved via verb"
 if assert_success; then
@@ -41,7 +41,7 @@ if assert_success; then
     if assert_stdout_contains "resolved via verb"; then test_pass; fi
 fi
 
-test_begin "133. bug dup marks source a duplicate of target"
+test_begin "bug-dup-marks-source-a-duplicate-of-target" "bug dup marks source a duplicate of target"
 SRC=$(make_bug "${_VERB_CREATE[@]}" --summary "verb dup source")
 TGT=$(make_bug "${_VERB_CREATE[@]}" --summary "verb dup target")
 run_bzr bug dup "$SRC" "$TGT"
@@ -51,7 +51,7 @@ if assert_success; then
         assert_json '.dupe_of' "$TGT"; then test_pass; fi
 fi
 
-test_begin "134. bug resolve batch partial failure (exit 11) commits valid leg"
+test_begin "bug-resolve-batch-partial-failure-exit-11-commits-valid-leg" "bug resolve batch partial failure (exit 11) commits valid leg"
 VID=$(make_bug "${_VERB_CREATE[@]}" --summary "verb resolve batch")
 run_bzr bug resolve "$VID" 999999 --as FIXED
 if assert_exit_code 11; then
@@ -59,7 +59,7 @@ if assert_exit_code 11; then
     if assert_json '.status' "RESOLVED"; then test_pass; fi
 fi
 
-test_begin "134a. bug resolve --expect-unchanged-since happy path"
+test_begin "bug-resolve-expect-unchanged-since-happy-path" "bug resolve --expect-unchanged-since happy path"
 VID=$(make_bug "${_VERB_CREATE[@]}" --summary "verb resolve guarded")
 run_bzr bug view "$VID"
 if assert_success; then
@@ -71,7 +71,7 @@ if assert_success; then
     fi
 fi
 
-test_begin "134b. bug dup --expect-unchanged-since detects collision"
+test_begin "bug-dup-expect-unchanged-since-detects-collision" "bug dup --expect-unchanged-since detects collision"
 SRC=$(make_bug "${_VERB_CREATE[@]}" --summary "verb dup guarded source")
 TGT=$(make_bug "${_VERB_CREATE[@]}" --summary "verb dup guarded target")
 run_bzr bug view "$SRC"

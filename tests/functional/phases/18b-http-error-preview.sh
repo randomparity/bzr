@@ -9,7 +9,7 @@
 # ═════════════════════════════════════════════════════════════
 echo "── Phase 18b: Bounded HTTP error output ────────────"
 
-test_begin "120j. oversized HTTP error body is UTF-8-safe and bounded (#512)"
+test_begin "oversized-http-error-body-is-utf-8-safe-and-bounded" "oversized HTTP error body is UTF-8-safe and bounded (#512)"
 if ! command -v python3 >/dev/null 2>&1; then
 	test_fail "python3 is required for the HTTP error fixture"
 	echo ""
