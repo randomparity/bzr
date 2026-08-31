@@ -35,3 +35,4 @@ rejected.
 | [0026](0026-scope-qualified-dependency-preflight.md) | Scope-qualify dependency collector preflight | Accepted |
 | [0027](0027-inline-server-aware-url-import.md) | Make URL import aware of the active inline server | Accepted |
 | [0028](0028-signed-metadata-sort-keys.md) | Model Bugzilla metadata sort keys as signed integers | Accepted |
+| [0029](0029-semantic-functional-test-ids.md) | Identify functional tests by phase and semantic slug | Accepted |
