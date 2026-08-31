@@ -34,10 +34,7 @@ running container itself as the shared source of truth:
   `setup-bugzilla.sh`, `run-tests.sh`, and `keyring-test.sh` use
   `set -euo pipefail`; `run-all-versions.sh` uses `set -uo pipefail` (no
   `-e` — it handles each version's failure explicitly via if/exit-code
-  checks) and is unchanged by this design. `setup-bugzilla.sh`,
-  `keyring-test.sh`, `lib.sh`, and `run-tests.sh`'s sourced phase files use
-  `[[ ]]`; `run-tests.sh`'s own top-level file and `run-all-versions.sh`
-  use only `if ! cmd; then ... fi` exit-code checks.
+  checks) and is unchanged by this design.
 - No new external dependency. `cksum` (POSIX) and the container runtime's
   own `port` subcommand (already required for `container_exists`,
   `container_runtime` etc.) cover everything needed.
@@ -203,7 +200,10 @@ Already defines `container_runtime()` and `bugzilla_container_name()`
           echo "ERROR: neither podman nor docker found in PATH" >&2
           exit 1
       }
-      _bz_container=$(bugzilla_container_name)
+      _bz_container=$(bugzilla_container_name) || {
+          echo "ERROR: could not derive the Bugzilla container name" >&2
+          exit 1
+      }
       BZ_PORT=$(bugzilla_container_port "$_bz_runtime" "$_bz_container") || {
           echo "ERROR: could not determine Bugzilla container port for" \
               "'$_bz_container'; is it running?" \
@@ -326,7 +326,13 @@ This is functional-test-harness tooling, not `bzr` CLI surface — the
 The applicable rule is the "any other change" one: a full functional run
 must be green before the PR opens.
 
-Acceptance criteria, each independently checkable:
+Acceptance criteria, each independently checkable — run
+`tests/functional/setup-bugzilla.sh stop` between criteria 1 and 2:
+`make functional-test` does not stop the container afterward, and
+`resolve_bz_port`'s stale-override check (working as designed) rejects
+criterion 2's `BZR_FUNC_PORT` against the container criterion 1 left running
+under the default name if the two are run back to back without stopping it
+first.
 
 1. `make functional-test` (default `bz50`) passes end to end with no
    `BZR_FUNC_PORT`/`BZR_FUNC_CONTAINER` set — proves the dynamic default
