@@ -79,30 +79,64 @@ merge; private pre/post functional transcripts prove migration equivalence.
    ```
 
    Expected: exit 0 and a green summary for every supported Bugzilla version.
-3. Normalize only completed test lines and per-version summaries:
+3. Normalize completed tests to one description/outcome record and retain per-version summaries:
 
    ```bash
    awk '
+     function trim_cr(value) { sub(/\r$/, "", value); return value }
+     function emit_test(value) { print "TEST " value; test_count++ }
      /^[[:space:]]*TEST[[:space:]]/ {
-       line = $0
+       if (pending != "") exit 2
+       line = trim_cr($0)
        sub(/^[[:space:]]*TEST[[:space:]]+/, "", line)
        sub(/^([0-9]+[a-z0-9-]*\. |\[[^]]+\] )/, "", line)
-       print "TEST " line
+       if (line ~ /\.\.\. (PASS|FAIL|SKIP)(  \(.*\))?$/) {
+         emit_test(line)
+         next
+       }
+       marker = index(line, " ... ")
+       if (marker == 0) exit 2
+       pending = substr(line, 1, marker + 4)
        next
      }
-     /^── Phase 17: Cleanup \(/ || /PASSED:/ || /^[[:space:]]*TOTAL:/ { print }
+     pending != "" {
+       outcome = trim_cr($0)
+       sub(/^[[:space:]]*/, "", outcome)
+       if (outcome ~ /^(PASS|FAIL|SKIP)(  \(.*\))?$/) {
+         emit_test(pending outcome)
+         pending = ""
+         next
+       }
+     }
+     /^── Phase 17: Cleanup \(/ || /PASSED:/ {
+       print trim_cr($0)
+     }
+     /^[[:space:]]*TOTAL:/ {
+       line = trim_cr($0)
+       total = line
+       sub(/^[[:space:]]*TOTAL:[[:space:]]*/, "", total)
+       if (total !~ /^[0-9]+$/ || test_count != total + 0) exit 3
+       print line
+       test_count = 0
+       summaries++
+     }
+     END { if (pending != "" || test_count != 0 || summaries == 0) exit 2 }
    ' "$WORKSPACE/functional-before.log" >"$WORKSPACE/functional-before.normalized"
    chmod 600 "$WORKSPACE/functional-before.normalized"
    ```
 
    Expected: one ordered normalized record containing descriptions/outcomes and summaries for all
-   versions. Record its SHA-256 in the Forge ledger.
+   versions. Live timestamps, warning timestamps, and observed fixture counts printed between a
+   test start and its outcome are excluded. A second test start before the pending outcome is an
+   error, and each version's normalized test count must equal its `TOTAL`. Record the normalized
+   file's SHA-256 in the Forge ledger.
 
 ### Acceptance criteria
 
 - Both transcript files are regular private files outside the repository.
 - The all-version command exited 0; no baseline is created from a red run.
 - The normalized file is non-empty and includes each version cleanup heading.
+- A constructed transcript with consecutive split-form test starts is rejected.
 
 ## Task 2: Add the static semantic-ID guard with tests
 

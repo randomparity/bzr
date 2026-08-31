@@ -96,14 +96,18 @@ count, but the functional run must retain the same test count and order for each
 
 Before modifying the harness or phase files, run `make functional-test-all` with `pipefail` and
 retain its complete private transcript outside the repository. After migration, run the same
-command in the same host environment and retain the new transcript. Normalize only completed test
-lines: remove the leading `TEST` marker plus either the old `<number>. ` prefix or the new
-`[<phase>/<slug>] ` prefix, leaving the description and terminal `PASS` or `SKIP` outcome intact.
-Keep per-version summary lines as part of the normalized record. The pre- and post-migration
-normalized records must compare byte-for-byte, and both all-version commands must exit zero. This
-proves the executed descriptions, outcomes, count, and order were preserved while the real live
-post-migration run proves the new harness works. A mismatch stops migration for investigation; it
-is not accepted by updating the baseline.
+command in the same host environment and retain the new transcript. Normalize each completed test
+into one record: remove the leading `TEST` marker plus either the old `<number>. ` prefix or the new
+`[<phase>/<slug>] ` prefix, retain the description and terminal `PASS`, `FAIL`, or `SKIP` outcome,
+and join an outcome printed on a following line to its pending test. Discard only incidental text
+between the test start and terminal outcome, such as live timestamps, warning timestamps, or
+observed fixture counts. Keep per-version summary lines as part of the normalized record. Reject an
+unfinished pending test, including a second test start before the pending test's outcome, and
+require each version's normalized test count to equal its retained `TOTAL`. The pre- and
+post-migration normalized records must compare byte-for-byte, and both all-version commands must
+exit zero. This proves the executed descriptions, outcomes, count, and order were preserved while
+the real live post-migration run proves the new harness works. A mismatch stops migration for
+investigation; it is not accepted by updating the baseline.
 
 ## Documentation and scope
 
@@ -131,8 +135,9 @@ or authorization decisions.
   loop modes.
 - `make check-functional-test-ids`, `make check-shell`, `make lint`, and `make test` pass.
 - `make functional-test-all` runs the migrated suite against every supported Bugzilla version and
-  reports semantic references; its normalized completed-test sequence and per-version summaries
-  match the green pre-migration transcript after stripping only reference prefixes.
+  reports semantic references; its normalized description/outcome sequence and per-version
+  summaries match the green pre-migration transcript after removing references and incidental
+  between-start-and-outcome diagnostics.
 
 ## Durable workflow context
 

@@ -41,10 +41,13 @@ exception. The guard has fixture tests, runs from `make lint`, runs in the insta
 hook, and is an individually named pull-request CI step.
 
 Before the first harness edit, retain a private transcript of `make functional-test-all`. After
-migration, run the same command and normalize both transcripts by stripping only the old numeric or
-new bracketed reference prefix from each completed test line. The ordered descriptions, PASS/SKIP
-outcomes, and per-version summary counts must match byte-for-byte. Both runs must be green; the
-comparison supplements rather than replaces the live functional proof.
+migration, run the same command and normalize both transcripts into one record per completed test:
+strip the old numeric or new bracketed reference prefix, retain the description and terminal
+PASS/FAIL/SKIP outcome, join outcomes printed on a following line, and discard incidental diagnostic
+text between a test start and that outcome. Reject a second test start before the pending outcome,
+and require each version's normalized record count to equal its `TOTAL`. The ordered records and
+per-version summary counts must match byte-for-byte. Both runs must be green; the comparison
+supplements rather than replaces the live functional proof.
 
 Existing phase order, test order, descriptions, assertions, skip behavior, and compiled `bzr`
 behavior do not change. The old numeric labels receive no compatibility aliases because they are
