@@ -128,9 +128,10 @@ host port. Set `BZR_FUNC_PORT` to pin an exact one if needed (e.g. to
 attach a debugger to a known address).
 
 **`BZR_FUNC_PORT` does not match the running container's actual port:**
-If a container from a prior run is still up, a follow-up invocation with
-`BZR_FUNC_PORT` set to a different port now errors instead of silently
-proceeding, since the running container's port cannot change. Run
+If a container from a prior run is still up, a follow-up `start` invocation
+with `BZR_FUNC_PORT` set to a different port now errors instead of silently
+proceeding, since the running container's port cannot change (`status` only
+reports `REST API: unknown` and exits 0 in this case). Run
 `tests/functional/setup-bugzilla.sh stop` first, then start again with the
 desired `BZR_FUNC_PORT`.
 
