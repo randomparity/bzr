@@ -37,6 +37,21 @@ def shape_bug_response(data):
     return json.dumps(value, separators=(",", ":")).encode()
 
 
+def shape_product_ids_response(data):
+    """Return JSON bytes with product IDs represented as decimal strings.
+
+    Some Bugzilla stacks (e.g. bugzilla.kernel.org) serialize
+    `get_{accessible,selectable,enterable}_products` ids as strings rather than
+    numbers. This rewrites every `ids` element to its decimal string form so the
+    client is exercised against the string wire shape the same endpoint serves
+    in the wild.
+    """
+    value = json.loads(data)
+    if isinstance(value, dict) and isinstance(value.get("ids"), list):
+        value["ids"] = [str(item) for item in value["ids"]]
+    return json.dumps(value, separators=(",", ":")).encode()
+
+
 def make_handler(backend_port):
     class Handler(http.server.BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -89,6 +104,16 @@ def make_handler(backend_port):
                     self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
                     return
 
+            if 200 <= status < 300 and self.path.startswith(
+                ("/rest/product_accessible", "/rest/product_selectable",
+                 "/rest/product_enterable")
+            ):
+                try:
+                    body = shape_product_ids_response(body)
+                except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                    self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
+                    return
+
             self.send_response(status)
             for key, value in response_headers:
                 if key.lower() not in _HOP_BY_HOP:
@@ -127,6 +152,24 @@ class ShapeTests(unittest.TestCase):
     def test_rejects_malformed_json(self):
         with self.assertRaises(json.JSONDecodeError):
             shape_bug_response(b"not json")
+
+    def test_products_shape_to_string_ids(self):
+        shaped = json.loads(shape_product_ids_response(
+            json.dumps({"ids": [12, 1, 21]}).encode()
+        ))
+        self.assertEqual(shaped, {"ids": ["12", "1", "21"]})
+
+    def test_products_shape_preserves_existing_string_ids(self):
+        payload = b'{"ids":["2","3","19"]}'
+        self.assertEqual(
+            json.loads(shape_product_ids_response(payload)), {"ids": ["2", "3", "19"]}
+        )
+
+    def test_products_shape_leaves_non_ids_payload_untouched(self):
+        payload = b'{"products":[]}'
+        self.assertEqual(
+            json.loads(shape_product_ids_response(payload)), {"products": []}
+        )
 
     def test_readiness_endpoint(self):
         server, thread = self._start_server(1)
