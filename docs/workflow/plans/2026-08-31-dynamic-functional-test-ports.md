@@ -142,6 +142,14 @@ functions out into their own file with no source-time side effects, so both
    }
    ```
 
+   Note: two later fix waves changed this function's shipped form beyond
+   what's transcribed above — `pwd` became `pwd -P` (symlinked checkouts
+   must resolve to the same real path) and the plain assignment gained
+   `|| return 1` (so `set -u` alone, not just `set -eu`, aborts on a missing
+   `SCRIPT_DIR`). See `tests/functional/container-env.sh` for the current
+   form; this step is a record of the original implementation, not a
+   standing contract.
+
 3. Confirm it fails correctly (`bugzilla_checkout_id` needs `SCRIPT_DIR`):
 
    ```sh
@@ -153,9 +161,13 @@ functions out into their own file with no source-time side effects, so both
    (acceptance criterion 6's negative case).
 
 4. Confirm the positive case and the two-different-paths-yield-two-different-ids
-   property. Use real directories — `cd "$SCRIPT_DIR/../.."` silently produces
-   the empty string (and thus the same fixed checksum) for a path that does not
-   exist, so an illustrative nonexistent path would defeat this check:
+   property. Use real directories — at the time this step was written,
+   `cd "$SCRIPT_DIR/../.."` silently produced the empty string (and thus the
+   same fixed checksum) for a path that does not exist, so an illustrative
+   nonexistent path would defeat this check. The later `|| return 1` fix
+   (see the note in step 2) closed that case, but real directories remain the
+   right choice here since this step also verifies the positive,
+   two-different-ids property, which needs paths that actually exist:
 
    ```sh
    a=$(mktemp -d); mkdir -p "$a/tests/functional"

@@ -443,18 +443,17 @@ first.
 6. `bugzilla_checkout_id()` (and by extension `bugzilla_container_name()`)
    actually varies with `SCRIPT_DIR`: sourcing `container-env.sh` with two
    different fabricated `SCRIPT_DIR` values in the same shell yields two
-   different ids. Run this check under `set -eu`, not `set -u` alone
-   (e.g. `bash -c 'set -eu; source tests/functional/container-env.sh;
-   bugzilla_checkout_id'` with `SCRIPT_DIR` unset) and assert a nonzero
-   exit — under `set -u` alone, the inner `root=$(cd "$SCRIPT_DIR/../.." &&
-   pwd)` plain assignment silently absorbs the subshell's nounset failure
-   (verified: `root` ends up empty and the function returns exit 0 with the
-   cksum of an empty string instead of erroring); only `set -eu` together
-   produces the nonzero exit the check asserts. This is a narrow, automatable
-   check (no container needed) that catches a regression in the derivation
-   logic itself — the class of bug this design's own review caught in the
-   `${VAR:-$(cmd)}` masking case — without needing the manual two-checkout
-   exercise in criterion 3 to be run on every change.
+   different ids. `set -u` alone is now sufficient to catch a missing
+   `SCRIPT_DIR` (e.g. `bash -c 'set -u; source tests/functional/container-env.sh;
+   bugzilla_checkout_id'` with `SCRIPT_DIR` unset asserts a nonzero exit):
+   `root=$(cd "$SCRIPT_DIR/../.." && pwd -P) || return 1` fails the nounset
+   error inside the command substitution and the explicit `|| return 1`
+   propagates it out of the plain assignment, without needing `set -e` to do
+   so (verified: rc=1 with empty output under `set -u` alone). This is a
+   narrow, automatable check (no container needed) that catches a regression
+   in the derivation logic itself — the class of bug this design's own review
+   caught in the `${VAR:-$(cmd)}` masking case — without needing the manual
+   two-checkout exercise in criterion 3 to be run on every change.
 
 No new automated phase script is added under `tests/functional/phases/`:
 those phases exercise `bzr` CLI behavior against a running server, and this
