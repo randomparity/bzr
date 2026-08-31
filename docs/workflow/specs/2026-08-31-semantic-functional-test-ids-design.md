@@ -10,8 +10,9 @@ This implements issue #602 and [ADR 0029](../../adr/0029-semantic-functional-tes
 
 Every functional test has the full ID `<phase>/<slug>`:
 
-- `phase` is the sourced phase filename without `.sh`, using the existing lowercase numeric-prefix
-  names such as `08-bugs` and `18d-dependency-analysis`;
+- `phase` is the sourced phase filename without `.sh` and matches the ASCII regular expression
+  `[0-9]{2}[a-z]?-[a-z0-9]+(-[a-z0-9]+)*`, covering existing names such as `08-bugs` and
+  `18d-dependency-analysis` while rejecting `08--bugs`, `08_Bugs`, and `bugs-08`;
 - `slug` is lowercase kebab case, begins and ends with an ASCII letter or digit, and contains only
   ASCII lowercase letters, digits, and single hyphen separators; and
 - the full expanded ID is unique during one functional run.
@@ -46,7 +47,9 @@ executing them. It requires each `test_begin` invocation to be a single line wit
 slug followed by a double-quoted description. Slug templates may contain literal grammar segments
 and a complete `${UPPER_CASE_NAME}` segment; no other shell expansion is accepted in an ID.
 
-The guard rejects:
+The guard compares the phase basenames on disk with the phase values enumerated by
+`run-tests.sh`: each side must contain the same unique set, and every value must match the exact
+phase grammar. It then rejects:
 
 - the legacy number-and-period prefix;
 - a malformed literal/template slug;
@@ -66,9 +69,10 @@ not call.
 All phase files move in one change because mixed one- and two-argument `test_begin` contracts
 cannot run safely. Each old number is removed, a semantic slug is chosen from the behavior already
 described, and the description text stays byte-for-byte unchanged except where separating the
-prefix necessarily removes the number and following space. Existing conditional alternatives
-that represent one test keep one slug; looped cases include their controlled mode in the expanded
-slug so each executed case is unique.
+prefix necessarily removes the number and following space. Mutually exclusive declarations use
+distinct slugs that name their outcomes, including the TLS tools-unavailable versus proxy-start
+failure paths and the dependency-analysis proxy-unavailable fallbacks. Looped cases include their
+controlled mode in the expanded slug so each executed case is unique.
 
 No compatibility translation or numeric alias is retained. Repository searches after migration
 must find no legacy numeric `test_begin` argument and exactly the same 402 call sites unless the
@@ -86,11 +90,13 @@ or authorization decisions.
 
 ## Verification
 
-- Checker fixture tests prove every accepted and rejected source shape, including duplicate
-  templates and legacy numeric labels.
+- Checker fixture tests prove every accepted and rejected source shape, including valid and
+  invalid phase basenames, runner/file set mismatches, duplicate templates, and legacy numeric
+  labels.
 - Focused harness tests prove `test_begin` composes the phase and slug, preserves the description,
-  accepts distinct controlled expansions, and rejects missing groups, wrong arity, malformed
-  expanded IDs, and duplicates on Bash 3.2-compatible code.
+  accepts distinct controlled expansions, and rejects missing groups, wrong arity, groups outside
+  `[0-9]{2}[a-z]?-[a-z0-9]+(-[a-z0-9]+)*`, malformed expanded slugs, and duplicates on Bash
+  3.2-compatible code.
 - `make check-functional-test-ids`, `make check-shell`, `make lint`, and `make test` pass.
 - `make functional-test-all` runs the migrated suite against every supported Bugzilla version and
   reports semantic references with no behavior regression.

@@ -29,9 +29,12 @@ runtime expansion is lowercase kebab-case and denotes a distinct semantic case.
 
 `test_begin` validates the expanded phase and slug, rejects a repeated full ID during the run, and
 prints the full ID separately from the description. A repository guard checks every phase call
-site for the two-argument shape, the slug-template grammar, duplicate templates within one phase,
-and remnants of the numeric format. The guard has fixture tests, runs from `make lint`, runs in the
-installed pre-commit hook, and is an individually named pull-request CI step.
+site for the two-argument shape, the phase and slug-template grammar, runner-to-file
+correspondence, duplicate templates within one phase, and remnants of the numeric format.
+Mutually exclusive call sites still use distinct semantic slugs that name the reported outcome;
+the runtime duplicate check is not replaced by a static exception. The guard has fixture tests,
+runs from `make lint`, runs in the installed pre-commit hook, and is an individually named
+pull-request CI step.
 
 Existing phase order, test order, descriptions, assertions, skip behavior, and compiled `bzr`
 behavior do not change. The old numeric labels receive no compatibility aliases because they are
@@ -43,7 +46,8 @@ Tests can be inserted or reordered without changing another test's reference. A 
 own phase and subject, and duplicate or malformed references fail early with an actionable error.
 Authors must choose a unique semantic slug rather than taking the next number. Renaming a test's
 description does not rename its ID; intentionally changing what a test represents may warrant an
-explicit ID change.
+explicit ID change. Mutually exclusive reports for different outcomes use different references
+even when their descriptions remain identical during the migration.
 
 The static guard checks source templates, while runtime validation checks their expansions. This
 split keeps the checker dependency-free and covers dynamic loop cases without attempting to parse
