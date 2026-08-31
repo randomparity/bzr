@@ -60,11 +60,28 @@ Already defines `container_runtime()` and `bugzilla_container_name()`
   every script that sources `lib.sh` (`tests/functional`'s own absolute
   directory), so this needs no new input.
 - New `bugzilla_container_port <runtime> <container>` — prints the host
-  port published for the container's `80/tcp`, by running
-  `<runtime> port <container> 80/tcp`, taking the first line, and printing
-  the text after the last `:`. Returns non-zero (printing nothing) if the
-  runtime command fails or prints nothing, so callers can distinguish "not
-  running yet" from a resolved port.
+  port published for the container's `80/tcp`. Checks the *output*
+  explicitly rather than trusting the runtime's exit status: podman exits 0
+  with empty stdout for a container that exists but is stopped (verified:
+  `podman run -d --name p1 -p 80 <image>`, `podman stop p1`, `podman port
+  p1 80/tcp` → exit 0, empty stdout/stderr), while docker exits 1 with a
+  stderr message for the same case — the two runtimes disagree on exit
+  status here, so only the output can be trusted on both:
+
+  ```bash
+  bugzilla_container_port() {
+      local runtime="$1" container="$2"
+      local mapping
+      mapping=$("$runtime" port "$container" 80/tcp 2>/dev/null | head -n1)
+      [[ -n "$mapping" ]] || return 1
+      printf '%s' "${mapping##*:}"
+      return 0
+  }
+  ```
+
+  Returns non-zero (printing nothing) whenever the runtime prints no
+  mapping line — container never started, stopped, or removed — so callers
+  can distinguish "not running yet" from a resolved port on both runtimes.
 
 ### `tests/functional/setup-bugzilla.sh` (container lifecycle)
 
@@ -75,31 +92,40 @@ Already defines `container_runtime()` and `bugzilla_container_name()`
 - Drops `DEFAULT_PORT` entirely (no per-version fixed port is defined
   anymore) but keeps `DEFAULT_TIMEOUT` per version unchanged — timeout
   tuning is unrelated to port assignment.
-- `BZ_PORT` becomes empty by default (`BZ_PORT="${BZR_FUNC_PORT:-}"`) and is
-  resolved to a concrete value only once the container is confirmed to be
-  running, via a new `resolve_bz_port` helper (defined in
-  `setup-bugzilla.sh`, not `lib.sh`, since it also owns the "not running
-  yet" error message specific to this script):
+- `BZ_PORT` becomes empty by default and is resolved to a concrete value
+  only once the container is confirmed to exist, via a new
+  `resolve_bz_port` helper (defined in `setup-bugzilla.sh`, not `lib.sh`,
+  since it also owns the error messages specific to this script). It always
+  queries the container's actual published port rather than trusting
+  `BZR_FUNC_PORT` blindly, so a stale override against an already-running
+  container (started earlier without it, or with a different value) fails
+  fast with a clear message instead of `wait_for_ready` polling the wrong
+  address for the full timeout:
 
   ```bash
   resolve_bz_port() {
-      if [[ -n "$BZR_FUNC_PORT" ]]; then
-          BZ_PORT="$BZR_FUNC_PORT"
-          return 0
-      fi
-      if ! BZ_PORT=$(bugzilla_container_port "$CONTAINER_RT" "$CONTAINER_NAME"); then
+      local actual
+      if ! actual=$(bugzilla_container_port "$CONTAINER_RT" "$CONTAINER_NAME"); then
           err "could not determine published port for ${CONTAINER_NAME}"
           return 1
       fi
+      if [[ -n "$BZR_FUNC_PORT" && "$BZR_FUNC_PORT" != "$actual" ]]; then
+          err "${CONTAINER_NAME} is already running on port ${actual}," \
+              "which does not match BZR_FUNC_PORT=${BZR_FUNC_PORT};" \
+              "stop it first or unset BZR_FUNC_PORT"
+          return 1
+      fi
+      BZ_PORT="$actual"
       return 0
   }
   ```
 
 - `cmd_start`'s "already running" branch calls `resolve_bz_port` before
-  `wait_for_ready` (replacing the removed fixed `BZ_PORT`).
+  `wait_for_ready` (replacing the removed fixed `BZ_PORT`); this is the
+  branch where the mismatch check above actually fires.
 - `cmd_start`'s "start a new container" branch publishes with
   `-p "${BZR_FUNC_PORT}:80"` when `BZR_FUNC_PORT` is set, else bare `-p 80`;
-  immediately after `run -d` succeeds, calls `resolve_bz_port` (the
+  immediately after `run -d` succeeds, calls the same `resolve_bz_port` (the
   container now exists and has a port assigned, running or not) before
   `wait_for_ready`.
 - `cmd_status` calls `resolve_bz_port` (ignoring a failure — a stopped or
@@ -146,6 +172,27 @@ resolve the port themselves.
 ### `tests/functional/keyring-test.sh`
 
 No change. It does not start or address the Bugzilla container.
+
+### `tests/functional/README.md`
+
+Its Environment Variables table (currently) documents fixed literal
+defaults that this change removes:
+
+- `BZR_FUNC_PORT` row: change the `Default` cell from `8089` to
+  `(runtime-assigned)`, and the description to note it overrides the
+  default rather than replacing a fixed one.
+- `BZR_FUNC_CONTAINER` row: change the `Default` cell from `bzr-func-test`
+  (already stale against the current `bzr-func-test-${BZ_VERSION}`) to
+  `bzr-func-test-<version>-<checkout-id>`.
+- `BZR_FUNC_TLS_PORT` / `BZR_FUNC_REDHAT_PORT` rows: change `BZR_FUNC_PORT +
+  1000`/`+ 2000` to `(resolved backend port) + 1000`/`+ 2000` — these were
+  always derived from the resolved backend port, not the env var literally,
+  and that distinction now matters once the backend port has no fixed
+  default.
+- Troubleshooting → **Port conflict** section: replace "Change the port
+  with `BZR_FUNC_PORT=9089`" with a note that port conflicts no longer
+  occur by default (each run gets a runtime-assigned port); `BZR_FUNC_PORT`
+  is still available to pin an exact one when needed.
 
 ### `AGENTS.md` (`CLAUDE.md` is a symlink to it)
 
