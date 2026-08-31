@@ -29,7 +29,10 @@ the skill renders Markdown and states the limitation.
 Ship a deterministic analysis/HTML fixture pair and contract validator for hostile text, unknown
 boundaries, truncation, provenance, graph direction, and forbidden schedule claims. The fixture is
 proof of the composition contract, not a runtime renderer or a promise that HTML is always
-available.
+available. Extend the existing installed dependency-analysis functional phase to exercise the
+installed template, exact sibling safety marker and reference, contract fixture, and Markdown
+fallback. The functional harness does not provide an active HTML artifact capability, so opening
+the exact page remains a separate capability-level visual proof.
 
 ## Consequences
 
@@ -42,6 +45,9 @@ available.
   improvising artifact-safety rules.
 - A safe page requires both automated contract checks and visual wide/narrow inspection; successful
   file creation alone is insufficient.
+- The installed-copy functional phase proves packaging, sibling-reference resolution, fixture
+  validation, and fallback routing without pretending that its shell harness can perform the
+  artifact capability's visual review.
 - Markdown remains the deterministic portable output and fallback.
 - The example HTML fixture adds maintained presentation markup, but no runtime dependency, remote
   asset, JavaScript, or second rendering implementation.
