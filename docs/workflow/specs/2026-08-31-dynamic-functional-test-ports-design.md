@@ -52,11 +52,13 @@ Already defines `container_runtime()` and `bugzilla_container_name()`
   `bzr-func-test-${BZ_VERSION}` to
   `bzr-func-test-${BZ_VERSION}-$(bugzilla_checkout_id)`. The
   `BZR_FUNC_CONTAINER` override path is unchanged.
-- New `bugzilla_checkout_id()` — prints the first field of
-  `cksum` of the absolute path `"$SCRIPT_DIR/../.."` resolves to.
-  `SCRIPT_DIR` is already set by every script that sources `lib.sh`
-  (`tests/functional`'s own absolute directory), so this needs no new
-  input.
+- New `bugzilla_checkout_id()` — prints the first field of `cksum` of the
+  absolute path `"$SCRIPT_DIR/../.."` resolves to, via
+  `printf '%s' "$root" | cksum | cut -d' ' -f1` — not a bash here-string
+  (`cksum <<<"$root"`), which appends a trailing newline `printf` does not
+  and so produces a different checksum. `SCRIPT_DIR` is already set by
+  every script that sources `lib.sh` (`tests/functional`'s own absolute
+  directory), so this needs no new input.
 - New `bugzilla_container_port <runtime> <container>` — prints the host
   port published for the container's `80/tcp`, by running
   `<runtime> port <container> 80/tcp`, taking the first line, and printing
