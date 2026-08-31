@@ -87,7 +87,14 @@ new `bugzilla_container_port()`) instead of keeping its own copy.
   and every host checked during this design (`ip_local_port_range` tops out
   at 60999, well under the 65535 the offset could reach), but not proven for
   every possible host configuration; a widened local range remains a latent
-  edge case this decision accepts rather than guards against.
+  edge case this decision accepts rather than guards against. The offset is
+  also a direct, unnegotiated `bind()` with no probe or retry (unlike the
+  container's own `-p 80` publish, which asks the kernel for a free port), so
+  besides the ceiling case it can collide with any other socket already
+  holding that exact port number — another concurrent checkout's own
+  container or derived port, or transient ephemeral-connection churn. This
+  decision accepts that latent, low-probability risk rather than guarding
+  against it, for the same reason the ceiling case is accepted above.
 - `AGENTS.md`'s fixed-port caution note (quoted in Context) describes
   behavior this decision removes. It is updated to state the new default —
   concurrent checkouts no longer need manual port/name coordination — so the
@@ -115,10 +122,12 @@ new `bugzilla_container_port()`) instead of keeping its own copy.
   always current and needs no cleanup, since the container itself is the
   state.
 - **Derive the checkout id from the git branch name instead of the checkout
-  path.** judgment: two checkouts on the same branch (a worktree checked out
-  to a branch already checked out elsewhere, or two clones on the same
-  branch) would still collide; the path is what actually distinguishes
-  concurrent checkouts.
+  path.** judgment: two checkouts on the same branch (two plain clones both
+  checked out to the same branch — an ordinary occurrence; a linked
+  `git worktree add` to a branch already checked out elsewhere is refused by
+  git without `--force`, so that variant is not itself an ordinary trigger)
+  would still collide; the path is what actually distinguishes concurrent
+  checkouts.
 - **Do nothing; document that operators must set `BZR_FUNC_PORT`/
   `BZR_FUNC_CONTAINER` by hand per checkout.** judgment: this is the status
   quo the issue is asking to remove; it requires every concurrent invocation
@@ -127,12 +136,16 @@ new `bugzilla_container_port()`) instead of keeping its own copy.
 - **Let the TLS and Red Hat-shape proxies bind their own OS-assigned
   ephemeral port, the same way the container's primary port now does,
   instead of deriving `TLS_PORT`/`REDHAT_SHAPE_PORT` by fixed offset.**
-  judgment: this is no more code (both are already Python processes that own
-  their own listening socket, so there is none of the container-runtime
-  TOCTOU concern raised against the rejected socket-probe alternative above)
-  and it removes the ephemeral-range-ceiling assumption noted in
-  Consequences entirely. Kept the offset scheme instead because it costs
-  nothing today, keeps the two proxy ports predictable for a human attaching
-  a debugger to a known offset, and the ceiling assumption it depends on
-  holds for every host this design was checked against.
+  judgment: verified: `tests/functional/tls-proxy.py` takes its listen port
+  as a required positional argument and binds it directly in `main()`, with
+  no path to report a self-chosen port back to the caller; `lib.sh`'s
+  `tls_fixture_start`/`redhat_shape_start` compute the port *before*
+  launching the process and reuse that value to poll readiness. Making the
+  proxy self-select would need both scripts to bind port 0 and synchronously
+  hand the chosen port back to `lib.sh` before the readiness loop runs —
+  more code than either script has today, unlike the container case where
+  `<runtime> port <name> 80/tcp` already exists as a post-hoc query. Kept
+  the offset scheme instead: it costs nothing today, keeps the two proxy
+  ports predictable for a human attaching a debugger to a known offset, and
+  its residual collision risk is accepted in Consequences above.
 </content>
