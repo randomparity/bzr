@@ -545,8 +545,12 @@ by `cmd_start` and `cmd_status` later in this same file.
 
 6. `tests/functional/setup-bugzilla.sh stop` to clean up.
 
-7. `git add tests/functional/setup-bugzilla.sh && git commit` with message
-   `feat(functional): resolve setup-bugzilla.sh's port and name dynamically`.
+7. Do **not** commit yet. At this point `setup-bugzilla.sh` publishes a
+   runtime-assigned port but `run-tests.sh` (Task 4) still assumes the old
+   fixed `DEFAULT_PORT` table — a commit landed here alone would leave
+   `make functional-test` genuinely red for anyone who checks out or
+   bisects into it, working against `AGENTS.md`'s per-commit bisect-hygiene
+   policy. Task 4 step 7 commits both files together as one change.
 
 **Acceptance criteria for this task:** Steps 3–6 all produce their
 documented output; `DEFAULT_PORT` no longer appears anywhere in the file;
@@ -643,11 +647,20 @@ sources `container-env.sh`).
 
 6. `tests/functional/setup-bugzilla.sh stop` to clean up.
 
-7. `git add tests/functional/run-tests.sh && git commit` with message
-   `feat(functional): resolve run-tests.sh's Bugzilla port dynamically`.
+7. `git add tests/functional/setup-bugzilla.sh tests/functional/run-tests.sh
+   && git commit` with message `feat(functional): resolve Bugzilla container
+   port and name dynamically`, covering both this task's and Task 3's
+   changes in one commit — the two scripts implement one coupled behavior
+   change (a dynamic port/name on the start side is unusable until the
+   discovery side stops assuming the old fixed-port table), and splitting
+   them across commits would leave `make functional-test` red at the
+   intermediate commit.
 
 **Acceptance criteria for this task:** Steps 3–5 all produce their
-documented output; `DEFAULT_PORT` no longer appears anywhere in the file.
+documented output; `DEFAULT_PORT` no longer appears anywhere in either
+`setup-bugzilla.sh` or `run-tests.sh`; the single commit covering both
+files is the first point in the branch's history where `make
+functional-test` is green under the new dynamic scheme.
 
 ---
 
