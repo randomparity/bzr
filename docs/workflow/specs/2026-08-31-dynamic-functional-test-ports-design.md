@@ -30,8 +30,11 @@ running container itself as the shared source of truth:
 
 ## Global Constraints
 
-- Bash (not POSIX sh) — matches every script in `tests/functional/`, which
-  already uses `set -euo pipefail` and `[[ ]]`.
+- Bash (not POSIX sh) — matches every script in `tests/functional/`.
+  `setup-bugzilla.sh`, `run-tests.sh`, and `keyring-test.sh` use
+  `set -euo pipefail`; `run-all-versions.sh` uses `set -uo pipefail` (no
+  `-e` — it handles each version's failure explicitly via if/exit-code
+  checks) and is unchanged by this design. All four use `[[ ]]`.
 - No new external dependency. `cksum` (POSIX) and the container runtime's
   own `port` subcommand (already required for `container_exists`,
   `container_runtime` etc.) cover everything needed.
@@ -72,12 +75,19 @@ Already defines `container_runtime()` and `bugzilla_container_name()`
   bugzilla_container_port() {
       local runtime="$1" container="$2"
       local mapping
-      mapping=$("$runtime" port "$container" 80/tcp 2>/dev/null | head -n1)
+      mapping=$("$runtime" port "$container" 80/tcp | head -n1)
       [[ -n "$mapping" ]] || return 1
       printf '%s' "${mapping##*:}"
       return 0
   }
   ```
+
+  Deliberately does not redirect the runtime's stderr to `/dev/null`: only
+  stdout is piped through `head -n1`, so a runtime error distinct from "not
+  running" (permission denied, daemon unreachable) still reaches the
+  caller's stderr alongside `resolve_bz_port`'s and `run-tests.sh`'s own
+  generic "could not determine port" message, instead of being silently
+  discarded.
 
   Returns non-zero (printing nothing) whenever the runtime prints no
   mapping line — container never started, stopped, or removed — so callers
@@ -186,6 +196,39 @@ resolve the port themselves.
 ### `tests/functional/keyring-test.sh`
 
 No change. It does not start or address the Bugzilla container.
+
+### `tools/record-demo.sh`
+
+Out of the issue's original named surface, but added here: it hardcodes
+`BZ_URL=${BZ_URL:-http://127.0.0.1:8089}` (line 22), which stops pointing at
+the running container the moment `setup-bugzilla.sh` stops defaulting to a
+fixed port — a real, silent regression for this actively-used dev tool, not
+covered by any automated test. Fixed by deriving the default the same way
+`run-tests.sh` does, instead of a literal:
+
+```bash
+REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+if [[ -z "${BZ_URL:-}" ]]; then
+    # shellcheck source=/dev/null
+    source "$REPO_ROOT/tests/functional/lib.sh"
+    _rt=$(container_runtime) || {
+        echo "ERROR: neither podman nor docker found in PATH" >&2
+        exit 1
+    }
+    _name=$(bugzilla_container_name)
+    _port=$(bugzilla_container_port "$_rt" "$_name") || {
+        echo "ERROR: could not determine Bugzilla container port for" \
+            "'$_name'; run: make functional-start" >&2
+        exit 1
+    }
+    BZ_URL="http://127.0.0.1:${_port}"
+fi
+```
+
+replacing the current unconditional `BZ_URL=${BZ_URL:-http://127.0.0.1:8089}`
+line. An explicit `BZ_URL` (or the existing `BZR_FUNC_PORT`, indirectly, if
+an operator sets it before running `make functional-start`) still overrides
+this, unchanged from today's `${BZ_URL:-...}` pattern.
 
 ### `tests/functional/README.md`
 
