@@ -40,10 +40,15 @@ Give the container a name unique to the checkout it runs from, unless
 `BZR_FUNC_CONTAINER` overrides it: `bzr-func-test-<version>-<checkout-id>`,
 where `<checkout-id>` is the checksum field of `cksum` of the absolute path
 `tests/functional/../..` resolves to for the running script — `cksum`
-prints two space-separated fields (checksum, byte count; verified:
-`printf '%s' "/home/dave/src/bzr" | cksum` → `967091103 18`), and only the
-first is used (`cksum <<<"$path" | cut -d' ' -f1`), so the derived name
-never contains the embedded space or second field. `cksum` is POSIX and
+prints two space-separated fields (checksum, byte count), and only the
+first is used: `printf '%s' "$path" | cksum | cut -d' ' -f1` (verified:
+`printf '%s' "/home/dave/src/bzr" | cksum | cut -d' ' -f1` → `967091103`).
+Use `printf '%s'` piped to `cksum`, not a bash here-string (`cksum
+<<<"$path"`) — the here-string appends a trailing newline `printf` does
+not, so it hashes different bytes and produces a different checksum
+(verified: `cksum <<<"/home/dave/src/bzr"` → `954492732 19`, not
+`967091103 18`). So the derived name never contains the embedded space or
+second field. `cksum` is POSIX and
 already present everywhere this suite runs; it needs no new dependency. The
 id is keyed on the checkout's filesystem path, not on git
 worktree metadata (`git rev-parse --git-dir`) or the branch name, so it
@@ -57,7 +62,11 @@ not inherit the port `setup-bugzilla.sh` chose. Instead of passing it through
 out-of-band state, `run-tests.sh` queries the already-running container for
 its own published port (`<runtime> port <name> 80/tcp`) — the running
 container is itself the shared state, so there is nothing to keep in sync
-and nothing to go stale.
+and nothing to go stale. Verified against both supported runtimes: podman
+prints one line (`0.0.0.0:41049`); docker 29.7.2 prints two — one per
+address family (`0.0.0.0:35053` and `[::]:35053` in this test), both
+carrying the same port number. `bugzilla_container_port()` takes the first
+line and the text after its last `:`, which is correct on both.
 
 `container_runtime()` and `bugzilla_container_name()` already exist in
 `tests/functional/lib.sh`, sourced by `run-tests.sh`; `setup-bugzilla.sh`
@@ -83,6 +92,13 @@ new `bugzilla_container_port()`) instead of keeping its own copy.
   time, still collide (same checkout id → same default container name).
   That failure mode is unrelated to what issue #606 asks for and is not
   addressed here.
+- `run-all-versions.sh` needs no changes: it sequentially calls
+  `setup-bugzilla.sh start` then `run-tests.sh` per version, within one
+  process, exporting only `BZR_BZ_VERSION`. Neither updated script depends
+  on inherited port/name state from that process — each independently
+  derives the checkout id from its own path and queries the runtime for the
+  port — so looping over versions in one script continues to work
+  unchanged.
 - `TLS_PORT`/`REDHAT_SHAPE_PORT` in `lib.sh` keep deriving from the resolved
   backend port by fixed offset (`+1000`/`+2000`); no change is needed there,
   since a fixed offset from an already-unique dynamic port stays unique in
@@ -144,21 +160,22 @@ new `bugzilla_container_port()`) instead of keeping its own copy.
   quo the issue is asking to remove; it requires every concurrent invocation
   to be manually coordinated, which is the friction `$campaign`-style
   parallel work hits in practice.
-- **Let the TLS and Red Hat-shape proxies bind their own OS-assigned
-  ephemeral port, the same way the container's primary port now does,
-  instead of deriving `TLS_PORT`/`REDHAT_SHAPE_PORT` by fixed offset.**
-  judgment: verified: both `tests/functional/tls-proxy.py` and
-  `tests/functional/redhat-shape-proxy.py` take their listen port as a
-  required positional argument (`sys.argv[1]`) and bind it directly in
-  `main()`, with no path to report a self-chosen port back to the caller;
-  `lib.sh`'s
-  `tls_fixture_start`/`redhat_shape_start` compute the port *before*
-  launching the process and reuse that value to poll readiness. Making the
-  proxy self-select would need both scripts to bind port 0 and synchronously
-  hand the chosen port back to `lib.sh` before the readiness loop runs —
-  more code than either script has today, unlike the container case where
-  `<runtime> port <name> 80/tcp` already exists as a post-hoc query. Kept
-  the offset scheme instead: it costs nothing today, keeps the two proxy
-  ports predictable for a human attaching a debugger to a known offset, and
-  its residual collision risk is accepted in Consequences above.
+- **Have `lib.sh` itself pick a free port for the TLS/Red Hat-shape proxies**
+  — either by having the proxy bind port 0 and report back, or by having
+  `lib.sh` probe a free port the same way the rejected socket-probe
+  alternative above would for the container — instead of deriving
+  `TLS_PORT`/`REDHAT_SHAPE_PORT` by fixed offset. judgment: verified: both
+  `tests/functional/tls-proxy.py` and `tests/functional/redhat-shape-proxy.py`
+  take their listen port as a required positional argument (`sys.argv[1]`)
+  and bind it directly in `main()`; `lib.sh`'s
+  `tls_fixture_start`/`redhat_shape_start` already compute a port value and
+  pass it as that argument before launching the process, so the
+  caller-probes-then-passes-it-in variant needs no proxy-script changes —
+  it is not more code than today. The real reason to keep the offset scheme
+  is the one already accepted in Consequences above: a caller-side probe
+  reintroduces the same TOCTOU window this design otherwise avoids for the
+  container's own port, for a residual risk (an offset landing on another
+  live socket, or past the ephemeral ceiling) judged acceptably rare, plus
+  it keeps the two proxy ports predictable for a human attaching a
+  debugger to a known offset.
 </content>
