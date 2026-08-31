@@ -25,13 +25,13 @@ Identify a functional test as `<phase>/<slug>`. The phase is the existing phase 
 `.sh`, supplied by `run-tests.sh` immediately before it sources that phase. Each `test_begin` call
 supplies two arguments: a lowercase kebab-case semantic slug and the human-readable description.
 For example, phase `08-bugs` and slug `create-first-bug` produce
-`08-bugs/create-first-bug`. Controlled loop variables may occupy a complete slug segment when each
-runtime expansion is lowercase kebab-case and denotes a distinct semantic case.
+`08-bugs/create-first-bug`. Slugs are literal: looped cases select between explicit literal-ID
+`test_begin` branches so every possible reference is visible to the repository guard.
 
 `test_begin` validates the expanded phase and slug, rejects a repeated full ID during the run, and
 prints the full ID separately from the description. A repository guard checks every phase call
-site for the two-argument shape, the phase and slug-template grammar, runner-to-file
-correspondence, duplicate templates within one phase, and remnants of the numeric format.
+site for the two-argument shape, the phase and literal-slug grammar, runner-to-file
+correspondence, duplicate slugs within one phase, and remnants of the numeric format.
 Mutually exclusive call sites still use distinct semantic slugs that name the reported outcome;
 the runtime duplicate check is not replaced by a static exception. The guard has fixture tests,
 runs from `make lint`, runs in the installed pre-commit hook, and is an individually named
@@ -50,9 +50,9 @@ description does not rename its ID; intentionally changing what a test represent
 explicit ID change. Mutually exclusive reports for different outcomes use different references
 even when their descriptions remain identical during the migration.
 
-The static guard checks source templates, while runtime validation checks their expansions. This
-split keeps the checker dependency-free and covers dynamic loop cases without attempting to parse
-or execute arbitrary Bash.
+The static guard checks every literal source ID, while runtime validation checks the composed full
+IDs and catches execution-dependent repetition. This split keeps the checker dependency-free
+without leaving variable expansions outside pre-merge validation.
 
 ## Considered & rejected
 
@@ -65,7 +65,10 @@ or execute arbitrary Bash.
   source path, so repeating it across every test adds a second value that can drift.
 - **Derive IDs from descriptions.** judgment: editorial wording changes would rename references,
   while normalization can collapse distinct descriptions to the same slug.
-- **Validate only statically.** judgment: a line-oriented source check cannot prove the values of
-  controlled loop expansions or detect duplicate expanded IDs across executed branches.
+- **Allow variables in slug segments.** judgment: a line-oriented source check cannot prove every
+  possible expansion, so malformed or colliding references could remain hidden in an unexecuted
+  branch or zero-iteration loop.
+- **Validate only statically.** judgment: source uniqueness cannot detect a full ID repeated by
+  execution-dependent control flow.
 - **Validate only at runtime.** judgment: a skipped or otherwise unexecuted malformed call site
-  could merge unnoticed, so the pull-request guard must also inspect source templates.
+  could merge unnoticed, so the pull-request guard must also inspect source call sites.
