@@ -4,6 +4,7 @@ use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::client::test_helpers::test_client;
+use crate::error::BzrError;
 use crate::types::{CreateProductParams, ProductListType, UpdateProductParams};
 
 #[tokio::test]
@@ -53,6 +54,174 @@ async fn list_products_empty() {
         .await
         .unwrap();
     assert!(products.is_empty());
+}
+
+#[tokio::test]
+async fn list_products_accepts_string_ids() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/product_accessible"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": ["1", "2"]})),
+        )
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/product"))
+        .and(query_param("ids", "1"))
+        .and(query_param("ids", "2"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "products": [
+                {"id": 1, "name": "Widget", "description": "A widget", "is_active": true, "components": [], "versions": [], "milestones": []},
+                {"id": 2, "name": "Gadget", "description": "A gadget", "is_active": true, "components": [], "versions": [], "milestones": []}
+            ]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let products = client
+        .list_products_by_type(ProductListType::Accessible)
+        .await
+        .unwrap();
+    assert_eq!(products.len(), 2);
+    assert_eq!(products[0].name.as_deref(), Some("Widget"));
+    assert_eq!(products[1].name.as_deref(), Some("Gadget"));
+}
+
+#[tokio::test]
+async fn list_products_accepts_mixed_ids() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/product_accessible"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [1, "2"]})),
+        )
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/product"))
+        .and(query_param("ids", "1"))
+        .and(query_param("ids", "2"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "products": [
+                {"id": 1, "name": "Widget", "description": "A widget", "is_active": true, "components": [], "versions": [], "milestones": []},
+                {"id": 2, "name": "Gadget", "description": "A gadget", "is_active": true, "components": [], "versions": [], "milestones": []}
+            ]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let products = client
+        .list_products_by_type(ProductListType::Accessible)
+        .await
+        .unwrap();
+    assert_eq!(products.len(), 2);
+}
+
+#[tokio::test]
+async fn list_products_rejects_malformed_string_id() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/product_accessible"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": ["not_a_number"]})),
+        )
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client
+        .list_products_by_type(ProductListType::Accessible)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, BzrError::Deserialize(_)),
+        "expected deserialize error, got: {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn list_products_rejects_negative_or_zero_id() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/product_accessible"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [0]})))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client
+        .list_products_by_type(ProductListType::Accessible)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, BzrError::Deserialize(_)),
+        "expected deserialize error, got: {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn list_products_rejects_string_zero_id() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/product_accessible"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": ["0"]})))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client
+        .list_products_by_type(ProductListType::Accessible)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, BzrError::Deserialize(_)),
+        "expected deserialize error, got: {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn list_products_rejects_negative_string_id() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/product_accessible"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": ["-5"]})))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client
+        .list_products_by_type(ProductListType::Accessible)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, BzrError::Deserialize(_)),
+        "expected deserialize error, got: {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn list_products_rejects_negative_number_id() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/product_accessible"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [-5]})))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client
+        .list_products_by_type(ProductListType::Accessible)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, BzrError::Deserialize(_)),
+        "expected deserialize error, got: {err:?}"
+    );
 }
 
 #[tokio::test]
