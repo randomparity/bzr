@@ -53,13 +53,13 @@ tests/functional/setup-bugzilla.sh stop
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BZR_FUNC_PORT` | `8089` | Host port mapped to container port 80 |
-| `BZR_FUNC_CONTAINER` | `bzr-func-test` | Container name |
+| `BZR_FUNC_PORT` | `(runtime-assigned)` | Host port mapped to container port 80 (overrides the runtime-assigned default when set) |
+| `BZR_FUNC_CONTAINER` | `bzr-func-test-<version>-<checkout-id>` | Container name |
 | `BZR_FUNC_IMAGE` | `localhost/bzr-func-test-bz:latest` | Image name |
 | `BZR_FUNC_TIMEOUT` | `90` | Health check timeout in seconds |
 | `BZR_BIN` | `target/release/bzr` | Path to pre-built bzr binary (skips cargo build) |
-| `BZR_FUNC_TLS_PORT` | `BZR_FUNC_PORT + 1000` | Host port the TLS proxy listens on for the ad-hoc TLS phase |
-| `BZR_FUNC_REDHAT_PORT` | `BZR_FUNC_PORT + 2000` | Host port for the Red Hat response-shape profile |
+| `BZR_FUNC_TLS_PORT` | `(resolved backend port) + 1000` | Host port the TLS proxy listens on for the ad-hoc TLS phase |
+| `BZR_FUNC_REDHAT_PORT` | `(resolved backend port) + 2000` | Host port for the Red Hat response-shape profile |
 
 ## Test Structure
 
@@ -123,7 +123,9 @@ The Containerfile installs Perl modules via dnf + cpanm. Network issues or missi
 Bugzilla's `checksetup.pl` can take 30-60s on first run. Increase timeout with `BZR_FUNC_TIMEOUT=120`.
 
 **Port conflict:**
-Change the port with `BZR_FUNC_PORT=9089`.
+No longer occurs by default — each invocation gets a runtime-assigned
+host port. Set `BZR_FUNC_PORT` to pin an exact one if needed (e.g. to
+attach a debugger to a known address).
 
 **Tests fail after image rebuild:**
 The container starts fresh each time. If tests fail, check `tests/functional/setup-bugzilla.sh logs` for Bugzilla errors.
