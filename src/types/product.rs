@@ -38,8 +38,12 @@ pub struct Version {
     pub id: u64,
     #[serde(default)]
     pub name: Option<String>,
-    #[serde(default)]
-    pub sort_key: Option<u64>,
+    #[serde(
+        default,
+        deserialize_with = "crate::types::sort_key::deserialize_optional",
+        serialize_with = "crate::types::sort_key::serialize_optional"
+    )]
+    pub sort_key: Option<i128>,
     #[serde(default)]
     pub is_active: Option<bool>,
 }
@@ -50,8 +54,12 @@ pub struct Milestone {
     pub id: u64,
     #[serde(default)]
     pub name: Option<String>,
-    #[serde(default)]
-    pub sort_key: Option<u64>,
+    #[serde(
+        default,
+        deserialize_with = "crate::types::sort_key::deserialize_optional",
+        serialize_with = "crate::types::sort_key::serialize_optional"
+    )]
+    pub sort_key: Option<i128>,
     #[serde(default)]
     pub is_active: Option<bool>,
 }

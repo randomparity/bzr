@@ -11,6 +11,7 @@ pub(crate) mod output;
 pub(crate) mod product;
 pub(crate) mod query;
 pub(crate) mod server_info;
+pub(crate) mod sort_key;
 pub(crate) mod template;
 pub(crate) mod transport;
 pub(crate) mod user;
