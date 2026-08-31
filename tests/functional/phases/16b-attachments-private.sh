@@ -14,7 +14,7 @@ echo "── Phase 15b: Private attachments (Hybrid mode) ───────�
 
 test_begin "100a. attachment upload --private"
 if [[ -n "$BUG1" ]]; then
-    run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
+    run_bzr attachment upload "$BUG1" "$FUNC_ATTACH_FILE" \
         --summary "Private test attachment" --private
     if assert_success && assert_json_exists '.id'; then
         PRIVATE_ATTACH_ID=$(jq -r '.id' "$BZR_STDOUT" 2>/dev/null || echo "")

@@ -58,10 +58,11 @@ RESTRICTED_BUG=""
 # ── Config isolation ─────────────────────────────────────────────────
 FUNC_CONFIG_DIR=$(mktemp -d /tmp/bzr-func-config.XXXXXX)
 export XDG_CONFIG_HOME="$FUNC_CONFIG_DIR"
+FUNC_ATTACH_FILE="$FUNC_CONFIG_DIR/attach.txt"
+FUNC_DOWNLOAD_FILE="$FUNC_CONFIG_DIR/downloaded.txt"
 
 cleanup() {
     rm -rf "$FUNC_CONFIG_DIR"
-    rm -f /tmp/bzr-func-test.txt /tmp/bzr-func-downloaded.txt
     _cleanup_tmpfiles
     return 0
 }

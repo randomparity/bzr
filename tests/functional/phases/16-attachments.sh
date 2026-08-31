@@ -9,12 +9,12 @@
 echo "── Phase 15: Attachments ───────────────────────────────────"
 
 test_begin "95. create temp file"
-echo "bzr functional test content $(date +%s)" >/tmp/bzr-func-test.txt
+echo "bzr functional test content $(date +%s)" >"$FUNC_ATTACH_FILE"
 test_pass
 
 test_begin "96. attachment upload"
 if [[ -n "$BUG1" ]]; then
-    run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt --summary "Test file"
+    run_bzr attachment upload "$BUG1" "$FUNC_ATTACH_FILE" --summary "Test file"
     if assert_success && assert_json_exists '.id'; then
         ATTACH_ID=$(jq -r '.id' "$BZR_STDOUT" 2>/dev/null || jq -r '.ids[0]' "$BZR_STDOUT" 2>/dev/null || echo "")
         test_pass
@@ -42,9 +42,9 @@ else test_skip "no BUG1"; fi
 
 test_begin "98. attachment download"
 if [[ -n "${ATTACH_ID:-}" ]] && [[ "$ATTACH_ID" != "null" ]]; then
-    rm -f /tmp/bzr-func-downloaded.txt
-    run_bzr attachment download "$ATTACH_ID" --out /tmp/bzr-func-downloaded.txt
-    if assert_success && assert_file_contains /tmp/bzr-func-downloaded.txt "bzr functional test content"; then
+    rm -f "$FUNC_DOWNLOAD_FILE"
+    run_bzr attachment download "$ATTACH_ID" --out "$FUNC_DOWNLOAD_FILE"
+    if assert_success && assert_file_contains "$FUNC_DOWNLOAD_FILE" "bzr functional test content"; then
         test_pass
     fi
 else
@@ -54,7 +54,7 @@ fi
 test_begin "98a. attachment download --out - streams raw bytes"
 if [[ -n "${ATTACH_ID:-}" ]] && [[ "$ATTACH_ID" != "null" ]]; then
     run_bzr_raw attachment download "$ATTACH_ID" --out -
-    if assert_success && assert_stdout_equals_file /tmp/bzr-func-test.txt; then test_pass; fi
+    if assert_success && assert_stdout_equals_file "$FUNC_ATTACH_FILE"; then test_pass; fi
 else
     test_skip "no attachment ID"
 fi
@@ -69,7 +69,7 @@ fi
 
 test_begin "100. attachment upload (explicit MIME)"
 if [[ -n "$BUG1" ]]; then
-    run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt --content-type text/plain
+    run_bzr attachment upload "$BUG1" "$FUNC_ATTACH_FILE" --content-type text/plain
     if assert_success; then test_pass; fi
 else test_skip "no BUG1"; fi
 
@@ -78,7 +78,7 @@ if [[ -n "$BUG1" ]]; then
     run_bzr comment list "$BUG1"
     if assert_success; then
         PRECOMMENT_COUNT=$(jq '. | length' "$BZR_STDOUT" 2>/dev/null || echo "")
-        run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
+        run_bzr attachment upload "$BUG1" "$FUNC_ATTACH_FILE" \
             --summary "with comment" \
             --comment "see #165 -- bzl-parity"
         if assert_success; then
@@ -99,7 +99,7 @@ else test_skip "no BUG1"; fi
 
 test_begin "100g. attachment upload --patch marks attachment as a patch"
 if [[ -n "$BUG1" ]]; then
-    run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
+    run_bzr attachment upload "$BUG1" "$FUNC_ATTACH_FILE" \
         --summary "patch test" --patch
     if assert_success; then
         run_bzr attachment list "$BUG1"
@@ -112,7 +112,7 @@ else test_skip "no BUG1"; fi
 
 test_begin "100h. attachment upload --comment-private flips comment privacy"
 if [[ -n "$BUG1" ]]; then
-    run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
+    run_bzr attachment upload "$BUG1" "$FUNC_ATTACH_FILE" \
         --summary "private comment test" \
         --comment "sensitive context for #170" \
         --comment-private
@@ -139,7 +139,7 @@ test_begin "100k. attachment upload --comment-file"
 if [[ -n "$BUG1" ]]; then
     _ACF=$(mktemp /tmp/bzr-func-attachment-comment.XXXXXX)
     printf 'attachment comment from file' >"$_ACF"
-    run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
+    run_bzr attachment upload "$BUG1" "$FUNC_ATTACH_FILE" \
         --summary "comment file upload" --comment-file "$_ACF"
     if assert_success; then
         run_bzr comment list "$BUG1"
@@ -152,7 +152,7 @@ test_begin "100l. attachment upload --comment-file -"
 if [[ -n "$BUG1" ]]; then
     _ACF=$(mktemp /tmp/bzr-func-attachment-comment.XXXXXX)
     printf 'attachment comment from stdin' >"$_ACF"
-    run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
+    run_bzr attachment upload "$BUG1" "$FUNC_ATTACH_FILE" \
         --summary "comment stdin upload" --comment-file - <"$_ACF"
     if assert_success; then
         run_bzr comment list "$BUG1"
@@ -165,7 +165,7 @@ test_begin "100m. attachment upload empty --comment-file rejected"
 if [[ -n "$BUG1" ]]; then
     _ACF=$(mktemp /tmp/bzr-func-attachment-comment.XXXXXX)
     printf '   ' >"$_ACF"
-    run_bzr attachment upload "$BUG1" /tmp/bzr-func-test.txt \
+    run_bzr attachment upload "$BUG1" "$FUNC_ATTACH_FILE" \
         --summary "empty comment upload" --comment-file "$_ACF"
     if assert_exit_code 7 && assert_stderr_contains "empty comment, aborting"; then test_pass; fi
     rm -f "$_ACF"
