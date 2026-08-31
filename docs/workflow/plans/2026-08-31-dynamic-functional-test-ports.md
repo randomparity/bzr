@@ -268,10 +268,15 @@ must keep working identically after this change.
 
    Expected: `0` (both now live only in `container-env.sh`).
 
-4. Confirm `run_bugzilla_sql_file`'s dependencies still resolve:
+4. Confirm `run_bugzilla_sql_file`'s dependencies still resolve. Use a real
+   directory — `lib.sh` now sources `"$SCRIPT_DIR/container-env.sh"`, so an
+   illustrative nonexistent path would abort the `source` and defeat this
+   check, the same way it did for Task 1 step 4 before that was fixed:
 
    ```sh
-   bash -c 'SCRIPT_DIR=/tmp/checkout-c/tests/functional; source tests/functional/lib.sh; type run_bugzilla_sql_file container_runtime bugzilla_container_name'
+   d=$(mktemp -d); mkdir -p "$d/tests/functional"
+   bash -c "SCRIPT_DIR=$d/tests/functional; source tests/functional/lib.sh; type run_bugzilla_sql_file container_runtime bugzilla_container_name"
+   rm -rf "$d"
    ```
 
    Expected: all three print as shell functions (no "not found" errors).
