@@ -31,11 +31,12 @@ For example, phase `08-bugs` and slug `create-first-bug` produce
 `test_begin` validates the expanded phase and slug, rejects a repeated full ID during the run, and
 prints the full ID separately from the description. A repository guard checks every phase call
 site for the two-argument shape, the phase and literal-slug grammar, runner-to-file
-correspondence, duplicate slugs within one phase, and remnants of the numeric format.
-Mutually exclusive call sites still use distinct semantic slugs that name the reported outcome;
-the runtime duplicate check is not replaced by a static exception. The guard has fixture tests,
-runs from `make lint`, runs in the installed pre-commit hook, and is an individually named
-pull-request CI step.
+correspondence, duplicate slugs within one phase, remnants of the numeric format, and any
+`CURRENT_TEST_GROUP` access from a sourced phase. The last rule makes runner ownership real despite
+Bash `source` sharing one variable scope. Mutually exclusive call sites still use distinct
+semantic slugs that name the reported outcome; the runtime duplicate check is not replaced by a
+static exception. The guard has fixture tests, runs from `make lint`, runs in the installed
+pre-commit hook, and is an individually named pull-request CI step.
 
 Existing phase order, test order, descriptions, assertions, skip behavior, and compiled `bzr`
 behavior do not change. The old numeric labels receive no compatibility aliases because they are

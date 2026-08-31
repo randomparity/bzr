@@ -20,7 +20,8 @@ Every functional test has the full ID `<phase>/<slug>`:
 The phase is runner-owned rather than repeated at 416 call sites. Immediately before sourcing a
 phase, `run-tests.sh` assigns its loop value to `CURRENT_TEST_GROUP`. A call site changes from one
 combined string to `test_begin "create-first-bug" "bug create (bug one)"`. `test_begin` composes
-and prints `[08-bugs/create-first-bug] bug create (bug one)`.
+and prints `[08-bugs/create-first-bug] bug create (bug one)`. Phase files may not read, assign, or
+otherwise reference `CURRENT_TEST_GROUP`; only the runner and shared helper own it.
 
 Slugs are literal and contain no shell expansion. A loop with mode-specific references uses a
 `case` to call `test_begin` with one explicit literal slug per supported mode, then shares the test
@@ -56,7 +57,9 @@ phase grammar. It then rejects:
 - a malformed literal slug;
 - any shell expansion in the slug;
 - missing or extra argument text on the call line; and
-- the same literal slug appearing twice in one phase file.
+- the same literal slug appearing twice in one phase file; and
+- any `CURRENT_TEST_GROUP` occurrence in a phase file, preventing a sourced phase from replacing
+  or deriving the runner-owned group.
 
 Runtime validation remains authoritative for composed full IDs and execution-dependent duplicates.
 `tools/check-functional-test-ids-tests.sh` builds isolated fixtures proving valid literal and
@@ -97,7 +100,8 @@ or authorization decisions.
 - Checker fixture tests prove every accepted and rejected source shape, including valid and
   invalid phase basenames, runner/file set mismatches, duplicate slugs, and legacy numeric
   labels. Both column-zero and indented fixtures prove indentation cannot hide a valid, legacy,
-  malformed, or duplicate-slug call.
+  malformed, or duplicate-slug call. Separate fixtures reject a direct group assignment and a
+  read used to derive and reassign the group from within a phase.
 - Focused harness tests prove `test_begin` composes the phase and slug, preserves the description,
   and rejects missing groups, wrong arity, groups outside
   `[0-9]{2}[a-z]?-[a-z0-9]+(-[a-z0-9]+)*`, malformed slugs, and duplicates on Bash 3.2-compatible
