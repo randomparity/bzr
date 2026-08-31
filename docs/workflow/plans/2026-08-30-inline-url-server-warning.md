@@ -39,7 +39,8 @@ direct compilation dependency. Later functional coverage relies on matching inli
 1. Add the matching-host functional case after test 35b. Set
    `_INLINE_SEARCH_CONFIG="$FUNC_CONFIG_DIR/inline-search-empty.toml"` without creating it, then run
    `run_bzr_raw --json --config "$_INLINE_SEARCH_CONFIG" --server-url "$BZ_URL" bug search
-   --from-url "${BZ_URL}/buglist.cgi?product=FuncTestProd&bug_status=NEW" --limit 1`. Require
+   --from-url "${BZ_URL}/buglist.cgi?bug_id=${BUG1}"`. The unique bug-ID filter and absence of an
+   explicit low limit prevent unrelated pagination diagnostics. Require
    `assert_success`, `assert_json_array_min_length '.' 1`, and `assert_stderr_empty`. Run
    `make functional-test`; expect this case to fail with the no-default configuration error. This
    is the red proof that the production-shaped fixture bites before implementation.
