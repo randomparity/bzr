@@ -67,6 +67,16 @@ effects** (no `mktemp`, no `trap`), and both `lib.sh` and
 `tools/record-demo.sh` source it directly instead of `record-demo.sh`
 sourcing the whole of `lib.sh`:
 
+- `BZ_VERSION="${BZR_BZ_VERSION:-bz50}"` — an ordinary variable default
+  (not a `mktemp`/`trap` side effect), moved here from `lib.sh`'s own top
+  so every direct sourcer of `container-env.sh` is self-sufficient.
+  Without this, `bugzilla_container_name()`'s bare `"${BZ_VERSION}"`
+  reference is only safe for callers that source `lib.sh` in full (which
+  sets it); `tools/record-demo.sh` sources `container-env.sh` directly and
+  never sets `BZ_VERSION` itself, so under `set -u` every normal invocation
+  (verified: reproduced the `unbound variable` abort) would fail before
+  ever reaching the container lookup. `lib.sh`'s own identical assignment
+  becomes redundant but harmless once it also sources this file.
 - `container_runtime()` — moved here unchanged from `lib.sh`.
 - `bugzilla_container_name()` — moved here, extended (see below).
 - New `bugzilla_checkout_id()`.
@@ -412,14 +422,14 @@ first.
 6. `bugzilla_checkout_id()` (and by extension `bugzilla_container_name()`)
    actually varies with `SCRIPT_DIR`: sourcing `container-env.sh` with two
    different fabricated `SCRIPT_DIR` values in the same shell yields two
-   different ids. Run this check under `set -u`
-   (e.g. `bash -c 'set -u; source tests/functional/container-env.sh;
+   different ids. Run this check under `set -eu`, not `set -u` alone
+   (e.g. `bash -c 'set -eu; source tests/functional/container-env.sh;
    bugzilla_checkout_id'` with `SCRIPT_DIR` unset) and assert a nonzero
-   exit — without `set -u` active, an unset `SCRIPT_DIR` resolves
-   `"$SCRIPT_DIR/../.."` to `/` silently instead of failing (verified:
-   reproduced this exact resolution), so the check must force the
-   precondition it is meant to test rather than rely on the ambient shell
-   options of whatever invokes it. This is a narrow, automatable
+   exit — under `set -u` alone, the inner `root=$(cd "$SCRIPT_DIR/../.." &&
+   pwd)` plain assignment silently absorbs the subshell's nounset failure
+   (verified: `root` ends up empty and the function returns exit 0 with the
+   cksum of an empty string instead of erroring); only `set -eu` together
+   produces the nonzero exit the check asserts. This is a narrow, automatable
    check (no container needed) that catches a regression in the derivation
    logic itself — the class of bug this design's own review caught in the
    `${VAR:-$(cmd)}` masking case — without needing the manual two-checkout
