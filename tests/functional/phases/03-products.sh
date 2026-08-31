@@ -40,6 +40,32 @@ test_begin "12b. product list --fields unknown exits 7"
 run_bzr product list --fields bogus_xyz
 if assert_exit_code 7; then test_pass; fi
 
+test_begin "12c. product list accepts string product IDs (kernel.org wire shape)"
+if redhat_shape_start "$BZ_PORT"; then
+    trap 'cleanup; redhat_shape_stop' EXIT
+    _PP_PROXY_URL="http://127.0.0.1:${REDHAT_SHAPE_PORT}"
+    _PP_OK=1
+    # The exact invocation that failed with exit 8 against bugzilla.kernel.org.
+    run_bzr_raw --json --server-url "$_PP_PROXY_URL" \
+        product list --type accessible --fields id,name,is_active
+    if [[ $BZR_EXIT -ne 0 ]] || ! jq -e 'length > 0' "$BZR_STDOUT" >/dev/null; then
+        _PP_OK=0
+    fi
+    run_bzr_raw --json --server-url "$_PP_PROXY_URL" \
+        product list --fields id,name
+    if [[ $BZR_EXIT -ne 0 ]] || ! jq -e 'length > 0' "$BZR_STDOUT" >/dev/null; then
+        _PP_OK=0
+    fi
+    redhat_shape_stop || _PP_OK=0
+    trap cleanup EXIT
+    if [[ $_PP_OK -eq 1 ]]; then test_pass; else
+        test_fail "string product IDs failed; proxy log: $REDHAT_SHAPE_LOG"
+    fi
+else
+    test_fail "Red Hat response-shape proxy did not become ready: $REDHAT_SHAPE_LOG"
+fi
+unset _PP_PROXY_URL _PP_OK
+
 test_begin "13. product update FuncTestProd"
 run_bzr product update FuncTestProd --description "Updated desc"
 if assert_success; then test_pass; fi
