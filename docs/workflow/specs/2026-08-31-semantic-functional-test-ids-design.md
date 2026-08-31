@@ -51,7 +51,16 @@ are not supported: the slug must be literal, and shell expansion is not accepted
 
 The guard compares the phase basenames on disk with the phase values enumerated by
 `run-tests.sh`: each side must contain the same unique set, and every value must match the exact
-phase grammar. It then rejects:
+phase grammar. It requires this exact adjacent runner shape for the source loop, including the same
+`_phase` token in both lines:
+
+```bash
+CURRENT_TEST_GROUP="$_phase"
+source "$SCRIPT_DIR/phases/${_phase}.sh"
+```
+
+An alternate variable, intervening command, reordered pair, or different source token fails. The
+guard then rejects:
 
 - the legacy number-and-period prefix;
 - a malformed literal slug;
@@ -85,6 +94,17 @@ must find no legacy numeric `test_begin` argument or slug expansion. The baselin
 call sites; explicitly branching the six mode-dependent declarations may increase the source
 count, but the functional run must retain the same test count and order for each environment.
 
+Before modifying the harness or phase files, run `make functional-test-all` with `pipefail` and
+retain its complete private transcript outside the repository. After migration, run the same
+command in the same host environment and retain the new transcript. Normalize only completed test
+lines: remove the leading `TEST` marker plus either the old `<number>. ` prefix or the new
+`[<phase>/<slug>] ` prefix, leaving the description and terminal `PASS` or `SKIP` outcome intact.
+Keep per-version summary lines as part of the normalized record. The pre- and post-migration
+normalized records must compare byte-for-byte, and both all-version commands must exit zero. This
+proves the executed descriptions, outcomes, count, and order were preserved while the real live
+post-migration run proves the new harness works. A mismatch stops migration for investigation; it
+is not accepted by updating the baseline.
+
 ## Documentation and scope
 
 `tests/functional/README.md` documents the printed reference, slug rules, insertion workflow, and
@@ -101,7 +121,9 @@ or authorization decisions.
   invalid phase basenames, runner/file set mismatches, duplicate slugs, and legacy numeric
   labels. Both column-zero and indented fixtures prove indentation cannot hide a valid, legacy,
   malformed, or duplicate-slug call. Separate fixtures reject a direct group assignment and a
-  read used to derive and reassign the group from within a phase.
+  read used to derive and reassign the group from within a phase. Runner fixtures reject a swapped
+  source mapping, an alternate source variable, and an intervening command between the canonical
+  assignment/source pair.
 - Focused harness tests prove `test_begin` composes the phase and slug, preserves the description,
   and rejects missing groups, wrong arity, groups outside
   `[0-9]{2}[a-z]?-[a-z0-9]+(-[a-z0-9]+)*`, malformed slugs, and duplicates on Bash 3.2-compatible
@@ -109,7 +131,8 @@ or authorization decisions.
   loop modes.
 - `make check-functional-test-ids`, `make check-shell`, `make lint`, and `make test` pass.
 - `make functional-test-all` runs the migrated suite against every supported Bugzilla version and
-  reports semantic references with no behavior regression.
+  reports semantic references; its normalized completed-test sequence and per-version summaries
+  match the green pre-migration transcript after stripping only reference prefixes.
 
 ## Durable workflow context
 

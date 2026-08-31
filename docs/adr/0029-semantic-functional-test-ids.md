@@ -33,10 +33,18 @@ prints the full ID separately from the description. A repository guard checks ev
 site for the two-argument shape, the phase and literal-slug grammar, runner-to-file
 correspondence, duplicate slugs within one phase, remnants of the numeric format, and any
 `CURRENT_TEST_GROUP` access from a sourced phase. The last rule makes runner ownership real despite
-Bash `source` sharing one variable scope. Mutually exclusive call sites still use distinct
-semantic slugs that name the reported outcome; the runtime duplicate check is not replaced by a
-static exception. The guard has fixture tests, runs from `make lint`, runs in the installed
-pre-commit hook, and is an individually named pull-request CI step.
+Bash `source` sharing one variable scope. It also requires the runner's group assignment and source
+operation to be adjacent canonical lines using the same `_phase` token, so set equality cannot hide
+a swapped assignment/source mapping. Mutually exclusive call sites still use distinct semantic
+slugs that name the reported outcome; the runtime duplicate check is not replaced by a static
+exception. The guard has fixture tests, runs from `make lint`, runs in the installed pre-commit
+hook, and is an individually named pull-request CI step.
+
+Before the first harness edit, retain a private transcript of `make functional-test-all`. After
+migration, run the same command and normalize both transcripts by stripping only the old numeric or
+new bracketed reference prefix from each completed test line. The ordered descriptions, PASS/SKIP
+outcomes, and per-version summary counts must match byte-for-byte. Both runs must be green; the
+comparison supplements rather than replaces the live functional proof.
 
 Existing phase order, test order, descriptions, assertions, skip behavior, and compiled `bzr`
 behavior do not change. The old numeric labels receive no compatibility aliases because they are
@@ -54,6 +62,10 @@ even when their descriptions remain identical during the migration.
 The static guard checks every literal source ID, while runtime validation checks the composed full
 IDs and catches execution-dependent repetition. This split keeps the checker dependency-free
 without leaving variable expansions outside pre-merge validation.
+
+The one-time transcript oracle makes preservation of executed test count, order, descriptions, and
+outcomes falsifiable during migration. It is not retained as a permanent fixture because supported
+Bugzilla and optional local-tool outcomes can legitimately change in later feature work.
 
 ## Considered & rejected
 
