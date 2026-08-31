@@ -8,8 +8,9 @@
 # follow the dynamic `source` in the phase loop, so disable its unused-variable
 # warning for them here.
 # SC1091: lib.sh is resolved from the computed script directory.
-# SC2329: cleanup is invoked through the EXIT trap.
-# shellcheck disable=SC1090,SC1091,SC2034,SC2329
+# SC2317/SC2329: cleanup is invoked through the EXIT trap (the diagnostic code
+# differs between supported ShellCheck versions).
+# shellcheck disable=SC1090,SC1091,SC2034,SC2317,SC2329
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
