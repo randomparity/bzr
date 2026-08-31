@@ -69,17 +69,30 @@ printf '# report\n' >"$stage/report.md"
 [ "$(readlink "$root/latest")" = runs/run-1 ]
 [ -f "$root/runs/run-1/report.md" ]
 
+stage="$root/.staging/stage-second"
+mkdir "$stage"
+cp "$WORK/new.json" "$stage/snapshot.json"
+"$HERE/../scripts/publish-run.sh" "$root" run-2 "$stage" >/dev/null
+[ "$(readlink "$root/latest")" = runs/run-2 ]
+[ -f "$root/runs/run-1/snapshot.json" ]
+[ -f "$root/runs/run-2/snapshot.json" ]
+
 stage="$root/.staging/stage-fail"
 mkdir "$stage"
 cp "$WORK/new.json" "$stage/snapshot.json"
 rm "$root/latest"
 mkdir "$root/latest"
-if "$HERE/../scripts/publish-run.sh" "$root" run-2 "$stage" >/dev/null 2>&1; then
+if "$HERE/../scripts/publish-run.sh" "$root" run-3 "$stage" \
+  >"$WORK/pointer-failure.out" 2>"$WORK/pointer-failure.err"; then
 	echo 'expected pointer replacement failure' >&2
 	exit 1
 fi
+[ -d "$root/latest" ]
+grep -q 'latest is a directory' "$WORK/pointer-failure.err"
+grep -q "new run retained: $root/runs/run-3" "$WORK/pointer-failure.err"
 [ -f "$root/runs/run-1/snapshot.json" ]
 [ -f "$root/runs/run-2/snapshot.json" ]
+[ -f "$root/runs/run-3/snapshot.json" ]
 
 invalid_stage="$root/.staging/invalid"
 mkdir "$invalid_stage"
