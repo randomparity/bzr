@@ -26,11 +26,15 @@ coordinate by hand.
 Stop requesting a fixed host port. `setup-bugzilla.sh` publishes the
 container's port with `-p 80` (no host port given) unless the operator sets
 `BZR_FUNC_PORT`, in which case that exact port is requested as before.
-`docker`/`podman` allocate the actual host port atomically as part of `run`
-(verified: `podman run -d --name bzr-port-probe -p 80 <image>` then `podman
-port bzr-port-probe 80/tcp` → `0.0.0.0:41049`, podman 5.x). There is no
-window between choosing a port and the container claiming it, because the
-runtime does both in one operation.
+`docker`/`podman` allocate the actual host port as part of `run` (verified:
+`podman run -d --name bzr-port-probe -p 80 <image>` then `podman port
+bzr-port-probe 80/tcp` → `0.0.0.0:41049`, podman 5.x; repeated across five
+containers, each got a distinct ephemeral port). The caller never chooses a
+port up front, so there is no separate probe-then-claim step in this
+script's own logic for another process to win a race against — unlike the
+rejected socket-probe alternative below. Whether the runtime's own internal
+allocation is atomic against a concurrent unrelated bind is the runtime's
+concern, not verified here.
 
 Give the container a name unique to the checkout it runs from, unless
 `BZR_FUNC_CONTAINER` overrides it: `bzr-func-test-<version>-<checkout-id>`,
@@ -78,7 +82,24 @@ new `bugzilla_container_port()`) instead of keeping its own copy.
 - `TLS_PORT`/`REDHAT_SHAPE_PORT` in `lib.sh` keep deriving from the resolved
   backend port by fixed offset (`+1000`/`+2000`); no change is needed there,
   since a fixed offset from an already-unique dynamic port stays unique in
-  practice.
+  practice. This assumes the runtime never hands back a backend port within
+  2000 of the ephemeral range's ceiling — true for every supported CI runner
+  and every host checked during this design (`ip_local_port_range` tops out
+  at 60999, well under the 65535 the offset could reach), but not proven for
+  every possible host configuration; a widened local range remains a latent
+  edge case this decision accepts rather than guards against.
+- `AGENTS.md`'s fixed-port caution note (quoted in Context) describes
+  behavior this decision removes. It is updated to state the new default —
+  concurrent checkouts no longer need manual port/name coordination — so the
+  note stops being a stale caveat once this ships.
+- A container left running or stopped by a checkout that is later deleted
+  (worktree removed, clone `rm -rf`'d) is no longer discoverable by any other
+  checkout, because its name is a function of a path that no longer exists.
+  The prior fixed-name scheme gave every checkout the same discovery point,
+  so an orphan self-healed the next time anyone ran the suite; that no longer
+  holds. An operator notices and prunes by hand (e.g. `podman/docker ps -a
+  --filter name=bzr-func-test-`); this decision does not add automatic
+  garbage collection for it.
 
 ## Considered & rejected
 
@@ -103,4 +124,15 @@ new `bugzilla_container_port()`) instead of keeping its own copy.
   quo the issue is asking to remove; it requires every concurrent invocation
   to be manually coordinated, which is the friction `$campaign`-style
   parallel work hits in practice.
+- **Let the TLS and Red Hat-shape proxies bind their own OS-assigned
+  ephemeral port, the same way the container's primary port now does,
+  instead of deriving `TLS_PORT`/`REDHAT_SHAPE_PORT` by fixed offset.**
+  judgment: this is no more code (both are already Python processes that own
+  their own listening socket, so there is none of the container-runtime
+  TOCTOU concern raised against the rejected socket-probe alternative above)
+  and it removes the ephemeral-range-ceiling assumption noted in
+  Consequences entirely. Kept the offset scheme instead because it costs
+  nothing today, keeps the two proxy ports predictable for a human attaching
+  a debugger to a known offset, and the ceiling assumption it depends on
+  holds for every host this design was checked against.
 </content>
