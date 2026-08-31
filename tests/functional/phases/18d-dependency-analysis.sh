@@ -693,7 +693,7 @@ if redhat_shape_start "$BZ_PORT"; then
 
   jq -n --arg bzr "$_DA_BZR_CANONICAL" --argjson root "${_DA_BASE:-0}" '
     {
-      bounds: {max_depth: 1, max_nodes: 2, max_relationships: 2},
+      bounds: {max_depth: 1, max_nodes: 20, max_relationships: 40},
       bzr: $bzr,
       direction: "both",
       resolved_mode: "include-no-traverse",
