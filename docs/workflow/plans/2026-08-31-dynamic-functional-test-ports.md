@@ -268,15 +268,18 @@ must keep working identically after this change.
 
    Expected: `0` (both now live only in `container-env.sh`).
 
-4. Confirm `run_bugzilla_sql_file`'s dependencies still resolve. Use a real
-   directory — `lib.sh` now sources `"$SCRIPT_DIR/container-env.sh"`, so an
-   illustrative nonexistent path would abort the `source` and defeat this
-   check, the same way it did for Task 1 step 4 before that was fixed:
+4. Confirm `run_bugzilla_sql_file`'s dependencies still resolve. This check
+   is not testing checkout-id determinism (Task 1 steps 4-5 already cover
+   that) — it only needs `lib.sh` to source successfully from its real
+   location, so don't override `SCRIPT_DIR`: let the guard added in step 1
+   self-derive it from `BASH_SOURCE`, the same way `lib.sh` is sourced in
+   practice. Pointing `SCRIPT_DIR` at any directory other than the real
+   `tests/functional/` — including an otherwise-real `mktemp`-backed one —
+   makes `lib.sh`'s own `source "$SCRIPT_DIR/container-env.sh"` fail to find
+   `container-env.sh` and defeats the check:
 
    ```sh
-   d=$(mktemp -d); mkdir -p "$d/tests/functional"
-   bash -c "SCRIPT_DIR=$d/tests/functional; source tests/functional/lib.sh; type run_bugzilla_sql_file container_runtime bugzilla_container_name"
-   rm -rf "$d"
+   bash -c 'source tests/functional/lib.sh; type run_bugzilla_sql_file container_runtime bugzilla_container_name'
    ```
 
    Expected: all three print as shell functions (no "not found" errors).
@@ -581,7 +584,8 @@ sources `container-env.sh`).
    grep -n 'DEFAULT_PORT=8089 ;;' tests/functional/run-tests.sh
    ```
 
-   Expected: one match (current line 24).
+   Expected: two matches (current lines 24 and 27 — the `bz50)` branch and
+   the `*)` unknown-version fallback, which also defaults to 8089).
 
 2. Replace current lines 22–30:
 
