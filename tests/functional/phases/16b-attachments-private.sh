@@ -47,10 +47,10 @@ else test_skip "no BUG1"; fi
 
 test_begin "100d. attachment download (private) in Hybrid mode"
 if [[ -n "${PRIVATE_ATTACH_ID:-}" ]] && [[ "$PRIVATE_ATTACH_ID" != "null" ]]; then
-    rm -f /tmp/bzr-func-private-hybrid.txt
+    rm -f "$FUNC_PRIVATE_HYBRID_FILE"
     run_bzr --api hybrid attachment download "$PRIVATE_ATTACH_ID" \
-        --out /tmp/bzr-func-private-hybrid.txt
-    if assert_success && assert_file_contains /tmp/bzr-func-private-hybrid.txt "bzr functional test content"; then
+        --out "$FUNC_PRIVATE_HYBRID_FILE"
+    if assert_success && assert_file_contains "$FUNC_PRIVATE_HYBRID_FILE" "bzr functional test content"; then
         test_pass
     fi
 else
@@ -59,10 +59,10 @@ fi
 
 test_begin "100e. attachment download (private) in XML-RPC mode"
 if [[ -n "${PRIVATE_ATTACH_ID:-}" ]] && [[ "$PRIVATE_ATTACH_ID" != "null" ]]; then
-    rm -f /tmp/bzr-func-private-xmlrpc.txt
+    rm -f "$FUNC_PRIVATE_XMLRPC_FILE"
     run_bzr --api xmlrpc attachment download "$PRIVATE_ATTACH_ID" \
-        --out /tmp/bzr-func-private-xmlrpc.txt
-    if assert_success && assert_file_contains /tmp/bzr-func-private-xmlrpc.txt "bzr functional test content"; then
+        --out "$FUNC_PRIVATE_XMLRPC_FILE"
+    if assert_success && assert_file_contains "$FUNC_PRIVATE_XMLRPC_FILE" "bzr functional test content"; then
         test_pass
     fi
 else

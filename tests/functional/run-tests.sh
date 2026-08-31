@@ -60,6 +60,8 @@ FUNC_CONFIG_DIR=$(mktemp -d /tmp/bzr-func-config.XXXXXX)
 export XDG_CONFIG_HOME="$FUNC_CONFIG_DIR"
 FUNC_ATTACH_FILE="$FUNC_CONFIG_DIR/attach.txt"
 FUNC_DOWNLOAD_FILE="$FUNC_CONFIG_DIR/downloaded.txt"
+FUNC_PRIVATE_HYBRID_FILE="$FUNC_CONFIG_DIR/private-hybrid.txt"
+FUNC_PRIVATE_XMLRPC_FILE="$FUNC_CONFIG_DIR/private-xmlrpc.txt"
 
 cleanup() {
     rm -rf "$FUNC_CONFIG_DIR"
