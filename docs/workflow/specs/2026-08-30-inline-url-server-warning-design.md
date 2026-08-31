@@ -1,6 +1,6 @@
 # Inline URL Server Warning Design
 
-Issue: [#593](https://github.com/randomparity/bzr/issues/593)  
+Issue: [#593](https://github.com/randomparity/bzr/issues/593)
 Decision: [ADR 0027](../../adr/0027-inline-server-aware-url-import.md)
 
 ## Scope charter
