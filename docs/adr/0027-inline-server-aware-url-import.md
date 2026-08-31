@@ -33,17 +33,22 @@ configured-server fixture can mask the inline path.
 
 ## Considered & rejected
 
+- **Keep the current behavior.** judgment: it preserves the false default-fallback warning and
+  premature no-default failure for matching inline hosts, contradicting issue #593.
 - **Suppress the warning in the search caller after parsing.** verified: at commit
   `0faa3df0d27a0365961485f16b3cb2538809e8b0`, `parse_bugzilla_url` emits the warning or returns the
   no-default error before `search::resolve_client_and_params` can apply `CommandContext`, so the
-  caller cannot correct either result after the fact.
+  caller cannot correct either result after the fact; reproduced with
+  `git grep -n 'parse_bugzilla_url\|resolve_client_and_params' 0faa3df0 --
+  src/commands/bug/search.rs src/commands/runtime/input/url_parser.rs`.
 - **Add the inline server temporarily to `Config`.** judgment: mutating the persisted-domain model
   with an ephemeral synthetic entry risks leaking `(inline)` into saved query semantics and makes
   precedence less explicit.
 - **Route the request to the imported URL hostname.** verified: at commit
   `0faa3df0d27a0365961485f16b3cb2538809e8b0`, connection target resolution gives the explicit inline
-  server priority; changing routing would contradict the issue's observed and expected destination.
+  server priority; reproduced with
+  `git show 0faa3df0:src/commands/runtime/shared/connection/target.rs`. Changing routing would
+  contradict the issue's observed and expected destination.
 - **Compare full origins including scheme and port.** judgment: stricter origin equality does not
   serve the hostname contract and would reintroduce warnings for harmless explicit port or scheme
   differences while the inline URL remains authoritative for transport security.
-
