@@ -10,10 +10,11 @@ The functional suite prints a manually maintained global number at the start of 
 description. New coverage inserted beside related tests has exhausted that sequence: later tests
 use letter and digit suffixes, and the same reference now appears in more than one phase. At commit
 `3ea672ca168b6da131894a5d78c997d49e0e8d02`,
-`rg -n '^test_begin "[0-9]+[a-z0-9-]*\.' tests/functional/phases | wc -l` finds 402
-numbered call sites, while grouping their prefixes finds repeated references including `8h`,
-`15c`, `120`, and `152`. Inserting a test in logical order therefore requires either renumbering
-unrelated tests or extending an identifier whose relationship to its phase is implicit.
+`rg -n '^[[:space:]]*test_begin "[0-9]+[a-z0-9-]*\.' tests/functional/phases | wc -l`
+finds 416 numbered call sites, while grouping their prefixes finds repeated references including
+`8h`, `15c`, `120`, and `152`. Inserting a test in logical order therefore requires either
+renumbering unrelated tests or extending an identifier whose relationship to its phase is
+implicit.
 
 Issue #602 requires an insertion-friendly reference associated with the test's group. The
 repository operator selected semantic stable IDs over phase-scoped numeric IDs.
@@ -55,7 +56,7 @@ or execute arbitrary Bash.
 
 ## Considered & rejected
 
-- **Keep the global numeric sequence.** verified: the commands in Context find 402 numbered call
+- **Keep the global numeric sequence.** verified: the commands in Context find 416 numbered call
   sites and repeated references at commit `3ea672ca168b6da131894a5d78c997d49e0e8d02`; the current
   sequence no longer provides unique, insertion-friendly references.
 - **Use phase-scoped numbers with gaps.** judgment: gaps postpone renumbering but do not make an ID

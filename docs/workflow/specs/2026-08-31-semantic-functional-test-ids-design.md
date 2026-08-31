@@ -17,7 +17,7 @@ Every functional test has the full ID `<phase>/<slug>`:
   ASCII lowercase letters, digits, and single hyphen separators; and
 - the full expanded ID is unique during one functional run.
 
-The phase is runner-owned rather than repeated at 402 call sites. Immediately before sourcing a
+The phase is runner-owned rather than repeated at 416 call sites. Immediately before sourcing a
 phase, `run-tests.sh` assigns its loop value to `CURRENT_TEST_GROUP`. A call site changes from one
 combined string to `test_begin "create-first-bug" "bug create (bug one)"`. `test_begin` composes
 and prints `[08-bugs/create-first-bug] bug create (bug one)`.
@@ -44,8 +44,9 @@ retain their behavior.
 
 `tools/check-functional-test-ids.sh <root>` inspects `tests/functional/phases/*.sh` without
 executing them. It requires each `test_begin` invocation to be a single line with a double-quoted
-slug followed by a double-quoted description. Slug templates may contain literal grammar segments
-and a complete `${UPPER_CASE_NAME}` segment; no other shell expansion is accepted in an ID.
+slug followed by a double-quoted description, with optional leading indentation. Slug templates
+may contain literal grammar segments and a complete `${UPPER_CASE_NAME}` segment; no other shell
+expansion is accepted in an ID.
 
 The guard compares the phase basenames on disk with the phase values enumerated by
 `run-tests.sh`: each side must contain the same unique set, and every value must match the exact
@@ -75,7 +76,7 @@ failure paths and the dependency-analysis proxy-unavailable fallbacks. Looped ca
 controlled mode in the expanded slug so each executed case is unique.
 
 No compatibility translation or numeric alias is retained. Repository searches after migration
-must find no legacy numeric `test_begin` argument and exactly the same 402 call sites unless the
+must find no legacy numeric `test_begin` argument and exactly the same 416 call sites unless the
 implementation adds a focused harness self-test outside the phase files.
 
 ## Documentation and scope
@@ -92,7 +93,8 @@ or authorization decisions.
 
 - Checker fixture tests prove every accepted and rejected source shape, including valid and
   invalid phase basenames, runner/file set mismatches, duplicate templates, and legacy numeric
-  labels.
+  labels. Both column-zero and indented fixtures prove indentation cannot hide a valid, legacy,
+  malformed, or duplicate-template call.
 - Focused harness tests prove `test_begin` composes the phase and slug, preserves the description,
   accepts distinct controlled expansions, and rejects missing groups, wrong arity, groups outside
   `[0-9]{2}[a-z]?-[a-z0-9]+(-[a-z0-9]+)*`, malformed expanded slugs, and duplicates on Bash
