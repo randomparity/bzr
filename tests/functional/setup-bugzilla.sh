@@ -20,8 +20,6 @@ else
 fi
 
 # ── Version-aware defaults ───────────────────────────────────────────
-BZ_VERSION="${BZR_BZ_VERSION:-bz50}"
-
 case "$BZ_VERSION" in
 bz50)
     DEFAULT_TIMEOUT=90
