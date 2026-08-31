@@ -12,6 +12,15 @@ Podman Bugzilla containers.
 
 ## Global constraints
 
+- Authority is issue #593 under scope token `q593-8c64ca6a`; issue #593 governs matching and
+  mismatch behavior, and the campaign request governs production fidelity plus all-version
+  functional proof. Accepted ADR 0027 governs hostname-only comparison and separation of saved
+  configured-server metadata from the inline request destination.
+- Permitted surface is the URL parser, bug-search caller, direct signature callers, sibling unit
+  tests, functional tests, ADR 0027, and direct design dependencies.
+- Excluded are credential stripping/sanitization changes, unrelated server-resolution behavior,
+  merging, the ADR index, and the campaign manifest. The campaign orchestrator owns the latter
+  three external workflow actions/surfaces.
 - Host equality uses `url::Url` normalized hostnames; schemes and ports do not participate.
 - Credential stripping, URL sanitization, named/default resolution, TLS, and routing remain intact.
 - User-facing output uses tracing/Writers conventions; tests live in sibling `_tests.rs` files.
@@ -44,39 +53,41 @@ direct compilation dependency. Later functional coverage relies on matching inli
    `assert_success`, `assert_json_array_min_length '.' 1`, and `assert_stderr_empty`. Run
    `make functional-test`; expect this case to fail with the no-default configuration error. This
    is the red proof that the production-shaped fixture bites before implementation.
-2. Add a parser test using an empty `Config`, imported
+2. Add the optional `active_server_url: Option<&str>` parser parameter without consulting it yet,
+   and update every existing production caller, fuzz wrapper, and parser test to pass `None`. Run
+   `make test-one T=parse_url`; expect the existing parser suite to compile and pass.
+3. Add a parser test using an empty `Config`, imported
    `https://bugzilla.example.com/buglist.cgi?product=Firefox`, and active
    `https://bugzilla.example.com:8443`. Assert success and no saved server name.
-3. Run `make test-one T=parse_url_hostname_matches_inline_server_without_default`; expect the new
-   test to fail because the current signature has no active-server input or current parsing returns
-   the no-default configuration error.
-4. Add a mismatched-inline parser test with an empty config and assert parsing succeeds with no
+4. Run `make test-one T=parse_url_hostname_matches_inline_server_without_default`; expect the new
+   test to execute and fail with the existing no-default configuration error.
+5. Add a mismatched-inline parser test with an empty config and assert parsing succeeds with no
    named server. Retain the existing no-inline/no-default error test.
-5. Add table-driven parser cases showing identical hostnames remain silent across scheme and port
+6. Add table-driven parser cases showing identical hostnames remain silent across scheme and port
    differences. Add malformed-active cases proving configured match and empty/default-less error
    precedence remain unchanged.
-6. Implement `active_server_hostname` by parsing the optional URL with `url::Url`. If hostname
+7. Implement `active_server_hostname` by parsing the optional URL with `url::Url`. If hostname
    extraction fails, preserve the existing configured/default parser path so connection setup
    retains malformed-inline error ownership. Compare a valid hostname independently of configured
    lookup, suppress warning/error on equality, and emit
    `URL hostname '<imported>' does not match inline server hostname '<active>'; using inline server`
    on a mismatch. If no active hostname is available, run the existing default/error branches.
-7. Update every call site: bug search passes the inline URL; query and fuzz entry points pass
-   `None`; existing tests pass `None` except the new active-server cases.
-8. Add a Tokio search test with an empty explicit config path and
+8. Change only the bug-search call site from `None` to
+   `ctx.inline_server().map(|server| server.url.as_str())`; query and fuzz callers remain `None`.
+9. Add a Tokio search test with an empty explicit config path and
    `CommandContext::with_inline_server(Some(InlineServer { url: mock.uri(), ... }))`; import the
    same mock hostname and assert the expected REST request occurs and succeeds credentiallessly.
    Mount `GET /rest/version` returning `{"version":"5.1.2"}` before the `/rest/bug` mock because
    inline servers have no cached API mode.
-9. Add a two-server precedence test: configured server A matches the imported hostname, while
-   inline server B differs. Assert mismatch guidance through `TracingCapture`, request receipt by B
-   and not A, and saved-query server name A after `--save-as`. Mount the same REST-capable
-   `/rest/version` response on B and account for that one detection request separately from the
-   expected `/rest/bug` request.
-10. Run `make test-one T=inline_server`; expect all matching/mismatching inline tests to pass. Run
+10. Add a two-server precedence test. Start mock A and configure/import it as
+    `http://localhost:<A-port>`; use mock B's ordinary `http://127.0.0.1:<B-port>` URI for the
+    inline server. Assert mismatch guidance through `TracingCapture`, zero requests received by A,
+    and saved-query server name A after `--save-as`. On B, mount `/rest/version` with expectation 1
+    and `/rest/bug` with expectation 1, proving inline routing despite A's configured match.
+11. Run `make test-one T=inline_server`; expect all matching/mismatching inline tests to pass. Run
    `make test-one T=from_url`; expect all URL-import regression tests to pass.
-11. Run `make lint`; expect exit 0 with no formatting, clippy, layout, or shell findings.
-12. Commit as `fix(cli): honor inline server when importing search URLs`.
+12. Run `make lint`; expect exit 0 with no formatting, clippy, layout, or shell findings.
+13. Commit as `fix(cli): honor inline server when importing search URLs`.
 
 **Acceptance:** matching inline searches work without persisted/default config; mismatch guidance
 describes the inline destination; configured/default and sanitization tests remain green.
