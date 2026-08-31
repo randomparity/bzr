@@ -142,13 +142,16 @@ functions out into their own file with no source-time side effects, so both
    }
    ```
 
-   Note: two later fix waves changed this function's shipped form beyond
-   what's transcribed above — `pwd` became `pwd -P` (symlinked checkouts
-   must resolve to the same real path) and the plain assignment gained
-   `|| return 1` (so `set -u` alone, not just `set -eu`, aborts on a missing
-   `SCRIPT_DIR`). See `tests/functional/container-env.sh` for the current
-   form; this step is a record of the original implementation, not a
-   standing contract.
+   Note: later fix waves changed this block's shipped form beyond what's
+   transcribed above — in `bugzilla_checkout_id`, `pwd` became `pwd -P`
+   (symlinked checkouts must resolve to the same real path) and the plain
+   assignment gained `|| return 1` (so `set -u` alone, not just `set -eu`,
+   aborts on a missing `SCRIPT_DIR`); separately, the `BZ_VERSION` default
+   dropped its outer `${BZ_VERSION:-...}` layer, so an ambient `BZ_VERSION`
+   in the operator's environment can no longer steer the container name —
+   only `BZR_BZ_VERSION` does. See `tests/functional/container-env.sh` for
+   the current form; this step is a record of the original implementation,
+   not a standing contract.
 
 3. Confirm it fails correctly (`bugzilla_checkout_id` needs `SCRIPT_DIR`):
 
