@@ -66,11 +66,13 @@ diagnostic.
 
 ## Error and output behavior
 
-The matching path removes stderr output only. A genuine mismatch says that the imported hostname
-does not match the inline server hostname and that the inline server will be used. Without an
-inline server, existing messages remain byte-for-byte unchanged. Errors for malformed imported
-URLs, non-`buglist.cgi` paths, missing imported hostnames, and default-less unmatched configured
-state remain unchanged.
+For a matching inline hostname, the mismatch diagnostic is suppressed. When config is empty or
+default-less, the same path also replaces the current configuration failure with normal inline
+connection and search behavior. A genuine mismatch says that the imported hostname does not match
+the inline server hostname and that the inline server will be used. Without an inline server,
+existing messages remain byte-for-byte unchanged. Errors for malformed imported URLs,
+non-`buglist.cgi` paths, missing imported hostnames, and default-less unmatched configured state
+remain unchanged.
 
 ## Security model
 
@@ -103,8 +105,13 @@ URL authoritative for routing and does not change TLS or credential handling.
 
 - Unit tests prove a matching inline hostname succeeds without a configured/default server and
   leaves `query.server` unset.
+- Table-driven parser cases prove the same hostname remains a match across scheme and port
+  differences.
 - Unit tests prove a mismatched inline hostname still succeeds with an empty/default-less config
   and emits stable guidance naming both hostnames and the inline destination.
+- Malformed-active-URL tests pin both existing fallbacks: a configured hostname match still returns
+  that configured server, while an empty/default-less config still returns the existing
+  configuration error before connection validation.
 - Existing configured match, default fallback, no-default error, and credential sanitization tests
   remain green.
 - A search command unit test uses `CommandContext::with_inline_server` with an empty config to prove
@@ -113,9 +120,9 @@ URL authoritative for routing and does not change TLS or credential handling.
   asserts the mismatch warning, proves only B receives the REST request, and saves A's configured
   name in the query. This distinguishes persistence metadata from the active request destination.
 - A functional test passes both `--server-url "$BZ_URL"` and a matching `--from-url` while pointing
-  `--config` at a new empty path. It asserts success, real Bugzilla data, and absence of the old
-  mismatch warning. The empty config is the production-fidelity correction: it prevents earlier
-  setup from accidentally satisfying hostname resolution through a persisted server.
+  `--config` at a new empty path. It asserts success, real Bugzilla data, and byte-empty stderr.
+  The empty config is the production-fidelity correction: it prevents earlier setup from
+  accidentally satisfying hostname resolution through a persisted server.
 - A second empty-config functional case imports
   `http://localhost:$BZ_PORT/buglist.cgi?...` while the inline destination remains
   `http://127.0.0.1:$BZ_PORT`. It asserts the search still succeeds against the real container and
