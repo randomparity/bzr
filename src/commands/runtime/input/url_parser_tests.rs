@@ -34,6 +34,15 @@ fn make_config(server_url: &str) -> Config {
     }
 }
 
+fn empty_config() -> Config {
+    Config {
+        default_server: None,
+        servers: HashMap::new(),
+        templates: HashMap::new(),
+        queries: HashMap::new(),
+    }
+}
+
 #[test]
 fn classify_param_kinds() {
     assert!(matches!(classify_param("columnlist"), ParamKind::Ignored));
@@ -68,7 +77,7 @@ fn classify_param_kinds() {
 fn parse_test_url(query: &str) -> ParsedUrl {
     let config = make_config("https://bugzilla.example.com");
     let url = format!("https://bugzilla.example.com/buglist.cgi?{query}");
-    parse_bugzilla_url(&url, &config).unwrap()
+    parse_bugzilla_url(&url, &config, None).unwrap()
 }
 
 /// Extract `raw_params` keys as a vec for assertions.
@@ -135,6 +144,7 @@ fn non_numeric_limit_rejected() {
     let err = parse_bugzilla_url(
         "https://bugzilla.example.com/buglist.cgi?limit=abc",
         &config,
+        None,
     )
     .unwrap_err();
     assert_eq!(err.exit_code(), 7);
@@ -150,6 +160,7 @@ fn overflow_limit_rejected() {
     let err = parse_bugzilla_url(
         "https://bugzilla.example.com/buglist.cgi?limit=99999999999",
         &config,
+        None,
     )
     .unwrap_err();
     assert_eq!(err.exit_code(), 7);
@@ -196,6 +207,7 @@ fn parse_url_without_buglist_cgi_errors() {
     let err = parse_bugzilla_url(
         "https://bugzilla.example.com/show_bug.cgi?id=12345",
         &config,
+        None,
     )
     .unwrap_err();
     assert!(
@@ -207,7 +219,7 @@ fn parse_url_without_buglist_cgi_errors() {
 #[test]
 fn parse_malformed_url_errors() {
     let config = make_config("https://bugzilla.example.com");
-    let err = parse_bugzilla_url("not a url", &config).unwrap_err();
+    let err = parse_bugzilla_url("not a url", &config, None).unwrap_err();
     assert!(
         err.to_string().contains("invalid URL"),
         "error should mention invalid URL: {err}"
@@ -221,6 +233,91 @@ fn parse_url_hostname_matches_configured_server() {
 }
 
 #[test]
+fn parse_url_hostname_matches_inline_server_without_default() {
+    let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::WARN);
+    let parsed = parse_bugzilla_url(
+        "https://bugzilla.example.com/buglist.cgi?product=Firefox",
+        &empty_config(),
+        Some("https://bugzilla.example.com:8443"),
+    )
+    .unwrap();
+
+    assert!(parsed.query.server.is_none());
+    assert!(
+        !capture.output().contains("does not match"),
+        "matching inline hostname should be silent: {}",
+        capture.output()
+    );
+}
+
+#[test]
+fn parse_url_inline_hostname_match_ignores_scheme_and_port() {
+    for active_url in [
+        "http://bugzilla.example.com",
+        "https://bugzilla.example.com:9443",
+    ] {
+        let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::WARN);
+        let parsed = parse_bugzilla_url(
+            "https://bugzilla.example.com/buglist.cgi?product=Firefox",
+            &empty_config(),
+            Some(active_url),
+        )
+        .unwrap();
+
+        assert!(parsed.query.server.is_none());
+        assert!(
+            !capture.output().contains("does not match"),
+            "same hostname should be silent for {active_url}: {}",
+            capture.output()
+        );
+    }
+}
+
+#[test]
+fn parse_url_inline_hostname_mismatch_warns_and_uses_inline() {
+    let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::WARN);
+    let parsed = parse_bugzilla_url(
+        "https://imported.example.com/buglist.cgi?product=Firefox",
+        &empty_config(),
+        Some("https://inline.example.com"),
+    )
+    .unwrap();
+
+    assert!(parsed.query.server.is_none());
+    let log = capture.output();
+    assert!(log.contains("imported.example.com"), "warning: {log}");
+    assert!(log.contains("inline.example.com"), "warning: {log}");
+    assert!(log.contains("using inline server"), "warning: {log}");
+}
+
+#[test]
+fn malformed_inline_url_preserves_configured_match() {
+    let parsed = parse_bugzilla_url(
+        "https://bugzilla.example.com/buglist.cgi?product=Firefox",
+        &make_config("https://bugzilla.example.com"),
+        Some("not a URL"),
+    )
+    .unwrap();
+
+    assert_eq!(parsed.query.server.as_deref(), Some("test"));
+}
+
+#[test]
+fn malformed_inline_url_preserves_no_default_error() {
+    let err = parse_bugzilla_url(
+        "https://bugzilla.example.com/buglist.cgi?product=Firefox",
+        &empty_config(),
+        Some("not a URL"),
+    )
+    .unwrap_err();
+
+    assert!(
+        matches!(err, BzrError::Config(ref message) if message.contains("no default server")),
+        "unexpected error: {err:?}"
+    );
+}
+
+#[test]
 fn parse_url_hostname_no_match_uses_default() {
     let config = make_config("https://other.example.com");
     // Config has "test" server at other.example.com, with default_server = "test"
@@ -228,6 +325,7 @@ fn parse_url_hostname_no_match_uses_default() {
     let parsed = parse_bugzilla_url(
         "https://bugzilla.example.com/buglist.cgi?product=Firefox",
         &config,
+        None,
     )
     .unwrap();
     // No hostname match → server field is None (will use default at query time)
@@ -236,15 +334,10 @@ fn parse_url_hostname_no_match_uses_default() {
 
 #[test]
 fn parse_url_hostname_no_match_no_default_errors() {
-    let config = Config {
-        default_server: None,
-        servers: HashMap::new(),
-        templates: HashMap::new(),
-        queries: HashMap::new(),
-    };
     let err = parse_bugzilla_url(
         "https://bugzilla.example.com/buglist.cgi?product=Firefox",
-        &config,
+        &empty_config(),
+        None,
     )
     .unwrap_err();
     assert!(
@@ -359,6 +452,7 @@ fn parse_url_strips_userinfo_from_source_url() {
     let parsed = parse_bugzilla_url(
         "https://user:secret@bugzilla.example.com/buglist.cgi?product=Firefox",
         &config,
+        None,
     )
     .unwrap();
 
@@ -464,7 +558,7 @@ fn strip_shell_backslashes_trailing_backslash() {
 fn parse_url_with_shell_backslashes_succeeds() {
     let config = make_config("https://bugzilla.example.com");
     let escaped = r"https://bugzilla.example.com/buglist.cgi\?product\=Firefox\&bug_status\=NEW";
-    let parsed = parse_bugzilla_url(escaped, &config).unwrap();
+    let parsed = parse_bugzilla_url(escaped, &config, None).unwrap();
     assert_eq!(parsed.query.product, vec!["Firefox"]);
     assert_eq!(parsed.query.status, vec!["NEW"]);
 }
@@ -473,7 +567,7 @@ fn parse_url_with_shell_backslashes_succeeds() {
 fn parse_url_with_shell_backslashes_boolean_chart() {
     let config = make_config("https://bugzilla.example.com");
     let escaped = r"https://bugzilla.example.com/buglist.cgi\?f1\=qa_contact\&o1\=changedfrom\&v1\=user\%40example.com\&classification\=Community";
-    let parsed = parse_bugzilla_url(escaped, &config).unwrap();
+    let parsed = parse_bugzilla_url(escaped, &config, None).unwrap();
 
     let keys = raw_keys(&parsed);
     assert!(keys.contains(&"f1"), "boolean chart f1 missing: {keys:?}");

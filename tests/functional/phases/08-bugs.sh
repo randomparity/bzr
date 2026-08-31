@@ -75,6 +75,36 @@ test_begin "35b. inline credentialless bug list"
 run_bzr_raw --json --server-url "$BZ_URL" bug list --product FuncTestProd --limit 1
 if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
 
+test_begin "35c. stateless inline from-url search"
+if [[ -n "$BUG1" ]]; then
+    _INLINE_SEARCH_CONFIG="$FUNC_CONFIG_DIR/inline-search-empty.toml"
+    run_bzr_raw --json --config "$_INLINE_SEARCH_CONFIG" --server-url "$BZ_URL" \
+        bug search --from-url "${BZ_URL}/buglist.cgi?bug_id=${BUG1}"
+    if assert_success && assert_json_array_min_length '.' 1 &&
+        assert_stderr_not_contains "does not match inline server hostname"; then
+        test_pass
+    fi
+    unset _INLINE_SEARCH_CONFIG
+else
+    test_skip "no BUG1"
+fi
+
+test_begin "35d. stateless inline from-url mismatch guidance"
+if [[ -n "$BUG1" ]]; then
+    _INLINE_SEARCH_CONFIG="$FUNC_CONFIG_DIR/inline-search-empty.toml"
+    run_bzr_raw --json --config "$_INLINE_SEARCH_CONFIG" --server-url "$BZ_URL" \
+        bug search --from-url "http://localhost:${BZ_PORT}/buglist.cgi?bug_id=${BUG1}"
+    if assert_success && assert_json_array_min_length '.' 1 &&
+        assert_stderr_contains "URL hostname 'localhost'" &&
+        assert_stderr_contains "inline server hostname '127.0.0.1'" &&
+        assert_stderr_contains "using inline server"; then
+        test_pass
+    fi
+    unset _INLINE_SEARCH_CONFIG
+else
+    test_skip "no BUG1"
+fi
+
 test_begin "36. bug view --fields"
 if [[ -n "$BUG1" ]]; then
     run_bzr bug view "$BUG1" --fields id,summary

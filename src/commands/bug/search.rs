@@ -93,7 +93,11 @@ async fn resolve_client_and_params(args: &SearchArgs, ctx: &CommandContext) -> R
     };
 
     let config = crate::config::Config::load_at(ctx.config_path_override())?;
-    let parsed = crate::commands::runtime::input::url_parser::parse_bugzilla_url(url_str, &config)?;
+    let parsed = crate::commands::runtime::input::url_parser::parse_bugzilla_url(
+        url_str,
+        &config,
+        ctx.inline_server().map(|server| server.url.as_str()),
+    )?;
     let effective_server = ctx.server().or(parsed.query.server.as_deref());
     let url_ctx = ctx.with_server(effective_server);
     let client = crate::commands::runtime::shared::connect_and_configure(&url_ctx).await?;

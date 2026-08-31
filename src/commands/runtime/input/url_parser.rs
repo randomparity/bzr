@@ -113,7 +113,11 @@ fn strip_shell_backslashes(url: &str) -> String {
 /// Unrecognized parameters are stored in `raw_params` for verbatim
 /// passthrough to the REST API. Display/session params are ignored.
 /// Credential parameters are stripped from both `source_url` and `raw_params`.
-pub(crate) fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<ParsedUrl> {
+pub(crate) fn parse_bugzilla_url(
+    url_str: &str,
+    config: &Config,
+    active_server_url: Option<&str>,
+) -> Result<ParsedUrl> {
     let cleaned = strip_shell_backslashes(url_str);
     let url = Url::parse(&cleaned).map_err(|e| BzrError::input(format!("invalid URL: {e}")))?;
 
@@ -128,17 +132,29 @@ pub(crate) fn parse_bugzilla_url(url_str: &str, config: &Config) -> Result<Parse
         .ok_or_else(|| BzrError::input("URL has no hostname".into()))?;
 
     let server = find_server_by_hostname(config, url_host);
-    if server.is_none() && config.default_server.is_none() {
-        return Err(BzrError::config(format!(
-            "URL hostname '{url_host}' does not match any configured server \
-             and no default server is set. Run `bzr config set-server` first."
-        )));
-    }
-    if server.is_none() {
-        tracing::warn!(
-            "URL hostname '{url_host}' does not match any configured server; \
-             using default server"
-        );
+    let active_server_host = active_server_url
+        .and_then(|active_url| Url::parse(active_url).ok())
+        .and_then(|active_url| active_url.host_str().map(String::from));
+    if let Some(active_host) = active_server_host.as_deref() {
+        if active_host != url_host {
+            tracing::warn!(
+                "URL hostname '{url_host}' does not match inline server hostname \
+                 '{active_host}'; using inline server"
+            );
+        }
+    } else {
+        if server.is_none() && config.default_server.is_none() {
+            return Err(BzrError::config(format!(
+                "URL hostname '{url_host}' does not match any configured server \
+                 and no default server is set. Run `bzr config set-server` first."
+            )));
+        }
+        if server.is_none() {
+            tracing::warn!(
+                "URL hostname '{url_host}' does not match any configured server; \
+                 using default server"
+            );
+        }
     }
 
     let mut query = SavedQuery {

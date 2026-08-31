@@ -68,6 +68,130 @@ async fn handle_search_from_url_executes() {
 }
 
 #[tokio::test]
+async fn from_url_inline_mismatch_warns_routes_inline_and_saves_configured_server() {
+    let configured_mock = wiremock::MockServer::start().await;
+    let inline_mock = wiremock::MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let configured_url = configured_mock.uri().replace("127.0.0.1", "localhost");
+    let config_path = crate::test_helpers::write_config_to(
+        &tmp,
+        &format!(
+            r#"
+default_server = "configured"
+
+[servers.configured]
+url = "{configured_url}"
+api_key = "test-key"
+auth_method = "header"
+api_mode = "rest"
+"#
+        ),
+    );
+
+    Mock::given(method("GET"))
+        .and(path("/rest/version"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.1.2"})),
+        )
+        .expect(1)
+        .mount(&inline_mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "summary": "Inline result", "status": "NEW"}]
+        })))
+        .expect(1)
+        .mount(&inline_mock)
+        .await;
+
+    let inline = crate::commands::runtime::invocation::InlineServer {
+        url: inline_mock.uri(),
+        api_key_env: None,
+        email: None,
+        tls: crate::commands::runtime::invocation::InlineTlsOptions::default(),
+    };
+    let imported_url = format!("{configured_url}/buglist.cgi?bug_id=1");
+    let action = from_url_action(imported_url, Some("inline-precedence".into()));
+    let ctx =
+        crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone()))
+            .with_inline_server(Some(inline));
+    let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::WARN);
+    let mut io = crate::test_helpers::CapturedIo::new();
+
+    let result = crate::commands::bug::execute(&action, &ctx, &mut io.writers()).await;
+
+    assert!(result.is_ok(), "inline search failed: {result:?}");
+    assert!(
+        configured_mock
+            .received_requests()
+            .await
+            .unwrap()
+            .is_empty(),
+        "configured server must not receive the inline request"
+    );
+    let saved = crate::config::Config::load_at(Some(&config_path)).unwrap();
+    assert_eq!(
+        saved.queries["inline-precedence"].server.as_deref(),
+        Some("configured")
+    );
+    let log = capture.output();
+    assert!(log.contains("localhost"), "warning: {log}");
+    assert!(log.contains("127.0.0.1"), "warning: {log}");
+    assert!(log.contains("using inline server"), "warning: {log}");
+}
+
+#[tokio::test]
+async fn from_url_matching_inline_server_works_without_config() {
+    let inline_mock = wiremock::MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = tmp.path().join("missing-config.toml");
+
+    Mock::given(method("GET"))
+        .and(path("/rest/version"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.1.2"})),
+        )
+        .expect(1)
+        .mount(&inline_mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "summary": "Inline result", "status": "NEW"}]
+        })))
+        .expect(1)
+        .mount(&inline_mock)
+        .await;
+
+    let inline = crate::commands::runtime::invocation::InlineServer {
+        url: inline_mock.uri(),
+        api_key_env: None,
+        email: None,
+        tls: crate::commands::runtime::invocation::InlineTlsOptions::default(),
+    };
+    let action = from_url_action(format!("{}/buglist.cgi?bug_id=1", inline_mock.uri()), None);
+    let ctx =
+        crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone()))
+            .with_inline_server(Some(inline));
+    let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::WARN);
+    let mut io = crate::test_helpers::CapturedIo::new();
+
+    let result = crate::commands::bug::execute(&action, &ctx, &mut io.writers()).await;
+
+    assert!(result.is_ok(), "inline search failed: {result:?}");
+    assert!(
+        !config_path.exists(),
+        "inline search must not create config"
+    );
+    assert!(capture.output().is_empty(), "warning: {}", capture.output());
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
+    assert_eq!(parsed[0]["id"], 1);
+}
+
+#[tokio::test]
 async fn handle_search_from_url_with_custom_fields_emits_custom_field() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 

@@ -57,7 +57,8 @@ fn saved_query_from_url(
     config_path_override: Option<&std::path::Path>,
 ) -> Result<SavedQuery> {
     let config = Config::load_at(config_path_override)?;
-    let parsed = crate::commands::runtime::input::url_parser::parse_bugzilla_url(url_str, &config)?;
+    let parsed =
+        crate::commands::runtime::input::url_parser::parse_bugzilla_url(url_str, &config, None)?;
     let mut query = parsed.query;
     query.limit = overrides.limit.or(query.limit);
     query.fields = overrides.fields.map(ToOwned::to_owned).or(query.fields);
