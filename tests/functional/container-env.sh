@@ -24,7 +24,7 @@ container_runtime() {
 # SCRIPT_DIR must be set by the caller before sourcing this file.
 bugzilla_checkout_id() {
 	local root
-	root=$(cd "$SCRIPT_DIR/../.." && pwd)
+	root=$(cd "$SCRIPT_DIR/../.." && pwd) || return 1
 	printf '%s' "$root" | cksum | cut -d' ' -f1
 	return 0
 }
