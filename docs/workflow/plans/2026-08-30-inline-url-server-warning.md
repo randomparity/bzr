@@ -36,9 +36,13 @@ the public wrapper in `src/lib.rs`, not the internal parser.
 direct compilation dependency. Later functional coverage relies on matching inline hostname with
 `query.server == None` and successful connection through `CommandContext`.
 
-1. Add the matching-host functional case described in Task 2 step 1, then run
-   `make functional-test`. Expect the new case to fail with the no-default configuration error.
-   This is the red proof that the production-shaped fixture bites before implementation.
+1. Add the matching-host functional case after test 35b. Set
+   `_INLINE_SEARCH_CONFIG="$FUNC_CONFIG_DIR/inline-search-empty.toml"` without creating it, then run
+   `run_bzr_raw --json --config "$_INLINE_SEARCH_CONFIG" --server-url "$BZ_URL" bug search
+   --from-url "${BZ_URL}/buglist.cgi?product=FuncTestProd&bug_status=NEW" --limit 1`. Require
+   `assert_success`, `assert_json_array_min_length '.' 1`, and `assert_stderr_empty`. Run
+   `make functional-test`; expect this case to fail with the no-default configuration error. This
+   is the red proof that the production-shaped fixture bites before implementation.
 2. Add a parser test using an empty `Config`, imported
    `https://bugzilla.example.com/buglist.cgi?product=Firefox`, and active
    `https://bugzilla.example.com:8443`. Assert success and no saved server name.
@@ -61,9 +65,13 @@ direct compilation dependency. Later functional coverage relies on matching inli
 8. Add a Tokio search test with an empty explicit config path and
    `CommandContext::with_inline_server(Some(InlineServer { url: mock.uri(), ... }))`; import the
    same mock hostname and assert the expected REST request occurs and succeeds credentiallessly.
+   Mount `GET /rest/version` returning `{"version":"5.1.2"}` before the `/rest/bug` mock because
+   inline servers have no cached API mode.
 9. Add a two-server precedence test: configured server A matches the imported hostname, while
    inline server B differs. Assert mismatch guidance through `TracingCapture`, request receipt by B
-   and not A, and saved-query server name A after `--save-as`.
+   and not A, and saved-query server name A after `--save-as`. Mount the same REST-capable
+   `/rest/version` response on B and account for that one detection request separately from the
+   expected `/rest/bug` request.
 10. Run `make test-one T=inline_server`; expect all matching/mismatching inline tests to pass. Run
    `make test-one T=from_url`; expect all URL-import regression tests to pass.
 11. Run `make lint`; expect exit 0 with no formatting, clippy, layout, or shell findings.
@@ -80,8 +88,8 @@ existing assertion cannot express absence from stderr.
 **Interfaces:** use existing `run_bzr_raw`, `BZR_STDERR`, `assert_success`, JSON helpers, `BZ_URL`,
 and `FUNC_CONFIG_DIR`. No new production interface is introduced.
 
-1. Re-read the matching-host case added before Task 1's implementation and confirm its assertions
-   require exit 0, at least one returned bug, and byte-empty `BZR_STDERR`.
+1. Re-read the concrete matching-host case added in Task 1 step 1 and confirm its assertions require
+   exit 0, at least one returned bug, and byte-empty `BZR_STDERR`.
 2. Add a second empty-config invocation whose imported URL uses `localhost:$BZ_PORT` while the
    inline URL remains `127.0.0.1:$BZ_PORT`. Assert exit 0, real results, and stderr substrings naming
    `localhost`, `127.0.0.1`, and `using inline server`.
