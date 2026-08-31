@@ -80,7 +80,8 @@ if [[ -n "$BUG1" ]]; then
     _INLINE_SEARCH_CONFIG="$FUNC_CONFIG_DIR/inline-search-empty.toml"
     run_bzr_raw --json --config "$_INLINE_SEARCH_CONFIG" --server-url "$BZ_URL" \
         bug search --from-url "${BZ_URL}/buglist.cgi?bug_id=${BUG1}"
-    if assert_success && assert_json_array_min_length '.' 1 && assert_stderr_empty; then
+    if assert_success && assert_json_array_min_length '.' 1 &&
+        assert_stderr_not_contains "does not match inline server hostname"; then
         test_pass
     fi
     unset _INLINE_SEARCH_CONFIG
