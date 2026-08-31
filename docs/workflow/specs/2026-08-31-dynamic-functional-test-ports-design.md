@@ -46,10 +46,37 @@ running container itself as the shared source of truth:
 
 ## Components
 
-### `tests/functional/lib.sh` (shared functions)
+### `tests/functional/container-env.sh` (new: side-effect-free shared functions)
 
-Already defines `container_runtime()` and `bugzilla_container_name()`
-(used today only by `run_bugzilla_sql_file`). Extend it:
+`container_runtime()` and `bugzilla_container_name()` currently live in
+`lib.sh`, which also unconditionally creates three `mktemp` temp files and
+installs `trap _cleanup_tmpfiles EXIT` as soon as it is sourced (existing
+`lib.sh` lines ~107-118) — side effects only `run-tests.sh`'s phase-file
+callers need. `tools/record-demo.sh` needs only the container-lookup
+functions, and bash `EXIT` traps do not stack: a later `trap ... EXIT`
+installed by `record-demo.sh` (it installs one in each of its four
+`--drive*` orchestrator branches) silently replaces `lib.sh`'s trap, so
+`_cleanup_tmpfiles` never runs and its three temp files leak on every
+invocation (verified: reproduced the exact trap-clobbering mechanism in an
+isolated script matching this structure — the first trap's cleanup command
+does not fire and its temp file remains on disk after exit).
+
+So this design adds a new file, `tests/functional/container-env.sh`,
+holding the four container-lookup functions with **no source-time side
+effects** (no `mktemp`, no `trap`), and both `lib.sh` and
+`tools/record-demo.sh` source it directly instead of `record-demo.sh`
+sourcing the whole of `lib.sh`:
+
+- `container_runtime()` — moved here unchanged from `lib.sh`.
+- `bugzilla_container_name()` — moved here, extended (see below).
+- New `bugzilla_checkout_id()`.
+- New `bugzilla_container_port()`.
+
+`lib.sh` sources `tests/functional/container-env.sh` near its own top (so
+existing callers of `container_runtime()`/`bugzilla_container_name()`, e.g.
+`run_bugzilla_sql_file`, are unaffected) and keeps its `mktemp`/`trap`
+side effects exactly as they are today — only `setup-bugzilla.sh` and
+`run-tests.sh` need those, and both already source `lib.sh` in full.
 
 - `bugzilla_container_name()` — change its fallback to compute the checkout
   id in a separate statement first, not embedded inside the `${VAR:-...}`
@@ -78,9 +105,10 @@ Already defines `container_runtime()` and `bugzilla_container_name()`
   `printf '%s' "$root" | cksum | cut -d' ' -f1` — not a bash here-string
   (`cksum <<<"$root"`), which appends a trailing newline `printf` does not
   and so produces a different checksum. `SCRIPT_DIR` must be set by the
-  caller before sourcing `lib.sh` — `setup-bugzilla.sh` and `run-tests.sh`
-  already do this; `tools/record-demo.sh`'s new sourcing block below must
-  do it too, since it doesn't otherwise need `SCRIPT_DIR` for anything.
+  caller before sourcing `container-env.sh` (directly, or transitively via
+  `lib.sh`) — `setup-bugzilla.sh` and `run-tests.sh` already set it before
+  sourcing `lib.sh`; `tools/record-demo.sh`'s new sourcing block below must
+  set it too, since it doesn't otherwise need `SCRIPT_DIR` for anything.
 - New `bugzilla_container_port <runtime> <container>` — prints the host
   port published for the container's `80/tcp`. Checks the *output*
   explicitly rather than trusting the runtime's exit status: podman exits 0
@@ -173,13 +201,38 @@ Already defines `container_runtime()` and `bugzilla_container_name()`
   `wait_for_ready`.
 - `cmd_status` calls `resolve_bz_port` before the existing `curl`
   reachability check and distinguishes its two failure exit codes rather
-  than treating both as "not reachable": exit `1` (no port mapping at all —
-  stopped or never started) skips the `curl` check and reports "REST API:
-  not reachable" as before; exit `2` (a `BZR_FUNC_PORT` mismatch against an
-  actually-running container) reports "REST API: unknown — BZR_FUNC_PORT
-  does not match the running container's actual port" instead, since the
-  container may well be reachable at its real port even though the
-  requested one is wrong.
+  than treating both as "not reachable". A bare `resolve_bz_port` call
+  followed by a `case $?` under `set -e` aborts the script before the case
+  statement runs (verified: reproduced this exact abort), so the exit code
+  must be captured explicitly first, the same `cmd || rc=$?` idiom `lib.sh`
+  already uses elsewhere in this codebase:
+
+  ```bash
+  local port_status=0
+  resolve_bz_port || port_status=$?
+  case "$port_status" in
+  0)
+      if curl -sf "http://127.0.0.1:${BZ_PORT}/rest/version" >/dev/null 2>&1; then
+          echo "REST API: reachable"
+      else
+          echo "REST API: not reachable"
+      fi
+      ;;
+  2)
+      echo "REST API: unknown — BZR_FUNC_PORT does not match the running container's actual port"
+      ;;
+  *)
+      echo "REST API: not reachable"
+      ;;
+  esac
+  ```
+
+  Exit `1` (no port mapping at all — stopped or never started) and any
+  other non-zero, non-`2` status fall through to "not reachable", matching
+  today's behavior; exit `2` (a `BZR_FUNC_PORT` mismatch against an
+  actually-running container) reports the mismatch explicitly instead,
+  since the container may well be reachable at its real port even though
+  the requested one is wrong.
 - `wait_for_ready`'s log line and error output already reference `$BZ_PORT`
   by variable, so no change is needed there beyond it now being resolved by
   the caller first.
@@ -238,7 +291,7 @@ REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 if [[ -z "${BZ_URL:-}" ]]; then
     SCRIPT_DIR="$REPO_ROOT/tests/functional"
     # shellcheck source=/dev/null
-    source "$SCRIPT_DIR/lib.sh"
+    source "$SCRIPT_DIR/container-env.sh"
     _rt=$(container_runtime) || {
         echo "ERROR: neither podman nor docker found in PATH" >&2
         exit 1
@@ -357,10 +410,16 @@ first.
    container still reports "does not exist" (unchanged path, not touched by
    this change) rather than erroring.
 6. `bugzilla_checkout_id()` (and by extension `bugzilla_container_name()`)
-   actually varies with `SCRIPT_DIR`: sourcing `lib.sh` with two different
-   fabricated `SCRIPT_DIR` values in the same shell yields two different
-   ids, and an unset `SCRIPT_DIR` makes `bugzilla_checkout_id()` fail
-   loudly rather than silently default. This is a narrow, automatable
+   actually varies with `SCRIPT_DIR`: sourcing `container-env.sh` with two
+   different fabricated `SCRIPT_DIR` values in the same shell yields two
+   different ids. Run this check under `set -u`
+   (e.g. `bash -c 'set -u; source tests/functional/container-env.sh;
+   bugzilla_checkout_id'` with `SCRIPT_DIR` unset) and assert a nonzero
+   exit — without `set -u` active, an unset `SCRIPT_DIR` resolves
+   `"$SCRIPT_DIR/../.."` to `/` silently instead of failing (verified:
+   reproduced this exact resolution), so the check must force the
+   precondition it is meant to test rather than rely on the ambient shell
+   options of whatever invokes it. This is a narrow, automatable
    check (no container needed) that catches a regression in the derivation
    logic itself — the class of bug this design's own review caught in the
    `${VAR:-$(cmd)}` masking case — without needing the manual two-checkout
