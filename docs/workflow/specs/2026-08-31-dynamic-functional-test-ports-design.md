@@ -92,6 +92,15 @@ Already defines `container_runtime()` and `bugzilla_container_name()`
 - Drops `DEFAULT_PORT` entirely (no per-version fixed port is defined
   anymore) but keeps `DEFAULT_TIMEOUT` per version unchanged — timeout
   tuning is unrelated to port assignment.
+- Normalizes `BZR_FUNC_PORT="${BZR_FUNC_PORT:-}"` once, alongside the
+  existing `CONTAINER_NAME`/`IMAGE_NAME` normalization near the top of the
+  script. The script runs under `set -euo pipefail` (unchanged), and every
+  later bare `"$BZR_FUNC_PORT"` reference — in `resolve_bz_port` and in
+  `cmd_start`'s new-container branch below — depends on this single
+  `:-`-guarded assignment having already run; without it, referencing an
+  unset `$BZR_FUNC_PORT` aborts the whole script with bash's
+  `unbound variable` error on the default (no-override) path, which is
+  acceptance criterion #1's exact scenario.
 - `BZ_PORT` becomes empty by default and is resolved to a concrete value
   only once the container is confirmed to exist, via a new
   `resolve_bz_port` helper (defined in `setup-bugzilla.sh`, not `lib.sh`,
@@ -124,9 +133,14 @@ Already defines `container_runtime()` and `bugzilla_container_name()`
   `wait_for_ready` (replacing the removed fixed `BZ_PORT`); this is the
   branch where the mismatch check above actually fires.
 - `cmd_start`'s "start a new container" branch publishes with
-  `-p "${BZR_FUNC_PORT}:80"` when `BZR_FUNC_PORT` is set, else bare `-p 80`;
-  immediately after `run -d` succeeds, calls the same `resolve_bz_port` (the
-  container now exists and has a port assigned, running or not) before
+  `-p "${BZR_FUNC_PORT}:80"` when `BZR_FUNC_PORT` is set, else bare `-p 80`
+  (safe under `set -u` because of the top-level normalization above); its
+  pre-run `log "Starting container ${CONTAINER_NAME} on port ${BZ_PORT}..."`
+  line drops the port mention (`BZ_PORT` is still unresolved at that point)
+  — `log "Starting container ${CONTAINER_NAME}..."` — since the actual port
+  is only known, and logged, after `resolve_bz_port` runs next: immediately
+  after `run -d` succeeds, calls the same `resolve_bz_port` (the container
+  now exists and has a port assigned, running or not) before
   `wait_for_ready`.
 - `cmd_status` calls `resolve_bz_port` (ignoring a failure — a stopped or
   never-started container has no port to report) before the existing
