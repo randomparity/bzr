@@ -105,7 +105,8 @@ pub mod fuzz {
              api_key = \"dummy\"\n",
         )
         .expect("static fuzz config is always valid");
-        let _ = crate::commands::runtime::input::url_parser::parse_bugzilla_url(data, &config);
+        let _ =
+            crate::commands::runtime::input::url_parser::parse_bugzilla_url(data, &config, None);
     }
 
     /// Drive XML-RPC response parsing on arbitrary strings.
