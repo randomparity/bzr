@@ -70,9 +70,11 @@ line and the text after its last `:`, which is correct on both.
 
 `container_runtime()` and `bugzilla_container_name()` already exist in
 `tests/functional/lib.sh`, sourced by `run-tests.sh`; `setup-bugzilla.sh`
-duplicated equivalent logic inline. `setup-bugzilla.sh` now sources
-`lib.sh` and uses the shared functions (extended with the checkout id and a
-new `bugzilla_container_port()`) instead of keeping its own copy.
+currently duplicates equivalent logic inline instead of sourcing `lib.sh`.
+This decision has `setup-bugzilla.sh` source `lib.sh` and use the shared
+functions — extended with the checkout id and a new
+`bugzilla_container_port()` — instead of keeping its own copy; that change
+lands in the same PR as this record, not before it.
 
 ## Consequences
 
@@ -116,9 +118,10 @@ new `bugzilla_container_port()`) instead of keeping its own copy.
   decision accepts that latent, low-probability risk rather than guarding
   against it, for the same reason the ceiling case is accepted above.
 - `AGENTS.md`'s fixed-port caution note (quoted in Context) describes
-  behavior this decision removes. It is updated to state the new default —
-  concurrent checkouts no longer need manual port/name coordination — so the
-  note stops being a stale caveat once this ships.
+  behavior this decision removes. It is updated, in the same PR as this
+  record, to state the new default — concurrent checkouts no longer need
+  manual port/name coordination — so the note does not ship as a stale
+  caveat.
 - A container left running or stopped by a checkout that is later deleted
   (worktree removed, clone `rm -rf`'d) is no longer discoverable by any other
   checkout, because its name is a function of a path that no longer exists.
