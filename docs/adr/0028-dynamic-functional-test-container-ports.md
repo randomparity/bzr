@@ -38,10 +38,14 @@ concern, not verified here.
 
 Give the container a name unique to the checkout it runs from, unless
 `BZR_FUNC_CONTAINER` overrides it: `bzr-func-test-<version>-<checkout-id>`,
-where `<checkout-id>` is `cksum` of the absolute path
-`tests/functional/../..` resolves to for the running script. `cksum` is
-POSIX and already present everywhere this suite runs; it needs no new
-dependency. The id is keyed on the checkout's filesystem path, not on git
+where `<checkout-id>` is the checksum field of `cksum` of the absolute path
+`tests/functional/../..` resolves to for the running script — `cksum`
+prints two space-separated fields (checksum, byte count; verified:
+`printf '%s' "/home/dave/src/bzr" | cksum` → `967091103 18`), and only the
+first is used (`cksum <<<"$path" | cut -d' ' -f1`), so the derived name
+never contains the embedded space or second field. `cksum` is POSIX and
+already present everywhere this suite runs; it needs no new dependency. The
+id is keyed on the checkout's filesystem path, not on git
 worktree metadata (`git rev-parse --git-dir`) or the branch name, so it
 applies identically to a linked worktree, a second plain clone, or any other
 means of having two checkouts on disk at once — the scenario issue #606
@@ -112,9 +116,14 @@ new `bugzilla_container_port()`) instead of keeping its own copy.
 
 - **Probe a free port with a throwaway socket bind (bind to port 0, read it,
   close it, then run the container on that port).** judgment: leaves a
-  TOCTOU window between the probe and the container actually claiming the
-  port; the runtime's own `-p 80` allocation does both atomically and is no
-  more code.
+  TOCTOU window in this script's own logic between the probe and the
+  container actually claiming the port; the runtime's own `-p 80` allocation
+  has no separate probe-then-claim step for another process to win a race
+  against here, and is no more code. (Whether the runtime's own internal
+  allocation is atomic against a concurrent unrelated bind is not itself
+  verified — see the Decision section — so this rejection rests on the
+  narrower, verified property: no probe step exists in this script to race
+  against, not on runtime-internal atomicity.)
 - **Coordinate the chosen port through a state file** (e.g. under the
   checkout's `.git` directory), written by `setup-bugzilla.sh` and read by
   `run-tests.sh`. judgment: adds a stateful file with its own staleness and
@@ -125,9 +134,11 @@ new `bugzilla_container_port()`) instead of keeping its own copy.
   path.** judgment: two checkouts on the same branch (two plain clones both
   checked out to the same branch — an ordinary occurrence; a linked
   `git worktree add` to a branch already checked out elsewhere is refused by
-  git without `--force`, so that variant is not itself an ordinary trigger)
-  would still collide; the path is what actually distinguishes concurrent
-  checkouts.
+  git without `--force` — verified: `git worktree add <path> <branch>`
+  against a branch already checked out in this repo fails with `fatal:
+  '<branch>' is already used by worktree at '<path>'` — so that variant is
+  not itself an ordinary trigger) would still collide; the path is what
+  actually distinguishes concurrent checkouts.
 - **Do nothing; document that operators must set `BZR_FUNC_PORT`/
   `BZR_FUNC_CONTAINER` by hand per checkout.** judgment: this is the status
   quo the issue is asking to remove; it requires every concurrent invocation
@@ -136,9 +147,11 @@ new `bugzilla_container_port()`) instead of keeping its own copy.
 - **Let the TLS and Red Hat-shape proxies bind their own OS-assigned
   ephemeral port, the same way the container's primary port now does,
   instead of deriving `TLS_PORT`/`REDHAT_SHAPE_PORT` by fixed offset.**
-  judgment: verified: `tests/functional/tls-proxy.py` takes its listen port
-  as a required positional argument and binds it directly in `main()`, with
-  no path to report a self-chosen port back to the caller; `lib.sh`'s
+  judgment: verified: both `tests/functional/tls-proxy.py` and
+  `tests/functional/redhat-shape-proxy.py` take their listen port as a
+  required positional argument (`sys.argv[1]`) and bind it directly in
+  `main()`, with no path to report a self-chosen port back to the caller;
+  `lib.sh`'s
   `tls_fixture_start`/`redhat_shape_start` compute the port *before*
   launching the process and reuse that value to poll readiness. Making the
   proxy self-select would need both scripts to bind port 0 and synchronously
