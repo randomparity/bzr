@@ -153,12 +153,17 @@ functions out into their own file with no source-time side effects, so both
    (acceptance criterion 6's negative case).
 
 4. Confirm the positive case and the two-different-paths-yield-two-different-ids
-   property:
+   property. Use real directories — `cd "$SCRIPT_DIR/../.."` silently produces
+   the empty string (and thus the same fixed checksum) for a path that does not
+   exist, so an illustrative nonexistent path would defeat this check:
 
    ```sh
-   bash -c 'SCRIPT_DIR=/home/user/checkout-a/tests/functional; source tests/functional/container-env.sh; bugzilla_checkout_id'
+   a=$(mktemp -d); mkdir -p "$a/tests/functional"
+   b=$(mktemp -d); mkdir -p "$b/tests/functional"
+   bash -c "SCRIPT_DIR=$a/tests/functional; source tests/functional/container-env.sh; bugzilla_checkout_id"
    echo
-   bash -c 'SCRIPT_DIR=/home/user/checkout-b/tests/functional; source tests/functional/container-env.sh; bugzilla_checkout_id'
+   bash -c "SCRIPT_DIR=$b/tests/functional; source tests/functional/container-env.sh; bugzilla_checkout_id"
+   rm -rf "$a" "$b"
    ```
 
    Expected: two different numeric ids printed (acceptance criterion 6's
@@ -168,9 +173,11 @@ functions out into their own file with no source-time side effects, so both
 5. Confirm `bugzilla_container_name()` composes correctly:
 
    ```sh
-   bash -c 'SCRIPT_DIR=/tmp/checkout-c/tests/functional; source tests/functional/container-env.sh; bugzilla_container_name'
+   c=$(mktemp -d); mkdir -p "$c/tests/functional"
+   bash -c "SCRIPT_DIR=$c/tests/functional; source tests/functional/container-env.sh; bugzilla_container_name"
    echo
-   BZR_FUNC_CONTAINER=pinned-name bash -c 'SCRIPT_DIR=/tmp/checkout-c/tests/functional; source tests/functional/container-env.sh; bugzilla_container_name'
+   BZR_FUNC_CONTAINER=pinned-name bash -c "SCRIPT_DIR=$c/tests/functional; source tests/functional/container-env.sh; bugzilla_container_name"
+   rm -rf "$c"
    ```
 
    Expected: first prints `bzr-func-test-bz50-<id>`; second prints
@@ -351,7 +358,7 @@ by `cmd_start` and `cmd_status` later in this same file.
       ```bash
       BZR_FUNC_PORT="${BZR_FUNC_PORT:-}"
       CONTAINER_NAME=$(bugzilla_container_name) || {
-          err "could not derive the Bugzilla container name"
+          echo "ERROR: [$BZ_VERSION] could not derive the Bugzilla container name" >&2
           exit 1
       }
       IMAGE_NAME="${BZR_FUNC_IMAGE:-localhost/bzr-func-${BZ_VERSION}:latest}"
@@ -359,9 +366,14 @@ by `cmd_start` and `cmd_status` later in this same file.
       HEALTH_TIMEOUT="${BZR_FUNC_TIMEOUT:-$DEFAULT_TIMEOUT}"
       ```
 
-      (`err` is defined a few lines below in the `# ── Helpers ──` block;
-      forward reference within the same script is fine since it's only
-      called at invocation time, not at parse time.)
+      This call site sits at the script's top level, before `err()` is
+      defined in the `# ── Helpers ──` block below — unlike `resolve_bz_port`
+      and the other `err` call sites, which only run once the case-statement
+      dispatcher below invokes a function, by which point `err` has already
+      been defined by normal top-to-bottom execution. A bare `echo ... >&2`
+      here matches the pattern the file's own existing top-level failure
+      paths (container-runtime detection, the version case statement's `*)`
+      branch above) already use for the same reason.
 
    d. In the `# ── Helpers ──` section, immediately after the `wait_for_ready`
       function (current lines 57–76), add:
@@ -407,7 +419,7 @@ by `cmd_start` and `cmd_status` later in this same file.
       ```
 
    f. `cmd_start()`'s container-start block currently reads (current lines
-      119–123):
+      119–125):
 
       ```bash
           log "Starting container ${CONTAINER_NAME} on port ${BZ_PORT}..."
@@ -491,7 +503,7 @@ by `cmd_start` and `cmd_status` later in this same file.
           fi
       ```
 
-   h. Update the usage text (current lines 180–183):
+   h. Update the usage text (current lines 179–183):
 
       ```bash
       *)
