@@ -10,7 +10,8 @@
     },
     "sort_key": {
       "type": ["integer", "null"],
-      "minimum": 0
+      "minimum": -9223372036854775808,
+      "maximum": 18446744073709551615
     },
     "is_active": {
       "type": ["boolean", "null"]

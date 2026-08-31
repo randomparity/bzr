@@ -559,6 +559,50 @@ fn field_value_conforms() {
 }
 
 #[test]
+fn metadata_sort_key_schemas_are_nullable_bounded_integers() {
+    let field = schema_for("field-value");
+    let product = schema_for("product");
+    let nodes = [
+        field.pointer("/properties/sort_key").unwrap(),
+        product
+            .pointer("/properties/versions/items/properties/sort_key")
+            .unwrap(),
+        product
+            .pointer("/properties/milestones/items/properties/sort_key")
+            .unwrap(),
+    ];
+
+    let accepts = |node: &Value, value: &Value| {
+        let types = node.get("type").and_then(Value::as_array).unwrap();
+        let has_type = (value.is_null() && types.contains(&json!("null")))
+            || ((value.as_i64().is_some() || value.as_u64().is_some())
+                && types.contains(&json!("integer")));
+        let number = value
+            .as_i64()
+            .map(i128::from)
+            .or_else(|| value.as_u64().map(i128::from));
+        has_type
+            && number.is_none_or(|number| {
+                number >= i128::from(node["minimum"].as_i64().unwrap())
+                    && number <= i128::from(node["maximum"].as_u64().unwrap())
+            })
+    };
+
+    for node in nodes {
+        assert_eq!(node["type"], json!(["integer", "null"]));
+        assert_eq!(node["minimum"], json!(i64::MIN));
+        assert_eq!(node["maximum"], json!(u64::MAX));
+        for value in [Value::Null, json!(i64::MIN), json!(u64::MAX)] {
+            assert!(accepts(node, &value));
+        }
+
+        let mut wrong_type = node.clone();
+        wrong_type["type"] = json!(["string", "null"]);
+        assert!(!accepts(&wrong_type, &json!(-1)));
+    }
+}
+
+#[test]
 fn server_capabilities_conforms() {
     // Maximal: every nullable field (max_attachment_size, flag_types) populated so
     // the closed-schema bijection exercises all declared properties.

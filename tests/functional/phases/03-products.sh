@@ -40,7 +40,7 @@ test_begin "12b. product list --fields unknown exits 7"
 run_bzr product list --fields bogus_xyz
 if assert_exit_code 7; then test_pass; fi
 
-test_begin "12c. product list accepts string product IDs (kernel.org wire shape)"
+test_begin "12c. production-shaped product and field metadata"
 if redhat_shape_start "$BZ_PORT"; then
     trap 'cleanup; redhat_shape_stop' EXIT
     _PP_PROXY_URL="http://127.0.0.1:${REDHAT_SHAPE_PORT}"
@@ -56,6 +56,34 @@ if redhat_shape_start "$BZ_PORT"; then
     if [[ $BZR_EXIT -ne 0 ]] || ! jq -e 'length > 0' "$BZR_STDOUT" >/dev/null; then
         _PP_OK=0
     fi
+    run_bzr_raw --json --server-url "$_PP_PROXY_URL" field list status
+    if [[ $BZR_EXIT -ne 0 ]] ||
+        ! jq -e 'any(.[]; .sort_key != null and .sort_key < 0)' \
+            "$BZR_STDOUT" >/dev/null; then
+        _PP_OK=0
+    fi
+    run_bzr_raw --json --server-url "$_PP_PROXY_URL" product list --type accessible
+    if [[ $BZR_EXIT -ne 0 ]] ||
+        ! jq -e 'any(.[]; any((.versions // [])[]; .sort_key != null and .sort_key < 0) or any((.milestones // [])[]; .sort_key != null and .sort_key < 0))' \
+            "$BZR_STDOUT" >/dev/null; then
+        _PP_OK=0
+    fi
+    _PP_FIELD_COUNT=$(awk \
+        '/metadata-sort-keys shaped route=field count=[1-9][0-9]*/ { count++ } END { print count + 0 }' \
+        "$REDHAT_SHAPE_LOG")
+    _PP_PRODUCT_COUNT=$(awk \
+        '/metadata-sort-keys shaped route=product count=[1-9][0-9]*/ { count++ } END { print count + 0 }' \
+        "$REDHAT_SHAPE_LOG")
+    if [[ $_PP_FIELD_COUNT -lt 1 ]] || [[ $_PP_PRODUCT_COUNT -lt 1 ]]; then
+        _PP_OK=0
+    fi
+    run_bzr_raw --json --server-url "$_PP_PROXY_URL" server capabilities
+    _PP_FIELD_COUNT_AFTER=$(awk \
+        '/metadata-sort-keys shaped route=field count=[1-9][0-9]*/ { count++ } END { print count + 0 }' \
+        "$REDHAT_SHAPE_LOG")
+    if [[ $BZR_EXIT -ne 0 ]] || [[ $_PP_FIELD_COUNT_AFTER -le $_PP_FIELD_COUNT ]]; then
+        _PP_OK=0
+    fi
     redhat_shape_stop || _PP_OK=0
     trap cleanup EXIT
     if [[ $_PP_OK -eq 1 ]]; then test_pass; else
@@ -64,7 +92,7 @@ if redhat_shape_start "$BZ_PORT"; then
 else
     test_fail "Red Hat response-shape proxy did not become ready: $REDHAT_SHAPE_LOG"
 fi
-unset _PP_PROXY_URL _PP_OK
+unset _PP_PROXY_URL _PP_OK _PP_FIELD_COUNT _PP_PRODUCT_COUNT _PP_FIELD_COUNT_AFTER
 
 test_begin "13. product update FuncTestProd"
 run_bzr product update FuncTestProd --description "Updated desc"
