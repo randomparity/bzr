@@ -13,8 +13,10 @@ and the functional scenario needed to reproduce the production search policy. It
 the native `bzr bug list` contract or probe production hosts.
 
 The collector continues to preflight every declared server exactly once before any resource read.
-Each preflight is bounded to one row and contains a term derived from that server's canonical
-declared scope. A server is recorded as reachable only after a valid structured success response.
+Each preflight is bounded to one row and derived from that server's canonical declared scope. An
+accepted custom-search scope with only empty criteria remains effectively termless; it exercises
+the structured failure path rather than proving reachability. A server is recorded as reachable
+only after a valid structured success response.
 Code 102 is classified as `inaccessible` only for a server with that proof. Any probe failure is
 command-fatal; a valid API code 1000 envelope is reported as `api`, never `malformed-output`.
 
@@ -44,8 +46,8 @@ accidentally avoid this case.
 The existing command runner parses versioned success and error envelopes. Probe success validates
 the returned ID page and marks the server reachable. Probe failure uses the existing fatal
 limitation mapping, preserving `api_code` validation before reducing shareable output to the safe
-error type. There is no fallback from code 1000 because every generated probe has a term; receiving
-1000 is evidence of another server incompatibility and remains visible as a structured API class.
+error type. There is no fallback from code 1000: the collector preserves the server's structured
+API failure, including when an accepted custom-search scope itself contains only empty criteria.
 
 ## Functional production-fidelity scenario
 
@@ -97,7 +99,7 @@ search policy remains future test-harness work.
 
 - Unit tests cover deterministic probe argv for every scope kind, global-minimum selection across
   permuted same-kind scopes, and restriction-only servers.
-- Collector tests prove probes are once-per-server, term-qualified, and precede resource reads.
+- Collector tests prove probes are once-per-server, scope-qualified, and precede resource reads.
 - A code-1000 probe fixture proves the failure remains `collection-api` / `api`.
 - Existing code-102 and rejected-credential tests remain green; a mixed inaccessible/public scope
   proves a search for the selected inaccessible ID can establish reachability before detail reads.

@@ -14,13 +14,15 @@ classified as an inaccessible bug instead of a command-fatal authentication ambi
 
 ## Decision
 
-Keep one preflight per declared server, before resource collection, but derive its search term from
-that server's canonical input scopes. Bug-ID and alias scopes become filtered `bug list` probes;
+Keep one preflight per declared server, before resource collection, but derive its search shape
+from that server's canonical input scopes. Bug-ID and alias scopes become filtered `bug list` probes;
 saved-query, custom-search, product, milestone, and version scopes use the same bounded command
 shape as their normal enumeration. The search operation is independent from the later single-bug
 detail operation: an invisible bug is omitted from search results, while a detail denial can return
 code 102. A code 102 response to the search itself remains command-fatal and never proves its own
-classification. A restriction is eligible only when no ordinary scope names that server.
+classification. An accepted custom-search with only empty criteria remains effectively termless
+and may return structured code 1000. A restriction is eligible only when no ordinary scope names
+that server.
 
 Selection is total and input-order independent. All bug IDs across a server's scopes are
 aggregated and the lowest is preferred. Otherwise candidates are ordered by scope-kind rank and
