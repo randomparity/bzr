@@ -6,8 +6,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# shellcheck source=tests/functional/lib.sh
-source "$SCRIPT_DIR/lib.sh"
+# shellcheck source=tests/functional/container-env.sh
+source "$SCRIPT_DIR/container-env.sh"
 
 # ── Container runtime detection ─────────────────────────────────────
 if command -v podman &>/dev/null; then

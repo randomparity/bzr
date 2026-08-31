@@ -71,9 +71,15 @@ line and the text after its last `:`, which is correct on both.
 `container_runtime()` and `bugzilla_container_name()` already exist in
 `tests/functional/lib.sh`, sourced by `run-tests.sh`; `setup-bugzilla.sh`
 currently duplicates equivalent logic inline instead of sourcing `lib.sh`.
-This decision has `setup-bugzilla.sh` source `lib.sh` and use the shared
-functions — extended with the checkout id and a new
-`bugzilla_container_port()` — instead of keeping its own copy; that change
+This decision extracts the container-lookup helpers — plus the checkout id
+and a new `bugzilla_container_port()` — into `tests/functional/container-env.sh`,
+a file with no source-time side effects (no `mktemp`, no `trap`), and has
+`setup-bugzilla.sh` source that file directly instead of keeping its own
+copy, for the same reason `tools/record-demo.sh` does: pulling in all of
+`lib.sh` would also install its `mktemp`/`trap` cleanup, which a container-
+lookup caller does not want. `run-tests.sh` still sources the whole of
+`lib.sh`, since it uses other helpers `lib.sh` defines; `lib.sh` itself
+sources `container-env.sh` for the three shared functions. That change
 lands in the same PR as this record, not before it.
 
 ## Consequences
@@ -87,9 +93,10 @@ lands in the same PR as this record, not before it.
   debugger, or to point a long-running local Bugzilla at a known address).
 - `cmd_status` and `wait_for_ready` in `setup-bugzilla.sh`, and
   `run-tests.sh`'s Bugzilla URL construction, must resolve the port by
-  querying the runtime instead of reading a compile-time constant. This
-  slightly widens `setup-bugzilla.sh`'s dependency on `lib.sh`, which was
-  previously only sourced by the test runner.
+  querying the runtime instead of reading a compile-time constant.
+  `setup-bugzilla.sh` picks up this and the other shared lookups from the new
+  `container-env.sh`, not from `lib.sh`, so its dependency surface stays as
+  narrow as it was before this change.
 - Two invocations from the exact same checkout directory, run at the same
   time, still collide (same checkout id → same default container name).
   That failure mode is unrelated to what issue #606 asks for and is not
