@@ -18,11 +18,13 @@ second report engine, or active artifact composition.
 Keep dependency collection, analysis, and the `bzr-dependency-analysis/v1` schema unchanged.
 Dependency analysis owns a report-template reference that maps that schema to stakeholder sections
 and graph semantics. It reuses the sibling project-manager artifact-safety reference for escaping,
-validated bug links, and self-containment. Before HTML composition, the skill must resolve and read
-the expected sibling reference; an absent, unreadable, or incompatible reference makes safe HTML
-unavailable. The active HTML-capable artifact tool owns page creation and must open or render the
-exact page for visual verification. When that capability or safety prerequisite is absent or
-cannot verify the result, the skill renders Markdown and states the limitation.
+validated bug links, and self-containment. That reference begins with the exact compatibility
+marker `Artifact safety contract: bzr-project-manager-reporting/v1`. Before HTML composition, the
+skill must resolve the expected sibling reference, require that marker as its first line, and read
+the file; an absent, unreadable, or mismatched reference makes safe HTML unavailable. The active
+HTML-capable artifact tool owns page creation and must open or render the exact page for visual
+verification. When that capability or safety prerequisite is absent or cannot verify the result,
+the skill renders Markdown and states the limitation.
 
 Ship a deterministic analysis/HTML fixture pair and contract validator for hostile text, unknown
 boundaries, truncation, provenance, graph direction, and forbidden schedule claims. The fixture is
@@ -36,7 +38,8 @@ available.
 - Dependency-specific semantics live beside dependency analysis, while shared artifact safety has
   one owner.
 - The canonical payload contains both skills, but a partial or version-skewed installation fails
-  closed to Markdown rather than improvising artifact-safety rules.
+  closed to Markdown when the exact safety-contract marker cannot be verified, rather than
+  improvising artifact-safety rules.
 - A safe page requires both automated contract checks and visual wide/narrow inspection; successful
   file creation alone is insufficient.
 - Markdown remains the deterministic portable output and fallback.
@@ -54,7 +57,8 @@ available.
   capability's layout and verification responsibilities.
 - **Copy the project-manager safety rules into dependency analysis.** judgment: duplicated security
   guidance can drift; the canonical payload already includes the sibling skill and reference, and
-  the HTML route fails closed when the installed reference is unavailable or incompatible.
+  the HTML route fails closed when the installed reference is unavailable or has a mismatched
+  contract marker.
 - **Put the dependency template and validator in project-manager reporting.** judgment: artifact
   capability selection and generic sink safety belong to project-manager reporting, while the
   meaning of components, edge direction, cycles, boundary nodes, bottlenecks, and no-schedule
