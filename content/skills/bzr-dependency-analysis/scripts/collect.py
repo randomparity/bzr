@@ -359,8 +359,8 @@ class CommandRunner:
         self.executable = executable
         self.preflighted_servers = set()
 
-    def preflight(self, server):
-        data, resource_error = self.run_json(preflight_argv(server))
+    def preflight(self, server, argv):
+        data, resource_error = self.run_json(argv)
         if resource_error is not None:
             raise FatalCollection("collection-unclassified", resource_error)
         validate_id_page(data)
@@ -463,7 +463,7 @@ class Collector:
     def collect(self):
         try:
             for server in self.policy["servers"]:
-                self.runner.preflight(server)
+                self.runner.preflight(server, preflight_argv(self.policy, server))
             if not self.collect_restriction():
                 return self.document(), 0
             candidates = self.enumerate_scopes()
@@ -942,24 +942,44 @@ def view_argv(server, requested, extra_field):
     ]
 
 
-def preflight_argv(server):
-    return [
-        "--server",
-        server,
-        "--json",
-        "bug",
-        "list",
-        "--limit",
-        "1",
-        "--offset",
-        "0",
-        "--fields",
-        "id",
-        "--sort",
-        "bug_id",
-        "--order",
-        "asc",
+def preflight_argv(policy, server):
+    scopes = [scope for scope in policy["scopes"] if scope["server"] == server]
+    bug_ids = [
+        bug_id
+        for scope in scopes
+        if scope["kind"] == "bug-ids"
+        for bug_id in scope["ids"]
     ]
+    if bug_ids:
+        command = ["bug", "list", "--id", str(min(bug_ids))]
+    else:
+        if not scopes:
+            scopes = [policy["restriction"]]
+        scope = min(scopes, key=preflight_scope_key)
+        kind = scope["kind"]
+        if kind == "alias":
+            command = ["bug", "list", "--alias", scope["alias"]]
+        elif kind == "saved-query":
+            command = ["query", "run", scope["name"]]
+        elif kind == "custom-search":
+            command = ["bug", "search", "--from-url", scope["url"]]
+        else:
+            flag = {
+                "product": "--product",
+                "milestone": "--target-milestone",
+                "version": "--version",
+            }[kind]
+            command = ["bug", "list", flag, scope["value"]]
+    return [
+        "--server", server, "--json", *command,
+        "--limit", "1", "--offset", "0", "--fields", "id",
+        "--sort", "bug_id", "--order", "asc",
+    ]
+
+
+def preflight_scope_key(scope):
+    canonical = json.dumps(scope, sort_keys=True, separators=(",", ":"))
+    return SCOPE_RANK[scope["kind"]], canonical
 
 
 def list_scope_argv(scope, limit, offset):

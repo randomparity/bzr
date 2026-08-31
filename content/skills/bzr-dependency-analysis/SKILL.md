@@ -31,8 +31,10 @@ selected edge may remain. A refresh is a new collection; never combine data from
 into one analysis.
 
 The collector invokes only released structured read commands: `bug view`, `bug list`, `bug search`,
-and `query run`. It preflights each declared server once with a released, read-only one-row
-`bug list` before resource reads, then uses deterministic ascending bug-ID scope enumeration and
+and `query run`. It preflights each declared server once with a released, read-only one-row search
+derived from that server's canonical declared scope before resource reads. Explicit bug IDs use
+the lowest server-qualified ID; other scope kinds reuse their bounded enumeration command. It then
+uses deterministic ascending bug-ID scope enumeration and
 hard depth and node caps plus a post-parse aggregate relationship cap.
 No direct `bzr` command composition is needed outside the collector.
 Each child command inherits the caller's environment for configuration and credential lookup, but
@@ -121,7 +123,8 @@ instant once.
 
 The output is `bzr-dependency-collection/v1`. A structured `not_found` error for a Bugzilla bug and
 Bugzilla codes 100/101 remain visible as sanitized `not_found` nodes. Code 102 is classified as a
-sanitized `inaccessible` node only after that server's preflight succeeded. A failed preflight or
+sanitized `inaccessible` node only after that server's scope-qualified preflight succeeded. A
+failed preflight or
 an ambiguous code 102 without a successful preflight is command-fatal. Unknown and boundary nodes
 remain visible with stable identifiers and classes, never raw server messages. Any other API,
 authentication, TLS, HTTP, connection, transport, malformed output, or schema failure stops

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bugzilla proxy that reproduces Red Hat bug response field shapes."""
+"""Bugzilla proxy that reproduces observed production response and policy variants."""
 
 import http.client
 import http.server
@@ -10,6 +10,7 @@ import sys
 import threading
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
 
 _HOP_BY_HOP = frozenset(
@@ -17,6 +18,20 @@ _HOP_BY_HOP = frozenset(
      "te", "trailers", "transfer-encoding", "upgrade", "host", "content-length"}
 )
 _MAX_REQUEST_BODY = 1024 * 1024
+
+
+def is_termless_bug_search(path):
+    """Return whether a REST bug search has no Bugzilla search criterion."""
+    parsed = urllib.parse.urlsplit(path)
+    if parsed.path != "/rest/bug":
+        return False
+    ignored = {
+        "bugzilla_api_key", "include_fields", "exclude_fields", "limit", "offset", "order"
+    }
+    return not any(
+        name.casefold() not in ignored and value
+        for name, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+    )
 
 
 def shape_bug_response(data):
@@ -61,6 +76,17 @@ def make_handler(backend_port):
                 self.send_response(204)
                 self.send_header("Content-Length", "0")
                 self.end_headers()
+                return
+
+            if is_termless_bug_search(self.path):
+                body = json.dumps({"code": 1000, "error": True,
+                                   "message": "You may not search without any search terms."},
+                                  separators=(",", ":")).encode()
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
                 return
 
             self._forward("GET")
@@ -129,6 +155,30 @@ def make_handler(backend_port):
 
 
 class ShapeTests(unittest.TestCase):
+    def test_identifies_termless_bug_search_without_matching_scoped_or_detail_reads(self):
+        self.assertTrue(is_termless_bug_search("/rest/bug?limit=1&include_fields=id"))
+        self.assertTrue(is_termless_bug_search("/rest/bug?product=&limit=1"))
+        self.assertTrue(is_termless_bug_search(
+            "/rest/bug?Bugzilla_api_key=secret&limit=1"
+        ))
+        self.assertFalse(is_termless_bug_search("/rest/bug?id=123&limit=1"))
+        self.assertFalse(is_termless_bug_search("/rest/bug/123?include_fields=id"))
+
+    def test_termless_search_returns_production_shaped_code_1000(self):
+        server, thread = self._start_server(1)
+        try:
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(
+                    f"http://127.0.0.1:{server.server_port}/rest/bug?limit=1",
+                    timeout=2,
+                )
+            self.assertEqual(error.exception.code, 400)
+            self.assertEqual(json.load(error.exception)["code"], 1000)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
     def test_shapes_scalar_empty_and_multi_values(self):
         shaped = json.loads(shape_bug_response(json.dumps({"bugs": [
             {"component": "Backend", "version": "rawhide"},

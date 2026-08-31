@@ -89,8 +89,36 @@ def list_argv(server, limit, offset, *scope_args):
     ]
 
 
-def preflight_argv(server):
-    return list_argv(server, 1, 0, "bug", "list")
+def preflight_argv(input_policy, server):
+    scopes = [scope for scope in input_policy["scopes"] if scope["server"] == server]
+    bug_ids = [bug_id for scope in scopes if scope["kind"] == "bug-ids" for bug_id in scope["ids"]]
+    if bug_ids:
+        return list_argv(server, 1, 0, "bug", "list", "--id", str(min(bug_ids)))
+    if not scopes:
+        scopes = [input_policy["restriction"]]
+    rank = {
+        "alias": 1,
+        "saved-query": 2,
+        "custom-search": 3,
+        "product": 4,
+        "milestone": 5,
+        "version": 6,
+    }
+    scope = min(
+        scopes,
+        key=lambda item: (rank[item["kind"]], json.dumps(item, sort_keys=True, separators=(",", ":"))),
+    )
+    kind = scope["kind"]
+    if kind == "alias":
+        command = ["bug", "list", "--alias", scope["alias"]]
+    elif kind == "saved-query":
+        command = ["query", "run", scope["name"]]
+    elif kind == "custom-search":
+        command = ["bug", "search", "--from-url", scope["url"]]
+    else:
+        flag = {"product": "--product", "milestone": "--target-milestone", "version": "--version"}[kind]
+        command = ["bug", "list", flag, scope["value"]]
+    return list_argv(server, 1, 0, *command)
 
 
 def ok(argv, data):
@@ -154,7 +182,16 @@ class CollectorTestCase(unittest.TestCase):
             preflights = []
             if auto_preflight and isinstance(input_policy, dict):
                 for server in sorted(input_policy.get("servers", [])):
-                    preflights.append(ok(preflight_argv(server), []))
+                    has_input = any(
+                        scope.get("server") == server
+                        for scope in input_policy.get("scopes", [])
+                        if isinstance(scope, dict)
+                    ) or (
+                        isinstance(input_policy.get("restriction"), dict)
+                        and input_policy["restriction"].get("server") == server
+                    )
+                    if has_input:
+                        preflights.append(ok(preflight_argv(input_policy, server), []))
             scenario_path.write_text(
                 json.dumps({"responses": [*preflights, *responses]}),
                 encoding="utf-8",
@@ -175,10 +212,21 @@ class CollectorTestCase(unittest.TestCase):
                 log = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
             self.assert_read_only_commands(log)
             if not include_preflight_log:
-                preflight_commands = {
-                    tuple(preflight_argv(server))
-                    for server in input_policy.get("servers", [])
-                } if isinstance(input_policy, dict) else set()
+                preflight_commands = set()
+                if isinstance(input_policy, dict):
+                    for server in input_policy.get("servers", []):
+                        has_scope = any(
+                            scope.get("server") == server
+                            for scope in input_policy.get("scopes", [])
+                            if isinstance(scope, dict)
+                        )
+                        restriction = input_policy.get("restriction")
+                        has_restriction = (
+                            isinstance(restriction, dict)
+                            and restriction.get("server") == server
+                        )
+                        if has_scope or has_restriction:
+                            preflight_commands.add(tuple(preflight_argv(input_policy, server)))
                 log = [argv for argv in log if tuple(argv) not in preflight_commands]
             return result, output, log
 
@@ -369,20 +417,61 @@ class CollectorTestCase(unittest.TestCase):
         self.assertNotIn(b"private server detail", output)
 
     def test_credentials_are_preflighted_once_per_server_before_resource_access(self):
+        input_policy = policy([bug_scope("zeta", 2), bug_scope("alpha", 1)])
         responses = [
             ok(view_argv("alpha", 1), bug(1)),
             ok(view_argv("zeta", 2), bug(2)),
         ]
         result, output, log = self.run_collector(
-            policy([bug_scope("zeta", 2), bug_scope("alpha", 1)]),
+            input_policy,
             responses,
             include_preflight_log=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIsNotNone(output)
-        self.assertEqual(log[:2], [preflight_argv("alpha"), preflight_argv("zeta")])
-        self.assertEqual(log.count(preflight_argv("alpha")), 1)
-        self.assertEqual(log.count(preflight_argv("zeta")), 1)
+        expected = [preflight_argv(input_policy, "alpha"), preflight_argv(input_policy, "zeta")]
+        self.assertEqual(log[:2], expected)
+        self.assertEqual(log.count(expected[0]), 1)
+        self.assertEqual(log.count(expected[1]), 1)
+
+    def test_preflight_selection_is_scope_qualified_total_and_input_order_independent(self):
+        scopes = [
+            {"kind": "product", "server": "primary", "value": "Widget"},
+            bug_scope("primary", 9, 7),
+            bug_scope("primary", 5, 3),
+        ]
+        expected = list_argv("primary", 1, 0, "bug", "list", "--id", "3")
+        for ordered in (scopes, list(reversed(scopes))):
+            with self.subTest(ordered=ordered):
+                input_policy = policy(ordered)
+                self.assertEqual(COLLECTOR.preflight_argv(input_policy, "primary"), expected)
+
+    def test_preflight_supports_every_non_numeric_scope_and_restriction_only_server(self):
+        cases = [
+            (alias_scope("primary", "release/next"), ["bug", "list", "--alias", "release/next"]),
+            ({"kind": "saved-query", "server": "primary", "name": "delivery"},
+             ["query", "run", "delivery"]),
+            ({"kind": "custom-search", "server": "primary",
+              "url": "https://bugs.invalid/buglist.cgi?product=Widget",
+              "parameter_names": ["product"]},
+             ["bug", "search", "--from-url", "https://bugs.invalid/buglist.cgi?product=Widget"]),
+            ({"kind": "product", "server": "primary", "value": "Widget"},
+             ["bug", "list", "--product", "Widget"]),
+            ({"kind": "milestone", "server": "primary", "value": "M1"},
+             ["bug", "list", "--target-milestone", "M1"]),
+            ({"kind": "version", "server": "primary", "value": "1.0"},
+             ["bug", "list", "--version", "1.0"]),
+        ]
+        for scope, command in cases:
+            with self.subTest(kind=scope["kind"]):
+                input_policy = policy([scope])
+                expected = list_argv("primary", 1, 0, *command)
+                self.assertEqual(COLLECTOR.preflight_argv(input_policy, "primary"), expected)
+
+        restriction = {"kind": "product", "server": "restricted", "value": "Widget"}
+        input_policy = policy([bug_scope("primary", 1)], restriction=restriction)
+        expected = list_argv("restricted", 1, 0, "bug", "list", "--product", "Widget")
+        self.assertEqual(COLLECTOR.preflight_argv(input_policy, "restricted"), expected)
 
     def test_child_runner_disables_tracing_and_preserves_other_environment(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -435,14 +524,15 @@ class CollectorTestCase(unittest.TestCase):
         self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
 
     def test_failed_preflight_and_ambiguous_api_102_are_command_fatal(self):
+        input_policy = policy([bug_scope("primary", 1)])
         response = failed(
-            preflight_argv("primary"),
+            preflight_argv(input_policy, "primary"),
             "api",
             api_code=102,
             raw="invalid private credential",
         )
         result, output, log = self.run_collector(
-            policy([bug_scope("primary", 1)]),
+            input_policy,
             [response],
             auto_preflight=False,
             include_preflight_log=True,
@@ -451,8 +541,42 @@ class CollectorTestCase(unittest.TestCase):
         document = self.parse(output)
         self.assertEqual(document["limitations"], ["collection-api"])
         self.assertEqual(document["nodes"], [])
-        self.assertEqual(log, [preflight_argv("primary")])
+        self.assertEqual(log, [preflight_argv(input_policy, "primary")])
         self.assertNotIn(b"invalid private credential", output + result.stderr)
+
+    def test_api_1000_preflight_failure_retains_structured_api_classification(self):
+        input_policy = policy([bug_scope("primary", 1)])
+        probe = preflight_argv(input_policy, "primary")
+        result, output, log = self.run_collector(
+            input_policy,
+            [failed(probe, "api", api_code=1000)],
+            auto_preflight=False,
+            include_preflight_log=True,
+        )
+        self.assertEqual(result.returncode, 1)
+        document = self.parse(output)
+        self.assertEqual(document["limitations"], ["collection-api"])
+        self.assertEqual(result.stderr, b"collection failed: api\n")
+        self.assertEqual(log, [probe])
+
+    def test_selected_inaccessible_id_search_proves_reachability_for_detail_classification(self):
+        input_policy = policy([bug_scope("primary", 2, 1)])
+        responses = [
+            failed(view_argv("primary", 1), "api", api_code=102),
+            ok(view_argv("primary", 2), bug(2)),
+        ]
+        result, output, log = self.run_collector(
+            input_policy,
+            responses,
+            include_preflight_log=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        document = self.parse(output)
+        self.assertEqual(
+            {node["id"]: node["error_type"] for node in document["nodes"]},
+            {1: "inaccessible", 2: None},
+        )
+        self.assertEqual(log[0], preflight_argv(input_policy, "primary"))
 
     def test_structured_bug_not_found_is_resource_scoped_after_preflight(self):
         response = failed(
