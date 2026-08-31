@@ -34,7 +34,10 @@ running container itself as the shared source of truth:
   `setup-bugzilla.sh`, `run-tests.sh`, and `keyring-test.sh` use
   `set -euo pipefail`; `run-all-versions.sh` uses `set -uo pipefail` (no
   `-e` — it handles each version's failure explicitly via if/exit-code
-  checks) and is unchanged by this design. All four use `[[ ]]`.
+  checks) and is unchanged by this design. `setup-bugzilla.sh`,
+  `keyring-test.sh`, `lib.sh`, and `run-tests.sh`'s sourced phase files use
+  `[[ ]]`; `run-tests.sh`'s own top-level file and `run-all-versions.sh`
+  use only `if ! cmd; then ... fi` exit-code checks.
 - No new external dependency. `cksum` (POSIX) and the container runtime's
   own `port` subcommand (already required for `container_exists`,
   `container_runtime` etc.) cover everything needed.
@@ -51,17 +54,36 @@ running container itself as the shared source of truth:
 Already defines `container_runtime()` and `bugzilla_container_name()`
 (used today only by `run_bugzilla_sql_file`). Extend it:
 
-- `bugzilla_container_name()` — change its fallback from
-  `bzr-func-test-${BZ_VERSION}` to
-  `bzr-func-test-${BZ_VERSION}-$(bugzilla_checkout_id)`. The
-  `BZR_FUNC_CONTAINER` override path is unchanged.
+- `bugzilla_container_name()` — change its fallback to compute the checkout
+  id in a separate statement first, not embedded inside the `${VAR:-...}`
+  default directly — a command substitution used only as a parameter
+  default does not propagate a failing/aborting inner command's status
+  through `set -e` the way a plain assignment does (verified: an inner
+  `bugzilla_checkout_id()` failure, e.g. from an unset `SCRIPT_DIR`, was
+  silently swallowed when embedded as `${VAR:-bzr-func-test-...-$(cmd)}`,
+  producing a garbage name instead of aborting):
+
+  ```bash
+  bugzilla_container_name() {
+      if [[ -n "${BZR_FUNC_CONTAINER:-}" ]]; then
+          printf '%s' "$BZR_FUNC_CONTAINER"
+          return 0
+      fi
+      local id
+      id=$(bugzilla_checkout_id) || return 1
+      printf '%s' "bzr-func-test-${BZ_VERSION}-${id}"
+      return 0
+  }
+  ```
+
 - New `bugzilla_checkout_id()` — prints the first field of `cksum` of the
   absolute path `"$SCRIPT_DIR/../.."` resolves to, via
   `printf '%s' "$root" | cksum | cut -d' ' -f1` — not a bash here-string
   (`cksum <<<"$root"`), which appends a trailing newline `printf` does not
-  and so produces a different checksum. `SCRIPT_DIR` is already set by
-  every script that sources `lib.sh` (`tests/functional`'s own absolute
-  directory), so this needs no new input.
+  and so produces a different checksum. `SCRIPT_DIR` must be set by the
+  caller before sourcing `lib.sh` — `setup-bugzilla.sh` and `run-tests.sh`
+  already do this; `tools/record-demo.sh`'s new sourcing block below must
+  do it too, since it doesn't otherwise need `SCRIPT_DIR` for anything.
 - New `bugzilla_container_port <runtime> <container>` — prints the host
   port published for the container's `80/tcp`. Checks the *output*
   explicitly rather than trusting the runtime's exit status: podman exits 0
@@ -132,7 +154,7 @@ Already defines `container_runtime()` and `bugzilla_container_name()`
           err "${CONTAINER_NAME} is already running on port ${actual}," \
               "which does not match BZR_FUNC_PORT=${BZR_FUNC_PORT};" \
               "stop it first or unset BZR_FUNC_PORT"
-          return 1
+          return 2
       fi
       BZ_PORT="$actual"
       return 0
@@ -152,10 +174,15 @@ Already defines `container_runtime()` and `bugzilla_container_name()`
   after `run -d` succeeds, calls the same `resolve_bz_port` (the container
   now exists and has a port assigned, running or not) before
   `wait_for_ready`.
-- `cmd_status` calls `resolve_bz_port` (ignoring a failure — a stopped or
-  never-started container has no port to report) before the existing
-  `curl` reachability check; skip the `curl` check entirely (report "REST
-  API: not reachable") when `resolve_bz_port` fails.
+- `cmd_status` calls `resolve_bz_port` before the existing `curl`
+  reachability check and distinguishes its two failure exit codes rather
+  than treating both as "not reachable": exit `1` (no port mapping at all —
+  stopped or never started) skips the `curl` check and reports "REST API:
+  not reachable" as before; exit `2` (a `BZR_FUNC_PORT` mismatch against an
+  actually-running container) reports "REST API: unknown — BZR_FUNC_PORT
+  does not match the running container's actual port" instead, since the
+  container may well be reachable at its real port even though the
+  requested one is wrong.
 - `wait_for_ready`'s log line and error output already reference `$BZ_PORT`
   by variable, so no change is needed there beyond it now being resolved by
   the caller first.
@@ -209,13 +236,17 @@ covered by any automated test. Fixed by deriving the default the same way
 ```bash
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 if [[ -z "${BZ_URL:-}" ]]; then
+    SCRIPT_DIR="$REPO_ROOT/tests/functional"
     # shellcheck source=/dev/null
-    source "$REPO_ROOT/tests/functional/lib.sh"
+    source "$SCRIPT_DIR/lib.sh"
     _rt=$(container_runtime) || {
         echo "ERROR: neither podman nor docker found in PATH" >&2
         exit 1
     }
-    _name=$(bugzilla_container_name)
+    _name=$(bugzilla_container_name) || {
+        echo "ERROR: could not derive the Bugzilla container name" >&2
+        exit 1
+    }
     _port=$(bugzilla_container_port "$_rt" "$_name") || {
         echo "ERROR: could not determine Bugzilla container port for" \
             "'$_name'; run: make functional-start" >&2
@@ -229,6 +260,16 @@ replacing the current unconditional `BZ_URL=${BZ_URL:-http://127.0.0.1:8089}`
 line. An explicit `BZ_URL` (or the existing `BZR_FUNC_PORT`, indirectly, if
 an operator sets it before running `make functional-start`) still overrides
 this, unchanged from today's `${BZ_URL:-...}` pattern.
+
+This block replaces the current line 22, which sits before the script's
+`--drive`/`--drive-weekly-status`/`--drive-dependency-analysis`/
+`--drive-release-readiness`/`--drive-project-manager-reporting` dispatch
+checks (each launched by `asciinema` as a fresh subprocess). None of those
+driver branches reads `$BZ_URL`, so keeping this block ahead of them makes
+every driver invocation depend on a container lookup it doesn't need.
+Move the whole block to just after the dispatch checks (immediately before
+the block that actually uses `$BZ_URL`), so a driver subprocess launch
+never depends on it.
 
 ### `tests/functional/README.md`
 
@@ -309,6 +350,15 @@ Acceptance criteria, each independently checkable:
 5. `tests/functional/setup-bugzilla.sh status` against a stopped/removed
    container still reports "does not exist" (unchanged path, not touched by
    this change) rather than erroring.
+6. `bugzilla_checkout_id()` (and by extension `bugzilla_container_name()`)
+   actually varies with `SCRIPT_DIR`: sourcing `lib.sh` with two different
+   fabricated `SCRIPT_DIR` values in the same shell yields two different
+   ids, and an unset `SCRIPT_DIR` makes `bugzilla_checkout_id()` fail
+   loudly rather than silently default. This is a narrow, automatable
+   check (no container needed) that catches a regression in the derivation
+   logic itself — the class of bug this design's own review caught in the
+   `${VAR:-$(cmd)}` masking case — without needing the manual two-checkout
+   exercise in criterion 3 to be run on every change.
 
 No new automated phase script is added under `tests/functional/phases/`:
 those phases exercise `bzr` CLI behavior against a running server, and this
