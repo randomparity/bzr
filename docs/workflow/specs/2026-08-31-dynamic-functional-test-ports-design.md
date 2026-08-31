@@ -46,6 +46,27 @@ running container itself as the shared source of truth:
 
 ## Components
 
+### `tests/functional/versions/*/Containerfile` (header comment only)
+
+Each Containerfile's `# Run:` header comment documents the exact manual
+invocation this design removes, e.g. (`bz50`; `bz52`/`bz53` are the same
+pattern with their own version-specific name/port):
+
+```
+# Run:    podman run -d --name bzr-func-test-bz50 -p 8089:80 localhost/bzr-func-bz50:latest  (or docker)
+```
+
+Update it to point at the supported entry point instead of a fixed
+name/port a maintainer could otherwise copy-paste and recreate the
+multi-checkout collision issue #606 removes:
+
+```
+# Run:    tests/functional/setup-bugzilla.sh start   (BZR_BZ_VERSION=bz50 if run outside the make target)
+```
+
+No other content in these files changes (`EXPOSE 80` and everything else
+is untouched, per Global Constraints above).
+
 ### `tests/functional/container-env.sh` (new: side-effect-free shared functions)
 
 `container_runtime()` and `bugzilla_container_name()` currently live in
