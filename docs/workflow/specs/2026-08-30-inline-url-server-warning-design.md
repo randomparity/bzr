@@ -120,9 +120,11 @@ URL authoritative for routing and does not change TLS or credential handling.
   asserts the mismatch warning, proves only B receives the REST request, and saves A's configured
   name in the query. This distinguishes persistence metadata from the active request destination.
 - A functional test passes both `--server-url "$BZ_URL"` and a matching `--from-url` while pointing
-  `--config` at a new empty path. It asserts success, real Bugzilla data, and byte-empty stderr.
-  The empty config is the production-fidelity correction: it prevents earlier setup from
-  accidentally satisfying hostname resolution through a persisted server.
+  `--config` at a new empty path. It asserts success, real Bugzilla data, and absence of the false
+  inline-host mismatch diagnostic. Other server-derived warnings remain permitted because they are
+  outside this warning-specific contract. The empty config is the production-fidelity correction:
+  it prevents earlier setup from accidentally satisfying hostname resolution through a persisted
+  server.
 - A second empty-config functional case imports
   `http://localhost:$BZ_PORT/buglist.cgi?...` while the inline destination remains
   `http://127.0.0.1:$BZ_PORT`. It asserts the search still succeeds against the real container and

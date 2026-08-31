@@ -105,7 +105,8 @@ existing assertion cannot express absence from stderr.
 and `FUNC_CONFIG_DIR`. No new production interface is introduced.
 
 1. Re-read the concrete matching-host case added in Task 1 step 1 and confirm its assertions require
-   exit 0, at least one returned bug, and byte-empty `BZR_STDERR`.
+   exit 0, at least one returned bug, and no inline-host mismatch diagnostic in `BZR_STDERR`.
+   Unrelated warnings emitted by real Bugzilla versions remain outside this contract.
 2. Add a second empty-config invocation whose imported URL uses `localhost:$BZ_PORT` while the
    inline URL remains `127.0.0.1:$BZ_PORT`. Assert exit 0, real results, and stderr substrings naming
    `localhost`, `127.0.0.1`, and `using inline server`.
