@@ -25,9 +25,11 @@ def is_termless_bug_search(path):
     parsed = urllib.parse.urlsplit(path)
     if parsed.path != "/rest/bug":
         return False
-    ignored = {"include_fields", "exclude_fields", "limit", "offset", "order"}
+    ignored = {
+        "bugzilla_api_key", "include_fields", "exclude_fields", "limit", "offset", "order"
+    }
     return not any(
-        name not in ignored and value
+        name.casefold() not in ignored and value
         for name, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
     )
 
@@ -156,6 +158,9 @@ class ShapeTests(unittest.TestCase):
     def test_identifies_termless_bug_search_without_matching_scoped_or_detail_reads(self):
         self.assertTrue(is_termless_bug_search("/rest/bug?limit=1&include_fields=id"))
         self.assertTrue(is_termless_bug_search("/rest/bug?product=&limit=1"))
+        self.assertTrue(is_termless_bug_search(
+            "/rest/bug?Bugzilla_api_key=secret&limit=1"
+        ))
         self.assertFalse(is_termless_bug_search("/rest/bug?id=123&limit=1"))
         self.assertFalse(is_termless_bug_search("/rest/bug/123?include_fields=id"))
 
