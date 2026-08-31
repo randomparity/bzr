@@ -30,3 +30,8 @@ rejected.
 | [0021](0021-contributor-guidance-lives-in-contributing.md) | Contributor guidance lives in `CONTRIBUTING.md` | Accepted |
 | [0022](0022-release-notes-carry-security-assessment.md) | Release notes carry an explicit security assessment | Accepted |
 | [0023](0023-skill-owned-weekly-status-snapshots.md) | Skill-owned weekly status snapshots | Accepted |
+| [0024](0024-bounded-bug-adjacency-contract.md) | Bound multi-bug adjacency at the CLI request boundary | Accepted |
+| [0025](0025-normalize-multi-valued-bug-fields.md) | Normalize multi-valued bug fields to arrays | Accepted |
+| [0026](0026-scope-qualified-dependency-preflight.md) | Scope-qualify dependency collector preflight | Accepted |
+| [0027](0027-inline-server-aware-url-import.md) | Make URL import aware of the active inline server | Accepted |
+| [0028](0028-dynamic-functional-test-container-ports.md) | Functional-test containers use runtime-assigned ports and checkout-scoped names | Accepted |
