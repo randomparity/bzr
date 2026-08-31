@@ -49,9 +49,9 @@ destination:
 
 1. Find a configured server whose hostname matches the imported URL and preserve its name in the
    saved query.
-2. Parse the optional active inline URL. If it is invalid or has no hostname, return an actionable
-   `invalid inline server URL` input error before emitting any mismatch diagnostic. The parse error
-   never includes the raw URL, userinfo, or query string.
+2. Parse the optional active inline URL only to extract its normalized hostname. If extraction
+   fails, preserve the existing configured/default parser path and leave full inline URL rejection
+   and error precedence to connection setup.
 3. If the inline hostname matches, emit no warning and allow an empty/default-less config.
 4. If an inline server exists but its hostname differs, continue with the inline destination and
    warn that the imported hostname differs from the inline hostname and that the inline server is
@@ -59,9 +59,9 @@ destination:
    server, because the explicit inline destination still wins routing.
 5. With no inline server, preserve the existing configured/default match, warning, and error paths.
 
-Connection setup still performs full `ServerConfig` validation before transport. The earlier parse
-here establishes only the hostname needed for import diagnostics and fails closed when that
-hostname cannot be established. No inline URL is copied into `SavedQuery` or rendered in a
+Connection setup still performs full `ServerConfig` validation before transport. The optional
+parse here establishes only the hostname needed for import diagnostics and does not change
+malformed-inline error ordering. No inline URL is copied into `SavedQuery` or rendered in a
 diagnostic.
 
 ## Error and output behavior
@@ -79,8 +79,8 @@ state remain unchanged.
 - **Existing boundary used, not widened:** the operator-controlled `--from-url` string is parsed by
   `url::Url`, restricted to a `buglist.cgi` path, and sanitized before persistence.
 - **Existing boundary used, not widened:** the operator-controlled `--server-url` is carried raw in
-  `CommandContext`. URL import validates that it is parseable and has a hostname before comparing;
-  connection setup remains responsible for full server-config validation and using it.
+  `CommandContext`. URL import compares only a successfully parsed hostname; connection setup
+  remains responsible for validation, error precedence, and use.
 - **Added comparison:** the parser reads only normalized hostnames from both URLs. It does not join
   paths, forward imported credentials, or derive the connection destination from the imported URL.
 
@@ -88,9 +88,10 @@ state remain unchanged.
 
 The local operator controls both CLI values; a copied Bugzilla URL may contain untrusted query
 parameters. `url::Url` parsing, the existing `buglist.cgi` path check, credential-name filtering,
-and `sanitize_url` remain the controls. An invalid inline URL produces an error that omits the raw
-value. Host comparison changes diagnostics only; connection selection continues to trust the
-explicit inline server from `CommandContext` after its existing full validation.
+and `sanitize_url` remain the controls. A malformed inline URL follows the existing configured or
+default parser result before connection validation. Host comparison changes diagnostics only;
+connection selection continues to trust the explicit inline server from `CommandContext` after its
+existing full validation.
 
 ### Out of scope
 
@@ -104,8 +105,6 @@ URL authoritative for routing and does not change TLS or credential handling.
   leaves `query.server` unset.
 - Unit tests prove a mismatched inline hostname still succeeds with an empty/default-less config
   and emits stable guidance naming both hostnames and the inline destination.
-- A parser test passes an invalid inline URL containing userinfo and credential-like query data;
-  it asserts an actionable error, no mismatch warning, and no raw value in captured tracing.
 - Existing configured match, default fallback, no-default error, and credential sanitization tests
   remain green.
 - A search command unit test uses `CommandContext::with_inline_server` with an empty config to prove
@@ -117,6 +116,10 @@ URL authoritative for routing and does not change TLS or credential handling.
   `--config` at a new empty path. It asserts success, real Bugzilla data, and absence of the old
   mismatch warning. The empty config is the production-fidelity correction: it prevents earlier
   setup from accidentally satisfying hostname resolution through a persisted server.
+- A second empty-config functional case imports
+  `http://localhost:$BZ_PORT/buglist.cgi?...` while the inline destination remains
+  `http://127.0.0.1:$BZ_PORT`. It asserts the search still succeeds against the real container and
+  stderr accurately names both hostnames and says the inline server is used.
 
 ## Durable workflow context
 
