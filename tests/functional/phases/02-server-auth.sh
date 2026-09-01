@@ -12,15 +12,13 @@ test_begin "server-info" "server info"
 run_bzr server info
 if assert_success && assert_json_exists '.version'; then test_pass; fi
 
-# TODO(#626): this credentialed assertion never checks max_attachment_size, so a
-# permanently null value has always passed here. The credentialless `null`
-# assertion further down is correct under accepted ADR 0005 and stays; #626 owns
-# adding the non-null credentialed case.
 test_begin "server-capabilities" "server capabilities"
 run_bzr server capabilities
 if assert_success && assert_json_exists '.version' &&
+    assert_json_exists '.max_attachment_size' &&
     assert_json_array_min_length '.api_modes' 1 &&
-    assert_json_array_min_length '.status_transitions' 1; then test_pass; fi
+    assert_json_array_min_length '.status_transitions' 1 &&
+    assert_json 'all(.status_transitions[]; .from != "")' 'true'; then test_pass; fi
 
 test_begin "whoami" "whoami"
 run_bzr whoami
@@ -99,5 +97,44 @@ if assert_success && assert_json_exists '.id' &&
     assert_json '.server_name' '(inline)' &&
     assert_json '.auth_mode' 'api_key'; then test_pass; fi
 unset BZR_FUNC_INLINE_KEY
+
+test_begin "production-shaped-server-capabilities" "production-shaped server capabilities"
+export BZR_FUNC_REDHAT_MODE=server-capabilities
+if redhat_shape_start "$BZ_PORT"; then
+    unset BZR_FUNC_REDHAT_MODE
+    trap 'cleanup; redhat_shape_stop' EXIT
+    export BZR_FUNC_INLINE_KEY="$API_KEY"
+    run_bzr_raw --json \
+        --server-url "http://127.0.0.1:${REDHAT_SHAPE_PORT}" \
+        --server-api-key-env BZR_FUNC_INLINE_KEY --server-email "$ADMIN_EMAIL" \
+        server capabilities
+    _SERVER_CAPABILITIES_SHAPE_OK=1
+    if ! assert_success ||
+        ! assert_json_exists '.max_attachment_size' ||
+        ! assert_json '.api_modes | index("rest") != null' 'true' ||
+        ! assert_json 'all(.status_transitions[]; .from != "")' 'true' ||
+        ! assert_json 'any(.custom_fields[]; .name == "cf_bzr_proxy_probe" and .type == "single_select")' 'true'; then
+        _SERVER_CAPABILITIES_SHAPE_OK=0
+    fi
+    for _SERVER_CAPABILITIES_ROUTE in version parameters status field-type; do
+        if ! grep -Fq \
+            "server-capability shaped route=${_SERVER_CAPABILITIES_ROUTE} count=1" \
+            "$REDHAT_SHAPE_LOG"; then
+            _SERVER_CAPABILITIES_SHAPE_OK=0
+        fi
+    done
+    redhat_shape_stop || _SERVER_CAPABILITIES_SHAPE_OK=0
+    trap cleanup EXIT
+    unset BZR_FUNC_INLINE_KEY
+    if [[ $_SERVER_CAPABILITIES_SHAPE_OK -eq 1 ]]; then
+        test_pass
+    else
+        test_fail "production-shaped server capabilities failed; proxy log: $REDHAT_SHAPE_LOG"
+    fi
+else
+    unset BZR_FUNC_REDHAT_MODE
+    test_fail "server-capability response-shape proxy did not become ready: $REDHAT_SHAPE_LOG"
+fi
+unset _SERVER_CAPABILITIES_ROUTE _SERVER_CAPABILITIES_SHAPE_OK
 
 echo ""
