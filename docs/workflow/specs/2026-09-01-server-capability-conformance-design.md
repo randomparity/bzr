@@ -35,9 +35,11 @@ REST for bare suffixed 5.1+ versions without changing its published schema.
 `src/client/resources/server.rs` adds a private `UnsignedWire(u64)` serde wrapper whose
 `Deserialize` implementation delegates to `u64_from_number_or_string`. Both
 `ParametersBody.maxattachmentsize` and `FieldDef.field_type` use the wrapper, while
-absence continues through `#[serde(default)]` on the optional parameter. The field type
-mapping performs a checked `u64` to `i64` conversion and uses `unknown` when the value is
-outside the existing mapper's domain.
+absence continues through `#[serde(default)]` on the optional parameter. `UnsignedWire`
+has a zero default, and `FieldDef.field_type` retains `#[serde(default)]`, so an omitted
+`type` keeps the existing `unknown` result; a malformed present value remains an error.
+The field type mapping performs a checked `u64` to `i64` conversion and uses `unknown`
+when the value is outside the existing mapper's domain.
 
 `attachment_size_limit` keeps its `Option<u64>` contract. Its error match splits
 `BzrError::Deserialize` from every other error and writes stable structured `reason`
@@ -59,7 +61,8 @@ multi-component `5.3.3+`, and malformed `5.1++` and `5.1+.2` fallback.
 
 Unit tests replace the false numeric parameter fixture with the stock string shape, prove
 the numeric compatibility arm, assert empty transitions are absent, and cover string and
-number field types. Two tests use `crate::test_helpers::TracingCapture` at DEBUG: a
+number field types plus the established omitted-type-to-`unknown` fallback. Two tests use
+`crate::test_helpers::TracingCapture` at DEBUG: a
 malformed authenticated parameter value must remain non-fatal and emit
 `reason=response_shape`, while HTTP 401 must remain non-fatal and emit `reason=request`.
 Both captured traces must exclude the test API key.

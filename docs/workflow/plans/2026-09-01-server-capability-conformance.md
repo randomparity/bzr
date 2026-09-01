@@ -38,14 +38,16 @@ Expected implementation size: 170–280 changed lines (M) — derived from four 
 capability fields.
 
 1. Change the parameter fixture to string `"1000"`, add a distinct numeric-compatibility
-   case, add string/number field-type cases, and add an empty-name transition to the status
-   fixture with an assertion that it is absent. Add DEBUG `TracingCapture` assertions for
-   malformed `"not-a-number"` parameters (`reason=response_shape`) and HTTP 401
-   (`reason=request`); both stay null and exclude the test API key from captured output.
+   case, add string/number/omitted field-type cases (omitted remains `unknown`), and add an
+   empty-name transition to the status fixture with an assertion that it is absent. Add
+   DEBUG `TracingCapture` assertions for malformed `"not-a-number"` parameters
+   (`reason=response_shape`) and HTTP 401 (`reason=request`); both stay null and exclude
+   the test API key from captured output.
 2. Run `make test-one T=server_capabilities_normalizes_attachment_size_to_bytes`; expect
    failure because string `maxattachmentsize` deserializes to `None` through the broad
    best-effort error arm.
-3. Add private `UnsignedWire(u64)` and delegate its serde implementation to:
+3. Add private `UnsignedWire(u64)` with a zero `Default` and delegate its serde
+   implementation to:
 
    ```rust
    u64_from_number_or_string(
@@ -56,8 +58,9 @@ capability fields.
    .map(Self)
    ```
 
-   Apply it to optional `maxattachmentsize` and required `field_type`, use checked
-   conversion before `field_type_name`, and filter `from.is_empty()`.
+   Apply it to optional `maxattachmentsize` and to `field_type` while retaining
+   `#[serde(default)]`; use checked conversion before `field_type_name`, and filter
+   `from.is_empty()`.
 4. Split `attachment_size_limit` errors into a `BzrError::Deserialize` arm with
    `reason = "response_shape"` and a remaining arm with `reason = "request"`; preserve
    `None` from both.

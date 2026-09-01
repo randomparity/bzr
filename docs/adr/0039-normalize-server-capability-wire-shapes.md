@@ -32,7 +32,9 @@ best-effort, with `null` on the credentialless path.
 Deserialize both capability integer fields through a server-local wrapper around ADR
 0033's shared unsigned adapter. Keep the wrapper local because it exists only to attach
 that adapter to optional and named response fields; do not add a generalized registry.
-Map field type values outside `i64` to the existing `unknown` output instead of failing a
+Give the wrapper a zero default for `FieldDef.field_type`, preserving the existing behavior
+where an omitted `type` maps to `unknown`; malformed present values remain fatal. Map
+field type values outside `i64` to the same existing `unknown` output instead of failing a
 whole capability document.
 
 Classify an optional attachment-limit failure at the existing best-effort boundary:
