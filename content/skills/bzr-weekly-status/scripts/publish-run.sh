@@ -82,11 +82,21 @@ mv "$staging" "$final"
 
 tmp_link="$root/.latest.$run_id.$$"
 trap 'rm -f "$tmp_link"' EXIT HUP INT TERM
-[ ! -d "$root/latest" ] || {
-	echo "publish-run: latest is a directory" >&2
+[ ! -d "$root/latest" ] || [ -L "$root/latest" ] || {
+	echo "publish-run: latest is a directory; new run retained: $final" >&2
 	exit 2
 }
-ln -s "runs/$run_id" "$tmp_link"
-mv -f "$tmp_link" "$root/latest"
+
+if ! ln -s "runs/$run_id" "$tmp_link" ||
+	! { mv -fh "$tmp_link" "$root/latest" 2>/dev/null ||
+	mv -fT "$tmp_link" "$root/latest"; } ||
+	[ ! -L "$root/latest" ] ||
+	[ "$(readlink "$root/latest")" != "runs/$run_id" ]; then
+	if [ -d "$root/latest" ] && [ ! -L "$root/latest" ]; then
+		rm -f "$root/latest/${tmp_link##*/}"
+	fi
+	echo "publish-run: could not update latest; new run retained: $final" >&2
+	exit 2
+fi
 trap - EXIT HUP INT TERM
 printf '%s\n' "$final"
