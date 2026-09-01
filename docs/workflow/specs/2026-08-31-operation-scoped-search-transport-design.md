@@ -38,15 +38,17 @@ pub(crate) fn begin_bug_search(&self, params: &SearchParams) -> BugSearch<'_>
 ```
 
 Construction examines the initial parameters. Non-empty `raw_params` with any configured mode
-other than `ApiMode::Rest` emits the current warning and records forced REST. All other searches
-record configured dispatch. The handle exposes:
+other than `ApiMode::Rest` records forced REST with a pending warning. All other searches record
+configured dispatch. The handle exposes:
 
 ```rust
-pub(crate) async fn execute(&self, params: &SearchParams) -> Result<Vec<Bug>>
+pub(crate) async fn execute(&mut self, params: &SearchParams) -> Result<Vec<Bug>>
 ```
 
-Forced REST calls the existing REST request path directly. Configured dispatch preserves the
-existing REST/XML-RPC/Hybrid match, including Hybrid empty-result fallback. Public
+On the first forced-REST execution, the handle emits the current warning immediately before the
+request and clears its pending-warning state; later executions remain silent. Forced REST calls
+the existing REST request path directly. Configured dispatch preserves the existing
+REST/XML-RPC/Hybrid match, including Hybrid empty-result fallback. Public
 `BugzillaClient::search_bugs` remains source-compatible by creating a handle and executing one
 request.
 
@@ -58,16 +60,17 @@ decision remains valid for every page. No writer or progress interface changes.
 ## Data and failure flow
 
 1. The command completes its existing URL import and parameter normalization.
-2. `fetch_page` begins one bug-search operation from those parameters.
-3. The operation selects configured dispatch or forced REST and emits at most one fallback
-   warning.
-4. Each requested page executes through that same operation handle.
+2. `fetch_page` begins one bug-search operation from those parameters without emitting output.
+3. Existing pre-request limit and offset validation runs unchanged.
+4. The first requested page executes through the operation, which emits at most one fallback
+   warning immediately before forced REST; later pages execute through the same silent handle.
 5. Existing paging code appends results, advances by rows received, emits page events, stops on an
    empty page, or returns its existing overflow/safety-cap/transport error.
 6. The caller writes the same result document and terminal progress event as before.
 
 The warning still precedes a REST validation or transport error, matching current single-request
-ordering. No error is intercepted, translated, retried differently, or converted into output.
+ordering. Errors raised by paging before a request remain warning-free. No error is intercepted,
+translated, retried differently, or converted into output.
 
 ## Verification
 
@@ -75,6 +78,8 @@ ordering. No error is intercepted, translated, retried differently, or converted
   proves every offset request reaches REST, proves the complete ordered result set is returned,
   and counts exactly one warning.
 - A focused REST-mode variant proves the same raw-parameter paging emits no fallback warning.
+- A focused raw-parameter over-fetch validation case proves an error raised before the first
+  request remains warning-free.
 - Existing paging tests continue to prove structured stdout isolation, page-event order,
   terminal-event ownership, offset overflow, safety-cap failure, and server-clamped completeness.
 - Existing client tests continue to prove raw parameters bypass XML-RPC fallback and preserve REST
