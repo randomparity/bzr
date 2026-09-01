@@ -270,7 +270,7 @@ async fn handle_search_from_url_does_not_infer_custom_fields_from_columnlist() {
         "id,summary,status,resolution,dupe_of,product,component,version,",
         "assigned_to,priority,severity,creation_time,last_change_time,creator,",
         "url,whiteboard,keywords,blocks,depends_on,cc,op_sys,rep_platform,deadline,",
-        "target_milestone,flags"
+        "target_milestone,groups,estimated_time,remaining_time,flags"
     );
 
     Mock::given(method("GET"))

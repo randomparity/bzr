@@ -111,17 +111,25 @@ if [[ -n "$BUG1" ]]; then
     if assert_success && assert_json_exists '.id' && assert_json_exists '.summary'; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "bug-view-time-fields-round-trip-and-project" "bug update/view time fields round-trip and project"
+test_begin "bug-view-time-fields-round-trip" "bug update/view time fields round-trip"
 if [[ -n "$BUG1" ]]; then
     run_bzr bug update "$BUG1" --estimated-time 8 --remaining-time 5
     if assert_success; then
-        run_bzr bug view "$BUG1" --fields groups,estimated_time,remaining_time
+        run_bzr bug view "$BUG1"
         if assert_success &&
-            assert_json 'keys == ["estimated_time", "groups", "remaining_time"]' "true" &&
             assert_json '.groups | length' "0" &&
             assert_json '.estimated_time' "8.0" &&
             assert_json '.remaining_time' "5.0"; then test_pass; fi
     fi
+else test_skip "no BUG1"; fi
+
+test_begin "bug-view-read-fields-project" "bug view projects groups and time fields"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug view "$BUG1" --fields groups,estimated_time,remaining_time
+    if assert_success &&
+        assert_json 'keys == ["estimated_time", "groups", "remaining_time"]' "true" &&
+        assert_json '.estimated_time' "8.0" &&
+        assert_json '.remaining_time' "5.0"; then test_pass; fi
 else test_skip "no BUG1"; fi
 
 test_begin "credentialless-bug-view-omits-time-fields" "credentialless bug view omits permission-gated time fields"
@@ -139,9 +147,14 @@ _READ_FIELDS_BUG=$(make_bug --product FuncTestProd --component Backend \
 if [[ -n "$_READ_FIELDS_BUG" ]]; then
     run_bzr bug update "$_READ_FIELDS_BUG" --groups-add functest-grp
     if assert_success; then
-        run_bzr bug view "$_READ_FIELDS_BUG" --fields groups
+        run_bzr bug view "$_READ_FIELDS_BUG"
         if assert_success &&
-            assert_json '.groups | index("functest-grp") != null' "true"; then test_pass; fi
+            assert_json '.groups | index("functest-grp") != null' "true"; then
+            run_bzr bug view "$_READ_FIELDS_BUG" --fields groups
+            if assert_success &&
+                assert_json 'keys == ["groups"]' "true" &&
+                assert_json '.groups | index("functest-grp") != null' "true"; then test_pass; fi
+        fi
     fi
 else test_skip "group round-trip bug was not created"; fi
 unset _READ_FIELDS_BUG
