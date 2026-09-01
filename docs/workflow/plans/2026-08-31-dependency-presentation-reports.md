@@ -179,6 +179,8 @@ text must appear only escaped in text content. Do not add JavaScript or remote r
 Create `test_presentation.py` with a private `HTMLParser` subclass that records start tags,
 attributes, headings, visible text, and SVG/title/description presence. Tests must:
 
+- run the existing `scripts/render.py` against the analysis fixture in a temporary directory and
+  require a successful Markdown render, proving the JSON passes the existing strict v1 validator;
 - load and assert the analysis fixture is partial and truncated;
 - reject forbidden active tags and `on*`, `src`, `srcset`, remote `href`, refresh, `style` values
   containing `url(` or `@import`, and unescaped hostile markup;
@@ -196,11 +198,12 @@ Run:
 ```sh
 python3 content/skills/bzr-dependency-analysis/tests/test_presentation.py
 bash content/skills/bzr-dependency-analysis/tests/skill-contract.sh
+cargo build --locked
 BZR_BIN=target/debug/bzr sh content/skills/bzr-project-manager-reporting/tests/run.sh
 ```
 
 Expected result: all presentation unittests pass, the dependency contract prints
-`dependency-analysis skill contract: ok`, and the PM contract exits 0.
+`dependency-analysis skill contract: ok`, the debug binary is built, and the PM contract exits 0.
 
 Verify the new test bites by temporarily replacing one escaped hostile marker in a scratch copy of
 the expected HTML with an active tag and pointing an equally temporary copy of the test module at
@@ -230,13 +233,16 @@ Expected result: exit 0 for every supported Bugzilla container, including
 and execute only paths below `$SKILLS_PROJECT/.agents/skills`; it must not fall back to the source
 tree.
 
-Open `content/skills/bzr-dependency-analysis/tests/fixtures/presentation.expected.html` through the
-active browser/artifact capability. Inspect one wide viewport and one narrow viewport for clipping,
-overlap, illegible labels, hierarchy, diagram/text agreement, limitations, and provenance. Record
-the capability and both viewport results in the quest handoff. If any view is unusable, correct the
-fixture/template, rerun the focused and aggregate tests, and repeat the visual inspection; if a safe
-readable page cannot be produced, the acceptance result is Markdown fallback rather than a claimed
-HTML success.
+Use the active file-capable artifact workflow to generate
+`content/skills/bzr-dependency-analysis/tests/fixtures/presentation.expected.html` from
+`presentation.analysis.json` after reading the dependency template and PM safety reference. Do not
+copy an unrelated page or treat the template as report evidence. Then open that exact generated
+file through the active browser/artifact capability and inspect one wide viewport and one narrow
+viewport for clipping, overlap, illegible labels, hierarchy, diagram/text agreement, limitations,
+and provenance. Record the generation capability, inspection capability, and both viewport results
+in the quest handoff. If any view is unusable, correct the generated fixture/template, rerun the
+focused and aggregate tests, and repeat the visual inspection; if a safe readable page cannot be
+produced, the acceptance result is Markdown fallback rather than a claimed HTML success.
 
 ### Step 5: Commit the logical implementation
 
