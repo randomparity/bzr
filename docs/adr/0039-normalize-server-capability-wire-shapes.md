@@ -40,7 +40,9 @@ whole capability document.
 Classify an optional attachment-limit failure at the existing best-effort boundary:
 deserialization errors emit a `response_shape` reason and all request, HTTP, API,
 permission, and transport errors emit a `request` reason. Both still degrade to `null`.
-The messages remain API-key-redacted through `BzrError` display.
+Deserialization messages remain API-key-redacted by the response layer's bounded preview
+before it constructs `BzrError::Deserialize`; HTTP and API errors retain their existing
+variant-level display redaction.
 
 Discard status values whose decoded name is absent or empty. Accept the suffix only when
 the complete version is exactly `major.minor+`: if ordinary minor parsing fails, require

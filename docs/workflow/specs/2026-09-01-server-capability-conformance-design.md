@@ -67,7 +67,9 @@ malformed authenticated parameter value must remain non-fatal and emit
 `reason=response_shape`, while HTTP 401 must remain non-fatal and emit `reason=request`.
 At least one controlled response body contains the test API key plus a non-secret marker;
 the captured trace must retain the marker while excluding the raw key, proving the
-existing `BzrError` display-redaction seam rather than making a vacuous absence assertion.
+response layer's bounded-preview redaction before `BzrError::Deserialize` construction,
+rather than making a vacuous absence assertion. The HTTP-status case separately proves
+the existing variant-level display redaction.
 
 The existing functional response-shape proxy gains an explicit server-capability mode and
 a single transformation function for those endpoints. The default mode leaves capability
@@ -118,8 +120,9 @@ phase; therefore the all-version run proves both sides on bz50, bz52, and bz53.
   negative, fractional, boolean, object, and out-of-range integer shapes; checked
   conversion bounds field type mapping.
 - A local operator controls the configured API key. Existing auth application and
-  `BzrError` display redaction remain the only credential paths; new logs format the
-  redacted error and never the raw response or request headers.
+  response-preview preprocessing plus HTTP/API variant-level display redaction remain the
+  diagnostic controls; new logs format the already-redacted error and never the raw
+  response or request headers.
 - Functional tests control the loopback proxy. It remains bound to `127.0.0.1`, preserves
   the existing body bound, strips hop-by-hop headers, and rewrites successful JSON only.
 
