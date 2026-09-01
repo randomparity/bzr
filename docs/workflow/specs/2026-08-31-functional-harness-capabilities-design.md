@@ -82,12 +82,24 @@ cardinality or ordering. No phase asserts a user count.
 
 `Makefile:201-207` defines `functional-test-bz52` and `functional-test-bz53`;
 `tests/functional/run-all-versions.sh:8` runs `bz50` as well, and `functional-stop-all` already
-stops it. The 5.0 arm therefore cannot be re-run alone after a red controlled-fault run, which
-is when an implementer needs it most.
+stops it.
+
+The 5.0 arm is not unreachable today: `make functional-test` depends on `functional-start`,
+which invokes `setup-bugzilla.sh` with no version override, and `container-env.sh:7` reads
+`BZ_VERSION="${BZR_BZ_VERSION:-bz50}"` — so that target already runs the 5.0 arm alone. What is
+missing is that the version under test is **implicit** there while 5.2 and 5.3 are named, which
+makes the three arms asymmetric exactly where a contributor is citing one arm by name in a
+controlled-fault observation.
 
 Add `functional-test-bz50` in the same two-line shape as its siblings, ordered before them, and
 list it in `.PHONY`. Nothing else changes: `run-all-versions.sh` keeps driving the matrix, so
-the target adds a way in rather than a second source of truth for the version list.
+the target adds a name rather than a second source of truth for the version list.
+
+The consequence to record is that `make functional-test` and `make functional-test-bz50` now
+denote the same arm, and they stop agreeing the moment `container-env.sh`'s default moves off
+`bz50` — both would still succeed, silently testing different versions. A comment on the new
+target names `functional-test` as its unpinned form and points at the default that couples
+them, so the next person to move that default sees the pair.
 
 ## Deliverable 3 — per-endpoint rewrite hooks in the production-shape proxy
 
@@ -113,13 +125,25 @@ ResponseHook = collections.namedtuple("ResponseHook", "name matches route rewrit
 - `route(path) -> str` — the sub-route label for the stderr marker, so one hook covering two
   endpoints reports which one fired.
 - `rewrite(path, body) -> (bytes, int)` — the transform and the number of values it changed.
-  Returning a zero count means the hook declined; the dispatcher then writes no marker.
+  A zero count means the hook changed nothing, and the dispatcher then writes no marker for it.
+
+**The count governs the marker, never the payload.** `apply_response_hooks` always adopts each
+matching hook's returned body, zero count included. This is the behavior-preserving reading:
+`shape_bug_response` and `shape_product_ids_response` today re-serialize every matching 2xx
+response with `separators=(",", ":")` whether or not they changed a value — a POST bug-create
+response `{"id": N}` on `/rest/bug` is the reachable case, since `_forward` serves POST and the
+bug matcher is a bare `/rest/bug` prefix — so discarding a zero-count body would change what
+those responses look like on the wire. The count is a reporting signal only.
 
 `apply_response_hooks(path, body) -> (bytes, list[(name, route, count)])` walks
 `RESPONSE_HOOKS` in order, applies every matching hook, and returns the rewritten body with one
 entry per hook that changed something. `_forward` calls it once for any 2xx response, maps a
 `UnicodeDecodeError` or `json.JSONDecodeError` to the existing 502, and writes one
 `"{name} shaped route={route} count={count}"` line to stderr per applied hook.
+
+Each hook defines what its count counts: `bug-multivalue` counts the bug fields rewritten from
+scalar to array, `product-ids` counts the elements rewritten in `ids`, and `metadata-sort-keys`
+keeps its existing count of rewritten `sort_key` values.
 
 The three existing rewrites become the three initial registry entries. Their transforms keep
 their names and gain the uniform signature:
@@ -132,10 +156,19 @@ their names and gain the uniform signature:
 
 ### Behavior this must preserve
 
-`tests/functional/phases/03-products.sh` counts lines matching
-`metadata-sort-keys shaped route=field count=<n>` and the `product` variant in the proxy log.
-That file belongs to a concurrent run and is not edited here, so the sort-key hook's `name` and
-`route` values are fixed by that contract and the emitted line stays byte-identical.
+The proxy has three consumers, all of which must stay green:
+
+- `tests/functional/phases/03-products.sh:44` counts lines matching
+  `metadata-sort-keys shaped route=field count=<n>` and the `product` variant in the proxy log.
+  That file belongs to a concurrent run and is not edited here, so the sort-key hook's `name`
+  and `route` values are fixed by that contract and the emitted line stays byte-identical.
+- `tests/functional/phases/18e-release-readiness.sh:136-166` pins `shape_bug_response`'s output
+  byte-for-byte across `bug list --paginate`, `bug search --from-url`, and `bug adjacency`,
+  asserting `.component == [$component, ($component + "-redhat-secondary")]` and the `version`
+  equivalent. The bug transform's values, not just its marker, are a contract.
+- `tests/functional/phases/18d-dependency-analysis.sh:734` routes an installed collector and a
+  termless-preflight exit-4 assertion through the same proxy, so the non-2xx paths
+  (`is_termless_bug_search`, the 400 body) must keep bypassing the hook registry as they do now.
 
 Matchers keep the existing raw-path prefix tests rather than switching to parsed paths, so no
 request changes hook membership. The route predicate the sort-key rewriter applies internally
@@ -151,8 +184,24 @@ its rewrite actually fired rather than assuming it did.
 ### Documentation
 
 A comment block above `RESPONSE_HOOKS` states the four fields, the rewriter contract, the
-decline-by-zero-count rule, and the obligation to add self-tests. `tests/functional/README.md`
-gains a short "Adding a production-shape rewrite" section pointing at it.
+count-governs-the-marker rule, the obligation to add self-tests, and the gate that enforces
+that obligation. `tests/functional/README.md` gains a short "Adding a production-shape rewrite"
+section pointing at it.
+
+### The self-tests need a gate
+
+Today nothing runs `--self-test`: `make lint` does not, `run-tests.sh` does not, and no CI
+workflow does. That is fatal to the role this design gives them — they are the stated mitigation
+for a hook refactor silently dropping a rewrite, and the comment block imposes a self-test
+obligation on the four later entries R7 routes through this proxy. An obligation checked by
+nobody is a convention, and it will not survive four pull requests.
+
+So `Makefile` gains `check-proxy-self-test`, running
+`python3 tests/functional/redhat-shape-proxy.py --self-test`, added to the `lint` prerequisite
+list and to `.PHONY`. It guards on `python3` the way `check-shell` guards on `shellcheck` — an
+actionable error rather than a silent skip — which is a new hard requirement for `make lint`.
+That is acceptable: `python3` is already required by `setup-bugzilla.sh`, the TLS fixture, and
+the proxy itself, and it is present on the GitHub runners CI uses.
 
 ### Self-tests
 
@@ -180,12 +229,33 @@ procedure the following pull requests cite:
 2. Remove the fix from the working tree — `git stash push` the source paths, or invert the one
    line under test. Do not weaken the test.
 3. Run the narrowest command that covers it: `make test-one T=<substring>` for a unit test,
-   `python3 tests/functional/redhat-shape-proxy.py --self-test` for a proxy rewrite, or
-   `make functional-test-bz50` / `-bz52` / `-bz53` for a single functional arm.
+   `python3 tests/functional/redhat-shape-proxy.py --self-test` for a proxy rewrite, or a single
+   functional arm — `make functional-test-bz50` / `-bz52` / `-bz53`, or `make functional-test`
+   for the unpinned default.
 4. Observe the failure and record the command and the failing assertion.
-5. Restore the fix, re-run the same command, observe green.
+5. Restore the fix, confirm the tree is actually restored (`git stash list`, `git status`),
+   re-run the same command, observe green.
 6. Put both observations in the pull-request body. A test that passes in both states does not
    close its finding.
+
+**The functional arm needs an explicit, verified rebuild before each of steps 3 and 5**, and the
+procedure says so with the reason attached, because two mechanisms in `phases/00-build.sh` can
+otherwise make the faulted run report green against an unfaulted binary:
+
+- `:16-17` uses `$BZR_BIN` verbatim whenever it is set and executable, skipping `cargo` entirely.
+  `BZR_BIN` is a documented override and CI sets it, so a contributor with it exported in their
+  shell never rebuilds and the fault never reaches the binary under test.
+- `:20` runs `cargo build --release 2>&1 | tail -3`, so a failed build is invisible — the pipe
+  discards cargo's status and `:25` only checks that `target/release/bzr` exists. Stashing one
+  file of a multi-file change is the ordinary way to leave the tree non-compiling, and the arm
+  then runs entirely against the stale pre-fault binary.
+
+The procedure therefore prefixes the functional arm with `unset BZR_BIN` and a bare
+`cargo build --release` whose exit status is observed before the container run. That makes the
+contributor's own build the gate and holds whether or not `00-build.sh` changes; the residual —
+that `00-build.sh` masks a failed build for every other caller — is a pre-existing harness defect
+this change neither depends on nor worsens, and it is tracked as
+[#630](https://github.com/randomparity/bzr/issues/630).
 
 ## Deliverable 5 — inventory of compromised fixtures
 
@@ -209,12 +279,14 @@ sits on the credentialed `server capabilities` test.
 
 ## Testing and acceptance
 
-- `python3 tests/functional/redhat-shape-proxy.py --self-test` — all proxy cases pass.
-- `make lint` — includes `check-shell` (shellcheck and `bash -n` over `lib.sh` and every phase)
-  and `check-functional-test-ids`, which constrains the new `test_begin` identifier to
-  `^[a-z0-9]+(-[a-z0-9]+)*$`.
+- `make lint` — now includes `check-proxy-self-test`, so all proxy cases pass as part of the
+  standard guardrail rather than as a remembered manual step. It also includes `check-shell`
+  (shellcheck and `bash -n` over `lib.sh` and every phase) and `check-functional-test-ids`,
+  which constrains the new `test_begin` identifier to `^[a-z0-9]+(-[a-z0-9]+)*$`.
 - `make test` — green; the markers are comments, so no Rust behavior changes.
-- `make functional-test-all` — green on bz50, bz52, and bz53.
+- `make functional-test-all` — green on bz50, bz52, and bz53. That covers all three proxy
+  consumers: `03-products.sh` (sort-key markers), `18e-release-readiness.sh` (bug-transform
+  values), and `18d-dependency-analysis.sh` (the non-2xx preflight path).
 - Controlled fault, applying the procedure this change documents: point
   `ensure_enabled_nonmember_user` at `--disable-login true`, observe the new phase test red,
   restore, observe green; break one hook matcher in `RESPONSE_HOOKS`, observe the registry
