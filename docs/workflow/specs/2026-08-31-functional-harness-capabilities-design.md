@@ -332,24 +332,21 @@ procedure the following pull requests cite:
 6. Put both observations in the pull-request body. A test that passes in both states does not
    close its finding.
 
-**The functional arm needs an explicit, verified rebuild before each of steps 3 and 5**, and the
-procedure says so with the reason attached, because two mechanisms in `phases/00-build.sh` can
-otherwise make the faulted run report green against an unfaulted binary:
+**The functional arm needs an explicit rebuild before each of steps 3 and 5**, and the procedure
+says so with the reason attached: `phases/00-build.sh:16-17` uses `$BZR_BIN` verbatim whenever it
+is set and executable, skipping `cargo` entirely. `BZR_BIN` is a documented override and CI sets
+it, so a contributor with it exported in their shell never rebuilds and the fault never reaches
+the binary under test. The procedure therefore prefixes the functional arm with `unset BZR_BIN`
+and an explicit `cargo build --release` before the container run.
 
-- `:16-17` uses `$BZR_BIN` verbatim whenever it is set and executable, skipping `cargo` entirely.
-  `BZR_BIN` is a documented override and CI sets it, so a contributor with it exported in their
-  shell never rebuilds and the fault never reaches the binary under test.
-- `:20` runs `cargo build --release 2>&1 | tail -3`, so a failed build is invisible — the pipe
-  discards cargo's status and `:25` only checks that `target/release/bzr` exists. Stashing one
-  file of a multi-file change is the ordinary way to leave the tree non-compiling, and the arm
-  then runs entirely against the stale pre-fault binary.
-
-The procedure therefore prefixes the functional arm with `unset BZR_BIN` and a bare
-`cargo build --release` whose exit status is observed before the container run. That makes the
-contributor's own build the gate and holds whether or not `00-build.sh` changes; the residual —
-that `00-build.sh` masks a failed build for every other caller — is a pre-existing harness defect
-this change neither depends on nor worsens, and it is tracked as
-[#630](https://github.com/randomparity/bzr/issues/630).
+A **failed** build is not the hazard, and the procedure must not claim it is. `00-build.sh:20`
+runs `cargo build --release 2>&1 | tail -3`, which looks like the exit-status-hiding pipeline the
+repository's guardrail rules forbid — but `run-tests.sh:14` is `set -euo pipefail` and phase files
+are *sourced* into that shell (`:91`), so `pipefail` gives the pipeline cargo's status and
+`errexit` aborts the runner before any phase executes. Verified with a runner mirroring those
+options and a cargo stub exiting 101: the run dies with status 101 and nothing after the source
+executes. Documenting the opposite would put a false statement about the repository's own
+guardrails into `CONTRIBUTING.md`, which ADR 0021 makes authoritative for exactly that.
 
 **The container is the other half of what a controlled fault must control.** The same reuse
 Deliverable 1 records above applies here: `setup-bugzilla.sh:119-127` returns early whenever the

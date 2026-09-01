@@ -276,9 +276,22 @@ def metadata_sort_key_route(path):
 ```
 
 5. Rewrite `shape_metadata_sort_keys_response`'s own guard to use the new predicate, keeping the
-   `is_field` / `is_product` locals it needs afterwards. Replace the span from
-   `    parsed_path = urllib.parse.urlsplit(path).path` through the following
-   `        return data, 0` — those two anchors and everything between them, nothing after —
+   `is_field` / `is_product` locals it needs afterwards. **Apply this edit before step 4**, or
+   quote the whole span below as the anchor — after step 4 lands, the single line
+   `    parsed_path = urllib.parse.urlsplit(path).path` occurs twice in the file and
+   `        return data, 0` already occurs twice inside this function, so neither anchor is unique
+   on its own. Replace exactly this span:
+
+```python
+    parsed_path = urllib.parse.urlsplit(path).path
+    is_field = parsed_path.startswith("/rest/field/bug")
+    is_product = parsed_path == "/rest/product" or parsed_path.startswith(
+        "/rest/product/"
+    )
+    if not is_field and not is_product:
+        return data, 0
+```
+
    with:
 
 ```python
@@ -777,9 +790,11 @@ fi
 # is not evidence that `group remove-user` worked.
 ```
 
-5. Verify the test ID guard: `make check-functional-test-ids`. Expect no output and exit 0.
+5. Verify the test ID guard: `make check-functional-test-ids`. Expect exit 0. It is not silent —
+   it prints three success banners ending `functional test semantic IDs are valid`.
 
-6. Verify shell lint: `make check-shell`. Expect no output and exit 0.
+6. Verify shell lint: `make check-shell`. Expect exit 0. It echoes its six recipe lines (none is
+   `@`-prefixed); exit status is the signal, not silence.
 
 7. Verify the phase against a live container:
    `unset BZR_BIN && cargo build --release && make functional-test-bz50`. Expect
@@ -864,25 +879,26 @@ record both observations in the pull-request body.
 **A functional arm needs a fresh binary and a fresh container.** Two things can make the run
 report on something other than your fault:
 
-- **A stale binary.** `tests/functional/phases/00-build.sh` uses `$BZR_BIN` verbatim when it is
-  set and executable, and when it does build it discards `cargo`'s exit status, checking only
-  that `target/release/bzr` exists. Either path runs the whole arm against a binary that never
-  received your fault.
+- **A stale binary.** `tests/functional/phases/00-build.sh:16` uses `$BZR_BIN` verbatim when it is
+  set and executable, so an exported `BZR_BIN` runs the whole arm against a binary that never
+  received your fault. A *failed* build is not the hazard: `run-tests.sh` runs under
+  `set -euo pipefail`, so a non-zero `cargo build` aborts the run rather than falling through to
+  a stale artifact.
 - **A stale container.** `tests/functional/setup-bugzilla.sh` reuses an already-running container
   for this checkout and version, so users, groups, and bugs from earlier runs persist. Residue
   can satisfy the assertion under test in the faulted state, or fail it in the restored state.
 
-So run the functional arm as:
+So run the functional arm as one gated chain, before and after removing the fault:
 
 ```bash
 unset BZR_BIN
-cargo build --release   # bare: its exit status is the gate
-BZR_BZ_VERSION=bz50 tests/functional/setup-bugzilla.sh reset
-make functional-test-bz50
+BZR_BZ_VERSION=bz50 tests/functional/setup-bugzilla.sh reset \
+  && cargo build --release \
+  && make functional-test-bz50
 ```
 
-Run the build unpiped. A pipeline returns the last command's status, so `| tail` hides a failed
-build — the same rule the repository's guardrails follow everywhere else.
+Chain the commands rather than pasting them as separate lines, so a failed reset or build stops
+before the arm runs instead of testing the previous state.
 ````
 
 3. Verify every command the section names exists:
@@ -962,8 +978,8 @@ changes.**
 7. Verify no behavior changed: `make test`. Expect the same pass count as before the edit and
    exit 0.
 
-8. Verify the shell edit: `make check-shell` and `make check-functional-test-ids`. Expect no
-   output and exit 0.
+8. Verify the shell edit: `make check-shell` and `make check-functional-test-ids`. Expect exit 0
+   from each; both print success banners rather than staying silent.
 
 9. Verify no asserted value moved. Filter on **comment syntax**, not on the marker token — the
    markers are multi-line and only their first line carries `TODO(#`, so a token filter reports
