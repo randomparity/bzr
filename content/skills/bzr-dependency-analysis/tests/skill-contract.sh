@@ -8,6 +8,10 @@ repo_root=$(cd "$skill_root/../../.." && pwd -P)
 documentation="$repo_root/docs/bzr-dependency-analysis.md"
 specification="$repo_root/docs/workflow/specs/2026-08-28-dependency-analysis-skill-design.md"
 recorder="$repo_root/tools/record-demo.sh"
+presentation="$skill_root/reference/presentation-report.md"
+presentation_test="$skill_root/tests/test_presentation.py"
+presentation_analysis="$skill_root/tests/fixtures/presentation.analysis.json"
+presentation_html="$skill_root/tests/fixtures/presentation.expected.html"
 
 normalized_commands=$(awk '
   /^```sh[[:space:]]*$/ { in_block = 1; next }
@@ -96,8 +100,16 @@ require_words 'Node and relationship bounds may not exceed 9,999'
 require_words 'longest dependency chain by edge count'
 require_words 'Weighted critical-path analysis and delivery-date prediction are unsupported'
 require_words 'refuse the request rather than mutate Bugzilla'
+require_words 'safe HTML-capable artifact tool'
+require_words 'Markdown fallback'
+require_literal '../bzr-project-manager-reporting/reference/artifact-safety.md'
+require_literal 'reference/presentation-report.md'
 require_literal 'cycle.collection.json'
 require_literal 'fixture-only cycle proof'
+
+for path in "$presentation" "$presentation_test" "$presentation_analysis" "$presentation_html"; do
+  [[ -f "$path" ]] || fail "missing presentation contract file: $path"
+done
 
 require_file_literal "$recorder" '"${1:-}" == "dependency-analysis"'
 require_file_literal "$recorder" \

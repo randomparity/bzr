@@ -75,6 +75,12 @@ Compose another bundled skill only when it matches the request:
 
 These are optional collaborators, not a required pipeline.
 
+For an HTML dependency report, dependency-analysis owns dependency-specific presentation semantics
+and its presentation template. This skill continues to own capability selection and the shared
+`reference/artifact-safety.md` contract; read that contract before composing the dependency page.
+Do not copy dependency topology rules into this skill or generic artifact-safety rules into the
+dependency template.
+
 ## Demonstration
 
 From the bzr repository, `tools/record-demo.sh project-manager-reporting` records a deterministic
