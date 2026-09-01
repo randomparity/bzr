@@ -49,17 +49,20 @@ statuses with no `can_change_to` remain omitted.
 
 ### Version parsing
 
-`version_to_api_mode` parses the major as before and parses the minor after stripping one
-trailing `+`. It does not strip arbitrary text. Unit cases pin the 5.0 boundary, 5.1+
-boundary, bare-major behavior, and malformed fallback.
+`version_to_api_mode` parses the major and ordinary numeric minor as before. Only when
+minor parsing fails does it accept the suffixed form, and then only if the complete
+version has exactly two components and the second is decimal digits followed by exactly
+one `+`. Unit cases pin the 5.0 boundary, 5.1+ boundary, bare-major behavior,
+multi-component `5.3.3+`, and malformed `5.1++` and `5.1+.2` fallback.
 
 ### Executable proof
 
 Unit tests replace the false numeric parameter fixture with the stock string shape, prove
 the numeric compatibility arm, assert empty transitions are absent, and cover string and
-number field types. Separate logging classification is represented directly by the two
-typed match arms and their stable `reason` values; HTTP 401 remains the request-class unit
-case.
+number field types. Two tests use `crate::test_helpers::TracingCapture` at DEBUG: a
+malformed authenticated parameter value must remain non-fatal and emit
+`reason=response_shape`, while HTTP 401 must remain non-fatal and emit `reason=request`.
+Both captured traces must exclude the test API key.
 
 The existing functional response-shape proxy gains a single transformation function for
 server capability endpoints. It:
@@ -71,10 +74,11 @@ server capability endpoints. It:
 
 The function returns named counters and logs each applied shape. Proxy self-tests cover
 each route and prove unrelated payloads are unchanged. The auth phase starts the proxy,
-runs a credentialed inline `server capabilities`, asserts non-null attachment size, the
-mapped proxy field, no empty transition, REST mode, and every expected proxy log. Existing
-stock and credentialless assertions stay in the same phase; therefore the all-version run
-proves both sides on bz50, bz52, and bz53.
+installs a combined harness/proxy EXIT trap, runs a credentialed inline
+`server capabilities`, asserts non-null attachment size, the mapped proxy field, no empty
+transition, REST mode, and every expected proxy log, then stops the proxy and restores the
+ordinary harness trap. Existing stock and credentialless assertions stay in the same
+phase; therefore the all-version run proves both sides on bz50, bz52, and bz53.
 
 ## Failure handling
 

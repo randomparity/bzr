@@ -39,7 +39,9 @@ capability fields.
 
 1. Change the parameter fixture to string `"1000"`, add a distinct numeric-compatibility
    case, add string/number field-type cases, and add an empty-name transition to the status
-   fixture with an assertion that it is absent.
+   fixture with an assertion that it is absent. Add DEBUG `TracingCapture` assertions for
+   malformed `"not-a-number"` parameters (`reason=response_shape`) and HTTP 401
+   (`reason=request`); both stay null and exclude the test API key from captured output.
 2. Run `make test-one T=server_capabilities_normalizes_attachment_size_to_bytes`; expect
    failure because string `maxattachmentsize` deserializes to `None` through the broad
    best-effort error arm.
@@ -80,7 +82,10 @@ selecting REST.
    Hybrid`, and an unrelated malformed minor retaining Hybrid fallback.
 2. Run `make test-one T=version_to_mode_5_1_plus`; expect failure for the new suffixed
    assertion.
-3. Strip only one trailing `+` from the minor component before `u32` parsing.
+3. Preserve ordinary minor parsing. On its failure only, accept a trailing `+` when the
+   complete version contains exactly two components and the suffix surrounds decimal
+   minor digits. Reject `5.1++` and `5.1+.2`; preserve `5.3.3+` through the ordinary
+   numeric-minor path.
 4. Run `make test-one T=version_to_mode`; expect every version mapping test green.
 5. Commit with `fix(api): parse bare Bugzilla version suffixes` after relevant hooks pass.
 
@@ -108,9 +113,11 @@ new shell globals.
 4. Run the proxy self-test again; expect all tests green.
 5. Strengthen the stock credentialed capability assertion with non-null attachment size
    and no empty transitions; retain the credentialless null assertion.
-6. Add one credentialed inline proxy case asserting non-null attachment size, the
+6. Add one credentialed inline proxy case. Immediately after proxy startup, install
+   `trap 'cleanup; redhat_shape_stop' EXIT`; assert non-null attachment size, the
    test-named custom field's mapped type, no empty transitions, REST mode from `5.2+`, and
-   all four rewrite evidence lines.
+   all four rewrite evidence lines. On the normal path require `redhat_shape_stop` to
+   succeed, then restore `trap cleanup EXIT`.
 7. Run `make functional-test-bz52`; expect the phase and full arm green. Then run
    `make functional-test-all`; expect bz50, bz52, and bz53 green.
 8. Commit with `test(functional): prove server capability response shapes` after relevant
