@@ -43,8 +43,10 @@ a safety gate, not a renderer.
    new dependency presentation template. If either is absent or unreadable, or the marker differs,
    report that safe HTML composition is unavailable and render Markdown. Consume only the
    validated analysis document.
-5. Create one self-contained page at a unique candidate path, never directly at the requested
-   destination. Run the dependency presentation validator with that exact file and its exact
+5. Create one self-contained page in a securely created unique regular candidate file in the
+   requested destination's directory, never directly at the destination and never in a generic
+   temporary directory. The candidate is therefore on the destination filesystem and cannot be a
+   symlink. Run the dependency presentation validator with that exact file and its exact
    validated analysis snapshot. The page carries template-defined semantic hooks for aggregate
    values, nodes, edges, caps, policies, timestamps, boundaries, and provenance. The validator
    compares those hooks with the snapshot, requires the report structure and equivalent graph text,
@@ -61,7 +63,9 @@ a safety gate, not a renderer.
    Inspect residual overlap and hierarchy visually. Permit one correction attempt within the same
    snapshot; rerun validation before reopening. An unresolved defect removes the candidate and
    triggers Markdown fallback. After both viewports pass, atomically promote the same byte-identical
-   candidate to the destination.
+   candidate to the destination with one same-directory atomic replacement. If promotion fails,
+   remove the candidate, preserve any existing destination byte-for-byte, and write Markdown only
+   at the distinct fallback path.
 
 Artifact verification does not authorize graph recollection, new estimates, or inferred dates.
 If the capability cannot open the page or a safe correction cannot be completed, discard the HTML
@@ -208,11 +212,14 @@ Eval cases:
   signal, and never implies global absence.
 - **DP-HTML-013 (candidate failure, block):** an unsafe or factually mutated candidate is removed,
   an existing destination remains byte-identical, and Markdown is written only to a distinct path.
+- **DP-HTML-014 (promotion failure, block):** a same-directory replacement failure removes the
+  candidate, preserves the existing destination byte-for-byte, and writes Markdown only to the
+  distinct fallback path.
 
 The deterministic matrix has separate complete, hostile, partial/boundary, truncation, time,
 provenance, and zero-node analysis inputs with expected HTML, plus marker-mismatch,
-capability-absence, candidate-failure, and link-origin routing fixtures. Cycle/direction
-relationships appear in the partial fixture and must match its graph text alternative. A manifest
+capability-absence, candidate-failure, promotion-failure, and link-origin routing fixtures.
+Cycle/direction relationships appear in the partial fixture and must match its graph text alternative. A manifest
 maps every DP-HTML case to its input and assertions so no case is implied by an incompatible fixture
 state. For every source-bound category, one negative fixture mutates an otherwise-safe HTML value,
 node, edge, cap, timestamp group, policy, boundary, or provenance hook and must fail validation.
@@ -271,7 +278,8 @@ self-contained presentation artifact and would add separate trust boundaries.
 - Contract tests validate the capability routing language, sibling safety reference, report
   template, deterministic fixture matrix and case manifest, required and zero-node sections,
   hostile escaping, element/attribute allowlist, source-bound exact generated-file validation,
-  safe candidate lifecycle, optional exact-origin numeric bug links, alias-drift omission,
+  safe same-directory candidate lifecycle and promotion failure, optional exact-origin numeric bug
+  links, alias-drift omission,
   graph/text alternative, caps, unknowns, timestamp ordering, provenance, and forbidden schedule
   claims.
 - Existing renderer tests prove Markdown and Mermaid behavior is unchanged.
