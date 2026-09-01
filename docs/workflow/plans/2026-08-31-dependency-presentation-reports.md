@@ -256,8 +256,10 @@ make functional-test-all
 
 Expected result: exit 0 for every supported Bugzilla container, including
 `installed-presentation-contract-preserves-safe-partial-evidence`. The installed phase must resolve
-and execute only paths below `$SKILLS_PROJECT/.agents/skills`; it must not fall back to the source
-tree.
+the new presentation template, fixture pair, focused test, and reused PM safety reference only from
+below `$SKILLS_PROJECT/.agents/skills`; those presentation assets must not fall back to the source
+tree. Preserve the existing live-pipeline requirement that `bzr` resolves separately to
+`$REPO_ROOT/target/release/bzr`.
 
 Use the active file-capable artifact workflow to generate
 `content/skills/bzr-dependency-analysis/tests/fixtures/presentation.expected.html` from
