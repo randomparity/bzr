@@ -79,6 +79,17 @@ on `fixture-enabled-non-member-user`, read that as this assumption failing on th
 version, not as the helper being wrong, and fix the fixture rather than weakening the assertion —
 an assertion that tolerates a disabled user is worth nothing to the dependent that consumes it.
 
+**The non-member half is an invariant, not a guarantee, and the helper says so.** The helper
+establishes *exists* and *enabled*; it does not establish *not a member*, which holds only
+because nothing adds this login to a group. That is weaker than it looks, because
+`setup-bugzilla.sh start` reuses an existing container for the checkout-and-version pair, so
+group membership survives across runs and across branches in the same worktree. An aborted #625
+iteration that added the user to `functest-grp` would leave the container in a state where
+#625's own assertion fails against a fixture it does not own. Coupling a generic `lib.sh` helper
+to one phase's group name to repair that would be the wrong trade, so the residual is recorded
+instead: **a phase that adds `$NONMEMBER_EMAIL` to a group must remove it**, stated in the
+helper's doc comment and beside the fixture's phase test.
+
 `tests/functional/phases/07-groups.sh` provisions the fixture after `group add-user` and
 asserts it is enabled. It does **not** assert the non-member is absent from the group listing —
 that assertion is red until #625 lands the filter fix, and it is #625's to write.
@@ -256,7 +267,11 @@ updated to the new signature:
    the `product-ids` matcher — a three-prefix `startswith` tuple — is dispatched by no case at
    all: case 5 below calls every rewriter directly and bypasses matching entirely, so a dropped
    prefix or a tuple that stops being a tuple would leave the whole suite green. The only
-   residual detector is `03-products.sh:49-53`, which this change may not edit and does not own.
+   residual detector is nothing at all. `03-products.sh:49-53` looks like one but is not: it
+   asserts only `length > 0` on `product list --type accessible` through the proxy, and a proxy
+   that stopped rewriting would serve the backend's native numeric `ids` — the *easier* shape,
+   which the client parses fine. Only the string shape the rewrite forces was ever the hard
+   case. So case 4 is the whole detector, not a belt beside a brace.
 5. Every registered hook's rewriter returns a `(bytes, int)` pair on a payload it declines. This
    is the contract a new hook author gets wrong, so it is asserted over the registry rather than
    over a fixed list of names.
@@ -333,6 +348,19 @@ sits on the credentialed `server capabilities` test.
 - `make functional-test-all` — green on bz50, bz52, and bz53. That covers all three proxy
   consumers: `03-products.sh` (sort-key markers), `18e-release-readiness.sh` (bug-transform
   values), and `18d-dependency-analysis.sh` (the non-2xx preflight path).
+- `make functional-test-bz50` — run once, on its own. This is Deliverable 2's only proof:
+  `run-all-versions.sh:20-40` calls `setup-bugzilla.sh` and `run-tests.sh` directly with
+  `BZR_BZ_VERSION` exported and never invokes a Make target, so `functional-test-all` does not
+  traverse the new recipe. A wrong version token or a copied `BZR_BZ_VERSION=bz52` would pass
+  every other gate here and then fail for the first dependent entry that follows the documented
+  procedure — in a pull request that does not own the defect.
+- Both `TODO` observations: these are the first `TODO` comments anywhere under `src/`
+  (`rg -n 'TODO' src/` is empty at HEAD), and `sonar-project.properties` sets
+  `sonar.sources=src`, so SonarQube analyses them on every non-fork pull request
+  (`ci.yml:217-247`). The expected effect is a reported new-issue class on the dashboard, not a
+  failing check: `sonar.qualitygate.wait` is not configured and the scan step passes no
+  gate-wait input. No exclusion or marker-syntax change is warranted — the markers are exactly
+  the traceability epic #616 asked for.
 - Controlled fault, applying the procedure this change documents: point
   `ensure_enabled_nonmember_user` at `--disable-login true`, observe the new phase test red,
   restore, observe green; break one hook matcher in `RESPONSE_HOOKS`, observe the registry
