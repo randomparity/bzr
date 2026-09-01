@@ -9,14 +9,17 @@ opened for inspection.
 
 ### 1. Executive summary
 
-State the analysis status; known, boundary, unknown, and unresolved counts; and the strongest
-blocker signal. Say that dependency structure is structural evidence, not a schedule. Do not infer
-estimates or dates.
+State the analysis status; known, boundary, and unknown counts; the count of known unresolved
+bugs whose status was fetched; the count whose resolution is unknown; and the strongest blocker
+signal. Never count a boundary or unknown node as unresolved merely because its resolution is
+null. Say that dependency structure is structural evidence, not a schedule. Do not infer estimates
+or dates.
 
 ### 2. Status and unresolved work
 
-Show status counts and distinct known, boundary, and unknown totals. Keep server-qualified
-identities. Do not turn an unobserved field into a zero.
+Show status counts and distinct known, boundary, and unknown totals. Count unresolved bugs only
+from fetched known-node evidence and report nodes with unobserved resolution separately. Keep
+server-qualified identities. Do not turn an unobserved field into a zero.
 
 ### 3. Needs attention
 

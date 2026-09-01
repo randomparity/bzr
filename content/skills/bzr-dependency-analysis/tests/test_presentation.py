@@ -140,7 +140,8 @@ class PresentationFixtureTest(unittest.TestCase):
 
     def test_page_preserves_attention_and_evidence_metadata(self):
         required = (
-            "status: partial", "1 known", "1 boundary", "1 unknown", "Unresolved 3",
+            "status: partial", "1 known", "1 boundary", "1 unknown",
+            "Known unresolved 1", "Resolution unknown 2",
             "Stale blockers", "Unassigned blockers", "primary#1 · fan-out 2",
             "last changed 2026-08-01T09:30:00Z", "maximum depth 3",
             "maximum nodes 10", "maximum relationships 2", "relationship cap true",
