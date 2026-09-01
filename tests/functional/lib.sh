@@ -509,6 +509,88 @@ run_bugzilla_sql_file() {
     "$runtime" exec -i "$container" mysql -u root bugs <"$sql_file"
 }
 
+# ── Group non-member fixture (issue #617) ────────────────────────────
+# A second, *enabled* user who is not a member of the functional test group.
+# Asserting that `group list-users --group <g>` honors its filter needs one: an
+# added member appears in the listing whether or not the filter is applied, and
+# the absence half proves nothing against a user the server would have hidden
+# anyway. The login deliberately shares no substring with `testuser`, so the
+# existing `user search testuser` and `assert_stdout_not_contains
+# "testuser@test.bzr"` assertions cannot match it.
+NONMEMBER_EMAIL="functest-nonmember@test.bzr"
+
+# ensure_enabled_nonmember_user — create $NONMEMBER_EMAIL if absent and make
+# sure it can log in. Idempotent in both halves: an "already exists" create is
+# success, and the enable runs unconditionally so a prior run that disabled the
+# user is repaired. The password is explicit because omitting it makes the
+# server generate one and mail it, and this harness configures no mail path.
+# Overwrites the BZR_* capture globals. Returns non-zero with a diagnostic on
+# stderr when either half fails.
+#
+# This establishes *exists* and *enabled*, not *not a member* — that half holds
+# only because nothing adds this login to a group, and containers are reused
+# between runs (setup-bugzilla.sh reuses one per checkout+version), so group
+# membership survives. A phase that adds $NONMEMBER_EMAIL to a group must
+# remove it, or it breaks the next run's non-membership assertion.
+ensure_enabled_nonmember_user() {
+    run_bzr user create --email "$NONMEMBER_EMAIL" \
+        --full-name "Enabled Non-Member" --password "TestPass1!"
+    if [[ $BZR_EXIT -ne 0 ]] && ! grep -q "already" "$BZR_STDERR" 2>/dev/null; then
+        echo "ensure_enabled_nonmember_user: create failed (exit $BZR_EXIT):" \
+            "$(tail -1 "$BZR_STDERR" 2>/dev/null)" >&2
+        return 1
+    fi
+    run_bzr user update "$NONMEMBER_EMAIL" --disable-login false --login-denied-text ""
+    if [[ $BZR_EXIT -ne 0 ]]; then
+        echo "ensure_enabled_nonmember_user: enable failed (exit $BZR_EXIT):" \
+            "$(tail -1 "$BZR_STDERR" 2>/dev/null)" >&2
+        return 1
+    fi
+    return 0
+}
+
+# assert_user_login_enabled <login> — fail the current test unless the server
+# reports can_login true for exactly <login>. This is the half a dependent
+# assertion rests on: a fixture that silently degraded to disabled would make an
+# absence assertion pass for the same wrong reason the current one does.
+# Overwrites the BZR_* capture globals, so call it before capturing output you
+# still need.
+assert_user_login_enabled() {
+    local login="$1"
+    run_bzr user search "$login" --details
+    if [[ $BZR_EXIT -ne 0 ]]; then
+        test_fail "user search '$login' --details exited $BZR_EXIT"
+        return 1
+    fi
+    assert_json "[.[] | select(.name == \"$login\")][0].can_login" "true"
+}
+
+# assert_user_group_membership <login> <group> <in|out> — assert that <login>'s
+# own membership set does or does not contain <group>, read from the `groups`
+# field `user search --details` already returns (USER_FIELDS_DETAILED,
+# src/client/mod.rs:22). This reads the *user* resource, not
+# `group list-users`, so it is independent of the group filter #625 owns.
+#
+# An empty `groups` array would make an `out` assertion pass for the wrong
+# reason, so callers pair it with an `in` assertion on a user known to be a
+# member: that positive control is what proves the harness can see membership
+# at all. Overwrites the BZR_* capture globals.
+assert_user_group_membership() {
+    local login="$1"
+    local group="$2"
+    local want="$3"
+    local expected=0
+    [[ "$want" == "in" ]] && expected=1
+    run_bzr user search "$login" --details
+    if [[ $BZR_EXIT -ne 0 ]]; then
+        test_fail "user search '$login' --details exited $BZR_EXIT"
+        return 1
+    fi
+    assert_json \
+        "[[.[] | select(.name == \"$login\")][0].groups[]? | select(.name == \"$group\")] | length" \
+        "$expected"
+}
+
 # ── TLS fixture (issue #406) ─────────────────────────────────────────
 # Front the HTTP-only Bugzilla container with HTTPS via a python3
 # TLS-terminating reverse proxy so the ad-hoc --server-tls-* trust flags can be
