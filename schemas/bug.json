@@ -99,6 +99,18 @@
     "target_milestone": {
       "type": ["string", "null"]
     },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "estimated_time": {
+      "type": ["number", "null"]
+    },
+    "remaining_time": {
+      "type": ["number", "null"]
+    },
     "flags": {
       "type": "array",
       "items": {

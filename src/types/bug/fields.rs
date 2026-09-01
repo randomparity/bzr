@@ -45,6 +45,9 @@ pub enum BugField {
     Cc,
     DupeOf,
     TargetMilestone,
+    Groups,
+    EstimatedTime,
+    RemainingTime,
     Flags,
 }
 
@@ -76,6 +79,9 @@ impl BugField {
             BugField::Cc => "cc",
             BugField::DupeOf => "dupe_of",
             BugField::TargetMilestone => "target_milestone",
+            BugField::Groups => "groups",
+            BugField::EstimatedTime => "estimated_time",
+            BugField::RemainingTime => "remaining_time",
             BugField::Flags => "flags",
         }
     }
@@ -107,6 +113,9 @@ impl BugField {
             BugField::Cc => &["cc"],
             BugField::DupeOf => &["dupe_of"],
             BugField::TargetMilestone => &["target_milestone", "milestone"],
+            BugField::Groups => &["groups"],
+            BugField::EstimatedTime => &["estimated_time"],
+            BugField::RemainingTime => &["remaining_time"],
             BugField::Flags => &["flags"],
         }
     }
@@ -138,6 +147,9 @@ impl BugField {
             BugField::Cc => "CC",
             BugField::DupeOf => "DUPE_OF",
             BugField::TargetMilestone => "MILESTONE",
+            BugField::Groups => "GROUPS",
+            BugField::EstimatedTime => "ESTIMATED_TIME",
+            BugField::RemainingTime => "REMAINING_TIME",
             BugField::Flags => "FLAGS",
         }
     }
@@ -179,6 +191,9 @@ pub const BUG_FIELDS: &[BugField] = &[
     BugField::Cc,
     BugField::DupeOf,
     BugField::TargetMilestone,
+    BugField::Groups,
+    BugField::EstimatedTime,
+    BugField::RemainingTime,
     BugField::Flags,
 ];
 

@@ -299,6 +299,24 @@ fn value_to_bug_captures_custom_fields() {
 }
 
 #[test]
+fn value_to_bug_captures_groups_and_time_tracking_fields() {
+    let mut payload = BTreeMap::new();
+    payload.insert("id".into(), Value::Int(42));
+    payload.insert(
+        "groups".into(),
+        Value::Array(vec![Value::String("functest-grp".into())]),
+    );
+    payload.insert("estimated_time".into(), Value::Double(8.0));
+    payload.insert("remaining_time".into(), Value::Double(5.0));
+
+    let bug = value_to_bug(&Value::Struct(payload)).unwrap();
+
+    assert_eq!(bug.groups, vec!["functest-grp"]);
+    assert_eq!(bug.estimated_time, Some(8.0));
+    assert_eq!(bug.remaining_time, Some(5.0));
+}
+
+#[test]
 fn value_to_bug_converts_custom_field_arrays() {
     let mut payload = BTreeMap::new();
     payload.insert("id".into(), Value::Int(42));

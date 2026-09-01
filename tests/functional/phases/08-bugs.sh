@@ -111,6 +111,41 @@ if [[ -n "$BUG1" ]]; then
     if assert_success && assert_json_exists '.id' && assert_json_exists '.summary'; then test_pass; fi
 else test_skip "no BUG1"; fi
 
+test_begin "bug-view-time-fields-round-trip-and-project" "bug update/view time fields round-trip and project"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug update "$BUG1" --estimated-time 8 --remaining-time 5
+    if assert_success; then
+        run_bzr bug view "$BUG1" --fields groups,estimated_time,remaining_time
+        if assert_success &&
+            assert_json 'keys == ["estimated_time", "groups", "remaining_time"]' "true" &&
+            assert_json '.groups | length' "0" &&
+            assert_json '.estimated_time' "8.0" &&
+            assert_json '.remaining_time' "5.0"; then test_pass; fi
+    fi
+else test_skip "no BUG1"; fi
+
+test_begin "credentialless-bug-view-omits-time-fields" "credentialless bug view omits permission-gated time fields"
+if [[ -n "$BUG1" ]]; then
+    run_bzr_raw --json --server public bug view "$BUG1"
+    if assert_success &&
+        assert_json 'has("estimated_time")' "false" &&
+        assert_json 'has("remaining_time")' "false"; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "bug-view-groups-round-trip-and-project" "bug update/view groups round-trip and project"
+_READ_FIELDS_BUG=$(make_bug --product FuncTestProd --component Backend \
+    --summary "Read fields group round-trip" --description "read fields" \
+    --op-sys All --rep-platform All)
+if [[ -n "$_READ_FIELDS_BUG" ]]; then
+    run_bzr bug update "$_READ_FIELDS_BUG" --groups-add functest-grp
+    if assert_success; then
+        run_bzr bug view "$_READ_FIELDS_BUG" --fields groups
+        if assert_success &&
+            assert_json '.groups | index("functest-grp") != null' "true"; then test_pass; fi
+    fi
+else test_skip "group round-trip bug was not created"; fi
+unset _READ_FIELDS_BUG
+
 test_begin "bug-list-product" "bug list --product"
 run_bzr bug list --product FuncTestProd
 if assert_success && assert_json_array_min_length '.' 2; then test_pass; fi

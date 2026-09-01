@@ -5,8 +5,8 @@ use crate::types::bug::{partition_filters, Bug, SearchParams, FIELD_MAPPINGS};
 use crate::xmlrpc::protocol::Value;
 use crate::xmlrpc::protocol::XmlRpcClient;
 use crate::xmlrpc::resources::mappers::{
-    get_datetime_str, get_flags, get_int_array, get_nonempty_str, get_str, get_str_array, get_u64,
-    require_u64, xmlrpc_id, xmlrpc_value_to_json, EXPECTED_STRUCT_RESPONSE,
+    get_datetime_str, get_f64, get_flags, get_int_array, get_nonempty_str, get_str, get_str_array,
+    get_u64, require_u64, xmlrpc_id, xmlrpc_value_to_json, EXPECTED_STRUCT_RESPONSE,
 };
 
 impl XmlRpcClient {
@@ -159,6 +159,9 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         op_sys: get_nonempty_str(m, "op_sys"),
         rep_platform: get_nonempty_str(m, "rep_platform"),
         target_milestone: get_nonempty_str(m, "target_milestone"),
+        groups: get_str_array(m, "groups"),
+        estimated_time: get_f64(m, "estimated_time"),
+        remaining_time: get_f64(m, "remaining_time"),
         flags: get_flags(m, "flags"),
         custom_fields: custom_fields_from_xmlrpc(m),
     })
