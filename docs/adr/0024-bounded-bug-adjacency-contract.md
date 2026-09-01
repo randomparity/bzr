@@ -80,6 +80,10 @@ traversal or analysis policy.
   budget.
 - Alias and numeric requests may both map to one `bugs` entry; the `requests` mapping preserves
   why that node was requested.
+- Reverse proxies and gateways must preserve the trailing slash on `/rest/bug/`. Normalizing that
+  route to `/rest/bug` selects `Bug.search`, which does not interpret the adjacency request's
+  `ids` and `permissive` parameters and can turn a bounded lookup into an unbounded search. This is
+  a structural deployment caveat, not an observed failure, and does not supersede this decision.
 - The 100-request limit is a judgmental safety ceiling: it keeps one invocation useful for a
   sizeable frontier while preventing an unbounded number of sequential calls. A server can still
   return a large adjacency array for one bug: completeness and a hard per-array cap are mutually
