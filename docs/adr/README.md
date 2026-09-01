@@ -37,3 +37,5 @@ rejected.
 | [0028](0028-signed-metadata-sort-keys.md) | Model Bugzilla metadata sort keys as signed integers | Accepted |
 | [0029](0029-semantic-functional-test-ids.md) | Identify functional tests by phase and semantic slug | Accepted |
 | [0030](0030-dynamic-functional-test-container-ports.md) | Functional-test containers use runtime-assigned ports and checkout-scoped names | Accepted |
+| [0031](0031-compose-dependency-presentation-artifacts.md) | Compose dependency presentation artifacts through active capabilities | Accepted |
+| [0032](0032-operation-scoped-search-transport.md) | Resolve search transport once per operation | Accepted |
