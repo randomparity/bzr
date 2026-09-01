@@ -63,6 +63,10 @@ library, POSIX/Bash contract tests, and the existing functional shell harness.
   composition and ownership guidance.
 - Modify `agent-skills/tests/run.sh`: execute the dependency contract and presentation fixture
   tests in the aggregate skills gate.
+- Modify `src/skills/embedded_tests.rs`: add the four presentation payload paths to the exact
+  embedded dependency-analysis inventory.
+- Modify `tests/functional/phases/18c-skills-install.sh`: add the same four paths to the exact
+  installed dependency-analysis inventory used for both project layouts.
 - Modify `tests/functional/phases/18d-dependency-analysis.sh`: resolve the new files and sibling PM
   safety reference from the installed tree and run the focused test there.
 
@@ -119,6 +123,20 @@ Modify `agent-skills/tests/run.sh` so the aggregate gate runs both new dependenc
 bash "$HERE/../../content/skills/bzr-dependency-analysis/tests/skill-contract.sh" || rc=1
 python3 "$HERE/../../content/skills/bzr-dependency-analysis/tests/test_presentation.py" || rc=1
 ```
+
+Add these exact relative paths, in lexical order, to both the dependency-analysis vector in
+`src/skills/embedded_tests.rs` and `DEPENDENCY_ANALYSIS_PAYLOAD` in
+`tests/functional/phases/18c-skills-install.sh`:
+
+```text
+reference/presentation-report.md
+tests/fixtures/presentation.analysis.json
+tests/fixtures/presentation.expected.html
+tests/test_presentation.py
+```
+
+The Rust inventory proves recursive embedding and phase 18c proves both installed project layouts;
+neither exact-inventory assertion may be left stale.
 
 Extend the `_DA_PATH` installed-root loop in
 `tests/functional/phases/18d-dependency-analysis.sh` with the template, fixture pair, focused test,
@@ -177,13 +195,15 @@ CSS, and a compact inline SVG with `role="img"` plus an adjacent textual edge li
 text must appear only escaped in text content. Do not add JavaScript or remote resources.
 
 Create `test_presentation.py` with a private `HTMLParser` subclass that records start tags,
-attributes, headings, visible text, and SVG/title/description presence. Tests must:
+attributes, headings, visible text, `<style>` element data, and SVG/title/description presence.
+Tests must:
 
 - run the existing `scripts/render.py` against the analysis fixture in a temporary directory and
   require a successful Markdown render, proving the JSON passes the existing strict v1 validator;
 - load and assert the analysis fixture is partial and truncated;
-- reject forbidden active tags and `on*`, `src`, `srcset`, remote `href`, refresh, `style` values
-  containing `url(` or `@import`, and unescaped hostile markup;
+- reject forbidden active tags and `on*`, `src`, `srcset`, remote `href`, refresh, `style`
+  attributes containing case-insensitive `url(` or `@import`, `<style>` element data containing
+  either token case-insensitively, and unescaped hostile markup;
 - require the six ordered report sections, status/known/boundary/unknown counts, stale and
   unassigned blockers, bottleneck and oldest-actionable identities, graph role and adjacent text
   alternative, bounds, timestamp, policies, cap flags, omission lower bound, warnings, unknowns,
@@ -205,10 +225,12 @@ BZR_BIN=target/debug/bzr sh content/skills/bzr-project-manager-reporting/tests/r
 Expected result: all presentation unittests pass, the dependency contract prints
 `dependency-analysis skill contract: ok`, the debug binary is built, and the PM contract exits 0.
 
-Verify the new test bites by temporarily replacing one escaped hostile marker in a scratch copy of
-the expected HTML with an active tag and pointing an equally temporary copy of the test module at
-that scratch fixture. Expected result: the hostile-content assertion fails. Remove the scratch
-directory after the controlled fault; do not alter the checked-in fixture for this proof.
+Verify the new test bites with two controlled faults in scratch copies: replace one escaped hostile
+marker with an active tag, then separately add `@import url("https://evil.invalid/x.css")` inside
+the inline `<style>` block. Point an equally temporary copy of the test module at each scratch
+fixture. Expected result: the hostile-content assertion fails for the first and the style-content
+assertion fails for the second. Remove the scratch directory after both faults; do not alter the
+checked-in fixture for this proof.
 
 ### Step 4: Run aggregate, installed, and visual acceptance
 
