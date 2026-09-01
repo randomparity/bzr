@@ -3,7 +3,7 @@ set -eu
 
 HERE=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 FILTER="$HERE/../scripts/compare-snapshots.jq"
-WORK=$(mktemp -d)
+WORK=$(CDPATH='' cd -- "$(mktemp -d)" && pwd -P)
 trap 'rm -rf "$WORK"' EXIT
 
 snapshot() {

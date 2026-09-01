@@ -27,6 +27,8 @@ grep -Fq 'update history. Never present whiteboard as an activity log' "$SKILL"
 grep -Fq 'bzr-weekly-status' "$SKILL"
 grep -Fq 'bzr-dependency-analysis' "$SKILL"
 grep -Fq 'bzr-release-readiness' "$SKILL"
+grep -Fq 'dependency-analysis owns dependency-specific presentation semantics' "$SKILL"
+grep -Fq 'reference/artifact-safety.md' "$SKILL"
 
 grep -Fq '=, +, -, or @' "$SAFETY"
 grep -Fq 'serialized cell with an apostrophe' "$SAFETY"

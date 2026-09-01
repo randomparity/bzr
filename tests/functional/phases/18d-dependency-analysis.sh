@@ -11,14 +11,27 @@ _DA_COLLECT="$_DA_SKILL_ROOT/scripts/collect.py"
 _DA_ANALYZE="$_DA_SKILL_ROOT/scripts/analyze.py"
 _DA_RENDER="$_DA_SKILL_ROOT/scripts/render.py"
 _DA_CYCLE="$_DA_SKILL_ROOT/tests/fixtures/cycle.collection.json"
+_DA_PRESENTATION_TEMPLATE="$_DA_SKILL_ROOT/reference/presentation-report.md"
+_DA_PRESENTATION_ANALYSIS="$_DA_SKILL_ROOT/tests/fixtures/presentation.analysis.json"
+_DA_PRESENTATION_HTML="$_DA_SKILL_ROOT/tests/fixtures/presentation.expected.html"
+_DA_PRESENTATION_TEST="$_DA_SKILL_ROOT/tests/test_presentation.py"
+_DA_PM_SAFETY="$SKILLS_PROJECT/.agents/skills/bzr-project-manager-reporting/reference/artifact-safety.md"
 _DA_PATHS_OK=1
-for _DA_PATH in "$_DA_COLLECT" "$_DA_ANALYZE" "$_DA_RENDER" "$_DA_CYCLE"; do
+for _DA_PATH in "$_DA_COLLECT" "$_DA_ANALYZE" "$_DA_RENDER" "$_DA_CYCLE" \
+  "$_DA_PRESENTATION_TEMPLATE" "$_DA_PRESENTATION_ANALYSIS" \
+  "$_DA_PRESENTATION_HTML" "$_DA_PRESENTATION_TEST"; do
   _DA_PATH_CANONICAL=$(cd "$(dirname "$_DA_PATH")" && pwd -P)/$(basename "$_DA_PATH")
   case "$_DA_PATH_CANONICAL" in
   "$_DA_SKILL_ROOT_CANONICAL"/*) ;;
   *) _DA_PATHS_OK=0 ;;
   esac
 done
+_DA_SKILLS_ROOT_CANONICAL=$(cd "$SKILLS_PROJECT/.agents/skills" && pwd -P)
+_DA_PM_SAFETY_CANONICAL=$(cd "$(dirname "$_DA_PM_SAFETY")" && pwd -P)/$(basename "$_DA_PM_SAFETY")
+case "$_DA_PM_SAFETY_CANONICAL" in
+"$_DA_SKILLS_ROOT_CANONICAL/bzr-project-manager-reporting/reference/artifact-safety.md") ;;
+*) _DA_PATHS_OK=0 ;;
+esac
 _DA_BZR_CANONICAL=$(cd "$(dirname "$BZR_BIN")" && pwd -P)/$(basename "$BZR_BIN")
 _DA_CONFIG="$XDG_CONFIG_HOME/bzr/config.toml"
 _DA_REJECTED_KEY="FuncTestRejected0123456789abcdef01234567"
@@ -41,6 +54,16 @@ if [[ $_DA_PATHS_OK -eq 1 ]] && [[ -f "$_DA_COLLECT" ]] &&
   test_pass
 else
   test_fail "dependency-analysis stage escaped its installed root or release binary"
+fi
+
+test_begin "installed-presentation-contract-preserves-safe-partial-evidence" "installed presentation contract preserves safe partial evidence"
+if [[ $_DA_PATHS_OK -eq 1 ]] && [[ -f $_DA_PRESENTATION_TEMPLATE ]] &&
+  [[ -f $_DA_PRESENTATION_ANALYSIS ]] && [[ -f $_DA_PRESENTATION_HTML ]] &&
+  [[ -f $_DA_PRESENTATION_TEST ]] && [[ -f $_DA_PM_SAFETY ]] &&
+  python3 "$_DA_PRESENTATION_TEST"; then
+  test_pass
+else
+  test_fail "installed presentation contract or safe partial fixture is unavailable"
 fi
 
 # Fixture mutations are confined to this disposable functional phase. The

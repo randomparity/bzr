@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dependency evidence report</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; }
+    body { margin: 0; background: #f5f7fb; color: #172033; }
+    main { max-width: 1040px; margin: auto; padding: 2rem; }
+    section { background: white; border: 1px solid #d8deea; border-radius: .75rem;
+      margin: 1rem 0; padding: 1rem 1.25rem; }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .75rem; }
+    .metric { background: #edf2ff; border-radius: .5rem; padding: .75rem; }
+    .warning { border-left: .35rem solid #c65d00; }
+    .map { width: 100%; min-height: 230px; }
+    .node { fill: #edf2ff; stroke: #365a9d; stroke-width: 2; }
+    .boundary { fill: #fff4d6; stroke: #9a6a00; }
+    .unknown { fill: #f5e8ff; stroke: #704090; stroke-dasharray: 5 4; }
+    .edge { stroke: #43516c; stroke-width: 2; }
+    .muted { color: #536078; }
+    code { overflow-wrap: anywhere; }
+    @media (max-width: 600px) {
+      main { padding: .75rem; }
+      section { padding: .8rem; }
+      .map { display: none; }
+      .text-alternative { background: #edf2ff; border-radius: .5rem; padding: .75rem; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Dependency evidence report</h1>
+  <p class="muted">Snapshot analyzed 2026-08-28T12:00:00Z · status: partial</p>
+
+  <section class="warning">
+    <h2>Executive summary</h2>
+    <p>Partial evidence contains 1 known unresolved bug, 1 boundary bug with unknown resolution,
+      and 1 unknown bug with unknown resolution.</p>
+    <p>The strongest blocker signal is primary#1, a stale, unassigned bottleneck with fan-out 2.
+      Dependency structure is evidence, not a schedule.</p>
+  </section>
+
+  <section>
+    <h2>Status and unresolved work</h2>
+    <div class="metrics">
+      <div class="metric"><strong>Status NEW</strong><br>1 known bug</div>
+      <div class="metric"><strong>Known</strong><br>1</div>
+      <div class="metric"><strong>Boundary</strong><br>1</div>
+      <div class="metric"><strong>Unknown</strong><br>1</div>
+      <div class="metric"><strong>Known unresolved</strong><br>1</div>
+      <div class="metric"><strong>Resolution unknown</strong><br>2</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Needs attention</h2>
+    <h3>Stale blockers</h3>
+    <ul><li><strong>primary#1</strong> —
+      &lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &lt;img src=x onerror=alert(1)&gt;
+      [click](https://evil.invalid) %%{init: {theme: dark}}%%</li></ul>
+    <h3>Unassigned blockers</h3>
+    <ul><li><strong>primary#1</strong> — assigned to configured placeholder
+      nobody@example.test</li></ul>
+  </section>
+
+  <section>
+    <h2>Dependency map</h2>
+    <svg class="map" viewBox="0 0 720 240" role="img" aria-labelledby="map-title map-desc">
+      <title id="map-title">Compact dependency map</title>
+      <desc id="map-desc">primary#1 blocks boundary primary#2 and unknown primary#3.</desc>
+      <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6"
+        markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z"></path></marker></defs>
+      <line class="edge" x1="240" y1="120" x2="390" y2="65" marker-end="url(#arrow)"></line>
+      <line class="edge" x1="240" y1="120" x2="390" y2="180" marker-end="url(#arrow)"></line>
+      <rect class="node" x="40" y="80" width="200" height="80" rx="12"></rect>
+      <text x="65" y="115">primary#1 · known</text><text x="65" y="140">stale · unassigned</text>
+      <rect class="node boundary" x="390" y="25" width="250" height="80" rx="12"></rect>
+      <text x="415" y="60">primary#2 · boundary</text><text x="415" y="84">pending fetch</text>
+      <rect class="node unknown" x="390" y="140" width="250" height="80" rx="12"></rect>
+      <text x="415" y="175">primary#3 · unknown</text><text x="415" y="199">inaccessible</text>
+    </svg>
+    <div class="text-alternative" aria-label="Dependency map text alternative">
+      <h3>Text alternative</h3>
+      <ul><li>primary#1 (known) blocks primary#2 (boundary: pending fetch).</li>
+        <li>primary#1 (known) blocks primary#3 (unknown: inaccessible).</li></ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>Bottlenecks and oldest actionable bugs</h2>
+    <p><strong>Bottleneck:</strong> primary#1 · fan-out 2.</p>
+    <ol><li><strong>primary#1</strong> · last changed 2026-08-01T09:30:00Z · NEW.</li></ol>
+  </section>
+
+  <section>
+    <h2>Limitations and provenance</h2>
+    <dl>
+      <dt>Analysis timestamp</dt><dd>2026-08-28T12:00:00Z</dd>
+      <dt>Bounds</dt><dd>maximum depth 3; maximum nodes 10; maximum relationships 2</dd>
+      <dt>Traversal</dt><dd>both</dd>
+      <dt>Resolved-node policy</dt><dd>include-no-traverse; resolved statuses: RESOLVED</dd>
+      <dt>Unassigned-assignee policy</dt><dd>primary=nobody@example.test</dd>
+      <dt>Caps</dt><dd>graph cap false; relationship cap true; scope truncated false;
+        omitted identities 0; omitted relationships lower bound 2</dd>
+      <dt>Limitations</dt><dd>relationship_cap; evidence status partial</dd>
+      <dt>Unknowns</dt><dd>primary#2 boundary pending_fetch; primary#3 unknown inaccessible</dd>
+      <dt>Warnings</dt><dd>None observed in collected evidence</dd>
+      <dt>Duration semantics</dt><dd>none</dd>
+      <dt>Provenance</dt><dd>server primary; saved query release &lt;unsafe&gt;; allowlisted
+        parameter names product, status; collection command bug view</dd>
+    </dl>
+  </section>
+</main>
+</body>
+</html>
