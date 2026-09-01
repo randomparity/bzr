@@ -34,4 +34,6 @@ rejected.
 | [0025](0025-normalize-multi-valued-bug-fields.md) | Normalize multi-valued bug fields to arrays | Accepted |
 | [0026](0026-scope-qualified-dependency-preflight.md) | Scope-qualify dependency collector preflight | Accepted |
 | [0027](0027-inline-server-aware-url-import.md) | Make URL import aware of the active inline server | Accepted |
-| [0028](0028-dynamic-functional-test-container-ports.md) | Functional-test containers use runtime-assigned ports and checkout-scoped names | Accepted |
+| [0028](0028-signed-metadata-sort-keys.md) | Model Bugzilla metadata sort keys as signed integers | Accepted |
+| [0029](0029-semantic-functional-test-ids.md) | Identify functional tests by phase and semantic slug | Accepted |
+| [0030](0030-dynamic-functional-test-container-ports.md) | Functional-test containers use runtime-assigned ports and checkout-scoped names | Accepted |

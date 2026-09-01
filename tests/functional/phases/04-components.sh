@@ -8,7 +8,7 @@
 # ══════════════════════════════════════════════════════════════════════
 echo "── Phase 4: Components ─────────────────────────────────────"
 
-test_begin "14. component create"
+test_begin "component-create" "component create"
 run_bzr component create --product FuncTestProd --name Backend --description "Backend component" --default-assignee "$ADMIN_EMAIL"
 if [[ $BZR_EXIT -eq 0 ]]; then
     COMP_ID=$(jq -r '.id' "$BZR_STDOUT" 2>/dev/null || echo "")
@@ -19,7 +19,7 @@ else
     assert_success
 fi
 
-test_begin "15. component update"
+test_begin "component-update" "component update"
 # Component update REST endpoint is not available on Bugzilla 5.0 or 5.2
 if [[ -n "${COMP_ID:-}" ]] && [[ "$COMP_ID" != "null" ]]; then
     run_bzr component update "$COMP_ID" --description "Updated backend"
@@ -47,22 +47,22 @@ else
     fi
 fi
 
-test_begin "15a. component list --product"
+test_begin "component-list-product" "component list --product"
 run_bzr component list --product FuncTestProd
 if assert_success && assert_json_array_min_length '.' 1 &&
     assert_json_contains '[.[].name] | join(",")' "Backend"; then test_pass; fi
 
-test_begin "15b. component view <product> <component>"
+test_begin "component-view-product-component" "component view <product> <component>"
 run_bzr component view FuncTestProd Backend
 if assert_success && assert_json '.name' "Backend" &&
     assert_json '.default_assignee' "$ADMIN_EMAIL"; then test_pass; fi
 
-test_begin "15c. component list --fields projects keys"
+test_begin "component-list-fields-projects-keys" "component list --fields projects keys"
 run_bzr component list --product FuncTestProd --fields id,name
 if assert_success && assert_json '.[0] | keys | length' 2 &&
     assert_json_exists '.[0].name'; then test_pass; fi
 
-test_begin "15d. component view --fields unknown exits 7"
+test_begin "component-view-fields-unknown-exits-7" "component view --fields unknown exits 7"
 run_bzr component view FuncTestProd Backend --fields bogus_xyz
 if assert_exit_code 7; then test_pass; fi
 
@@ -73,14 +73,14 @@ write_json_fixture "$_CJSON_DIR/create.json" \
 write_json_fixture "$_CJSON_DIR/update-by-name.json" \
     "{\"product\":\"FuncTestProd\",\"component\":\"$_CJ_NAME\",\"description\":\"component json updated\"}"
 
-test_begin "15c. component create --from-json"
+test_begin "component-create-from-json" "component create --from-json"
 run_bzr component create --from-json "$_CJSON_DIR/create.json"
 if assert_success; then
     run_bzr component view FuncTestProd "$_CJ_NAME"
     if assert_json '.name' "$_CJ_NAME"; then test_pass; fi
 fi
 
-test_begin "15d. component update --product --component target"
+test_begin "component-update-product-component-target" "component update --product --component target"
 run_bzr component update --product FuncTestProd --component "$_CJ_NAME" \
     --description "component named target updated"
 if [[ $BZR_EXIT -eq 0 ]]; then
@@ -92,7 +92,7 @@ else
     assert_success
 fi
 
-test_begin "15e. component update --from-json named target"
+test_begin "component-update-from-json-named-target" "component update --from-json named target"
 run_bzr component update --from-json "$_CJSON_DIR/update-by-name.json"
 if [[ $BZR_EXIT -eq 0 ]]; then
     run_bzr component view FuncTestProd "$_CJ_NAME"

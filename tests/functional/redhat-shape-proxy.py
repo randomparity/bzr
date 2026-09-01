@@ -67,6 +67,47 @@ def shape_product_ids_response(data):
     return json.dumps(value, separators=(",", ":")).encode()
 
 
+def shape_metadata_sort_keys_response(path, data):
+    """Return production-shaped signed metadata ordering weights and count."""
+    parsed_path = urllib.parse.urlsplit(path).path
+    is_field = parsed_path.startswith("/rest/field/bug")
+    is_product = parsed_path == "/rest/product" or parsed_path.startswith(
+        "/rest/product/"
+    )
+    if not is_field and not is_product:
+        return data, 0
+
+    value = json.loads(data)
+    candidates = []
+    if is_field and isinstance(value, dict):
+        fields = value.get("fields")
+        if isinstance(fields, list):
+            for field in fields:
+                values = field.get("values") if isinstance(field, dict) else None
+                if isinstance(values, list):
+                    candidates.extend(values)
+    elif is_product and isinstance(value, dict):
+        products = value.get("products")
+        if isinstance(products, list):
+            for product in products:
+                if not isinstance(product, dict):
+                    continue
+                for name in ("versions", "milestones"):
+                    items = product.get(name)
+                    if isinstance(items, list):
+                        candidates.extend(items)
+
+    changed = 0
+    cycle = (-1, 0, 1)
+    for candidate in candidates:
+        if isinstance(candidate, dict) and "sort_key" in candidate:
+            candidate["sort_key"] = cycle[changed % len(cycle)]
+            changed += 1
+    if changed == 0:
+        return data, 0
+    return json.dumps(value, separators=(",", ":")).encode(), changed
+
+
 def make_handler(backend_port):
     class Handler(http.server.BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -139,6 +180,21 @@ def make_handler(backend_port):
                 except (UnicodeDecodeError, json.JSONDecodeError) as error:
                     self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
                     return
+
+            if 200 <= status < 300:
+                try:
+                    body, changed = shape_metadata_sort_keys_response(self.path, body)
+                except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                    self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
+                    return
+                if changed:
+                    route = "field" if urllib.parse.urlsplit(self.path).path.startswith(
+                        "/rest/field/bug"
+                    ) else "product"
+                    sys.stderr.write(
+                        f"metadata-sort-keys shaped route={route} count={changed}\n"
+                    )
+                    sys.stderr.flush()
 
             self.send_response(status)
             for key, value in response_headers:
@@ -220,6 +276,58 @@ class ShapeTests(unittest.TestCase):
         self.assertEqual(
             json.loads(shape_product_ids_response(payload)), {"products": []}
         )
+
+    def test_shapes_field_metadata_sort_keys_with_signed_cycle(self):
+        payload = json.dumps({"fields": [{
+            "id": 10,
+            "name": "bug_status",
+            "values": [
+                {"id": 101, "name": "NEW", "sort_key": 100},
+                {"id": 102, "name": "ASSIGNED", "sort_key": 200},
+                {"id": 103, "name": "CLOSED", "sort_key": 300},
+            ],
+        }]}).encode()
+        body, count = shape_metadata_sort_keys_response(
+            "/rest/field/bug/status", payload
+        )
+        shaped = json.loads(body)
+        self.assertEqual(count, 3)
+        self.assertEqual(
+            [item["sort_key"] for item in shaped["fields"][0]["values"]],
+            [-1, 0, 1],
+        )
+        self.assertEqual(
+            [item["id"] for item in shaped["fields"][0]["values"]],
+            [101, 102, 103],
+        )
+
+    def test_shapes_product_metadata_sort_keys_with_signed_cycle(self):
+        payload = json.dumps({"products": [{
+            "id": 10,
+            "versions": [
+                {"id": 201, "sort_key": 100},
+                {"id": 202, "sort_key": 200},
+            ],
+            "milestones": [{"id": 301, "sort_key": 300}],
+        }]}).encode()
+        body, count = shape_metadata_sort_keys_response("/rest/product", payload)
+        shaped = json.loads(body)
+        self.assertEqual(count, 3)
+        self.assertEqual(
+            [item["sort_key"] for item in shaped["products"][0]["versions"]],
+            [-1, 0],
+        )
+        self.assertEqual(
+            shaped["products"][0]["milestones"][0]["sort_key"], 1
+        )
+        self.assertEqual(shaped["products"][0]["id"], 10)
+
+    def test_metadata_sort_key_shape_leaves_unrelated_payload_untouched(self):
+        payload = b'{"products":[{"id":10,"sort_key":99}]}'
+        for path in ["/rest/version", "/rest/product"]:
+            body, count = shape_metadata_sort_keys_response(path, payload)
+            self.assertEqual(body, payload)
+            self.assertEqual(count, 0)
 
     def test_readiness_endpoint(self):
         server, thread = self._start_server(1)

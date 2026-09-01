@@ -87,7 +87,7 @@ PROJECT_MANAGER_REPORTING_PAYLOAD=(
   tests/run.sh
 )
 
-test_begin "123a. skills install populates both project layouts"
+test_begin "skills-install-populates-both-project-layouts" "skills install populates both project layouts"
 run_bzr skills install --agent all --project "$SKILLS_PROJECT"
 if assert_success &&
   assert_json '.action' "install" &&
@@ -104,7 +104,7 @@ else
   [[ $FAIL_COUNT -gt 0 ]] || test_fail "nested bundled files were not installed"
 fi
 
-test_begin "123i. dependency-analysis installation contains the complete payload"
+test_begin "dependency-analysis-installation-contains-the-complete-payload" "dependency-analysis installation contains the complete payload"
 _DA_INSTALLED_ROOT="$SKILLS_PROJECT/.agents/skills/bzr-dependency-analysis"
 _DA_INSTALLED_EXPECTED="$FUNC_CONFIG_DIR/dependency-analysis-installed-expected.txt"
 printf '%s\n' "${DEPENDENCY_ANALYSIS_PAYLOAD[@]}" | LC_ALL=C sort \
@@ -126,7 +126,7 @@ else
   test_fail "installed dependency-analysis payload did not match the embedded contract"
 fi
 
-test_begin "123k. release-readiness installation contains the complete payload"
+test_begin "release-readiness-installation-contains-the-complete-payload" "release-readiness installation contains the complete payload"
 _RR_INSTALLED_EXPECTED="$FUNC_CONFIG_DIR/release-readiness-installed-expected.txt"
 printf '%s\n' "${RELEASE_READINESS_PAYLOAD[@]}" | LC_ALL=C sort \
   >"$_RR_INSTALLED_EXPECTED"
@@ -147,7 +147,7 @@ else
   test_fail "installed release-readiness payload did not match the embedded contract"
 fi
 
-test_begin "123l. project-manager reporting installation contains the complete payload"
+test_begin "project-manager-reporting-installation-contains-the-complete-payload" "project-manager reporting installation contains the complete payload"
 _PM_INSTALLED_EXPECTED="$FUNC_CONFIG_DIR/project-manager-reporting-installed-expected.txt"
 printf '%s\n' "${PROJECT_MANAGER_REPORTING_PAYLOAD[@]}" | LC_ALL=C sort \
   >"$_PM_INSTALLED_EXPECTED"
@@ -168,14 +168,14 @@ else
   test_fail "installed project-manager reporting payload did not match the embedded contract"
 fi
 
-test_begin "123b. skills install idempotently replaces an owned skill"
+test_begin "skills-install-idempotently-replaces-an-owned-skill" "skills install idempotently replaces an owned skill"
 printf '\nlocal stale marker\n' >>"$SKILLS_PROJECT/.agents/skills/bzr-reference/SKILL.md"
 run_bzr skills install --agent all --project "$SKILLS_PROJECT"
 if assert_success &&
   ! grep -q "local stale marker" \
     "$SKILLS_PROJECT/.agents/skills/bzr-reference/SKILL.md" &&
-  [[ $(jq -r '.destinations[0].installed | length' "$BZR_STDOUT") == ${#SKILLS_EXPECTED[@]} ]] &&
-  [[ $(jq -r '.destinations[1].installed | length' "$BZR_STDOUT") == ${#SKILLS_EXPECTED[@]} ]]; then
+  [[ $(jq -r '.destinations[0].installed | length' "$BZR_STDOUT") == "${#SKILLS_EXPECTED[@]}" ]] &&
+  [[ $(jq -r '.destinations[1].installed | length' "$BZR_STDOUT") == "${#SKILLS_EXPECTED[@]}" ]]; then
   test_pass
 else
   [[ $FAIL_COUNT -gt 0 ]] || test_fail "owned skill was not replaced from embedded payload"
@@ -186,7 +186,7 @@ mkdir "$SKILLS_HOME"
 SKILLS_HOME_CANONICAL=$(cd "$SKILLS_HOME" && pwd -P)
 ORIGINAL_HOME=$HOME
 export HOME="$SKILLS_HOME"
-test_begin "123c. skills install populates isolated global layouts"
+test_begin "skills-install-populates-isolated-global-layouts" "skills install populates isolated global layouts"
 run_bzr skills install --agent all --global
 export HOME="$ORIGINAL_HOME"
 if assert_success &&
@@ -225,7 +225,7 @@ jq -n --arg project "$SKILLS_NDJSON_CANONICAL" --args '
     ]
   }
 ' "${SKILLS_EXPECTED[@]}" >"$SKILLS_NDJSON_EXPECTED"
-test_begin "123d. skills install emits one bare, complete NDJSON object"
+test_begin "skills-install-emits-one-bare-complete-ndjson-object" "skills install emits one bare, complete NDJSON object"
 run_bzr_raw --output ndjson skills install --agent all --project "$SKILLS_NDJSON"
 if assert_success &&
   assert_ndjson_line_count 1 &&
@@ -247,7 +247,7 @@ source-version: foreign
 source-commit: foreign
 EOF
 cp -R "$SKILLS_FOREIGN/.agents" "$SKILLS_FOREIGN_BEFORE"
-test_begin "123e. skills install refuses and preserves a foreign skill"
+test_begin "skills-install-refuses-and-preserves-a-foreign-skill" "skills install refuses and preserves a foreign skill"
 run_bzr skills install --agent codex --project "$SKILLS_FOREIGN"
 if assert_failure &&
   [[ ! -s "$BZR_STDOUT_RAW" ]] &&
@@ -261,7 +261,7 @@ SKILLS_SYMLINK="$FUNC_CONFIG_DIR/skills-symlink"
 SKILLS_SYMLINK_TARGET="$FUNC_CONFIG_DIR/skills-symlink-target"
 mkdir "$SKILLS_SYMLINK" "$SKILLS_SYMLINK_TARGET"
 ln -s "$SKILLS_SYMLINK_TARGET" "$SKILLS_SYMLINK/.agents"
-test_begin "123f. skills install refuses a symlinked destination component"
+test_begin "skills-install-refuses-a-symlinked-destination-component" "skills install refuses a symlinked destination component"
 run_bzr skills install --agent codex --project "$SKILLS_SYMLINK"
 if assert_failure &&
   [[ ! -s "$BZR_STDOUT_RAW" ]] &&
@@ -278,7 +278,7 @@ SKILLS_BAD_CONFIG_BEFORE="$FUNC_CONFIG_DIR/skills-malformed-config-before.toml"
 mkdir "$SKILLS_NO_CONFIG"
 printf 'not = [valid toml\n' >"$SKILLS_BAD_CONFIG"
 cp "$SKILLS_BAD_CONFIG" "$SKILLS_BAD_CONFIG_BEFORE"
-test_begin "123g. skills install ignores and preserves malformed Bugzilla config"
+test_begin "skills-install-ignores-and-preserves-malformed-bugzilla-config" "skills install ignores and preserves malformed Bugzilla config"
 run_bzr --config "$SKILLS_BAD_CONFIG" skills install \
   --agent standard --project "$SKILLS_NO_CONFIG"
 if assert_success &&
@@ -289,7 +289,7 @@ else
   [[ $FAIL_COUNT -gt 0 ]] || test_fail "local install consulted or changed Bugzilla config"
 fi
 
-test_begin "123h. skills install refuses an omitted scope without stdout"
+test_begin "skills-install-refuses-an-omitted-scope-without-stdout" "skills install refuses an omitted scope without stdout"
 run_bzr skills install --agent all
 if assert_exit_code 7 && [[ ! -s "$BZR_STDOUT_RAW" ]]; then
   test_pass
@@ -297,7 +297,7 @@ else
   [[ $FAIL_COUNT -gt 0 ]] || test_fail "missing scope emitted stdout"
 fi
 
-test_begin "123j. installed cycle fixture analyzes and renders deterministically"
+test_begin "installed-cycle-fixture-analyzes-and-renders-deterministically" "installed cycle fixture analyzes and renders deterministically"
 _DA_CYCLE_COLLECTION="$_DA_INSTALLED_ROOT/tests/fixtures/cycle.collection.json"
 _DA_CYCLE_EXPECTED="$_DA_INSTALLED_ROOT/tests/fixtures/cycle.analysis.json"
 _DA_CYCLE_ANALYSIS="$FUNC_CONFIG_DIR/dependency-cycle.analysis.json"
@@ -321,7 +321,7 @@ else
   test_fail "installed cycle fixture pipeline did not preserve cycle evidence"
 fi
 
-test_begin "123ja. installed collector replay feeds installed analyzer and renderers"
+test_begin "installed-collector-replay-feeds-installed-analyzer-and-renderers" "installed collector replay feeds installed analyzer and renderers"
 _DA_REPLAY_POLICY="$_DA_INSTALLED_ROOT/tests/fixtures/alias-collapse.policy.json"
 _DA_REPLAY_EXPECTED="$_DA_INSTALLED_ROOT/tests/fixtures/alias-collapse.expected.json"
 _DA_REPLAY_RUNNER="$_DA_INSTALLED_ROOT/tests/fixtures/recording_runner.py"
@@ -340,7 +340,7 @@ jq -n '{
       "--sort", "bug_id", "--order", "asc"
     ],
     exit_code: 0,
-    stdout: {schema_version: "1.0.0", data: []}
+    stdout: {schema_version: "2.0.0", data: []}
   }, {
     argv: [
       "--server", "primary", "--json", "bug", "view", "delivery",
@@ -349,7 +349,7 @@ jq -n '{
     ],
     exit_code: 0,
     stdout: {
-      schema_version: "1.0.0",
+      schema_version: "2.0.0",
       data: {
         assigned_to: null,
         blocks: [],

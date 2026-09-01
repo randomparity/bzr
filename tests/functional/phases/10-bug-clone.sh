@@ -8,7 +8,7 @@
 # ══════════════════════════════════════════════════════════════════════
 echo "── Phase 10: Bug Clone ───────────────────────────────────────"
 
-test_begin "54. bug clone (defaults)"
+test_begin "bug-clone-defaults" "bug clone (defaults)"
 if [[ -n "$BUG3" ]]; then
     # Pass --op-sys and --rep-platform since some Bugzilla versions require them
     # and the Bug struct doesn't include these fields for automatic copying
@@ -19,7 +19,7 @@ if [[ -n "$BUG3" ]]; then
     fi
 else test_skip "no BUG3"; fi
 
-test_begin "55. bug view (verify clone fields)"
+test_begin "bug-view-verify-clone-fields" "bug view (verify clone fields)"
 if [[ -n "$CLONE_ID" ]]; then
     run_bzr bug view "$CLONE_ID"
     if assert_success && assert_json '.summary' "Clone source bug" && assert_json '.priority' "Highest"; then
@@ -27,19 +27,19 @@ if [[ -n "$CLONE_ID" ]]; then
     fi
 else test_skip "no CLONE_ID"; fi
 
-test_begin "56. bug clone (with overrides)"
+test_begin "bug-clone-with-overrides" "bug clone (with overrides)"
 if [[ -n "$BUG3" ]]; then
     run_bzr bug clone "$BUG3" --summary "Overridden summary" --no-comment --op-sys Linux --rep-platform PC
     if assert_success && assert_json_exists '.id'; then test_pass; fi
 else test_skip "no BUG3"; fi
 
-test_begin "57. bug clone --add-depends-on"
+test_begin "bug-clone-add-depends-on" "bug clone --add-depends-on"
 if [[ -n "$BUG3" ]]; then
     run_bzr bug clone "$BUG3" --summary "Depends on source" --add-depends-on --no-cc --no-keywords --op-sys Linux --rep-platform PC
     if assert_success && assert_json_exists '.id'; then test_pass; fi
 else test_skip "no BUG3"; fi
 
-test_begin "57a. bug clone copies source metadata"
+test_begin "bug-clone-copies-source-metadata" "bug clone copies source metadata"
 if [[ -n "$BUG3" ]]; then
     run_bzr bug update "$BUG3" --url "http://example.com/source-$BUG3" \
         --whiteboard "clone-source-$BUG3" --target-milestone=--- \
@@ -56,7 +56,7 @@ if [[ -n "$BUG3" ]]; then
     fi
 else test_skip "no BUG3"; fi
 
-test_begin "57b. bug clone metadata overrides"
+test_begin "bug-clone-metadata-overrides" "bug clone metadata overrides"
 if [[ -n "$BUG3" ]]; then
     _CL_WB="clone-override-$$"
     run_bzr bug clone "$BUG3" --op-sys Linux --rep-platform PC --no-comment \

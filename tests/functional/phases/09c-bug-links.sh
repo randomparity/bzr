@@ -18,7 +18,7 @@ LINK_A=""
 LINK_B=""
 LINK_C=""
 
-test_begin "53g. bug create (link node A)"
+test_begin "bug-create-link-node-a" "bug create (link node A)"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Link node A" --description "links graph node A" \
     --op-sys All --rep-platform All
@@ -27,7 +27,7 @@ if assert_success && assert_json_exists '.id'; then
     test_pass
 fi
 
-test_begin "53h. bug create (link node B)"
+test_begin "bug-create-link-node-b" "bug create (link node B)"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Link node B" --description "links graph node B" \
     --op-sys All --rep-platform All
@@ -36,7 +36,7 @@ if assert_success && assert_json_exists '.id'; then
     test_pass
 fi
 
-test_begin "53i. bug create (link node C)"
+test_begin "bug-create-link-node-c" "bug create (link node C)"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Link node C" --description "links graph node C" \
     --op-sys All --rep-platform All
@@ -45,7 +45,7 @@ if assert_success && assert_json_exists '.id'; then
     test_pass
 fi
 
-test_begin "53j. wire dependency chain A->B->C"
+test_begin "wire-dependency-chain-a-b-c" "wire dependency chain A->B->C"
 if [[ -n "$LINK_A" ]] && [[ -n "$LINK_B" ]] && [[ -n "$LINK_C" ]]; then
     run_bzr bug update "$LINK_A" --depends-on-add "$LINK_B"
     a=$BZR_EXIT
@@ -56,7 +56,7 @@ if [[ -n "$LINK_A" ]] && [[ -n "$LINK_B" ]] && [[ -n "$LINK_C" ]]; then
     fi
 else test_skip "no link nodes"; fi
 
-test_begin "53k. bug links A (one hop): single depth-1 depends_on record"
+test_begin "bug-links-a-one-hop-single-depth-1-depends-on-record" "bug links A (one hop): single depth-1 depends_on record"
 if [[ -n "$LINK_A" ]] && [[ -n "$LINK_B" ]]; then
     run_bzr bug links "$LINK_A"
     if assert_success &&
@@ -69,13 +69,13 @@ if [[ -n "$LINK_A" ]] && [[ -n "$LINK_B" ]]; then
     fi
 else test_skip "no link nodes"; fi
 
-test_begin "53l. bug links A --recursive --depth 1: still just one hop"
+test_begin "bug-links-a-recursive-depth-1-still-just-one-hop" "bug links A --recursive --depth 1: still just one hop"
 if [[ -n "$LINK_A" ]]; then
     run_bzr bug links "$LINK_A" --recursive --depth 1
     if assert_success && assert_json 'length' "1"; then test_pass; fi
 else test_skip "no link nodes"; fi
 
-test_begin "53m. bug links A --recursive --depth 2: reaches C at depth 2"
+test_begin "bug-links-a-recursive-depth-2-reaches-c-at-depth-2" "bug links A --recursive --depth 2: reaches C at depth 2"
 if [[ -n "$LINK_A" ]] && [[ -n "$LINK_B" ]] && [[ -n "$LINK_C" ]]; then
     run_bzr bug links "$LINK_A" --recursive --depth 2
     if assert_success &&
@@ -88,7 +88,7 @@ if [[ -n "$LINK_A" ]] && [[ -n "$LINK_B" ]] && [[ -n "$LINK_C" ]]; then
     fi
 else test_skip "no link nodes"; fi
 
-test_begin "53n. bug links A --recursive --depth 10: terminates past end of chain"
+test_begin "bug-links-a-recursive-depth-10-terminates-past-end-of-chain" "bug links A --recursive --depth 10: terminates past end of chain"
 if [[ -n "$LINK_A" ]]; then
     run_bzr bug links "$LINK_A" --recursive --depth 10
     # The chain ends at C, so a large depth still yields exactly B (depth 1) and
@@ -101,7 +101,7 @@ if [[ -n "$LINK_A" ]]; then
     fi
 else test_skip "no link nodes"; fi
 
-test_begin "53o. bug links B --relation blocks: reverse edge to A (direction in)"
+test_begin "bug-links-b-relation-blocks-reverse-edge-to-a-direction-in" "bug links B --relation blocks: reverse edge to A (direction in)"
 if [[ -n "$LINK_A" ]] && [[ -n "$LINK_B" ]]; then
     # A depends_on B, so B.blocks contains A; the record's direction is "in".
     run_bzr bug links "$LINK_B" --relation blocks
@@ -114,19 +114,19 @@ if [[ -n "$LINK_A" ]] && [[ -n "$LINK_B" ]]; then
     fi
 else test_skip "no link nodes"; fi
 
-test_begin "53p. bug links --depth without --recursive is a usage error"
+test_begin "bug-links-depth-without-recursive-is-a-usage-error" "bug links --depth without --recursive is a usage error"
 if [[ -n "$LINK_A" ]]; then
     run_bzr_raw bug links "$LINK_A" --depth 2
     if assert_failure; then test_pass; fi
 else test_skip "no link nodes"; fi
 
-test_begin "53q. bug links --depth 0 rejected (out of range)"
+test_begin "bug-links-depth-0-rejected-out-of-range" "bug links --depth 0 rejected (out of range)"
 if [[ -n "$LINK_A" ]]; then
     run_bzr_raw bug links "$LINK_A" --recursive --depth 0
     if assert_failure; then test_pass; fi
 else test_skip "no link nodes"; fi
 
-test_begin "53r. credentialless bug links A --recursive --depth 2 (public server)"
+test_begin "credentialless-bug-links-a-recursive-depth-2-public-server" "credentialless bug links A --recursive --depth 2 (public server)"
 if [[ -n "$LINK_A" ]] && [[ -n "$LINK_C" ]]; then
     run_bzr_raw --json --server public bug links "$LINK_A" --recursive --depth 2
     if assert_success &&
@@ -151,7 +151,7 @@ if "$_RH_RUNTIME" cp "$_RH_FIXTURE" "$_RH_CONTAINER:$_RH_REMOTE" &&
     _RH_READY=1
 fi
 
-test_begin "53s. Red Hat object-valued duplicate: one hop"
+test_begin "red-hat-object-valued-duplicate-one-hop" "Red Hat object-valued duplicate: one hop"
 if [[ $_RH_READY -eq 1 ]]; then
     run_bzr_raw --json --server-url "$BZ_URL/redhat-links.cgi" --api rest \
         bug links 998
@@ -164,7 +164,7 @@ if [[ $_RH_READY -eq 1 ]]; then
     fi
 else test_fail "could not install Red Hat response fixture"; fi
 
-test_begin "53t. Red Hat object-valued duplicate: recursive depth 2"
+test_begin "red-hat-object-valued-duplicate-recursive-depth-2" "Red Hat object-valued duplicate: recursive depth 2"
 if [[ $_RH_READY -eq 1 ]]; then
     run_bzr_raw --json --server-url "$BZ_URL/redhat-links.cgi" --api rest \
         bug links 998 --recursive --depth 2

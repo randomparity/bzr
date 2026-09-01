@@ -8,7 +8,7 @@
 # ══════════════════════════════════════════════════════════════════════
 echo "── Phase 14: Comments ───────────────────────────────────────"
 
-test_begin "88. comment add (first)"
+test_begin "comment-add-first" "comment add (first)"
 if [[ -n "$BUG1" ]]; then
     run_bzr comment add "$BUG1" --body "First test comment"
     if assert_success && assert_json_exists '.id'; then
@@ -17,39 +17,39 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "89. comment add (second)"
+test_begin "comment-add-second" "comment add (second)"
 if [[ -n "$BUG1" ]]; then
     run_bzr comment add "$BUG1" --body "Second comment"
     if assert_success; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "90. comment list"
+test_begin "comment-list" "comment list"
 if [[ -n "$BUG1" ]]; then
     run_bzr comment list "$BUG1"
     # Bug description counts as comment 0, plus our 2 = at least 3
     if assert_success && assert_json_array_min_length '.' 3; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "91. comment list --since"
+test_begin "comment-list-since" "comment list --since"
 if [[ -n "$BUG1" ]]; then
     run_bzr comment list "$BUG1" --since 2020-01-01
     if assert_success; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "91a. comment list --fields projects keys"
+test_begin "comment-list-fields-projects-keys" "comment list --fields projects keys"
 if [[ -n "$BUG1" ]]; then
     run_bzr comment list "$BUG1" --fields id,creator
     if assert_success && assert_json '.[0] | keys | length' 2 &&
         assert_json_exists '.[0].id'; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "91b. comment list --fields unknown exits 7"
+test_begin "comment-list-fields-unknown-exits-7" "comment list --fields unknown exits 7"
 if [[ -n "$BUG1" ]]; then
     run_bzr comment list "$BUG1" --fields bogus_xyz
     if assert_exit_code 7; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "92. comment tag --add"
+test_begin "comment-tag-add" "comment tag --add"
 if [[ -n "${COMMENT_ID:-}" ]] && [[ "$COMMENT_ID" != "null" ]]; then
     run_bzr comment tag "$COMMENT_ID" --add important
     if assert_success; then test_pass; fi
@@ -57,7 +57,7 @@ else
     test_skip "no comment ID"
 fi
 
-test_begin "93. comment tag --remove"
+test_begin "comment-tag-remove" "comment tag --remove"
 if [[ -n "${COMMENT_ID:-}" ]] && [[ "$COMMENT_ID" != "null" ]]; then
     run_bzr comment tag "$COMMENT_ID" --remove important
     if assert_success; then test_pass; fi
@@ -65,14 +65,14 @@ else
     test_skip "no comment ID"
 fi
 
-test_begin "94. comment search-tags"
+test_begin "comment-search-tags" "comment search-tags"
 run_bzr comment search-tags important
 # May return empty if tag was fully removed, but should succeed
 if assert_success; then test_pass; fi
 
 # ─ Issue #161: bug update --comment / --comment-file / --comment-private ─
 
-test_begin "94d. bug update --comment posts atomically"
+test_begin "bug-update-comment-posts-atomically" "bug update --comment posts atomically"
 if [[ -n "$BUG1" ]]; then
     # Capture pre-update comment count.
     run_bzr comment list "$BUG1"
@@ -91,7 +91,7 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "94e. bug update --comment --comment-private"
+test_begin "bug-update-comment-comment-private" "bug update --comment --comment-private"
 if [[ -n "$BUG1" ]]; then
     run_bzr bug update "$BUG1" --comment "private atomic comment" --comment-private
     if assert_success; then
@@ -105,7 +105,7 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "94f. bug update --comment-file"
+test_begin "bug-update-comment-file" "bug update --comment-file"
 if [[ -n "$BUG1" ]]; then
     tmpfile=$(mktemp)
     printf 'comment from file\nsecond line\n' >"$tmpfile"
@@ -126,7 +126,7 @@ else test_skip "no BUG1"; fi
 _CB=$(make_bug --product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d --summary "comment bodyfile host")
 _CBF=$(mktemp /tmp/bzr-func-cbody.XXXXXX)
 
-test_begin "149. comment add --body-file"
+test_begin "comment-add-body-file" "comment add --body-file"
 printf 'body from a file' >"$_CBF"
 run_bzr comment add "$_CB" --body-file "$_CBF"
 if assert_success; then
@@ -134,7 +134,7 @@ if assert_success; then
     if assert_stdout_contains "body from a file"; then test_pass; fi
 fi
 
-test_begin "149a. comment add --body-file - (stdin)"
+test_begin "comment-add-body-file-stdin" "comment add --body-file - (stdin)"
 printf 'body via stdin dash' >"$_CBF"
 run_bzr comment add "$_CB" --body-file - <"$_CBF"
 if assert_success; then

@@ -52,7 +52,7 @@ run_bzr query save "$_RR_QUERY" --product "$_RR_PRODUCT" --limit 1 \
 run_bzr query save "$_RR_URL_QUERY" --from-url "$_RR_URL" --limit 1
 [[ $BZR_EXIT -eq 0 ]] || _RR_FIXTURE_OK=0
 
-test_begin "123r. release fixture carries deadline, owner, milestone, history, and dependency"
+test_begin "release-fixture-carries-deadline-owner-milestone-history-and-dependency" "release fixture carries deadline, owner, milestone, history, and dependency"
 if [[ $_RR_FIXTURE_OK -eq 1 ]]; then
   run_bzr bug view "$_RR_ROOT"
   if assert_success && assert_json '.priority' "Highest" &&
@@ -107,7 +107,7 @@ _rr_scope_matches_fixture() {
       'map(.id) == $expected' "$BZR_STDOUT" >/dev/null
 }
 
-test_begin "123s. five release scope forms use bounded complete reads"
+test_begin "five-release-scope-forms-use-bounded-complete-reads" "five release scope forms use bounded complete reads"
 _RR_SCOPES_OK=1
 run_bzr --server test bug search --from-url "$_RR_URL" --limit 100 --paginate \
   --sort bug_id --order asc --fields "$_RR_FIELDS"
@@ -133,7 +133,7 @@ else
   test_fail "a release scope failed, omitted the fixture, or lost stable ordering"
 fi
 
-test_begin "123s-a. Red Hat-shaped bug fields normalize to arrays"
+test_begin "red-hat-shaped-bug-fields-normalize-to-arrays" "Red Hat-shaped bug fields normalize to arrays"
 if redhat_shape_start "$BZ_PORT"; then
   trap 'cleanup; redhat_shape_stop' EXIT
   _RR_REDHAT_URL="http://127.0.0.1:${REDHAT_SHAPE_PORT}"
@@ -172,7 +172,7 @@ else
   test_fail "Red Hat response-shape proxy did not become ready: $REDHAT_SHAPE_LOG"
 fi
 
-test_begin "123t. supplementary release evidence is structured and bounded"
+test_begin "supplementary-release-evidence-is-structured-and-bounded" "supplementary release evidence is structured and bounded"
 _RR_SUPPLEMENT_OK=1
 run_bzr bug view "$_RR_ROOT" --fields "$_RR_FIELDS"
 [[ $BZR_EXIT -eq 0 ]] && [[ $(jq -r '.id' "$BZR_STDOUT") == "$_RR_ROOT" ]] ||
@@ -206,7 +206,7 @@ fi
 
 _RR_REPORT="$FUNC_CONFIG_DIR/release-readiness-demo.md"
 _RR_REPORT_TRACE="$FUNC_CONFIG_DIR/release-readiness-demo.trace.jsonl"
-test_begin "123u. demo helper turns live evidence into a PM report"
+test_begin "demo-helper-turns-live-evidence-into-a-pm-report" "demo helper turns live evidence into a PM report"
 _RR_REPORT_OK=1
 if [[ -x "$REPO_ROOT/tools/run-release-readiness-demo.sh" ]] &&
   BZR_BIN="$BZR_BIN" "$REPO_ROOT/tools/run-release-readiness-demo.sh" \
@@ -265,7 +265,7 @@ else
   test_fail "demo helper did not produce the release-readiness report contract"
 fi
 
-test_begin "123v. release review leaves Bugzilla and local configuration unchanged"
+test_begin "release-review-leaves-bugzilla-and-local-configuration-unchanged" "release review leaves Bugzilla and local configuration unchanged"
 _rr_capture_fixture_state "$_RR_STATE_AFTER" || _RR_STATE_OK=0
 if [[ $_RR_STATE_OK -eq 1 ]] && diff -qr "$_RR_STATE_BEFORE" "$_RR_STATE_AFTER" \
   >"$FUNC_CONFIG_DIR/release-readiness-state.diff"; then

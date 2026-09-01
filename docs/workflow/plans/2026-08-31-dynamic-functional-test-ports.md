@@ -31,7 +31,7 @@ processes never need to pass anything between them directly.
   override semantics exactly as documented today.
 - `tests/functional/versions/*/Containerfile`'s internal `EXPOSE 80` is
   unchanged; only the header comment and the host-side publish flag change.
-- ADR: `docs/adr/0028-dynamic-functional-test-container-ports.md` (Accepted).
+- ADR: `docs/adr/0030-dynamic-functional-test-container-ports.md` (Accepted).
   Design: `docs/workflow/specs/2026-08-31-dynamic-functional-test-ports-design.md`.
 
 Every task below binds to these constraints; they are not repeated per task.

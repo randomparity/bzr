@@ -65,3 +65,36 @@ fn field_value_missing_scalars_stay_unknown() {
     assert!(serialized["sort_key"].is_null());
     assert!(serialized["is_active"].is_null());
 }
+
+#[test]
+fn field_value_signed_sort_key_round_trips_supported_domain() {
+    for sort_key in [i128::from(i64::MIN), -2008, 0, 2008, i128::from(u64::MAX)] {
+        let json = format!(r#"{{"name":"NEW","sort_key":{sort_key},"is_active":true}}"#);
+        let value: FieldValue = serde_json::from_str(&json).unwrap();
+        assert_eq!(value.sort_key.unwrap(), sort_key);
+        let serialized = serde_json::to_value(value).unwrap();
+        let serialized_sort_key = serialized["sort_key"]
+            .as_i64()
+            .map(i128::from)
+            .or_else(|| serialized["sort_key"].as_u64().map(i128::from));
+        assert_eq!(serialized_sort_key, Some(sort_key));
+    }
+}
+
+#[test]
+fn field_value_signed_sort_key_rejects_values_outside_supported_domain() {
+    for sort_key in ["-9223372036854775809", "18446744073709551616"] {
+        let json = format!(r#"{{"name":"NEW","sort_key":{sort_key},"is_active":true}}"#);
+        assert!(serde_json::from_str::<FieldValue>(&json).is_err());
+    }
+
+    for sort_key in [i128::from(i64::MIN) - 1, i128::from(u64::MAX) + 1] {
+        let value = FieldValue {
+            name: Some("NEW".into()),
+            sort_key: Some(sort_key),
+            is_active: Some(true),
+            can_change_to: None,
+        };
+        assert!(serde_json::to_value(value).is_err());
+    }
+}

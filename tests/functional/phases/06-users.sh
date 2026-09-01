@@ -8,7 +8,7 @@
 # ══════════════════════════════════════════════════════════════════════
 echo "── Phase 6: Users ──────────────────────────────────────────"
 
-test_begin "21. user create"
+test_begin "user-create" "user create"
 run_bzr user create --email testuser@test.bzr --full-name "Test User" --password "TestPass1!"
 if [[ $BZR_EXIT -eq 0 ]]; then
     test_pass
@@ -19,28 +19,28 @@ else
 fi
 
 # Re-enable testuser in case it was disabled by a prior run (test 24 sets disable_login=true)
-test_begin "21b. user re-enable (idempotent fix)"
+test_begin "user-re-enable-idempotent-fix" "user re-enable (idempotent fix)"
 run_bzr user update testuser@test.bzr --disable-login false --login-denied-text ""
 if assert_success; then test_pass; fi
 
-test_begin "22. user search testuser"
+test_begin "user-search-testuser" "user search testuser"
 run_bzr user search testuser
 if assert_success && assert_stdout_contains "testuser"; then test_pass; fi
 
-test_begin "23. user search testuser --details"
+test_begin "user-search-testuser-details" "user search testuser --details"
 run_bzr user search testuser --details
 if assert_success; then test_pass; fi
 
-test_begin "23a. user search --fields projects keys"
+test_begin "user-search-fields-projects-keys" "user search --fields projects keys"
 run_bzr user search testuser --fields id,email
 if assert_success && assert_json '.[0] | keys | length' 2 &&
     assert_json_exists '.[0].id'; then test_pass; fi
 
-test_begin "23b. user search --fields unknown exits 7"
+test_begin "user-search-fields-unknown-exits-7" "user search --fields unknown exits 7"
 run_bzr user search testuser --fields bogus_xyz
 if assert_exit_code 7; then test_pass; fi
 
-test_begin "24. user update testuser"
+test_begin "user-update-testuser" "user update testuser"
 # Note: Bugzilla 5.0 REST API does not support real_name updates
 # (set_real_name method not found). Use login_denied_text instead.
 run_bzr user update testuser@test.bzr --disable-login true --login-denied-text "test disabled"
@@ -53,14 +53,14 @@ write_json_fixture "$_UJSON_DIR/create.json" \
 write_json_fixture "$_UJSON_DIR/update.json" \
     "{\"user\":\"$_UJ_LOGIN\",\"disable_login\":true,\"login_denied_text\":\"json disabled\"}"
 
-test_begin "24a. user create --from-json"
+test_begin "user-create-from-json" "user create --from-json"
 run_bzr user create --from-json "$_UJSON_DIR/create.json"
 if assert_success; then
     run_bzr user search "$_UJ_LOGIN" --details
     if assert_stdout_contains "$_UJ_LOGIN"; then test_pass; fi
 fi
 
-test_begin "24b. user update --from-json"
+test_begin "user-update-from-json" "user update --from-json"
 run_bzr user update --from-json "$_UJSON_DIR/update.json"
 if assert_success; then
     run_bzr user search "$_UJ_LOGIN" --details

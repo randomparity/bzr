@@ -120,3 +120,52 @@ fn version_and_milestone_deserialize() {
     assert_eq!(ms.id, 2);
     assert_eq!(ms.is_active, Some(false));
 }
+
+#[test]
+fn product_metadata_signed_sort_keys_round_trip_supported_domain() {
+    for sort_key in [i128::from(i64::MIN), -2008, 0, 2008, i128::from(u64::MAX)] {
+        let json = format!(r#"{{"id":1,"name":"1.0","sort_key":{sort_key},"is_active":true}}"#);
+        let version: Version = serde_json::from_str(&json).unwrap();
+        let milestone: Milestone = serde_json::from_str(&json).unwrap();
+        assert_eq!(version.sort_key.unwrap(), sort_key);
+        assert_eq!(milestone.sort_key.unwrap(), sort_key);
+        for value in [
+            serde_json::to_value(&version).unwrap(),
+            serde_json::to_value(&milestone).unwrap(),
+        ] {
+            let serialized_sort_key = value["sort_key"]
+                .as_i64()
+                .map(i128::from)
+                .or_else(|| value["sort_key"].as_u64().map(i128::from));
+            assert_eq!(serialized_sort_key, Some(sort_key));
+        }
+        assert_eq!(version.id, 1_u64);
+        assert_eq!(milestone.id, 1_u64);
+    }
+}
+
+#[test]
+fn product_metadata_signed_sort_keys_reject_values_outside_supported_domain() {
+    for sort_key in ["-9223372036854775809", "18446744073709551616"] {
+        let json = format!(r#"{{"id":1,"name":"1.0","sort_key":{sort_key},"is_active":true}}"#);
+        assert!(serde_json::from_str::<Version>(&json).is_err());
+        assert!(serde_json::from_str::<Milestone>(&json).is_err());
+    }
+
+    for sort_key in [i128::from(i64::MIN) - 1, i128::from(u64::MAX) + 1] {
+        let version = Version {
+            id: 1,
+            name: Some("1.0".into()),
+            sort_key: Some(sort_key),
+            is_active: Some(true),
+        };
+        let milestone = Milestone {
+            id: 1,
+            name: Some("M1".into()),
+            sort_key: Some(sort_key),
+            is_active: Some(true),
+        };
+        assert!(serde_json::to_value(version).is_err());
+        assert!(serde_json::to_value(milestone).is_err());
+    }
+}

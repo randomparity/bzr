@@ -10,53 +10,53 @@ echo "── Phase 13.5: Saved Queries ─────────────�
 
 # ── CRUD lifecycle ───────────────────────────────────────────────────
 
-test_begin "72. query save (list kind)"
+test_begin "query-save-list-kind" "query save (list kind)"
 run_bzr query save prod-bugs --product FuncTestProd --status NEW --status CONFIRMED --limit 10
 if assert_success && assert_json '.action' "saved"; then test_pass; fi
 
-test_begin "73. query save (search kind)"
+test_begin "query-save-search-kind" "query save (search kind)"
 run_bzr query save search-bugs --search "Bug one" --limit 5
 if assert_success && assert_json '.action' "saved"; then test_pass; fi
 
-test_begin "74. query save (multi-filter)"
+test_begin "query-save-multi-filter" "query save (multi-filter)"
 run_bzr query save complex --product FuncTestProd --component Backend --priority Normal --severity normal --status NEW --status CONFIRMED --limit 20
 if assert_success && assert_json '.action' "saved"; then test_pass; fi
 
-test_begin "75. query list"
+test_begin "query-list" "query list"
 run_bzr_raw query list
 if assert_success && assert_stdout_contains "prod-bugs" && assert_stdout_contains "search-bugs" && assert_stdout_contains "complex"; then test_pass; fi
 
-test_begin "76. query show"
+test_begin "query-show" "query show"
 run_bzr query show complex
 if assert_success && assert_json '.kind' "list" && assert_json '.product[0]' "FuncTestProd" && assert_json '.priority[0]' "Normal"; then test_pass; fi
 
-test_begin "77. query save (update existing)"
+test_begin "query-save-update-existing" "query save (update existing)"
 run_bzr query save prod-bugs --product FuncTestProd --status NEW --limit 5
 if assert_success && assert_json '.action' "updated"; then test_pass; fi
 
 # ── Run queries against real Bugzilla ────────────────────────────────
 
-test_begin "78. query run (product+status filter)"
+test_begin "query-run-product-status-filter" "query run (product+status filter)"
 run_bzr query run prod-bugs
 if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
 
-test_begin "79. query run (quicksearch)"
+test_begin "query-run-quicksearch" "query run (quicksearch)"
 run_bzr query run search-bugs
 if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
 
-test_begin "80. query run (multi-filter complex)"
+test_begin "query-run-multi-filter-complex" "query run (multi-filter complex)"
 run_bzr query run complex
 if assert_success; then test_pass; fi
 
-test_begin "81. query run with limit override"
+test_begin "query-run-with-limit-override" "query run with limit override"
 run_bzr query run prod-bugs --limit 1
 if assert_success && assert_json_array_length '.' 1; then test_pass; fi
 
-test_begin "82. query run with fields override"
+test_begin "query-run-with-fields-override" "query run with fields override"
 run_bzr query run prod-bugs --fields id,summary,status
 if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
 
-test_begin "82a. query run --count"
+test_begin "query-run-count" "query run --count"
 _QCOUNT_MARK=$(unique_name query-count)
 make_bug --marker "$_QCOUNT_MARK" --product FuncTestProd --component Backend \
     --op-sys Linux --rep-platform PC --description d --summary "query count 1" >/dev/null
@@ -69,7 +69,7 @@ if assert_success && assert_json '.action' "saved"; then
 fi
 unset _QCOUNT_MARK
 
-test_begin "82b. query update --from-url"
+test_begin "query-update-from-url" "query update --from-url"
 _Q_URL="${BZ_URL}/buglist.cgi?product=FuncTestProd&component=Backend&bug_status=NEW&query_format=advanced"
 run_bzr query update complex --from-url "$_Q_URL" --limit 2
 if assert_success; then
@@ -80,7 +80,7 @@ if assert_success; then
 fi
 unset _Q_URL
 
-test_begin "82c. weekly-status query collection shape"
+test_begin "weekly-status-query-collection-shape" "weekly-status query collection shape"
 _Q_WEEKLY_URL="${BZ_URL}/buglist.cgi?product=FuncTestProd&query_format=advanced"
 run_bzr query save weekly-status-fixture --from-url "$_Q_WEEKLY_URL"
 if assert_success; then
@@ -102,23 +102,23 @@ unset _Q_WEEKLY_URL
 
 # ── Cleanup and error handling ───────────────────────────────────────
 
-test_begin "83. query delete"
+test_begin "query-delete" "query delete"
 run_bzr query delete search-bugs
 if assert_success && assert_json '.action' "deleted"; then test_pass; fi
 
-test_begin "84. query show (deleted, expect failure)"
+test_begin "query-show-deleted-expect-failure" "query show (deleted, expect failure)"
 run_bzr query show search-bugs
 if assert_failure; then test_pass; fi
 
-test_begin "85. query run (deleted, expect failure)"
+test_begin "query-run-deleted-expect-failure" "query run (deleted, expect failure)"
 run_bzr query run search-bugs
 if assert_failure; then test_pass; fi
 
-test_begin "86. query save (empty, expect failure)"
+test_begin "query-save-empty-expect-failure" "query save (empty, expect failure)"
 run_bzr query save empty-q
 if assert_failure; then test_pass; fi
 
-test_begin "87. query delete remaining"
+test_begin "query-delete-remaining" "query delete remaining"
 run_bzr query delete prod-bugs
 if assert_success; then
     run_bzr query delete count-bugs

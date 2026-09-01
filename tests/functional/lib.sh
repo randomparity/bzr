@@ -34,6 +34,8 @@ PASS_COUNT=0
 FAIL_COUNT=0
 SKIP_COUNT=0
 CURRENT_TEST=""
+CURRENT_TEST_GROUP=""
+SEEN_TEST_IDS=$'\n'
 
 # ── Colors ───────────────────────────────────────────────────────────
 if [[ -t 1 ]]; then
@@ -49,8 +51,37 @@ fi
 # ── Test lifecycle ───────────────────────────────────────────────────
 
 test_begin() {
-    CURRENT_TEST="$1"
-    printf "  ${CYAN}TEST${RESET}  %s ... " "$CURRENT_TEST"
+    if [[ $# -ne 2 ]]; then
+        printf 'test_begin: expected exactly 2 arguments, got %d\n' "$#" >&2
+        return 2
+    fi
+
+    local slug="$1"
+    local description="$2"
+    local phase_re='^[0-9]{2}[a-z]?-[a-z0-9]+(-[a-z0-9]+)*$'
+    local slug_re='^[a-z0-9]+(-[a-z0-9]+)*$'
+    local test_id
+
+    if [[ ! $CURRENT_TEST_GROUP =~ $phase_re ]]; then
+        printf "test_begin: invalid functional test group '%s'\n" "$CURRENT_TEST_GROUP" >&2
+        return 2
+    fi
+    if [[ ! $slug =~ $slug_re ]]; then
+        printf "test_begin: invalid functional test slug '%s'\n" "$slug" >&2
+        return 2
+    fi
+
+    test_id="$CURRENT_TEST_GROUP/$slug"
+    case $SEEN_TEST_IDS in
+    *$'\n'"$test_id"$'\n'*)
+        printf "test_begin: duplicate functional test ID '%s'\n" "$test_id" >&2
+        return 2
+        ;;
+    esac
+
+    SEEN_TEST_IDS="${SEEN_TEST_IDS}${test_id}"$'\n'
+    CURRENT_TEST="$description"
+    printf "  ${CYAN}TEST${RESET}  [%s] %s ... " "$test_id" "$CURRENT_TEST"
     return 0
 }
 

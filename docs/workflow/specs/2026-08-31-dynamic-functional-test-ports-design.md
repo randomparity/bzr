@@ -1,7 +1,7 @@
 # Dynamic functional-test container port assignment — design
 
 Issue: [#606](https://github.com/randomparity/bzr/issues/606)
-ADR: [0028](../../adr/0028-dynamic-functional-test-container-ports.md)
+ADR: [0030](../../adr/0030-dynamic-functional-test-container-ports.md)
 
 ## Goal
 

@@ -13,13 +13,13 @@
 # reproducible at all.
 echo "── Phase 14b: Private comments (Hybrid mode) ─────────────────"
 
-test_begin "94a. comment add --private"
+test_begin "comment-add-private" "comment add --private"
 if [[ -n "$BUG1" ]]; then
     run_bzr comment add "$BUG1" --body "Private test comment" --private
     if assert_success && assert_json_exists '.id'; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "94b. comment list returns private comment in Hybrid mode"
+test_begin "comment-list-returns-private-comment-in-hybrid-mode" "comment list returns private comment in Hybrid mode"
 if [[ -n "$BUG1" ]]; then
     run_bzr --api hybrid comment list "$BUG1"
     # 1 description (count 0) + 2 public + 1 private = >= 4
@@ -31,7 +31,7 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
-test_begin "94c. comment list returns private comment in XML-RPC mode"
+test_begin "comment-list-returns-private-comment-in-xml-rpc-mode" "comment list returns private comment in XML-RPC mode"
 if [[ -n "$BUG1" ]]; then
     run_bzr --api xmlrpc comment list "$BUG1"
     if assert_success &&
