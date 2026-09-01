@@ -241,7 +241,8 @@ list and to `.PHONY`. It guards on `python3` the way `check-shell` guards on `sh
 actionable error rather than a silent skip.
 
 **Naming the whole prerequisite, not just the interpreter.** Four of the suite's fourteen cases
-(`redhat-shape-proxy.py:332-378`) start a real `ThreadingHTTPServer` on `127.0.0.1`, issue live
+route through `_start_server` (`redhat-shape-proxy.py:380-387`) to start a real
+`ThreadingHTTPServer` on `127.0.0.1`, issue live
 requests with two-second timeouts, and join threads; they are essentially all of its 2.0s
 runtime. So `make lint` gains loopback TCP bind-and-connect and a few seconds of timing
 headroom, not merely `python3` — every existing `lint` prerequisite is offline filesystem work.
@@ -381,12 +382,17 @@ sits on the credentialed `server capabilities` test.
 - `make functional-test-all` — green on bz50, bz52, and bz53. That covers all three proxy
   consumers: `03-products.sh` (sort-key markers), `18e-release-readiness.sh` (bug-transform
   values), and `18d-dependency-analysis.sh` (the non-2xx preflight path).
-- `make functional-test-bz50` — run once, on its own. This is Deliverable 2's only proof:
-  `run-all-versions.sh:20-40` calls `setup-bugzilla.sh` and `run-tests.sh` directly with
-  `BZR_BZ_VERSION` exported and never invokes a Make target, so `functional-test-all` does not
-  traverse the new recipe. A wrong version token or a copied `BZR_BZ_VERSION=bz52` would pass
-  every other gate here and then fail for the first dependent entry that follows the documented
-  procedure — in a pull request that does not own the defect.
+- `make functional-test-bz50` — run once, on its own, **and read the phase-0 banner**
+  (`00-build.sh:11` prints `bzr functional tests (<version>)`) to confirm it says `bz50`. This is
+  Deliverable 2's only proof: `run-all-versions.sh:20-40` calls `setup-bugzilla.sh` and
+  `run-tests.sh` directly with `BZR_BZ_VERSION` exported and never invokes a Make target, so
+  `functional-test-all` does not traverse the new recipe. The banner is the part that adds
+  coverage. An *unknown* token needs no proof — `setup-bugzilla.sh:23-35` rejects anything but
+  `bz50`/`bz52`/`bz53` on the target's first line, before any container work. A token
+  mis-**copied** from the sibling recipe is the reachable defect: `BZR_BZ_VERSION=bz52` starts
+  the 5.2 container, runs the identical phase list, and exits 0, because that is exactly what
+  `make functional-test-bz52` asserts today. Green alone therefore does not distinguish the two;
+  the banner does.
 - Both `TODO` observations: these are the first `TODO` comments anywhere under `src/`
   (`rg -n 'TODO' src/` is empty at HEAD), and `sonar-project.properties` sets
   `sonar.sources=src`, so SonarQube analyses them on every non-fork pull request

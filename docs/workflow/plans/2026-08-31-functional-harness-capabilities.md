@@ -901,8 +901,12 @@ Run in this order, each bare (no pipe), after all six tasks:
 1. `make lint` — expect exit 0, including the new `check-proxy-self-test` output ending `OK`.
 2. `make test` — expect exit 0.
 3. `unset BZR_BIN && cargo build --release` — expect exit 0.
-4. `make functional-test-bz50` — expect the bz50 container to start and the suite to reach
-   `FAILED: 0`. This is Task 1's only proof: `run-all-versions.sh:20-40` invokes
+4. `make functional-test-bz50` — expect the phase-0 banner to read
+   `║  bzr functional tests (bz50)` and the suite to reach `FAILED: 0`. **Read the banner**: it
+   is the only observable that distinguishes this target from a recipe mis-copied to
+   `BZR_BZ_VERSION=bz52`, which would start the 5.2 container, run the identical phase list, and
+   also exit 0. An unknown token needs no check — `setup-bugzilla.sh:23-35` rejects it before any
+   container work. This is Task 1's only proof: `run-all-versions.sh:20-40` invokes
    `setup-bugzilla.sh` and `run-tests.sh` directly and never shells out to a Make target, so
    step 5 does not traverse the new recipe.
 5. `make functional-test-all` — expect `bz50: PASSED`, `bz52: PASSED`, `bz53: PASSED` and exit 0.
