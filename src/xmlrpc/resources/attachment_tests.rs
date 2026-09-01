@@ -98,7 +98,7 @@ async fn xmlrpc_get_attachments_parses_full_response() {
 }
 
 #[tokio::test]
-async fn xmlrpc_get_attachments_requests_inline_data_field() {
+async fn xmlrpc_get_attachments_requests_inline_data_and_flags_fields() {
     let mock = MockServer::start().await;
     let response_xml = xmlrpc_bugs_envelope(42, "");
 
@@ -110,6 +110,7 @@ async fn xmlrpc_get_attachments_requests_inline_data_field() {
         .and(body_string_contains("<string>bug_id</string>"))
         .and(body_string_contains("<string>file_name</string>"))
         .and(body_string_contains("<string>data</string>"))
+        .and(body_string_contains("<string>flags</string>"))
         .and(NotBodyContains("exclude_fields"))
         .respond_with(ResponseTemplate::new(200).set_body_string(response_xml))
         .expect(1)
