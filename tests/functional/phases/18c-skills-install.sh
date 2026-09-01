@@ -36,6 +36,7 @@ SKILLS_EXPECTED=(
 
 DEPENDENCY_ANALYSIS_PAYLOAD=(
   SKILL.md
+  reference/presentation-report.md
   scripts/analyze.py
   scripts/collect.py
   scripts/render.py
@@ -58,6 +59,8 @@ DEPENDENCY_ANALYSIS_PAYLOAD=(
   tests/fixtures/inaccessible.collection.json
   tests/fixtures/missing.analysis.json
   tests/fixtures/missing.collection.json
+  tests/fixtures/presentation.analysis.json
+  tests/fixtures/presentation.expected.html
   tests/fixtures/recording_runner.py
   tests/fixtures/resolved.analysis.json
   tests/fixtures/resolved.collection.json
@@ -66,6 +69,7 @@ DEPENDENCY_ANALYSIS_PAYLOAD=(
   tests/skill-contract.sh
   tests/test_analyze.py
   tests/test_collect.py
+  tests/test_presentation.py
   tests/test_render.py
 )
 
