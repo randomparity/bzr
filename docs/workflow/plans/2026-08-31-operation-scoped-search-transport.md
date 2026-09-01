@@ -118,11 +118,12 @@ assigned file surface.
    }
    ```
 
-2. In the same sibling test file, add a multi-page regression. Mount four REST responses at
-   offsets `0`, `2`, `3`, and the terminal `4` only if the response sizes require it; use response
-   sizes `2`, `1`, and `0`, so the expected offsets are exactly `0`, `2`, and `3`. Each mock must
-   require `limit=2`, `f1=status_whiteboard`, `o1=substring`, `v1=marker`, and
-   `include_fields=id,summary`. Use the Hybrid test client and install
+2. In the same sibling test file, add a multi-page regression. Mount exactly three one-shot REST
+   responses with explicit bodies: offset `0` returns bugs with IDs `[1, 2]`, offset `2` returns a
+   bug with ID `[3]`, and offset `3` returns an empty array. Do not use `bugs_body(n)` for the
+   second page because that helper restarts IDs at one. Each mock must require `limit=2`,
+   `f1=status_whiteboard`, `o1=substring`, `v1=marker`, and `include_fields=id,summary`, and each
+   must use `.expect(1)`. Use the Hybrid test client and install
    `TracingCapture::install(tracing::Level::WARN)`. Execute:
 
    ```rust
@@ -147,10 +148,12 @@ assigned file surface.
    not contain the fallback warning. The mock must expect the raw `f1/o1/v1` values and
    `include_fields=id,summary`.
 
-4. Extend `fetch_page_rejects_limit_that_cannot_overfetch` to use the Hybrid client and
+4. Rename `fetch_page_rejects_limit_that_cannot_overfetch` to
+   `fetch_page_raw_params_rejects_limit_that_cannot_overfetch`, then use the Hybrid client and
    `raw_params_with_limit(u32::MAX)`. Install a WARN capture and retain the current no-request
    assertion. Add an assertion that the fallback warning is absent, proving local validation still
-   precedes the first diagnostic/request.
+   precedes the first diagnostic/request. The `raw_params` substring keeps this case inside the
+   focused red/green selector below.
 
 5. Run the focused tests before production edits:
 
@@ -256,9 +259,10 @@ assigned file surface.
    make test-one T=raw_params
    ```
 
-   Expected: exit 0. The multi-page test returns all three IDs, all three requests are REST, the
-   forced-REST capture contains one warning, explicit REST contains none, and the pre-request
-   validation case remains warning-free.
+   Expected: exit 0. The multi-page test returns all three IDs from offsets `0`, `2`, and `3`; all
+   three requests are REST; the forced-REST capture contains one warning; explicit REST contains
+   none; and the renamed pre-request validation case runs under this selector and remains
+   warning-free.
 
 10. Run the focused paging and existing client regressions:
 
@@ -323,7 +327,7 @@ cannot confuse zero matches with a harness failure.
    configured XML-RPC, a one-row page, and an output projection that omits `id`:
 
    ```bash
-   run_bzr --api xmlrpc query run "$_PM_QUERY" \
+   RUST_LOG=bzr=warn run_bzr --api xmlrpc query run "$_PM_QUERY" \
      --fields summary,status,assigned_to,target_milestone,last_change_time,whiteboard \
      --limit 1 --paginate
    ```
@@ -351,12 +355,14 @@ cannot confuse zero matches with a harness failure.
    pages:
 
    ```bash
-   run_bzr_raw --api rest --output ndjson bug search --from-url "$_PM_URL" \
+   RUST_LOG=bzr=warn run_bzr_raw --api rest --output ndjson bug search --from-url "$_PM_URL" \
      --fields id,summary,status,assigned_to,target_milestone,last_change_time,whiteboard \
      --limit 1 --paginate
    ```
 
-   Retain the current NDJSON row/order assertions and add
+   Prefixing both invocations with `RUST_LOG=bzr=warn` makes their presence/absence assertions
+   independent of an ambient operator `RUST_LOG` override. Retain the current NDJSON row/order
+   assertions and add
    `assert_stderr_not_contains "query contains raw URL parameters that require REST API"` before
    `test_pass`.
 
