@@ -348,8 +348,8 @@ fi
    (`src/commands/user/update.rs:95-105`) maps `(Some(true), Some(text))` to that text, and an
    empty `text` is byte-identical to what `(Some(false), _)` sends — so
    `--disable-login true --login-denied-text ""` **re-enables** the user and the fault is inert,
-   costing a full container arm to observe PASS where a FAIL was promised. This is the same class
-   of trap as Task 3 step 12's `startswith` direction: a fault that does not fault.
+   costing a full container arm to observe PASS where a FAIL was promised — a fault that does not
+   fault.
 
 9. Commit: `test(functional): add an enabled non-member group fixture user`.
 
@@ -366,8 +366,11 @@ fi
 **Modifies:** `CONTRIBUTING.md`. **Tests:** none executable; reviewed against the commands it
 names, each of which must exist.
 
-**Interfaces.** Consumes the target names Tasks 1 and 2 add (`make functional-test-bz50`,
-`make check-proxy-self-test`). Write this task after them so every command it names exists.
+**Interfaces.** Consumes the target name Task 1 adds (`make functional-test-bz50`). Write this
+task after it so every command it names exists. It must **not** name `make check-proxy-self-test`:
+that target was Task 2's, which is dropped, so naming it would put a phantom command into
+`CONTRIBUTING.md`. The proxy's own `--self-test` entry point is on `main` already and is named
+directly.
 
 ### Steps
 
@@ -398,8 +401,7 @@ record both observations in the pull-request body.
    line under test. Do not weaken the test.
 3. Run the narrowest command that covers it:
    - a unit test: `make test-one T=<name-substring>`;
-   - a production-shape proxy rewrite: `python3 tests/functional/redhat-shape-proxy.py --self-test`,
-     or `make check-proxy-self-test`;
+   - a production-shape proxy rewrite: `python3 tests/functional/redhat-shape-proxy.py --self-test`;
    - a single functional arm: `make functional-test-bz50`, `make functional-test-bz52`,
      `make functional-test-bz53`, or `make functional-test` for the unpinned default.
 4. Observe the failure. Record the exact command and the failing assertion.
@@ -433,9 +435,11 @@ before the arm runs instead of testing the previous state.
 ````
 
 3. Verify every command the section names exists:
-   `make -n test-one T=x`, `make -n check-proxy-self-test`, `make -n functional-test-bz50`,
-   `make -n functional-test-bz52`, `make -n functional-test-bz53`, `make -n functional-test`.
-   Each must exit 0. (`make -n test-one` without `T=` errors by design; pass `T=x`.)
+   `make -n test-one T=x`, `make -n functional-test-bz50`, `make -n functional-test-bz52`,
+   `make -n functional-test-bz53`, `make -n functional-test`. Each must exit 0.
+   (`make -n test-one` without `T=` errors by design; pass `T=x`.) Also verify the proxy entry
+   point the section names actually runs:
+   `python3 tests/functional/redhat-shape-proxy.py --self-test`, expect exit 0 ending `OK`.
 
 4. Verify the relative link target still resolves: the section adds no new links, so
    `rg -n '\]\(' CONTRIBUTING.md` should show the same link set as before the edit.
@@ -542,8 +546,9 @@ changes.**
 Run in this order, each bare (no pipe), after all six tasks:
 
 1. `make lint` — expect exit 0. Its prerequisite list is unchanged by this task set.
-1a. `make check-proxy-self-test` — expect exit 0, ending `OK`. Run it separately; it is a CI step,
-   not a `lint` prerequisite.
+1a. `python3 tests/functional/redhat-shape-proxy.py --self-test` — expect exit 0, ending `OK`.
+   Not a guardrail this change owns; run it once to confirm the command `CONTRIBUTING.md` now
+   names really works, since the proxy file itself is untouched here.
 2. `make test` — expect exit 0.
 3. `unset BZR_BIN && cargo build --release` — expect exit 0.
 4. `make functional-test-bz50` — expect the phase-0 banner to read
@@ -557,6 +562,7 @@ Run in this order, each bare (no pipe), after all six tasks:
 5. `make functional-test-all` — expect `bz50: PASSED`, `bz52: PASSED`, `bz53: PASSED` and exit 0.
 6. `make functional-stop-all` — clean up the three containers.
 
-Record the two controlled-fault observations (Task 3 step 12, Task 4 step 8) in the pull-request
-body, and disclose there that `.github/workflows/ci.yml` was added to the change surface beyond
-the file list issue #617 suggests, with the one-line reason.
+Record the controlled-fault observation (Task 4 step 8) in the pull-request body. The change adds
+no file beyond the file map above — with Tasks 2 and 3 dropped, no workflow file and no proxy file
+is touched, so there is nothing to disclose as surface beyond what issue #617 suggests. State
+plainly in the body that acceptance criterion 3 is deferred to #634 and not met here.
