@@ -4,8 +4,12 @@ Issue: [#617](https://github.com/randomparity/bzr/issues/617). Epic: [#616](http
 
 ## Goal
 
-Deliver the five functional-harness capabilities that the conformance entries of epic #616
-depend on, in a change that lands green on its own and corrects no fixture.
+Deliver four of the five functional-harness capabilities that the conformance entries of epic
+#616 depend on, in a change that lands green on its own and corrects no fixture.
+
+**Scope cap.** An operator decision after design deferred acceptance criterion 3 — the
+production-shape proxy's rewrite-hook registry — to [#634](https://github.com/randomparity/bzr/issues/634).
+Criterion 3 is **not met by this change**; see Deliverable 3 below.
 
 ## Why this is separable
 
@@ -20,20 +24,21 @@ which is exactly the failure R4 exists to prevent.
 
 - Correcting any inventoried fixture value. Owned by #621, #622, #625, #626.
 - Any change to a `src/` production code path.
-- `src/cli/product.rs` and `tests/functional/phases/03-products.sh`, owned by the concurrent
-  run on #618.
+- The production-shape proxy's rewrite-hook registry. Deferred to #634;
+  `tests/functional/redhat-shape-proxy.py` and every workflow file are untouched.
+- `src/cli/product.rs` and `tests/functional/phases/03-products.sh`, owned by #618, whose merge is
+  already in this branch.
 - Restructuring the functional harness beyond the extension points named below (epic #616
   non-goals).
 
 ## No new ADR
 
-The proxy work extends accepted [ADR 0028](../../adr/0028-signed-metadata-sort-keys.md), which
-already decided that leniency findings are proved by rewriting a successful response into its
-production shape behind the functional proxy, with proxy self-tests. This change generalizes
-the mechanism that record chose; it neither supersedes nor contradicts it, and it introduces no
-new payload contract, schema, or public behavior. The remaining deliverables — a Make target, a
-fixture user, a `CONTRIBUTING` section, and comment-only markers — carry no decision with viable
-alternatives at the level ADRs record here.
+The delivered work — a Make target, a fixture user and its helpers, a `CONTRIBUTING` section, and
+comment-only markers — carries no decision with viable alternatives at the level ADRs record here,
+introduces no payload contract, schema, or public behavior, and contradicts no accepted record.
+The deferred proxy work extends accepted
+[ADR 0028](../../adr/0028-signed-metadata-sort-keys.md) rather than superseding it; that reasoning
+travels to #634.
 
 ## Deliverable 1 — enabled non-member user fixture
 
@@ -137,177 +142,31 @@ denote the same arm, and they stop agreeing the moment `container-env.sh`'s defa
 target names `functional-test` as its unpinned form and points at the default that couples
 them, so the next person to move that default sees the pair.
 
-## Deliverable 3 — per-endpoint rewrite hooks in the production-shape proxy
+## Deliverable 3 — DEFERRED to #634, not delivered here
 
-### Problem
+Acceptance criterion 3 — documented per-endpoint rewrite hooks with self-tests in
+`tests/functional/redhat-shape-proxy.py` — is **not met by this change**. An operator scope cap
+after design moved it to its own entry,
+[#634](https://github.com/randomparity/bzr/issues/634), which carries the criterion verbatim.
 
-`tests/functional/redhat-shape-proxy.py` applies three rewrites through three hand-written
-`if` blocks inside `_forward`, each with its own path test, its own error handling, and — for
-one of the three — its own stderr marker. Epic requirement R7 makes this proxy the proof
-mechanism for every leniency finding, so entries #620, #626, #627, and #629 will each add
-another rewrite. Four more copies of that block is the wrong shape.
+Two constraints this design established travel with it, because they are not obvious from the
+proxy source and a reimplementer would otherwise break them:
 
-### Design
+- **The marker line is a contract.** `tests/functional/phases/03-products.sh` counts lines matching
+  `metadata-sort-keys shaped route=field count=[1-9][0-9]*` and the `route=product` variant, and
+  further requires `server capabilities` to raise the `route=field` count. Any refactor must keep
+  that string byte-identical, and the pattern matches only a **non-zero** count.
+- **The explicit `sys.stderr.flush()` after each marker write is load-bearing.** `lib.sh` redirects
+  the proxy's output to a log file that `03-products.sh` reads *while the proxy is still running*.
+  On CPython before 3.9 stderr to a non-tty is block-buffered, so dropping the flush leaves the
+  markers in the buffer and the mid-run counters read zero. On 3.9+ it is redundant, which is what
+  makes it easy to drop and invisible on a modern box.
 
-A registry of hooks, one uniform contract, one dispatcher.
+The proxy has three consumers that any such refactor must keep green: `03-products.sh`,
+`18d-dependency-analysis.sh`, and `18e-release-readiness.sh` — the last pins the bug transform's
+output values, not just its marker.
 
-```python
-ResponseHook = collections.namedtuple("ResponseHook", "name matches route rewrite")
-```
-
-- `name` — the stable marker token written to stderr, e.g. `metadata-sort-keys`.
-- `matches(path) -> bool` — whether this hook claims the request path (raw path with query, as
-  the handler sees it).
-- `route(path) -> str` — the sub-route label for the stderr marker, so one hook covering two
-  endpoints reports which one fired.
-- `rewrite(path, body) -> (bytes, int)` — the transform and the number of values it changed.
-  A zero count means the hook changed nothing, and the dispatcher then writes no marker for it.
-
-**The count governs the marker, never the payload.** `apply_response_hooks` always adopts each
-matching hook's returned body, zero count included. This is the behavior-preserving reading:
-`shape_bug_response` and `shape_product_ids_response` today re-serialize every matching 2xx
-response with `separators=(",", ":")` whether or not they changed a value — a POST bug-create
-response `{"id": N}` on `/rest/bug` is the reachable case, since `_forward` serves POST and the
-bug matcher is a bare `/rest/bug` prefix — so discarding a zero-count body would change what
-those responses look like on the wire. The count is a reporting signal only.
-
-`apply_response_hooks(path, body) -> (bytes, list[(name, route, count)])` walks
-`RESPONSE_HOOKS` in order, applies every matching hook, and returns the rewritten body with one
-entry per hook that changed something. `_forward` calls it once for any 2xx response, maps a
-`UnicodeDecodeError` or `json.JSONDecodeError` to the existing 502, and writes one
-`"{name} shaped route={route} count={count}"` line to stderr per applied hook.
-
-Each hook defines what its count counts: `bug-multivalue` counts every field whose scalar value
-was replaced by a list, the empty string included (`""` becomes `[]`, which the existing
-`test_shapes_scalar_empty_and_multi_values` case already exercises); `product-ids` counts the
-non-string elements rewritten in `ids`; and `metadata-sort-keys` keeps its existing count of
-rewritten `sort_key` values.
-
-The three existing rewrites become the three initial registry entries. Their transforms keep
-their names and gain the uniform signature:
-
-| name | matches | route | rewriter |
-|---|---|---|---|
-| `bug-multivalue` | path starts with `/rest/bug` | `bug` | `shape_bug_response` |
-| `product-ids` | path starts with `/rest/product_accessible`, `/rest/product_selectable`, or `/rest/product_enterable` | `product-ids` | `shape_product_ids_response` |
-| `metadata-sort-keys` | `is_metadata_sort_key_route(path)` | `field` or `product` | `shape_metadata_sort_keys_response` |
-
-### Behavior this must preserve
-
-The proxy has three consumers, all of which must stay green:
-
-- `tests/functional/phases/03-products.sh:71-83` counts lines matching
-  `metadata-sort-keys shaped route=field count=[1-9][0-9]*` and the `product` variant in the
-  proxy log. That file belongs to a concurrent run and is not edited here, so the sort-key
-  hook's `name` and `route` values are fixed by that contract and the emitted line stays
-  byte-identical. Two details the pattern encodes: it matches only a **non-zero** count, which
-  agrees with the dispatcher writing no marker at zero; and `:81-84` further requires
-  `server capabilities` to emit *additional* `route=field` markers, so the field matcher's
-  coverage of the endpoints that command touches is part of the preserved contract, not just
-  the line's spelling. `:49-53` is the third assertion in that phase, requiring
-  `product list --type accessible` to return a non-empty array through the proxy — the
-  `product-ids` hook's end-to-end consumer.
-- **The explicit `sys.stderr.flush()` after each marker write.** `lib.sh:622-623` redirects the
-  proxy's stderr to `$REDHAT_SHAPE_LOG`, a *file*, and `03-products.sh` reads that file with awk
-  while the proxy is still running (it is not stopped until `:87`). On CPython before 3.9 stderr
-  to a non-tty is block-buffered, so without the flush the markers sit in the buffer and the
-  mid-run counters read zero, failing the phase. On 3.9+ stderr is line-buffered and the flush
-  is redundant — which is exactly what makes it easy to drop in a refactor and invisible on a
-  modern box. It is part of the contract, not decoration.
-- `tests/functional/phases/18e-release-readiness.sh:136-166` pins `shape_bug_response`'s output
-  byte-for-byte across `bug list --paginate`, `bug search --from-url`, and `bug adjacency`,
-  asserting `.component == [$component, ($component + "-redhat-secondary")]` and the `version`
-  equivalent. The bug transform's values, not just its marker, are a contract.
-- `tests/functional/phases/18d-dependency-analysis.sh:734` routes an installed collector and a
-  termless-preflight exit-4 assertion through the same proxy, so the non-2xx paths
-  (`is_termless_bug_search`, the 400 body) must keep bypassing the hook registry as they do now.
-
-Matchers keep the existing raw-path prefix tests rather than switching to parsed paths, so no
-request changes hook membership. The route predicate the sort-key rewriter applies internally
-is extracted to `is_metadata_sort_key_route` and used both as the hook's matcher and as the
-rewriter's own guard, so the function stays independently correct and the condition is written
-once.
-
-The two rewrites that log nothing today start emitting their own markers. That is additive: the
-awk counters in `03-products.sh` match on their own prefixes, and the proxy log is otherwise
-read only by humans. It is also the half of the ADR 0028 pattern that lets a dependent prove
-its rewrite actually fired rather than assuming it did.
-
-### Documentation
-
-A comment block above `RESPONSE_HOOKS` states the four fields, the rewriter contract, the
-count-governs-the-marker rule, the obligation to add self-tests, and the gate that enforces
-that obligation. `tests/functional/README.md` gains a short "Adding a production-shape rewrite"
-section pointing at it.
-
-### The self-tests need a gate
-
-Today nothing runs `--self-test`: `make lint` does not, `run-tests.sh` does not, and no CI
-workflow does. That is fatal to the role this design gives them — they are the stated mitigation
-for a hook refactor silently dropping a rewrite, and the comment block imposes a self-test
-obligation on the four later entries R7 routes through this proxy. An obligation checked by
-nobody is a convention, and it will not survive four pull requests.
-
-**The gate goes where it binds: CI.** No workflow runs `make lint` —
-`rg -n 'make lint|make check-'` over `.github/workflows/` returns only `ci.yml:46-48`
-(`check-test-layout`, `check-functional-test-ids`, `check-no-spawn`) and `ci.yml:264`
-(`check-shell`), and the pre-commit hook the Makefile writes at `:65` runs fmt, clippy,
-`check-test-layout`, and `check-functional-test-ids`, not `lint`. This repository's convention is
-that a guard reaches CI by being named as its own workflow step; `check-build-script` and
-`check-release-security-notes` sit in `lint`'s prerequisite list and are consequently run by
-nothing automated.
-
-So `Makefile` gains a `check-proxy-self-test` target running
-`python3 tests/functional/redhat-shape-proxy.py --self-test`, and `ci.yml`'s existing
-`test-layout` job gains one `- run: make check-proxy-self-test` step beside the three
-`make check-*` steps already there. `python3` is preinstalled on `ubuntu-latest`, so the job needs
-no new setup step. **This adds `.github/workflows/ci.yml` to the change surface** beyond the file
-list the issue suggests — a one-line step in an existing job, no new action, no permission change,
-no dependency — because without it the obligation this section imposes on four later entries is
-enforced by nothing they will run.
-
-**The target is deliberately *not* a `make lint` prerequisite.** That was the first design here,
-and it is the wrong trade. Four of the suite's fourteen cases route through `_start_server`
-(`redhat-shape-proxy.py:380-387`) to start a real `ThreadingHTTPServer` on `127.0.0.1`, issue live
-requests with two-second timeouts, and join threads — essentially all of its 2.0s runtime. Adding
-it to `lint` would give the repository's primary guardrail a `python3` and loopback-TCP
-requirement where every existing prerequisite is offline filesystem work, would drag a
-`CONTRIBUTING.md` development-setup edit along to provision it, and would buy nothing the CI step
-does not already deliver: no completion criterion asks for a local gate, and CI is what actually
-blocks a pull request. `check-shell`'s `shellcheck` guard is not a precedent — that requirement
-predates this change. Contributors and agents reach the self-tests through the named target and
-through the controlled-fault procedure, which cites it directly.
-
-One residual is accepted and named: `test_unavailable_backend_returns_502` picks its unavailable
-port by binding port 0 and closing the socket, so a process that grabs that port in the window
-fails the case. The window is sub-millisecond and the case predates this change; running it in CI
-raises the exposure slightly, and the honest response is to record it rather than rewrite a
-working test. Measured passing in an agent sandbox on this host: 14 tests, 2.010s, `OK`.
-
-### Self-tests
-
-`--self-test` gains cases for the registry itself, alongside the existing per-transform cases
-updated to the new signature:
-
-1. A path no hook claims returns the body unchanged and an empty applied list.
-2. A `/rest/bug` body reports `("bug-multivalue", "bug", <count>)` with the count equal to the
-   number of rewritten fields.
-3. A `/rest/field/bug` body reports `("metadata-sort-keys", "field", 3)`, and a `/rest/product`
-   body reports the `product` route — the contract `03-products.sh` asserts end to end.
-4. A `/rest/product_accessible` body with numeric `ids` reports
-   `("product-ids", "product-ids", <count>)`, and a `/rest/product` body does not. Without this
-   the `product-ids` matcher — a three-prefix `startswith` tuple — is dispatched by no case at
-   all: case 5 below calls every rewriter directly and bypasses matching entirely, so a dropped
-   prefix or a tuple that stops being a tuple would leave the whole suite green. The only
-   residual detector is nothing at all. `03-products.sh:49-53` looks like one but is not: it
-   asserts only `length > 0` on `product list --type accessible` through the proxy, and a proxy
-   that stopped rewriting would serve the backend's native numeric `ids` — the *easier* shape,
-   which the client parses fine. Only the string shape the rewrite forces was ever the hard
-   case. So case 4 is the whole detector, not a belt beside a brace.
-5. Every registered hook's rewriter returns a `(bytes, int)` pair on a payload it declines. This
-   is the contract a new hook author gets wrong, so it is asserted over the registry rather than
-   over a fixed list of names.
-6. A hook that matches but changes nothing produces no applied entry.
+`tests/functional/redhat-shape-proxy.py` and every workflow file are untouched by this change.
 
 ## Deliverable 4 — the controlled-fault procedure in CONTRIBUTING
 
@@ -383,13 +242,8 @@ sits on the credentialed `server capabilities` test.
   `check-shell` (shellcheck and `bash -n` over `lib.sh` and every phase) and
   `check-functional-test-ids`, which constrains the new `test_begin` identifiers to
   `^[a-z0-9]+(-[a-z0-9]+)*$`.
-- `make check-proxy-self-test` — green locally, and wired as its own step in `ci.yml`'s
-  `test-layout` job, which is what makes the self-test obligation binding on a pull request
-  rather than on memory.
 - `make test` — green; the markers are comments, so no Rust behavior changes.
-- `make functional-test-all` — green on bz50, bz52, and bz53. That covers all three proxy
-  consumers: `03-products.sh` (sort-key markers), `18e-release-readiness.sh` (bug-transform
-  values), and `18d-dependency-analysis.sh` (the non-2xx preflight path).
+- `make functional-test-all` — green on bz50, bz52, and bz53.
 - `make functional-test-bz50` — run once, on its own, **and read the phase-0 banner**
   (`00-build.sh:11` prints `bzr functional tests (<version>)`) to confirm it says `bz50`. This is
   Deliverable 2's only proof: `run-all-versions.sh:20-40` calls `setup-bugzilla.sh` and
@@ -408,19 +262,17 @@ sits on the credentialed `server capabilities` test.
   failing check: `sonar.qualitygate.wait` is not configured and the scan step passes no
   gate-wait input. No exclusion or marker-syntax change is warranted — the markers are exactly
   the traceability epic #616 asked for.
-- Controlled fault, applying the procedure this change documents: point
-  `ensure_enabled_nonmember_user` at `--disable-login true`, observe the new phase test red,
-  restore, observe green; break one hook matcher in `RESPONSE_HOOKS`, observe the registry
-  self-tests red, restore, observe green.
+- Controlled fault, applying the procedure this change documents: replace
+  `ensure_enabled_nonmember_user`'s `--disable-login false --login-denied-text ""` with
+  `--disable-login true --login-denied-text "fault disabled"`, observe the new phase test red,
+  restore, observe green. Replacing the whole flag pair is required:
+  `resolve_login_denied_text` (`src/commands/user/update.rs:95-105`) maps
+  `(Some(true), Some(""))` to the same empty string as `(Some(false), _)`, so flipping only the
+  boolean re-enables the user and the fault is inert.
 
 ## Failure modes considered
 
 - **The fixture user leaks into an unrelated assertion.** Mitigated by the login prefix, and
   checked by running the full matrix rather than one arm.
-- **The hook refactor silently drops a rewrite.** The registry self-tests assert route and count
-  per hook, and `03-products.sh` still counts the sort-key markers end to end.
-- **A 2xx response that is not JSON.** Unchanged: a hook that claims the path raises, and
-  `_forward` maps it to 502. A hook that does not claim it is never called, so a non-JSON body
-  on an unrelated route still passes through, as today.
 - **`make functional-test-bz50` drifting from the matrix.** The target starts the container and
   runs the same `run-tests.sh`; `run-all-versions.sh` keeps owning the version list.

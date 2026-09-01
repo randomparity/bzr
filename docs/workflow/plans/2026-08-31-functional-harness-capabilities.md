@@ -1,18 +1,20 @@
 # Implementation plan — functional-harness capabilities (issue #617)
 
-**Goal.** Land the five harness capabilities epic #616's conformance entries depend on, without
-correcting a single fixture and without touching a `src/` production path.
+**Goal.** Land four of the five harness capabilities epic #616's conformance entries depend on,
+without correcting a single fixture and without touching a `src/` production path.
 
-**Architecture.** Everything lives in `tests/functional/` plus three project files. The proxy
-(`redhat-shape-proxy.py`, python3 stdlib only) gains a rewrite-hook registry; the shell harness
-(`lib.sh`, phase scripts) gains a fixture user and three helpers; `Makefile`,
-`.github/workflows/ci.yml`, and `CONTRIBUTING.md` gain a target, a CI step, and a procedure. Four
-Rust test files gain comment-only markers.
+**Scope cap.** An operator decision after design moved acceptance criterion 3 — the per-endpoint
+rewrite-hook registry in `tests/functional/redhat-shape-proxy.py` — to its own entry,
+[#634](https://github.com/randomparity/bzr/issues/634). Tasks 2 and 3 below are struck. That file
+and every workflow file are untouched by this change.
+
+**Architecture.** Everything lives in `tests/functional/` plus one project file. The shell harness
+(`lib.sh`, phase scripts) gains a fixture user and three helpers; `Makefile` gains one target; and
+`CONTRIBUTING.md` gains a procedure. Four Rust test files gain comment-only markers.
 
 **Design record.** `docs/workflow/specs/2026-08-31-functional-harness-capabilities-design.md`.
 
-**Tech stack.** bash 5 (the harness), python3 stdlib (the proxy, `unittest` for its self-tests),
-GNU Make, Rust 2021 (comments only).
+**Tech stack.** bash 5 (the harness), GNU Make, Rust 2021 (comments only).
 
 ## Global constraints
 
@@ -21,13 +23,9 @@ Every task's requirements implicitly include this section.
 - **No fixture value changes and no `src/` production-path changes.** Rust edits in this plan are
   comment lines only. Changing an asserted value would make this change red on arrival; epic #616
   requirement R4 assigns that correction to the dependent entry.
-- **Do not edit `src/cli/product.rs` or `tests/functional/phases/03-products.sh`.** A concurrent
-  run owns them (issue #618). `03-products.sh` is nevertheless a consumer of the proxy and its
-  assertions must keep passing.
-- **Preserve the proxy's stderr marker format byte-for-byte.**
-  `03-products.sh:71-83` counts lines matching
-  `/metadata-sort-keys shaped route=field count=[1-9][0-9]*/` and the `route=product` variant;
-  `:81-84` additionally requires `server capabilities` to raise the `route=field` count.
+- **Do not edit `tests/functional/redhat-shape-proxy.py`, any workflow file, `src/cli/product.rs`,
+  or `tests/functional/phases/03-products.sh`.** The proxy and its gate belong to #634; the other
+  two landed under #618, whose merge is already in this branch.
 - **Functional test IDs.** `test_begin "<slug>" "<description>"` on one line, two literal
   arguments, slug matching `^[a-z0-9]+(-[a-z0-9]+)*$`, unique within its phase.
   `make check-functional-test-ids` enforces it.
@@ -44,10 +42,7 @@ Every task's requirements implicitly include this section.
 
 | File | Created / modified | Answerable for |
 |---|---|---|
-| `Makefile` | modified | the `functional-test-bz50` target and the `check-proxy-self-test` guard |
-| `.github/workflows/ci.yml` | modified | running `check-proxy-self-test` on every pull request |
-| `tests/functional/redhat-shape-proxy.py` | modified | the rewrite-hook registry, dispatcher, and self-tests |
-| `tests/functional/README.md` | modified | documenting how to add a rewrite hook |
+| `Makefile` | modified | the `functional-test-bz50` target |
 | `tests/functional/lib.sh` | modified | the non-member fixture global and its three helpers |
 | `tests/functional/phases/07-groups.sh` | modified | provisioning the fixture; `TODO(#625)` markers |
 | `tests/functional/phases/02-server-auth.sh` | modified | the `TODO(#626)` marker |
@@ -114,500 +109,24 @@ functional-test-bz50: ## Run functional tests against Bugzilla 5.0
 - `functional-test-bz50` is in `.PHONY`.
 - `run-all-versions.sh` is unchanged — it remains the only list of matrix versions.
 
-## Task 2 — gate the proxy self-tests
-
-**Modifies:** `Makefile`, `.github/workflows/ci.yml`. **Tests:** `make check-proxy-self-test`.
-
-This task must land **after** Task 3 in the working tree if you run the guard before committing —
-the guard runs the self-tests, which Task 3 extends. Landing it first is fine because the existing
-self-tests already pass; run `make check-proxy-self-test` after each of the two tasks.
-
-**Interfaces.** Consumes `python3 tests/functional/redhat-shape-proxy.py --self-test` (exists
-today at `redhat-shape-proxy.py:391`, exit 0 on success, 1 on failure). Task 3's comment block
-refers to this target by name.
-
-### Steps
-
-1. In `Makefile`'s `.PHONY` list, `Makefile:6` currently reads exactly
-   `        check-no-spawn check-release-security-notes check-shell clean help man \`.
-   Insert one token, keeping every existing one:
-   `        check-no-spawn check-release-security-notes check-shell check-proxy-self-test clean help man \`
-
-   Do not drop `clean help man`. `man` in particular must stay phony: `Makefile:156-157` writes
-   into a `man/` directory that `.gitignore:5` ignores, so once `make man` has run the directory
-   exists and a non-phony `man` target reports `make: 'man' is up to date.` and silently stops
-   regenerating the pages.
-
-2. **Leave the `lint` rule alone.** `check-proxy-self-test` is deliberately not a `lint`
-   prerequisite: four of the suite's cases bind a real loopback socket, so adding it would give
-   the repository's primary guardrail a `python3` and TCP requirement where every existing
-   prerequisite is offline filesystem work — and buy nothing, since no workflow runs `make lint`
-   and step 4's CI step is what actually blocks a pull request. See the design record's "The
-   target is deliberately *not* a `make lint` prerequisite".
-
-3. Immediately after the `check-shell` rule (the one ending with the `shfmt -d -ln bash` line),
-   insert:
-
-```make
-check-proxy-self-test: ## Run the production-shape proxy self-tests
-	@command -v python3 >/dev/null || { echo "ERROR: python3 is required for this guard"; echo "  Install your platform's python3 package"; exit 1; }
-	python3 tests/functional/redhat-shape-proxy.py --self-test
-```
-
-4. In `.github/workflows/ci.yml`, in the `test-layout` job, after the line
-   `      - run: make check-no-spawn`, add:
-
-```yaml
-      - run: make check-proxy-self-test
-```
-
-   Match the surrounding six-space indentation exactly. Add no `setup-python` step: `python3` is
-   preinstalled on `ubuntu-latest`.
-
-5. Verify: `make check-proxy-self-test`. Expect the unittest runner to print one `... ok` line per
-   case and a final `OK`, and the command to exit 0. Run it bare — no pipe — so the exit status is
-   the make target's own.
-
-6. Verify the workflow edit with `git diff .github/workflows/ci.yml`: the added line must sit
-   inside the `test-layout` job's `steps:` list, aligned with its siblings. The repository has no
-   YAML linter in its guardrails, so this is a read, not a command.
-
-7. Commit: `ci: run the production-shape proxy self-tests as a guard`.
-
-### Acceptance criteria
-
-- `make check-proxy-self-test` exits 0 and runs every case in `ShapeTests`.
-- `make lint`'s prerequisite list is **unchanged**: `git diff Makefile` shows no edit to the
-  `lint:` rule.
-- `ci.yml`'s `test-layout` job has four `make check-*` steps.
-- `git diff Makefile` shows the `.PHONY` block gained exactly one token and lost none — in
-  particular `clean`, `help`, and `man` are still there.
-
-## Task 3 — per-endpoint rewrite hooks in the proxy
-
-**Modifies:** `tests/functional/redhat-shape-proxy.py`, `tests/functional/README.md`.
-**Tests:** `python3 tests/functional/redhat-shape-proxy.py --self-test`.
-
-**Interfaces.**
-
-- Consumes: nothing from earlier tasks.
-- Provides, for later entries (#620, #626, #627, #629) and for Task 2's guard:
-  - `ResponseHook = collections.namedtuple("ResponseHook", "name matches route rewrite")`
-  - `RESPONSE_HOOKS: tuple[ResponseHook, ...]`
-  - `apply_response_hooks(path: str, body: bytes) -> tuple[bytes, list[tuple[str, str, int]]]`
-  - `is_metadata_sort_key_route(path: str) -> bool`
-  - `metadata_sort_key_route(path: str) -> str`
-  - rewriter signature `rewrite(path: str, body: bytes) -> tuple[bytes, int]`, adopted by
-    `shape_bug_response`, `shape_product_ids_response`, and
-    `shape_metadata_sort_keys_response` (the last already had it).
-
-### Steps
-
-1. Add `import collections` to the import block, in alphabetical position — before
-   `import http.client`.
-
-2. Change `shape_bug_response` to the uniform signature and a change count. Replace the whole
-   function with:
-
-```python
-def shape_bug_response(path, data):
-    """Return JSON bytes with bug component/version values represented as arrays.
-
-    The count is every field whose scalar value was replaced by a list, the empty
-    string included — `""` becomes `[]`, which is a rewrite even though it gains
-    no secondary entry.
-    """
-    del path  # every /rest/bug body is shaped the same way
-    value = json.loads(data)
-    bugs = value.get("bugs") if isinstance(value, dict) else None
-    changed = 0
-    if isinstance(bugs, list):
-        for bug in bugs:
-            if not isinstance(bug, dict):
-                continue
-            for field in ("component", "version"):
-                field_value = bug.get(field)
-                if isinstance(field_value, str):
-                    values = [] if field_value == "" else [field_value]
-                    if values:
-                        values.append(f"{field_value}-redhat-secondary")
-                    bug[field] = values
-                    changed += 1
-    return json.dumps(value, separators=(",", ":")).encode(), changed
-```
-
-3. Change `shape_product_ids_response` the same way. Replace the whole function with:
-
-```python
-def shape_product_ids_response(path, data):
-    """Return JSON bytes with product IDs represented as decimal strings.
-
-    Some Bugzilla stacks (e.g. bugzilla.kernel.org) serialize
-    `get_{accessible,selectable,enterable}_products` ids as strings rather than
-    numbers. This rewrites every `ids` element to its decimal string form so the
-    client is exercised against the string wire shape the same endpoint serves
-    in the wild. The count is the number of non-string elements rewritten.
-    """
-    del path  # every product_* body is shaped the same way
-    value = json.loads(data)
-    changed = 0
-    if isinstance(value, dict) and isinstance(value.get("ids"), list):
-        ids = value["ids"]
-        changed = sum(1 for item in ids if not isinstance(item, str))
-        value["ids"] = [str(item) for item in ids]
-    return json.dumps(value, separators=(",", ":")).encode(), changed
-```
-
-4. Extract the sort-key route predicate. Immediately **above**
-   `def shape_metadata_sort_keys_response`, insert:
-
-```python
-def is_metadata_sort_key_route(path):
-    """Return whether <path> is a metadata route whose sort keys are rewritten."""
-    parsed_path = urllib.parse.urlsplit(path).path
-    return parsed_path.startswith("/rest/field/bug") or (
-        parsed_path == "/rest/product" or parsed_path.startswith("/rest/product/")
-    )
-
-
-def metadata_sort_key_route(path):
-    """Return `field` or `product`, the marker sub-route for a sort-key path."""
-    if urllib.parse.urlsplit(path).path.startswith("/rest/field/bug"):
-        return "field"
-    return "product"
-```
-
-5. Rewrite `shape_metadata_sort_keys_response`'s own guard to use the new predicate, keeping the
-   `is_field` / `is_product` locals it needs afterwards. **Apply this edit before step 4**, or
-   quote the whole span below as the anchor — after step 4 lands, the single line
-   `    parsed_path = urllib.parse.urlsplit(path).path` occurs twice in the file and
-   `        return data, 0` already occurs twice inside this function, so neither anchor is unique
-   on its own. Replace exactly this span:
-
-```python
-    parsed_path = urllib.parse.urlsplit(path).path
-    is_field = parsed_path.startswith("/rest/field/bug")
-    is_product = parsed_path == "/rest/product" or parsed_path.startswith(
-        "/rest/product/"
-    )
-    if not is_field and not is_product:
-        return data, 0
-```
-
-   with:
-
-```python
-    if not is_metadata_sort_key_route(path):
-        return data, 0
-    parsed_path = urllib.parse.urlsplit(path).path
-    is_field = parsed_path.startswith("/rest/field/bug")
-    is_product = not is_field
-```
-
-   The rest of the function is unchanged. The guard is now redundant with the hook's matcher and
-   is kept deliberately so the function stays correct called directly, which its self-tests do.
-
-6. Immediately after `metadata_sort_key_route` and the three shape functions — that is, just
-   before `def make_handler` — insert the registry, its documentation, and the dispatcher:
-
-```python
-# ── Per-endpoint response rewrite hooks ──────────────────────────────
-#
-# Each hook rewrites one endpoint family's successful (2xx) response into a
-# shape a real deployment serves, so the compiled CLI is exercised against that
-# shape without patching the container. Accepted ADR 0028 is the governing
-# record: a leniency finding is proved by rewriting the endpoint's response
-# here, with self-tests, rather than by assertion.
-#
-# A hook has four fields:
-#
-#   name     Stable marker token. When a hook changes something the proxy
-#            writes "<name> shaped route=<route> count=<n>" to stderr, and
-#            phase scripts count those lines. Treat a shipped name as a
-#            contract: tests/functional/phases/03-products.sh matches
-#            "metadata-sort-keys shaped route=field count=[1-9][0-9]*".
-#   matches  matches(path) -> bool, over the raw request path including its
-#            query string, exactly as the handler receives it.
-#   route    route(path) -> str, the marker's sub-route label, so one hook
-#            spanning two endpoints reports which one fired.
-#   rewrite  rewrite(path, body) -> (bytes, int). The count governs the marker
-#            only: apply_response_hooks always adopts the returned body, zero
-#            count included, so a hook that changed nothing must still return
-#            a body it is happy to serve.
-#
-# To add one: write the transform with that signature, append a ResponseHook
-# below, and add self-tests that dispatch a real path for it through
-# apply_response_hooks — not just the transform directly, which would leave the
-# matcher unguarded. `make check-proxy-self-test` runs them, and CI runs that
-# target on every pull request, which is what enforces the obligation.
-ResponseHook = collections.namedtuple("ResponseHook", "name matches route rewrite")
-
-RESPONSE_HOOKS = (
-    ResponseHook(
-        name="bug-multivalue",
-        matches=lambda path: path.startswith("/rest/bug"),
-        route=lambda path: "bug",
-        rewrite=shape_bug_response,
-    ),
-    ResponseHook(
-        name="product-ids",
-        matches=lambda path: path.startswith(
-            ("/rest/product_accessible", "/rest/product_selectable",
-             "/rest/product_enterable")
-        ),
-        route=lambda path: "product-ids",
-        rewrite=shape_product_ids_response,
-    ),
-    ResponseHook(
-        name="metadata-sort-keys",
-        matches=is_metadata_sort_key_route,
-        route=metadata_sort_key_route,
-        rewrite=shape_metadata_sort_keys_response,
-    ),
-)
-
-
-def apply_response_hooks(path, body):
-    """Apply every hook matching <path> to a successful response body.
-
-    Returns the rewritten body and one (name, route, count) entry per hook that
-    changed something, in registry order.
-    """
-    applied = []
-    for hook in RESPONSE_HOOKS:
-        if not hook.matches(path):
-            continue
-        body, count = hook.rewrite(path, body)
-        if count:
-            applied.append((hook.name, hook.route(path), count))
-    return body, applied
-```
-
-7. Replace the three inline rewrite blocks in `_forward`. Delete everything from
-   `            if 200 <= status < 300 and self.path.startswith("/rest/bug"):` through the
-   `                    sys.stderr.flush()` line, and put in its place:
-
-```python
-            if 200 <= status < 300:
-                try:
-                    body, applied = apply_response_hooks(self.path, body)
-                except (UnicodeDecodeError, json.JSONDecodeError) as error:
-                    self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
-                    return
-                for name, route, count in applied:
-                    sys.stderr.write(f"{name} shaped route={route} count={count}\n")
-                if applied:
-                    sys.stderr.flush()
-```
-
-   The `self.send_response(status)` line that follows is unchanged.
-
-8. Update the three existing self-tests that call the two changed transforms. In `ShapeTests`,
-   replace `test_shapes_scalar_empty_and_multi_values`, `test_leaves_non_bug_payload_untouched`,
-   and `test_rejects_malformed_json` with:
-
-```python
-    def test_shapes_scalar_empty_and_multi_values(self):
-        body, count = shape_bug_response("/rest/bug", json.dumps({"bugs": [
-            {"component": "Backend", "version": "rawhide"},
-            {"component": [], "version": ["40", "41"]},
-            {"component": "", "version": ""},
-        ]}).encode())
-        shaped = json.loads(body)
-        self.assertEqual(count, 4)
-        self.assertEqual(
-            shaped["bugs"][0]["component"],
-            ["Backend", "Backend-redhat-secondary"],
-        )
-        self.assertEqual(
-            shaped["bugs"][0]["version"], ["rawhide", "rawhide-redhat-secondary"]
-        )
-        self.assertEqual(shaped["bugs"][1]["version"], ["40", "41"])
-        self.assertEqual(shaped["bugs"][2]["component"], [])
-
-    def test_leaves_non_bug_payload_untouched(self):
-        body, count = shape_bug_response("/rest/bug", b'{"version":"5.2"}')
-        self.assertEqual(json.loads(body), {"version": "5.2"})
-        self.assertEqual(count, 0)
-
-    def test_rejects_malformed_json(self):
-        with self.assertRaises(json.JSONDecodeError):
-            shape_bug_response("/rest/bug", b"not json")
-```
-
-   The count is 4: bug 0 rewrites both fields, bug 1 rewrites neither (both are already lists),
-   bug 2 rewrites both empty strings to `[]`.
-
-9. Update the three product-ids self-tests. Replace `test_products_shape_to_string_ids`,
-   `test_products_shape_preserves_existing_string_ids`, and
-   `test_products_shape_leaves_non_ids_payload_untouched` with:
-
-```python
-    def test_products_shape_to_string_ids(self):
-        body, count = shape_product_ids_response(
-            "/rest/product_accessible", json.dumps({"ids": [12, 1, 21]}).encode()
-        )
-        self.assertEqual(json.loads(body), {"ids": ["12", "1", "21"]})
-        self.assertEqual(count, 3)
-
-    def test_products_shape_preserves_existing_string_ids(self):
-        body, count = shape_product_ids_response(
-            "/rest/product_accessible", b'{"ids":["2","3","19"]}'
-        )
-        self.assertEqual(json.loads(body), {"ids": ["2", "3", "19"]})
-        self.assertEqual(count, 0)
-
-    def test_products_shape_leaves_non_ids_payload_untouched(self):
-        body, count = shape_product_ids_response(
-            "/rest/product_accessible", b'{"products":[]}'
-        )
-        self.assertEqual(json.loads(body), {"products": []})
-        self.assertEqual(count, 0)
-```
-
-10. Add the six registry self-tests. Insert them into `ShapeTests` immediately after
-    `test_metadata_sort_key_shape_leaves_unrelated_payload_untouched`:
-
-```python
-    def test_response_hooks_leave_unmatched_paths_untouched(self):
-        payload = b'{"version":"5.2"}'
-        body, applied = apply_response_hooks("/rest/version", payload)
-        self.assertEqual(body, payload)
-        self.assertEqual(applied, [])
-
-    def test_response_hooks_report_bug_route_and_count(self):
-        payload = json.dumps({"bugs": [
-            {"component": "Backend", "version": "rawhide"},
-            {"component": ["already"], "version": "f40"},
-        ]}).encode()
-        body, applied = apply_response_hooks("/rest/bug?limit=2", payload)
-        self.assertEqual(applied, [("bug-multivalue", "bug", 3)])
-        self.assertEqual(json.loads(body)["bugs"][1]["component"], ["already"])
-
-    def test_response_hooks_report_product_ids_route(self):
-        body, applied = apply_response_hooks(
-            "/rest/product_accessible", b'{"ids":[7,8]}'
-        )
-        self.assertEqual(applied, [("product-ids", "product-ids", 2)])
-        self.assertEqual(json.loads(body), {"ids": ["7", "8"]})
-        _, unmatched = apply_response_hooks("/rest/product", b'{"ids":[7,8]}')
-        self.assertEqual(unmatched, [])
-
-    def test_response_hooks_report_metadata_routes(self):
-        field_payload = json.dumps({"fields": [{"values": [
-            {"id": 1, "sort_key": 10},
-            {"id": 2, "sort_key": 20},
-            {"id": 3, "sort_key": 30},
-        ]}]}).encode()
-        _, applied = apply_response_hooks("/rest/field/bug/status", field_payload)
-        self.assertEqual(applied, [("metadata-sort-keys", "field", 3)])
-        product_payload = json.dumps(
-            {"products": [{"versions": [{"id": 9, "sort_key": 5}]}]}
-        ).encode()
-        _, applied = apply_response_hooks("/rest/product", product_payload)
-        self.assertEqual(applied, [("metadata-sort-keys", "product", 1)])
-
-    def test_matching_hook_that_changes_nothing_reports_no_entry(self):
-        body, applied = apply_response_hooks(
-            "/rest/product_selectable", b'{"ids":["7"]}'
-        )
-        self.assertEqual(applied, [])
-        self.assertEqual(json.loads(body), {"ids": ["7"]})
-
-    def test_every_hook_honors_the_registry_contract(self):
-        for hook in RESPONSE_HOOKS:
-            with self.subTest(hook=hook.name):
-                self.assertIsInstance(hook.matches("/rest/bug"), bool)
-                self.assertIsInstance(hook.route("/rest/bug"), str)
-                body, count = hook.rewrite("/rest/bug", b'{"bugs":[]}')
-                self.assertIsInstance(body, bytes)
-                self.assertEqual(count, 0)
-```
-
-11. Verify: `python3 tests/functional/redhat-shape-proxy.py --self-test`. Expect every case to
-    print `... ok`, a final `OK`, and exit status 0.
-
-12. Controlled fault, per the procedure Task 5 documents. Temporarily **add one character to the
-    first prefix** in the `product-ids` hook's `matches` tuple — `"/rest/product_accessible"` →
-    `"/rest/product_accessibles"` — re-run the self-test, and expect
-    `test_response_hooks_report_product_ids_route` to FAIL with
-    `AssertionError: Lists differ: [] != [('product-ids', 'product-ids', 2)]`. Restore the
-    character, re-run, expect `OK`. Record both observations for the pull-request body.
-
-    The direction rule matters and is easy to get backwards: **shortening a `startswith` prefix
-    widens the match.** `'/rest/product_accessible'.startswith('/rest/product_accessibl')` is
-    `True`, so dropping a character leaves the hook firing and the self-test green — a fault that
-    proves nothing. Lengthening the prefix past the real path is what stops the match.
-
-12a. Verify no proxy consumer regressed, before committing:
-    `unset BZR_BIN && cargo build --release && make functional-test-bz50` (Task 1's target, so
-    run Task 1 first). Expect
-    `[03-products/production-shaped-product-and-field-metadata] ... PASS` and the
-    `18e-release-readiness` proxy test to PASS. The self-test alone proves the registry;
-    only an arm proves the three phases that consume it, and discovering a break here costs one
-    container instead of unpicking six commits after `functional-test-all`.
-
-13. Add the README section. In `tests/functional/README.md`, immediately before the
-    `## Config Isolation` heading, insert:
-
-```markdown
-## Production-Shape Proxy (`redhat-shape-proxy.py`)
-
-`tests/functional/redhat-shape-proxy.py` fronts the running container and rewrites successful
-responses into shapes real deployments serve, so the compiled CLI is exercised against them
-without patching Bugzilla. Accepted ADR 0028 is the governing record. Three phases consume it:
-`03-products.sh`, `18d-dependency-analysis.sh`, and `18e-release-readiness.sh`.
-
-### Adding a production-shape rewrite
-
-Each rewrite is a `ResponseHook` in the `RESPONSE_HOOKS` registry, with a `name`, a
-`matches(path)` predicate, a `route(path)` label, and a
-`rewrite(path, body) -> (bytes, count)` transform. The comment block above `RESPONSE_HOOKS`
-states the contract in full. Two rules are worth repeating here:
-
-- The count governs the stderr marker only. `apply_response_hooks` always adopts the body a
-  hook returns, so a hook that changed nothing must still return a body it is happy to serve.
-- Add self-tests that dispatch a real path through `apply_response_hooks`, not only the
-  transform in isolation — a direct-transform test leaves the matcher unguarded.
-
-When a hook changes something the proxy writes `<name> shaped route=<route> count=<n>` to
-stderr, which `lib.sh` captures into `$REDHAT_SHAPE_LOG`; that is how a phase proves its rewrite
-actually fired. Run the self-tests with
-`python3 tests/functional/redhat-shape-proxy.py --self-test`, or through
-`make check-proxy-self-test`, which CI runs on every pull request.
-```
-
-14. Correct the README prerequisite line. `tests/functional/README.md:11-12` currently reads:
-
-```markdown
-- `python3` and `openssl` — only for the ad-hoc TLS phase; when either is
-  missing that phase skips cleanly (see the TLS Fixture section below)
-```
-
-    Replace those two lines with:
-
-```markdown
-- `python3` — the production-shape proxy and the ad-hoc TLS phase; `make check-proxy-self-test`
-  needs it too
-- `openssl` — only for the ad-hoc TLS phase; when it or `python3` is missing that phase
-  skips cleanly (see the TLS Fixture section below)
-```
-
-    The existing wording calls `python3` TLS-phase-only, which was already inaccurate — the
-    production-shape proxy has always needed it — and this file gains a section below telling
-    contributors to run `make check-proxy-self-test`. This is a correction inside a file the
-    change already edits, not a new prerequisite: `make lint` is unaffected.
-
-15. Commit: `test(functional): add per-endpoint rewrite hooks to the shape proxy`.
-
-### Acceptance criteria
-
-- `python3 tests/functional/redhat-shape-proxy.py --self-test` exits 0.
-- `_forward` contains exactly one rewrite block, calling `apply_response_hooks`.
-- The `metadata-sort-keys` marker line is byte-identical to the one at `redhat-shape-proxy.py:195`
-  before this change: `f"metadata-sort-keys shaped route={route} count={changed}\n"` with `route`
-  in `{"field", "product"}`.
-- `git diff` shows no change to `tests/functional/phases/03-products.sh`.
+## Task 2 — DROPPED (deferred to #634)
+
+The `check-proxy-self-test` guard and its `.github/workflows/ci.yml` step existed only to gate the
+Task 3 registry's self-tests. Both move to #634 with the work they gate. `Makefile`'s `.PHONY` list
+and `lint` rule are untouched, and this change edits no workflow file.
+
+## Task 3 — DROPPED (deferred to #634)
+
+The per-endpoint rewrite-hook registry, dispatcher, documentation, and self-tests in
+`tests/functional/redhat-shape-proxy.py` are **not** part of this change. An operator scope cap
+moved acceptance criterion 3 to its own entry, [#634](https://github.com/randomparity/bzr/issues/634),
+which carries the criterion verbatim plus the two constraints this design established: the
+`metadata-sort-keys shaped route={field|product} count=<n>` marker stays byte-identical because
+`tests/functional/phases/03-products.sh` counts it, and the explicit `sys.stderr.flush()` after each
+marker write is load-bearing because that phase reads the log file mid-run.
+
+`tests/functional/redhat-shape-proxy.py` is untouched by this change, and `Makefile` gains no
+`check-proxy-self-test` target.
 
 ## Task 4 — the enabled non-member user fixture
 
