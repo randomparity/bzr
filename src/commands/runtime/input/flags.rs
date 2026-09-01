@@ -22,8 +22,8 @@ pub fn parse_flags(raw: &[String]) -> Result<Vec<FlagUpdate>> {
 }
 
 fn parse_single_flag(s: &str) -> Result<(String, FlagStatus, Option<String>)> {
-    // Find the status character (+, -, ?, X)
-    let status_pos = s.find(['+', '-', '?', 'X']).ok_or_else(|| {
+    // The status is the final character, or immediately before a requestee.
+    let status_pos = status_position(s).ok_or_else(|| {
         BzrError::input(format!(
             "invalid flag '{s}': must contain +, -, ?, or X (e.g. 'review?')"
         ))
@@ -56,6 +56,25 @@ fn parse_single_flag(s: &str) -> Result<(String, FlagStatus, Option<String>)> {
     };
 
     Ok((name, status, requestee))
+}
+
+fn status_position(s: &str) -> Option<usize> {
+    let candidate = if s.ends_with(')') {
+        s.rfind('(')
+            .and_then(|open_pos| open_pos.checked_sub(1))
+            .filter(|&pos| is_status_byte(s.as_bytes().get(pos).copied()))
+    } else {
+        s.char_indices()
+            .next_back()
+            .map(|(pos, _)| pos)
+            .filter(|&pos| is_status_byte(s.as_bytes().get(pos).copied()))
+    };
+
+    candidate.or_else(|| s.rfind(['+', '-', '?', 'X']))
+}
+
+fn is_status_byte(byte: Option<u8>) -> bool {
+    matches!(byte, Some(b'+' | b'-' | b'?' | b'X'))
 }
 
 #[cfg(test)]

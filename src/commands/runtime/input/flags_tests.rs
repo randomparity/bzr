@@ -20,8 +20,22 @@ fn parse_flag_grant() {
 }
 
 #[test]
+fn parse_hyphenated_flag_grant() {
+    let flags = parse_flags(&["needs-info+".into()]).unwrap();
+    assert_eq!(flags[0].name, "needs-info");
+    assert_eq!(flags[0].status, FlagStatus::Grant);
+}
+
+#[test]
 fn parse_flag_deny() {
     let flags = parse_flags(&["review-".into()]).unwrap();
+    assert_eq!(flags[0].status, FlagStatus::Deny);
+}
+
+#[test]
+fn parse_hyphenated_flag_deny() {
+    let flags = parse_flags(&["needs-info-".into()]).unwrap();
+    assert_eq!(flags[0].name, "needs-info");
     assert_eq!(flags[0].status, FlagStatus::Deny);
 }
 
@@ -29,6 +43,14 @@ fn parse_flag_deny() {
 fn parse_flag_no_status_char_fails() {
     let err = parse_flags(&["review".into()]).unwrap_err();
     assert!(err.to_string().contains("must contain"));
+}
+
+#[test]
+fn parse_hyphenated_flag_request() {
+    let flags = parse_flags(&["needs-info?(alice@example.com)".into()]).unwrap();
+    assert_eq!(flags[0].name, "needs-info");
+    assert_eq!(flags[0].status, FlagStatus::Request);
+    assert_eq!(flags[0].requestee.as_deref(), Some("alice@example.com"));
 }
 
 #[test]
@@ -61,6 +83,13 @@ fn parse_flag_clear() {
     assert_eq!(flags[0].name, "review");
     assert_eq!(flags[0].status, FlagStatus::Clear);
     assert!(flags[0].requestee.is_none());
+}
+
+#[test]
+fn parse_hyphenated_flag_clear() {
+    let flags = parse_flags(&["needs-infoX".into()]).unwrap();
+    assert_eq!(flags[0].name, "needs-info");
+    assert_eq!(flags[0].status, FlagStatus::Clear);
 }
 
 #[test]
