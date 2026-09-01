@@ -35,7 +35,9 @@ transition keys.
    `make test-one T=clone_`; expect failure showing the source platform is absent.
 2. Rename the domain/wire/adapter field and default request name; update field selection
    aliases and output access.
-3. Add serialization/deserialization assertions for canonical and transition alias keys.
+3. Assert `platform` alone on REST/XML-RPC deserialization, assert both canonical and
+   transition keys only on published serialization, and keep legacy create-JSON alias
+   tests at that input boundary.
 4. Run `make test-one T=clone_` and the relevant bug type/output tests; expect success.
 
 ## Task 2: Canonicalize create, update, clone, and search writes
