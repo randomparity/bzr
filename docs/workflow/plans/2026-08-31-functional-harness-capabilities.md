@@ -739,11 +739,22 @@ fi
 
     **Verify this against a live container before relying on it.** Bugzilla returns `groups` on
     `User.get` only to a caller permitted to see them; the harness runs as `admin@test.bzr`, which
-    holds `editusers`, so it should be populated. If the positive control fails on any arm —
-    `testuser` shows an empty `groups` — the field is not visible to this credential there. In
-    that case delete this test, restore the comment-only invariant, and record in this plan and in
-    the spec which arm withheld it and what would prove non-membership instead. Do **not** keep
-    the `out` half alone: without the control it passes on an empty array, which is the
+    holds `editusers`, so it should be populated.
+
+    If the positive control fails — `testuser` shows an empty `groups` — **diagnose before
+    deleting anything**, because two causes produce the identical symptom and only one is a
+    harness limitation. Run `run_bzr user search admin@test.bzr --details` and inspect `.groups`:
+    a non-empty array on any user proves the field *is* visible to this credential, which means
+    `group add-user` never created the membership. That is a product defect, not a harness gap —
+    stop and report it. Note that this assertion is the first evidence in the repository that
+    `group add-user` does anything: `07-groups.sh:87` asserts only that `testuser` appears in a
+    listing, which by this change's own `TODO(#625)` reasoning holds whether or not the group
+    filter is honored.
+
+    Only when `.groups` is empty for every user does the field genuinely fail to reach this
+    credential. Then delete this test, restore the comment-only invariant, and record in this plan
+    and in the spec which arm withheld it and what would prove non-membership instead. Do **not**
+    keep the `out` half alone: without the control it passes on an empty array, which is the
     pass-for-the-wrong-reason failure this whole epic exists to remove.
 
 3. In the same file, immediately before `test_begin "group-list-users"` (currently at `:85`),
@@ -775,11 +786,21 @@ fi
    `TEST  [07-groups/fixture-enabled-non-member-user] fixture enabled non-member user ... PASS`
    and a final `FAILED: 0`.
 
-8. Controlled fault: change step 1's `--disable-login false` to `--disable-login true`, re-run
-   `make functional-test-bz50`, and expect that test to FAIL with
+8. Controlled fault: in step 1's helper, replace the **whole flag pair**
+   `--disable-login false --login-denied-text ""` with
+   `--disable-login true --login-denied-text "fault disabled"` — the idiom `06-users.sh:46`
+   already uses to disable a user. Re-run `make functional-test-bz50` and expect
+   `07-groups/fixture-enabled-non-member-user` to FAIL with
    `jq '[.[] | select(.name == "functest-nonmember@test.bzr")][0].can_login' = 'false', expected 'true'`.
-   Restore, confirm with `git diff tests/functional/lib.sh`, re-run, expect PASS. Record both
-   observations for the pull-request body.
+   Restore the pair, confirm with `git diff tests/functional/lib.sh`, re-run, expect PASS. Record
+   both observations for the pull-request body.
+
+   Replace the pair, not just the boolean. `resolve_login_denied_text`
+   (`src/commands/user/update.rs:95-105`) maps `(Some(true), Some(text))` to that text, and an
+   empty `text` is byte-identical to what `(Some(false), _)` sends — so
+   `--disable-login true --login-denied-text ""` **re-enables** the user and the fault is inert,
+   costing a full container arm to observe PASS where a FAIL was promised. This is the same class
+   of trap as Task 3 step 12's `startswith` direction: a fault that does not fault.
 
 9. Commit: `test(functional): add an enabled non-member group fixture user`.
 
