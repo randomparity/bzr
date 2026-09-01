@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use super::{fetch_all_pages_with_cap, fetch_page, resolve_offset, write_truncation_note, Page};
-use crate::client::test_helpers::test_client;
+use crate::client::test_helpers::{test_client, test_client_hybrid};
 use crate::types::{Bug, OutputFormat, SearchParams};
 
 /// A `Page` of `n` placeholder bugs marked truncated/not for note tests.
@@ -24,6 +24,20 @@ fn bugs_body(n: u64) -> serde_json::Value {
 fn params_with_limit(limit: u32) -> SearchParams {
     SearchParams {
         limit: Some(limit),
+        ..Default::default()
+    }
+}
+
+fn raw_params_with_limit(limit: u32) -> SearchParams {
+    SearchParams {
+        limit: Some(limit),
+        include_fields: Some("summary".into()),
+        exclude_fields: Some("id".into()),
+        raw_params: vec![
+            ("f1".into(), "status_whiteboard".into()),
+            ("o1".into(), "substring".into()),
+            ("v1".into(), "marker".into()),
+        ],
         ..Default::default()
     }
 }
@@ -62,13 +76,14 @@ async fn fetch_page_flags_truncation_via_over_fetch() {
 }
 
 #[tokio::test]
-async fn fetch_page_rejects_limit_that_cannot_overfetch() {
+async fn fetch_page_raw_params_rejects_limit_that_cannot_overfetch() {
     let mock = MockServer::start().await;
-    let client = test_client(&mock.uri());
+    let client = test_client_hybrid(&mock.uri());
+    let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::WARN);
 
     let Err(err) = fetch_page(
         &client,
-        &params_with_limit(u32::MAX),
+        &raw_params_with_limit(u32::MAX),
         false,
         None,
         &mut crate::test_helpers::CapturedIo::new().writers(),
@@ -87,6 +102,105 @@ async fn fetch_page_rejects_limit_that_cannot_overfetch() {
         mock.received_requests().await.unwrap().is_empty(),
         "overflow validation should happen before any search request"
     );
+    assert!(
+        !capture
+            .output()
+            .contains("query contains raw URL parameters that require REST API"),
+        "overflow validation should happen before the fallback warning"
+    );
+}
+
+#[tokio::test]
+async fn fetch_all_pages_raw_params_warns_once_and_uses_rest() {
+    let mock = MockServer::start().await;
+    for (offset, body) in [
+        ("0", serde_json::json!({"bugs": [{"id": 1}, {"id": 2}]})),
+        ("2", serde_json::json!({"bugs": [{"id": 3}]})),
+        ("3", serde_json::json!({"bugs": []})),
+    ] {
+        Mock::given(method("GET"))
+            .and(path("/rest/bug"))
+            .and(query_param("limit", "2"))
+            .and(query_param("offset", offset))
+            .and(query_param("f1", "status_whiteboard"))
+            .and(query_param("o1", "substring"))
+            .and(query_param("v1", "marker"))
+            .and(query_param("include_fields", "id,summary"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(body))
+            .expect(1)
+            .mount(&mock)
+            .await;
+    }
+
+    let client = test_client_hybrid(&mock.uri());
+    let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::WARN);
+    let bugs = fetch_all_pages_with_cap(
+        &client,
+        &raw_params_with_limit(2),
+        3,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        bugs.iter().map(|bug| bug.id).collect::<Vec<_>>(),
+        vec![1, 2, 3]
+    );
+    let requests = mock.received_requests().await.unwrap();
+    assert_eq!(requests.len(), 3);
+    for request in requests {
+        assert_eq!(request.method.as_str(), "GET");
+        assert_eq!(request.url.path(), "/rest/bug");
+        assert!(
+            !request
+                .url
+                .query_pairs()
+                .any(|(key, _)| key == "exclude_fields"),
+            "id must be removed from exclude_fields"
+        );
+    }
+    assert_eq!(
+        capture
+            .output()
+            .matches("query contains raw URL parameters that require REST API")
+            .count(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn fetch_page_raw_params_explicit_rest_is_silent() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("f1", "status_whiteboard"))
+        .and(query_param("o1", "substring"))
+        .and(query_param("v1", "marker"))
+        .and(query_param("include_fields", "id,summary"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(bugs_body(1)))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::WARN);
+    let params = raw_params_with_limit(0);
+    let page = fetch_page(
+        &client,
+        &params,
+        true,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(page.bugs.len(), 1);
+    assert!(!capture
+        .output()
+        .contains("query contains raw URL parameters that require REST API"));
 }
 
 #[tokio::test]

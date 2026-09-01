@@ -87,10 +87,11 @@ pub(crate) async fn fetch_page(
             truncated: false,
         });
     }
+    let mut search = client.begin_bug_search(params);
     // Over-fetch one row past the limit to detect "more available" without a
     // server total. A zero/absent limit means "no window", so nothing to flag.
     let Some(limit) = params.limit.filter(|l| *l > 0) else {
-        let bugs = client.search_bugs(params).await?;
+        let bugs = search.execute(params).await?;
         return Ok(Page {
             bugs,
             truncated: false,
@@ -99,7 +100,7 @@ pub(crate) async fn fetch_page(
     let mut probe = params.clone();
     probe.limit = Some(overfetch_limit(limit)?);
     let _ = checked_next_offset(params.offset.unwrap_or(0), limit)?;
-    let mut bugs = client.search_bugs(&probe).await?;
+    let mut bugs = search.execute(&probe).await?;
     let truncated = bugs.len() as u64 > u64::from(limit);
     bugs.truncate(limit as usize);
     Ok(Page { bugs, truncated })
@@ -124,10 +125,11 @@ async fn fetch_all_pages_with_cap(
     progress: Option<ProgressFormat>,
     w: &mut Writers<'_>,
 ) -> Result<Vec<Bug>> {
+    let mut search = client.begin_bug_search(params);
     if params.limit.is_none_or(|limit| limit == 0) {
         // No window: one unbounded request returns everything. There is no
         // multi-page sequence to report; the caller emits the terminal `done`.
-        return client.search_bugs(params).await;
+        return search.execute(params).await;
     }
     let mut offset = params.offset.unwrap_or(0);
     let mut all = Vec::new();
@@ -136,7 +138,7 @@ async fn fetch_all_pages_with_cap(
     for _ in 0..max_pages {
         let mut p = params.clone();
         p.offset = Some(offset);
-        let batch = client.search_bugs(&p).await?;
+        let batch = search.execute(&p).await?;
         let received = batch.len();
         all.extend(batch);
         page_no += 1;
