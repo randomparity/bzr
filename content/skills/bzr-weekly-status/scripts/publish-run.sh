@@ -86,8 +86,9 @@ trap 'rm -f "$tmp_link"' EXIT HUP INT TERM
 	echo "publish-run: latest is a directory; new run retained: $final" >&2
 	exit 2
 }
-ln -s "runs/$run_id" "$tmp_link"
-if ! { mv -fh "$tmp_link" "$root/latest" 2>/dev/null ||
+
+if ! ln -s "runs/$run_id" "$tmp_link" ||
+	! { mv -fh "$tmp_link" "$root/latest" 2>/dev/null ||
 	mv -fT "$tmp_link" "$root/latest"; } ||
 	[ ! -L "$root/latest" ] ||
 	[ "$(readlink "$root/latest")" != "runs/$run_id" ]; then

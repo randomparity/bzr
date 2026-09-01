@@ -77,6 +77,22 @@ cp "$WORK/new.json" "$stage/snapshot.json"
 [ -f "$root/runs/run-1/snapshot.json" ]
 [ -f "$root/runs/run-2/snapshot.json" ]
 
+mkdir "$WORK/link-failure-bin"
+printf '%s\n' '#!/bin/sh' 'exit 1' >"$WORK/link-failure-bin/ln"
+chmod +x "$WORK/link-failure-bin/ln"
+stage="$root/.staging/stage-link-failure"
+mkdir "$stage"
+cp "$WORK/new.json" "$stage/snapshot.json"
+if PATH="$WORK/link-failure-bin:$PATH" "$HERE/../scripts/publish-run.sh" "$root" run-link-failure "$stage" \
+  >"$WORK/link-failure.out" 2>"$WORK/link-failure.err"; then
+	echo 'expected temporary pointer creation failure' >&2
+	exit 1
+fi
+grep -q "could not update latest; new run retained: $root/runs/run-link-failure" \
+  "$WORK/link-failure.err"
+[ "$(readlink "$root/latest")" = runs/run-2 ]
+[ -f "$root/runs/run-link-failure/snapshot.json" ]
+
 mkdir "$WORK/race-bin"
 printf '%s\n' '#!/bin/sh' \
   'case "$3" in' \
