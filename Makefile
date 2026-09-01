@@ -7,7 +7,7 @@ RUST_MIN_VERSION := 1.89.0
         skills-test \
         mutants mutants-fast mutants-list audit-mutant-skips \
         functional-build functional-start functional-test functional-stop \
-        functional-test-bz52 functional-test-bz53 functional-test-all functional-stop-all \
+        functional-test-bz50 functional-test-bz52 functional-test-bz53 functional-test-all functional-stop-all \
         functional-test-keyring
 
 ## Setup & Environment
@@ -197,6 +197,14 @@ functional-test: functional-start ## Run functional tests against real Bugzilla
 
 functional-stop: ## Stop and remove the Bugzilla container
 	tests/functional/setup-bugzilla.sh stop
+
+# `make functional-test` is the unpinned form of this target: it runs whatever
+# tests/functional/container-env.sh defaults BZ_VERSION to, which is bz50 today.
+# The two agree only while that default is bz50; moving it makes them diverge
+# silently, since both still succeed.
+functional-test-bz50: ## Run functional tests against Bugzilla 5.0
+	BZR_BZ_VERSION=bz50 tests/functional/setup-bugzilla.sh start
+	BZR_BZ_VERSION=bz50 tests/functional/run-tests.sh
 
 functional-test-bz52: ## Run functional tests against Bugzilla 5.2
 	BZR_BZ_VERSION=bz52 tests/functional/setup-bugzilla.sh start

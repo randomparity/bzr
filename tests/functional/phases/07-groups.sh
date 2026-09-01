@@ -78,10 +78,41 @@ test_begin "user-re-enable-for-group-tests" "user re-enable for group tests"
 run_bzr user update testuser@test.bzr --disable-login false --login-denied-text ""
 if assert_success; then test_pass; fi
 
+# The enabled non-member fixture (issue #617). It exists so #625 can assert that
+# `group list-users --group functest-grp` excludes a user the server would
+# otherwise return. That assertion is red until #625 lands the group-filter fix,
+# so this phase provisions and validates the fixture and stops there.
+# Invariant: nothing may leave $NONMEMBER_EMAIL in a group. Containers are
+# reused between runs, so a membership added here survives into the next one.
+test_begin "fixture-enabled-non-member-user" "fixture enabled non-member user"
+if ! ensure_enabled_nonmember_user; then
+    test_fail "could not provision the enabled non-member fixture user"
+elif assert_user_login_enabled "$NONMEMBER_EMAIL"; then
+    test_pass
+fi
+
 test_begin "group-add-user" "group add-user"
 run_bzr group add-user --group functest-grp --user testuser@test.bzr
 if assert_success; then test_pass; fi
 
+# The fixture's non-membership is what #625's assertion will rest on, so assert
+# it rather than trusting that nothing added the user to a group — containers
+# are reused across runs, so a stray membership persists indefinitely. The
+# testuser half is the positive control: it proves the harness can see
+# membership at all, so the nonmember half cannot pass on an empty `groups`.
+# Both read the user resource, not `group list-users`, so neither depends on
+# the group filter #625 owns.
+test_begin "fixture-non-member-is-not-in-the-group" "fixture non-member is not in the group"
+if assert_user_group_membership "testuser@test.bzr" functest-grp in &&
+    assert_user_group_membership "$NONMEMBER_EMAIL" functest-grp out; then
+    test_pass
+fi
+
+# TODO(#625): these list-users assertions pass whether or not the group filter is
+# honored. An added member appears in an unfiltered listing too, and the absence
+# assertion below is only reached after the user is disabled, which hides it from
+# user search regardless. #625 owns the `groups=` fix and the replacement
+# assertion, which uses the enabled $NONMEMBER_EMAIL fixture above.
 test_begin "group-list-users" "group list-users"
 run_bzr group list-users --group functest-grp
 if assert_success && assert_stdout_contains "testuser"; then test_pass; fi
@@ -105,6 +136,8 @@ if assert_success; then test_pass; fi
 
 # Re-disable testuser so it's excluded from list-users results (Bugzilla 5.0
 # default user search hides disabled users, which is also what test 24 does)
+# TODO(#625): this re-disable is what makes the absence assertion below pass; it
+# is not evidence that `group remove-user` worked.
 run_bzr user update testuser@test.bzr --disable-login true --login-denied-text "test disabled" >/dev/null 2>&1 || true
 
 test_begin "group-list-users-after-remove" "group list-users (after remove)"

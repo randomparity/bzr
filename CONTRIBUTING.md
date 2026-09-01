@@ -69,6 +69,50 @@ functional tier you could not run. Do not describe an omitted check as passing.
 Documentation-only changes should also confirm that every added relative link resolves and every
 documented command still exists in the repository.
 
+### Controlled-fault verification
+
+A test that passes both before and after a fix has proved nothing about the fix. When a change
+corrects a defect, demonstrate the test goes red against the pre-fix code and green after, and
+record both observations in the pull-request body.
+
+1. Write or strengthen the test first.
+2. Remove the fix from the working tree — `git stash push` the source paths, or invert the one
+   line under test. Do not weaken the test.
+3. Run the narrowest command that covers it:
+   - a unit test: `make test-one T=<name-substring>`;
+   - a production-shape proxy rewrite: `python3 tests/functional/redhat-shape-proxy.py --self-test`;
+   - a single functional arm: `make functional-test-bz50`, `make functional-test-bz52`,
+     `make functional-test-bz53`, or `make functional-test` for the unpinned default.
+4. Observe the failure. Record the exact command and the failing assertion.
+5. Restore the fix, confirm the tree really is restored (`git stash list`, `git status`), re-run
+   the same command, and observe green.
+6. Put both observations in the pull-request body.
+
+**A functional arm needs a fresh binary and a fresh container.** Two things can make the run
+report on something other than your fault:
+
+- **A stale binary.** `tests/functional/phases/00-build.sh:16` uses `$BZR_BIN` verbatim when it is
+  set and executable, so an exported `BZR_BIN` runs the whole arm against a binary that never
+  received your fault. A *failed* build is not the hazard: `run-tests.sh` runs under
+  `set -euo pipefail`, so a non-zero `cargo build` aborts the run rather than falling through to
+  a stale artifact.
+- **A stale container.** `tests/functional/setup-bugzilla.sh` reuses an already-running container
+  for this checkout and version, so users, groups, and bugs from earlier runs persist. Residue
+  can satisfy the assertion under test in the faulted state, or fail it in the restored state.
+
+So run the functional arm as one gated chain, before and after removing the fault:
+
+```bash
+unset BZR_BIN
+BZR_BZ_VERSION=bz50 tests/functional/setup-bugzilla.sh reset \
+  && cargo build --release \
+  && make functional-test-bz50
+```
+
+Keep the reset, the build, and the arm chained with `&&` rather than pasting them as three
+separate lines, so a failed reset or build stops before the arm runs instead of testing the
+previous state. (`unset` cannot fail, so it stands on its own line.)
+
 ## Pull requests
 
 - Describe what the current diff does and why.
