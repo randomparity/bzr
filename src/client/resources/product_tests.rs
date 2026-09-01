@@ -7,6 +7,39 @@ use crate::client::test_helpers::test_client;
 use crate::error::BzrError;
 use crate::types::{CreateProductParams, ProductListType, UpdateProductParams};
 
+#[test]
+fn list_products_rejects_invalid_ids_with_stable_messages() {
+    for (id, expected) in [
+        (
+            serde_json::json!(0),
+            "expected a positive integer product ID",
+        ),
+        (
+            serde_json::json!(-5),
+            "expected a positive integer product ID",
+        ),
+        (
+            serde_json::json!("not_a_number"),
+            "expected a positive integer product ID",
+        ),
+        (
+            serde_json::json!("-5"),
+            "expected a positive integer product ID",
+        ),
+        (
+            serde_json::json!(true),
+            "invalid type: boolean `true`, expected a positive integer or decimal numeric string product ID",
+        ),
+    ] {
+        let error = serde_json::from_value::<super::ProductAccessibleResponse>(
+            serde_json::json!({"ids": [id]}),
+        )
+        .err()
+        .unwrap();
+        assert_eq!(error.to_string(), expected);
+    }
+}
+
 #[tokio::test]
 async fn list_products_returns_products() {
     let mock = MockServer::start().await;

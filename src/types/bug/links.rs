@@ -183,6 +183,8 @@ impl Visitor<'_> for PositiveRelationshipIdVisitor {
     }
 }
 
+// This positive integer-or-object union deliberately rejects strings, so it
+// cannot use the shared string-or-number adapter.
 struct RelationshipIdVisitor;
 
 impl<'de> Visitor<'de> for RelationshipIdVisitor {

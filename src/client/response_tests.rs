@@ -219,6 +219,7 @@ fn strict_adjacency_resource_error_rejects_open_or_malformed_envelopes() {
         serde_json::json!({"error": false, "code": 101}),
         serde_json::json!({"error": true, "code": 100_500}),
         serde_json::json!({"error": true, "code": "0101"}),
+        serde_json::json!({"error": true, "code": "32610"}),
         serde_json::json!({"error": true, "code": 101.0}),
         serde_json::json!({"error": true, "code": 101, "extra": true}),
         serde_json::json!({"error": true, "code": 101, "bugs": []}),

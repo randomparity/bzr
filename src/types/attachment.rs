@@ -1,25 +1,7 @@
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
+use super::deserialization::option_bool_from_int_or_bool;
 use super::flag::{Flag, FlagUpdate};
-
-/// Deserialize an optional boolean that may arrive as an integer (0/1) from Bugzilla 5.0.
-fn option_bool_from_int_or_bool<'de, D: Deserializer<'de>>(d: D) -> Result<Option<bool>, D::Error> {
-    let v = serde_json::Value::deserialize(d)?;
-    match v {
-        serde_json::Value::Null => Ok(None),
-        serde_json::Value::Bool(b) => Ok(Some(b)),
-        serde_json::Value::Number(n) => match n.as_u64() {
-            Some(0) => Ok(Some(false)),
-            Some(1) => Ok(Some(true)),
-            _ => Err(serde::de::Error::custom(format!(
-                "expected bool or 0/1 integer, got {n}"
-            ))),
-        },
-        other => Err(serde::de::Error::custom(format!(
-            "expected bool or integer, got {other}"
-        ))),
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
