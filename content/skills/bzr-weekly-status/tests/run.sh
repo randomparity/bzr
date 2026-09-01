@@ -119,8 +119,6 @@ fi
 stage="$root/.staging/stage-fail"
 mkdir "$stage"
 cp "$WORK/new.json" "$stage/snapshot.json"
-rmdir "$root/latest"
-mkdir "$root/latest"
 if "$HERE/../scripts/publish-run.sh" "$root" run-3 "$stage" \
   >"$WORK/pointer-failure.out" 2>"$WORK/pointer-failure.err"; then
 	echo 'expected pointer replacement failure' >&2
