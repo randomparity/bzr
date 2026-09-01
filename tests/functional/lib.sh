@@ -2,8 +2,11 @@
 # Test helper library for bzr functional tests.
 # Source this file; do not execute directly.
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=tests/functional/container-env.sh
+source "$SCRIPT_DIR/container-env.sh"
+
 # ── Version ──────────────────────────────────────────────────────────
-BZ_VERSION="${BZR_BZ_VERSION:-bz50}"
 
 bz_version_num() {
     case "$BZ_VERSION" in
@@ -492,23 +495,6 @@ assert_stdout_equals_file() {
 assert_schema_list_contains() {
     local name="$1"
     assert_json_exists "index(\"$name\")"
-}
-
-container_runtime() {
-    if command -v podman >/dev/null 2>&1; then
-        printf '%s' podman
-        return 0
-    fi
-    if command -v docker >/dev/null 2>&1; then
-        printf '%s' docker
-        return 0
-    fi
-    return 1
-}
-
-bugzilla_container_name() {
-    printf '%s' "${BZR_FUNC_CONTAINER:-bzr-func-test-${BZ_VERSION}}"
-    return 0
 }
 
 # run_bugzilla_sql_file <path> — execute SQL inside the running Bugzilla

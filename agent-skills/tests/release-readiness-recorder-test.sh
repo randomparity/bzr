@@ -167,6 +167,7 @@ common_env=(
   BZR_BIN="$stub_bin/bzr"
   MV_REAL="$real_mv"
   FAKE_MV_STATE="$work/mv-failed"
+  BZ_URL="http://127.0.0.1:8089"
 )
 
 assert_report_contains() {
