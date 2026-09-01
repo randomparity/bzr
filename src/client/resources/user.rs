@@ -45,7 +45,7 @@ impl BugzillaClient {
                 } else {
                     Err(BzrError::Api {
                         code: 32614,
-                        message: "whoami not available on this server; configure a named server with `bzr config set-server --email`, or add `--server-email` to an inline `--server-url` invocation, for the Bugzilla 5.0/5.2 fallback".into(),
+                        message: "Bugzilla 5.3+/BMO-derived servers use native whoami; this Bugzilla 5.0/5.2 server needs an email-backed fallback. Configure a named server with `bzr config set-server --email`, or add `--server-email` to an inline `--server-url` invocation".into(),
                     })
                 }
             }

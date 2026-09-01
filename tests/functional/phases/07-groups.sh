@@ -208,15 +208,16 @@ test_begin "group-remove-user" "group remove-user"
 run_bzr group remove-user --group functest-grp --user testuser@test.bzr
 if assert_success; then test_pass; fi
 
-# Re-disable testuser so it's excluded from list-users results (Bugzilla 5.0
-# default user search hides disabled users, which is also what test 24 does)
-# TODO(#625): this re-disable is what makes the absence assertion below pass; it
-# is not evidence that `group remove-user` worked.
-run_bzr user update testuser@test.bzr --disable-login true --login-denied-text "test disabled" >/dev/null 2>&1 || true
+test_begin "group-membership-after-remove" "removed user has no group membership"
+if assert_user_group_membership "testuser@test.bzr" functest-grp out; then test_pass; fi
 
 test_begin "group-list-users-after-remove" "group list-users (after remove)"
 run_bzr group list-users --group functest-grp
 if assert_success && assert_stdout_not_contains "testuser@test.bzr"; then test_pass; fi
+
+# Restore the disabled fixture state only after both removal proofs observe the
+# user while enabled. Bugzilla 5.0 user search hides disabled users.
+run_bzr user update testuser@test.bzr --disable-login true --login-denied-text "test disabled" >/dev/null 2>&1 || true
 
 _GJSON_DIR=$(mktemp -d /tmp/bzr-func-group-json.XXXXXX)
 _GJ_NAME=$(unique_name groupjson)

@@ -438,6 +438,10 @@ async fn whoami_404_no_email_suggests_email_flag() {
         "unexpected version hint: {err}"
     );
     assert!(
+        err.contains("5.3+/BMO-derived") && err.contains("native whoami"),
+        "should name the native whoami arm, got: {err}"
+    );
+    assert!(
         err.contains("config set-server --email"),
         "should suggest named-server recovery, got: {err}"
     );

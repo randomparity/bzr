@@ -42,6 +42,11 @@ async fn whoami_missing_email_names_named_and_inline_recovery() {
         .await
         .unwrap_err()
         .to_string();
+    assert!(error.contains("Bugzilla 5.0/5.2"), "{error}");
+    assert!(
+        error.contains("5.3+/BMO-derived") && error.contains("native whoami"),
+        "{error}"
+    );
     assert!(error.contains("config set-server --email"), "{error}");
     assert!(error.contains("--server-email"), "{error}");
 }
