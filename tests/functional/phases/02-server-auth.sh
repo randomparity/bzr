@@ -110,8 +110,9 @@ if redhat_shape_start "$BZ_PORT"; then
         server capabilities
     _SERVER_CAPABILITIES_SHAPE_OK=1
     if ! assert_success ||
+        ! assert_json '.version' '5.2+' ||
         ! assert_json_exists '.max_attachment_size' ||
-        ! assert_json '.api_modes | index("rest") != null' 'true' ||
+        ! assert_json '.api_modes == ["rest"]' 'true' ||
         ! assert_json 'all(.status_transitions[]; .from != "")' 'true' ||
         ! assert_json 'any(.custom_fields[]; .name == "cf_bzr_proxy_probe" and .type == "single_select")' 'true'; then
         _SERVER_CAPABILITIES_SHAPE_OK=0

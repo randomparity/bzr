@@ -1,6 +1,6 @@
 # Server capability wire conformance design
 
-Issue: #626  
+Issue: #626
 ADR: [0039](../../adr/0039-normalize-server-capability-wire-shapes.md)
 
 ## Outcome
