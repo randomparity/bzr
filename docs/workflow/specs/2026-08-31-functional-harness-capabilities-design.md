@@ -79,16 +79,29 @@ on `fixture-enabled-non-member-user`, read that as this assumption failing on th
 version, not as the helper being wrong, and fix the fixture rather than weakening the assertion —
 an assertion that tolerates a disabled user is worth nothing to the dependent that consumes it.
 
-**The non-member half is an invariant, not a guarantee, and the helper says so.** The helper
-establishes *exists* and *enabled*; it does not establish *not a member*, which holds only
+**The non-member half is asserted, not assumed.** `ensure_enabled_nonmember_user` establishes
+*exists* and *enabled*; nothing in it establishes *not a member*, which would otherwise hold only
 because nothing adds this login to a group. That is weaker than it looks, because
 `setup-bugzilla.sh start` reuses an existing container for the checkout-and-version pair, so
 group membership survives across runs and across branches in the same worktree. An aborted #625
 iteration that added the user to `functest-grp` would leave the container in a state where
-#625's own assertion fails against a fixture it does not own. Coupling a generic `lib.sh` helper
-to one phase's group name to repair that would be the wrong trade, so the residual is recorded
-instead: **a phase that adds `$NONMEMBER_EMAIL` to a group must remove it**, stated in the
-helper's doc comment and beside the fixture's phase test.
+#625's own assertion fails against a fixture it does not own — a defect passing for the wrong
+reason inside the fixture built to eliminate exactly that.
+
+So a third helper, `assert_user_group_membership <login> <group> <in|out>`, asserts it directly
+from the `groups` array `user search --details` already returns (`USER_FIELDS_DETAILED`,
+`src/client/mod.rs:22`). This reads the **user** resource, not `group list-users`, so it is
+independent of the filter #625 owns and is green today.
+
+One trap it must not fall into: an empty `groups` array — which is what a server would return if
+the calling credential could not see membership — makes an `out` assertion pass for the wrong
+reason. So the phase test pairs it with an `in` assertion on `testuser@test.bzr`, a known member
+by that point in the phase. That positive control is what proves the harness can see membership
+at all. Whether `groups` is populated for this credential on every arm is verified by the first
+`make functional-test-all` run, not assumed: if the control fails on an arm, the paired test is
+removed and the residual returns to a recorded invariant — **a phase that adds
+`$NONMEMBER_EMAIL` to a group must remove it** — with that arm named. The `out` half is never
+kept without the control.
 
 `tests/functional/phases/07-groups.sh` provisions the fixture after `group add-user` and
 asserts it is enabled. It does **not** assert the non-member is absent from the group listing —

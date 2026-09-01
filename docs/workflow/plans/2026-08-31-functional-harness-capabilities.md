@@ -89,8 +89,16 @@ functional-test-bz50: ## Run functional tests against Bugzilla 5.0
    `BZR_BZ_VERSION=bz50 tests/functional/setup-bugzilla.sh start` and
    `BZR_BZ_VERSION=bz50 tests/functional/run-tests.sh`, and exit status 0.
 
-4. Verify the help entry appears: `make help | grep functional-test-bz50`. Expect one line
-   containing `Run functional tests against Bugzilla 5.0`.
+4. Verify the rule and its help text landed:
+   `rg -n 'functional-test-bz50: ## Run functional tests against Bugzilla 5.0' Makefile`.
+   Expect one hit.
+
+   Do **not** verify through `make help`. Its filter at `Makefile:223` is
+   `grep -E '^[a-zA-Z_-]+:.*##'`, whose character class has no digit range, so no target with a
+   digit in its name is listed — `functional-test-bz52` and `functional-test-bz53` are already
+   invisible there today (`make help | grep -c functional-test-bz52` prints `0`). Widening that
+   class would change `make help` output for targets this change does not own, so it stays out
+   of scope; the gap is reported rather than fixed here.
 
 5. Commit: `feat(test): add a functional-test-bz50 make target`.
 
@@ -504,12 +512,12 @@ def apply_response_hooks(path, body):
 11. Verify: `python3 tests/functional/redhat-shape-proxy.py --self-test`. Expect every case to
     print `... ok`, a final `OK`, and exit status 0.
 
-12. Controlled fault, per the procedure Task 5 documents. Temporarily change the `product-ids`
-    hook's `matches` to `lambda path: path.startswith("/rest/product_accessibles")` — one
-    **added** character — re-run the self-test, and expect
+12. Controlled fault, per the procedure Task 5 documents. Temporarily **add one character to the
+    first prefix** in the `product-ids` hook's `matches` tuple — `"/rest/product_accessible"` →
+    `"/rest/product_accessibles"` — re-run the self-test, and expect
     `test_response_hooks_report_product_ids_route` to FAIL with
-    `AssertionError: [] != [('product-ids', 'product-ids', 2)]`. Restore the string, re-run,
-    expect `OK`. Record both observations for the pull-request body.
+    `AssertionError: Lists differ: [] != [('product-ids', 'product-ids', 2)]`. Restore the
+    character, re-run, expect `OK`. Record both observations for the pull-request body.
 
     The direction rule matters and is easy to get backwards: **shortening a `startswith` prefix
     widens the match.** `'/rest/product_accessible'.startswith('/rest/product_accessibl')` is
@@ -662,6 +670,32 @@ assert_user_login_enabled() {
     fi
     assert_json "[.[] | select(.name == \"$login\")][0].can_login" "true"
 }
+
+# assert_user_group_membership <login> <group> <in|out> — assert that <login>'s
+# own membership set does or does not contain <group>, read from the `groups`
+# field `user search --details` already returns (USER_FIELDS_DETAILED,
+# src/client/mod.rs:22). This reads the *user* resource, not
+# `group list-users`, so it is independent of the group filter #625 owns.
+#
+# An empty `groups` array would make an `out` assertion pass for the wrong
+# reason, so callers pair it with an `in` assertion on a user known to be a
+# member: that positive control is what proves the harness can see membership
+# at all. Overwrites the BZR_* capture globals.
+assert_user_group_membership() {
+    local login="$1"
+    local group="$2"
+    local want="$3"
+    local expected=0
+    [[ "$want" == "in" ]] && expected=1
+    run_bzr user search "$login" --details
+    if [[ $BZR_EXIT -ne 0 ]]; then
+        test_fail "user search '$login' --details exited $BZR_EXIT"
+        return 1
+    fi
+    assert_json \
+        "[[.[] | select(.name == \"$login\")][0].groups[]? | select(.name == \"$group\")] | length" \
+        "$expected"
+}
 ```
 
 2. In `tests/functional/phases/07-groups.sh`, immediately after the
@@ -683,6 +717,34 @@ elif assert_user_login_enabled "$NONMEMBER_EMAIL"; then
     test_pass
 fi
 ```
+
+2a. Assert the fixture's defining property, with a positive control. Insert this **after** the
+    existing `group-add-user` test block (so `testuser@test.bzr` is a known member) and before
+    the `group-list-users` test:
+
+```bash
+# The fixture's non-membership is what #625's assertion will rest on, so assert
+# it rather than trusting that nothing added the user to a group — containers
+# are reused across runs, so a stray membership persists indefinitely. The
+# testuser half is the positive control: it proves the harness can see
+# membership at all, so the nonmember half cannot pass on an empty `groups`.
+# Both read the user resource, not `group list-users`, so neither depends on
+# the group filter #625 owns.
+test_begin "fixture-non-member-is-not-in-the-group" "fixture non-member is not in the group"
+if assert_user_group_membership "testuser@test.bzr" functest-grp in &&
+    assert_user_group_membership "$NONMEMBER_EMAIL" functest-grp out; then
+    test_pass
+fi
+```
+
+    **Verify this against a live container before relying on it.** Bugzilla returns `groups` on
+    `User.get` only to a caller permitted to see them; the harness runs as `admin@test.bzr`, which
+    holds `editusers`, so it should be populated. If the positive control fails on any arm —
+    `testuser` shows an empty `groups` — the field is not visible to this credential there. In
+    that case delete this test, restore the comment-only invariant, and record in this plan and in
+    the spec which arm withheld it and what would prove non-membership instead. Do **not** keep
+    the `out` half alone: without the control it passes on an empty array, which is the
+    pass-for-the-wrong-reason failure this whole epic exists to remove.
 
 3. In the same file, immediately before `test_begin "group-list-users"` (currently at `:85`),
    insert:
@@ -724,6 +786,8 @@ fi
 ### Acceptance criteria
 
 - `07-groups/fixture-enabled-non-member-user` passes on bz50, bz52, and bz53.
+- `07-groups/fixture-non-member-is-not-in-the-group` passes on all three arms, **with its
+  positive control passing** — or the test is removed and step 2a's fallback is recorded.
 - No existing assertion in `07-groups.sh` changed — only insertions.
 - `make check-functional-test-ids` and `make check-shell` are clean.
 
@@ -752,9 +816,10 @@ features.
 
 2. In `CONTRIBUTING.md`, immediately after the paragraph ending
    `Do not describe an omitted check as passing.` and before the
-   `Documentation-only changes should also confirm...` paragraph, insert:
+   `Documentation-only changes should also confirm...` paragraph, insert everything between the
+   four-backtick fences below (the inner three-backtick `bash` block is part of the insert):
 
-```markdown
+````markdown
 ### Controlled-fault verification
 
 A test that passes both before and after a fix has proved nothing about the fix. When a change
@@ -797,17 +862,17 @@ make functional-test-bz50
 
 Run the build unpiped. A pipeline returns the last command's status, so `| tail` hides a failed
 build — the same rule the repository's guardrails follow everywhere else.
-```
+````
 
-2. Verify every command the section names exists:
+3. Verify every command the section names exists:
    `make -n test-one T=x`, `make -n check-proxy-self-test`, `make -n functional-test-bz50`,
    `make -n functional-test-bz52`, `make -n functional-test-bz53`, `make -n functional-test`.
    Each must exit 0. (`make -n test-one` without `T=` errors by design; pass `T=x`.)
 
-3. Verify the relative link target still resolves: the section adds no new links, so
+4. Verify the relative link target still resolves: the section adds no new links, so
    `rg -n '\]\(' CONTRIBUTING.md` should show the same link set as before the edit.
 
-4. Commit: `docs: record the controlled-fault verification procedure`.
+5. Commit: `docs: record the controlled-fault verification procedure`.
 
 ### Acceptance criteria
 
@@ -879,9 +944,19 @@ changes.**
 8. Verify the shell edit: `make check-shell` and `make check-functional-test-ids`. Expect no
    output and exit 0.
 
-9. Verify no asserted value moved:
-   `git diff -U0 src/ tests/functional/phases/02-server-auth.sh | rg '^[+-]' | rg -v '^[+-][+-]' | rg -v 'TODO\(#'`
-   must print nothing — every changed line is a `TODO` comment.
+9. Verify no asserted value moved. Filter on **comment syntax**, not on the marker token — the
+   markers are multi-line and only their first line carries `TODO(#`, so a token filter reports
+   every continuation line as a violation on correct work:
+
+   ```bash
+   git diff -U0 src/ tests/functional/phases/02-server-auth.sh \
+     | rg '^[+-]' | rg -v '^[+-][+-]' | rg -v '^[+-]\s*(//|#)'
+   ```
+
+   must print nothing — every changed line is a comment. Then confirm the markers are actually
+   present: `rg -c 'TODO\(#' src/commands/bug/clone_tests.rs src/client/resources/group_tests.rs
+   src/client/resources/server_tests.rs src/xmlrpc/resources/mappers_tests.rs
+   tests/functional/phases/02-server-auth.sh` should report 2, 4, 2, 1, and 1.
 
 10. Commit: `test: mark fixtures that encode the conformance defects they hide`.
 
