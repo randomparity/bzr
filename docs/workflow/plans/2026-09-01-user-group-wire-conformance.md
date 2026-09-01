@@ -345,8 +345,14 @@ inline `group list-users --details` through the proxy and assert:
 
 - the expected member is present;
 - `$NONMEMBER_EMAIL` is absent while enabled;
-- each returned `id` is numeric and each populated `can_login` is boolean;
+- each returned `id` is numeric;
+- the expected member has a non-null boolean `can_login`;
+- the expected member has at least one nested group with a present ID, and every present nested
+  group ID is numeric;
 - the log contains a positive `user-read` transform.
+
+The non-null `can_login` and non-empty nested-group checks are required before the type checks, so
+the production-shape proof cannot pass when Bugzilla omits either optional field.
 
 On bz50/bz52, in that same populated-membership window, run credentialed inline `group view`
 through the proxy and first assert `.membership | length > 0`; then assert numeric group/member IDs

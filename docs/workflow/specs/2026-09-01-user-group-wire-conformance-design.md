@@ -93,9 +93,12 @@ count returned for logging. Functional phase 02 proves native/fallback `whoami`;
 `full_name` on bz52 and both create-result paths through the proxy; phase 07 uses credentialed
 inline calls to prove recognized group filtering, user/group response normalization, and the
 enabled non-member exclusion. Those calls run after the positive member is added and before it is
-removed, and the group-detail assertion requires at least one membership row before checking every
-member ID. A separate credentialless phase-07 call asserts the stock server's access-denied
-response, covering the anonymous command path without claiming stock Bugzilla returns user data.
+removed. The detailed user assertion requires the expected member's `can_login` and at least one
+nested group ID to be present before checking their normalized types; the group-detail assertion
+likewise requires at least one membership row before checking every member ID. These non-empty
+checks prevent optional or collection-valued fields from making the adapter proof vacuous. A
+separate credentialless phase-07 call asserts the stock server's access-denied response, covering
+the anonymous command path without claiming stock Bugzilla returns user data.
 A bz53 group-detail arm may skip because stock 5.3 rejects REST Group.get and the client correctly
 falls back to XML-RPC, which the JSON response-shape proxy does not transform.
 
