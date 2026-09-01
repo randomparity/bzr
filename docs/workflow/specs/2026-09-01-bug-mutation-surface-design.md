@@ -85,8 +85,9 @@ on each bug's current state and remains the server's responsibility, as for clos
   and record the body-matcher failure showing the empty member was omitted.
 - Preserve and extend default resolve and non-empty create-group coverage.
 - Extend phase 11b for an explicit resolve status plus client-side invalid-status rejection.
-- Extend the restricted-product phase's mandatory-default-group fixture with a structured create
-  carrying `groups: []`, then assert the resulting bug's group list is empty.
+- Extend the restricted-access phase with a dedicated product whose group control is default (2),
+  not mandatory (3). Assert omission applies that group, then create with `groups: []` and assert
+  the resulting bug's group list is empty.
 - Run focused tests, `make test-fast`, `make lint`, `make test`, and
   `make functional-test-all` across bz50, bz52, and bz53.
 
