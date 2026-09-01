@@ -24,6 +24,7 @@ async fn mount_status_field(mock: &MockServer) {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "fields": [{
                 "values": [
+                    {"name": "", "can_change_to": [{"name": "NEW"}]},
                     {"name": "NEW", "can_change_to": [{"name": "ASSIGNED"}, {"name": "RESOLVED"}]},
                     {"name": "RESOLVED"}
                 ]
@@ -90,7 +91,26 @@ async fn server_capabilities_normalizes_attachment_size_to_bytes() {
     Mock::given(method("GET"))
         .and(path("/rest/parameters"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            // TODO(#626): every stock server stringifies /parameters values; #626 owns the fix.
+            "parameters": {"maxattachmentsize": "1000"}
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let caps = client.server_capabilities().await.unwrap();
+
+    assert_eq!(caps.max_attachment_size, Some(1_024_000));
+}
+
+#[tokio::test]
+async fn server_capabilities_keeps_numeric_attachment_size_compatibility() {
+    let mock = MockServer::start().await;
+    mount_version(&mock, "5.0.4").await;
+    mount_status_field(&mock).await;
+    mount_all_fields(&mock).await;
+    Mock::given(method("GET"))
+        .and(path("/rest/parameters"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "parameters": {"maxattachmentsize": 1000}
         })))
         .mount(&mock)
@@ -103,21 +123,79 @@ async fn server_capabilities_normalizes_attachment_size_to_bytes() {
 }
 
 #[tokio::test]
-async fn server_capabilities_nulls_attachment_size_on_parameters_error() {
+async fn server_capabilities_accepts_string_and_missing_field_types() {
     let mock = MockServer::start().await;
     mount_version(&mock, "5.0.4").await;
     mount_status_field(&mock).await;
-    mount_all_fields(&mock).await;
     Mock::given(method("GET"))
-        .and(path("/rest/parameters"))
-        .respond_with(ResponseTemplate::new(401).set_body_string("Unauthorized"))
+        .and(path("/rest/field/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "fields": [
+                {"name": "cf_string_type", "type": "2", "is_custom": true},
+                {"name": "cf_missing_type", "is_custom": true}
+            ]
+        })))
         .mount(&mock)
         .await;
 
     let client = test_client(&mock.uri());
     let caps = client.server_capabilities().await.unwrap();
 
+    assert_eq!(caps.custom_fields[0].field_type, "single_select");
+    assert_eq!(caps.custom_fields[1].field_type, "unknown");
+}
+
+#[tokio::test]
+async fn server_capabilities_logs_response_shape_attachment_failure() {
+    let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::DEBUG);
+    let mock = MockServer::start().await;
+    mount_version(&mock, "5.0.4").await;
+    mount_status_field(&mock).await;
+    mount_all_fields(&mock).await;
+    Mock::given(method("GET"))
+        .and(path("/rest/parameters"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "parameters": {
+                "maxattachmentsize": "not-a-number Bugzilla_api_key=test-key marker"
+            }
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let caps = client.server_capabilities().await.unwrap();
+    let output = capture.output();
+
     assert_eq!(caps.max_attachment_size, None);
+    assert!(output.contains("reason=response_shape"), "{output}");
+    assert!(output.contains("marker"), "{output}");
+    assert!(!output.contains("test-key"), "{output}");
+}
+
+#[tokio::test]
+async fn server_capabilities_nulls_attachment_size_on_parameters_error() {
+    let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::DEBUG);
+    let mock = MockServer::start().await;
+    mount_version(&mock, "5.0.4").await;
+    mount_status_field(&mock).await;
+    mount_all_fields(&mock).await;
+    Mock::given(method("GET"))
+        .and(path("/rest/parameters"))
+        .respond_with(
+            ResponseTemplate::new(401)
+                .set_body_string("Unauthorized Bugzilla_api_key=test-key marker"),
+        )
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let caps = client.server_capabilities().await.unwrap();
+    let output = capture.output();
+
+    assert_eq!(caps.max_attachment_size, None);
+    assert!(output.contains("reason=request"), "{output}");
+    assert!(output.contains("marker"), "{output}");
+    assert!(!output.contains("test-key"), "{output}");
 }
 
 #[tokio::test]
