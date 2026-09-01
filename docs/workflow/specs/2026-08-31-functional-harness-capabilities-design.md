@@ -48,7 +48,7 @@ filter correctly requires a second user who is **enabled** and **not a member**.
 
 ### Design
 
-`tests/functional/lib.sh` gains one fixture global and two helpers, beside the existing TLS and
+`tests/functional/lib.sh` gains one fixture global and three helpers, beside the existing TLS and
 production-shape fixture sections:
 
 - `NONMEMBER_EMAIL` — the fixture login, `functest-nonmember@test.bzr`. The prefix deliberately
@@ -248,44 +248,41 @@ for a hook refactor silently dropping a rewrite, and the comment block imposes a
 obligation on the four later entries R7 routes through this proxy. An obligation checked by
 nobody is a convention, and it will not survive four pull requests.
 
-So `Makefile` gains `check-proxy-self-test`, running
-`python3 tests/functional/redhat-shape-proxy.py --self-test`, added to the `lint` prerequisite
-list and to `.PHONY`. It guards on `python3` the way `check-shell` guards on `shellcheck` — an
-actionable error rather than a silent skip.
-
-**Naming the whole prerequisite, not just the interpreter.** Four of the suite's fourteen cases
-route through `_start_server` (`redhat-shape-proxy.py:380-387`) to start a real
-`ThreadingHTTPServer` on `127.0.0.1`, issue live
-requests with two-second timeouts, and join threads; they are essentially all of its 2.0s
-runtime. So `make lint` gains loopback TCP bind-and-connect and a few seconds of timing
-headroom, not merely `python3` — every existing `lint` prerequisite is offline filesystem work.
-This is documented rather than avoided, so a `make lint` failure in a restricted sandbox is
-diagnosable instead of mysterious; the suite was measured passing in an agent sandbox on this
-host (14 tests, 2.010s, `OK`). One residual is accepted and named:
-`test_unavailable_backend_returns_502` picks its unavailable port by binding port 0 and closing
-the socket, so a process that grabs that port in the window fails the case. The window is
-sub-millisecond and the case predates this change; promoting the suite to a gate raises the
-exposure, and the honest response is to record it here rather than to rewrite a working test.
-Since `python3` becomes a `make lint` requirement, `tests/functional/README.md`'s prerequisite
-list (which today calls it TLS-phase-only) and `CONTRIBUTING.md`'s development-setup section are
-corrected in the same change — a change that adds a prerequisite updates provisioning with it.
-
-**`make lint` alone would not be a gate.** No workflow runs it: `rg -n 'make lint|make check-'`
-over `.github/workflows/` returns only `ci.yml:46-48` (`check-test-layout`,
-`check-functional-test-ids`, `check-no-spawn`) and `ci.yml:264` (`check-shell`), and the
-pre-commit hook the Makefile writes at `:65` runs fmt, clippy, `check-test-layout`, and
-`check-functional-test-ids` — not `lint`. This repository's convention is that a guard reaches
-CI by being named as its own workflow step; `check-build-script` and
+**The gate goes where it binds: CI.** No workflow runs `make lint` —
+`rg -n 'make lint|make check-'` over `.github/workflows/` returns only `ci.yml:46-48`
+(`check-test-layout`, `check-functional-test-ids`, `check-no-spawn`) and `ci.yml:264`
+(`check-shell`), and the pre-commit hook the Makefile writes at `:65` runs fmt, clippy,
+`check-test-layout`, and `check-functional-test-ids`, not `lint`. This repository's convention is
+that a guard reaches CI by being named as its own workflow step; `check-build-script` and
 `check-release-security-notes` sit in `lint`'s prerequisite list and are consequently run by
 nothing automated.
 
-So the gate is delivered in both places, following that convention: the `lint` prerequisite for
-contributors and agents, and one `- run: make check-proxy-self-test` step in `ci.yml`'s existing
-`test-layout` job, beside the three `make check-*` steps already there. `python3` is preinstalled
-on `ubuntu-latest`, so the job needs no new setup step. **This adds `.github/workflows/ci.yml` to
-the change surface** beyond the file list the issue suggests — a one-line step in an existing
-job, no new action, no permission change, no dependency — because without it the obligation this
-section imposes on four later entries is enforced by nothing they will run.
+So `Makefile` gains a `check-proxy-self-test` target running
+`python3 tests/functional/redhat-shape-proxy.py --self-test`, and `ci.yml`'s existing
+`test-layout` job gains one `- run: make check-proxy-self-test` step beside the three
+`make check-*` steps already there. `python3` is preinstalled on `ubuntu-latest`, so the job needs
+no new setup step. **This adds `.github/workflows/ci.yml` to the change surface** beyond the file
+list the issue suggests — a one-line step in an existing job, no new action, no permission change,
+no dependency — because without it the obligation this section imposes on four later entries is
+enforced by nothing they will run.
+
+**The target is deliberately *not* a `make lint` prerequisite.** That was the first design here,
+and it is the wrong trade. Four of the suite's fourteen cases route through `_start_server`
+(`redhat-shape-proxy.py:380-387`) to start a real `ThreadingHTTPServer` on `127.0.0.1`, issue live
+requests with two-second timeouts, and join threads — essentially all of its 2.0s runtime. Adding
+it to `lint` would give the repository's primary guardrail a `python3` and loopback-TCP
+requirement where every existing prerequisite is offline filesystem work, would drag a
+`CONTRIBUTING.md` development-setup edit along to provision it, and would buy nothing the CI step
+does not already deliver: no completion criterion asks for a local gate, and CI is what actually
+blocks a pull request. `check-shell`'s `shellcheck` guard is not a precedent — that requirement
+predates this change. Contributors and agents reach the self-tests through the named target and
+through the controlled-fault procedure, which cites it directly.
+
+One residual is accepted and named: `test_unavailable_backend_returns_502` picks its unavailable
+port by binding port 0 and closing the socket, so a process that grabs that port in the window
+fails the case. The window is sub-millisecond and the case predates this change; running it in CI
+raises the exposure slightly, and the honest response is to record it rather than rewrite a
+working test. Measured passing in an agent sandbox on this host: 14 tests, 2.010s, `OK`.
 
 ### Self-tests
 
@@ -382,12 +379,13 @@ sits on the credentialed `server capabilities` test.
 
 ## Testing and acceptance
 
-- `make lint` — now includes `check-proxy-self-test`, so all proxy cases pass as part of the
-  guardrail contributors and agents are told to run. It also includes `check-shell` (shellcheck
-  and `bash -n` over `lib.sh` and every phase) and `check-functional-test-ids`, which constrains
-  the new `test_begin` identifier to `^[a-z0-9]+(-[a-z0-9]+)*$`.
-- `make check-proxy-self-test` in CI, as its own step in `ci.yml`'s `test-layout` job — the half
-  that makes the self-test obligation binding on a pull request rather than on memory.
+- `make lint` — unchanged in its prerequisite list, and green. It covers this change through
+  `check-shell` (shellcheck and `bash -n` over `lib.sh` and every phase) and
+  `check-functional-test-ids`, which constrains the new `test_begin` identifiers to
+  `^[a-z0-9]+(-[a-z0-9]+)*$`.
+- `make check-proxy-self-test` — green locally, and wired as its own step in `ci.yml`'s
+  `test-layout` job, which is what makes the self-test obligation binding on a pull request
+  rather than on memory.
 - `make test` — green; the markers are comments, so no Rust behavior changes.
 - `make functional-test-all` — green on bz50, bz52, and bz53. That covers all three proxy
   consumers: `03-products.sh` (sort-key markers), `18e-release-readiness.sh` (bug-transform

@@ -5,7 +5,7 @@ correcting a single fixture and without touching a `src/` production path.
 
 **Architecture.** Everything lives in `tests/functional/` plus three project files. The proxy
 (`redhat-shape-proxy.py`, python3 stdlib only) gains a rewrite-hook registry; the shell harness
-(`lib.sh`, phase scripts) gains a fixture user and one assertion helper; `Makefile`,
+(`lib.sh`, phase scripts) gains a fixture user and three helpers; `Makefile`,
 `.github/workflows/ci.yml`, and `CONTRIBUTING.md` gain a target, a CI step, and a procedure. Four
 Rust test files gain comment-only markers.
 
@@ -48,7 +48,7 @@ Every task's requirements implicitly include this section.
 | `.github/workflows/ci.yml` | modified | running `check-proxy-self-test` on every pull request |
 | `tests/functional/redhat-shape-proxy.py` | modified | the rewrite-hook registry, dispatcher, and self-tests |
 | `tests/functional/README.md` | modified | documenting how to add a rewrite hook |
-| `tests/functional/lib.sh` | modified | the non-member fixture global and its two helpers |
+| `tests/functional/lib.sh` | modified | the non-member fixture global and its three helpers |
 | `tests/functional/phases/07-groups.sh` | modified | provisioning the fixture; `TODO(#625)` markers |
 | `tests/functional/phases/02-server-auth.sh` | modified | the `TODO(#626)` marker |
 | `CONTRIBUTING.md` | modified | the controlled-fault procedure |
@@ -98,7 +98,13 @@ functional-test-bz50: ## Run functional tests against Bugzilla 5.0
    digit in its name is listed — `functional-test-bz52` and `functional-test-bz53` are already
    invisible there today (`make help | grep -c functional-test-bz52` prints `0`). Widening that
    class would change `make help` output for targets this change does not own, so it stays out
-   of scope; the gap is reported rather than fixed here.
+   of scope.
+
+   **Knowingly unowned.** No issue is filed for the help-filter gap and none is planned: it is
+   pre-existing (two sibling targets are already invisible), this change adds a third rather than
+   creating the condition, and the discovery path contributors actually use is the
+   `CONTRIBUTING.md` procedure, which names all three arms. Recorded here so it is a decision
+   rather than an omission.
 
 5. Commit: `feat(test): add a functional-test-bz50 make target`.
 
@@ -132,17 +138,12 @@ refers to this target by name.
    exists and a non-phony `man` target reports `make: 'man' is up to date.` and silently stops
    regenerating the pages.
 
-2. Change the `lint` rule from
-
-```make
-lint: fmt clippy check-build-script check-test-layout check-functional-test-ids check-no-spawn check-release-security-notes check-shell ## Run all linters
-```
-
-   to
-
-```make
-lint: fmt clippy check-build-script check-test-layout check-functional-test-ids check-no-spawn check-release-security-notes check-shell check-proxy-self-test ## Run all linters
-```
+2. **Leave the `lint` rule alone.** `check-proxy-self-test` is deliberately not a `lint`
+   prerequisite: four of the suite's cases bind a real loopback socket, so adding it would give
+   the repository's primary guardrail a `python3` and TCP requirement where every existing
+   prerequisite is offline filesystem work — and buy nothing, since no workflow runs `make lint`
+   and step 4's CI step is what actually blocks a pull request. See the design record's "The
+   target is deliberately *not* a `make lint` prerequisite".
 
 3. Immediately after the `check-shell` rule (the one ending with the `shfmt -d -ln bash` line),
    insert:
@@ -176,7 +177,8 @@ check-proxy-self-test: ## Run the production-shape proxy self-tests
 ### Acceptance criteria
 
 - `make check-proxy-self-test` exits 0 and runs every case in `ShapeTests`.
-- `make lint` includes it (visible in `make -n lint`, or by the guard's output during a real run).
+- `make lint`'s prerequisite list is **unchanged**: `git diff Makefile` shows no edit to the
+  `lint:` rule.
 - `ci.yml`'s `test-layout` job has four `make check-*` steps.
 - `git diff Makefile` shows the `.PHONY` block gained exactly one token and lost none — in
   particular `clean`, `help`, and `man` are still there.
@@ -336,8 +338,8 @@ def metadata_sort_key_route(path):
 # To add one: write the transform with that signature, append a ResponseHook
 # below, and add self-tests that dispatch a real path for it through
 # apply_response_hooks — not just the transform directly, which would leave the
-# matcher unguarded. `make check-proxy-self-test`, a `make lint` prerequisite
-# and a ci.yml step, is what enforces that.
+# matcher unguarded. `make check-proxy-self-test` runs them, and CI runs that
+# target on every pull request, which is what enforces the obligation.
 ResponseHook = collections.namedtuple("ResponseHook", "name matches route rewrite")
 
 RESPONSE_HOOKS = (
@@ -572,7 +574,7 @@ When a hook changes something the proxy writes `<name> shaped route=<route> coun
 stderr, which `lib.sh` captures into `$REDHAT_SHAPE_LOG`; that is how a phase proves its rewrite
 actually fired. Run the self-tests with
 `python3 tests/functional/redhat-shape-proxy.py --self-test`, or through
-`make check-proxy-self-test`, which `make lint` and CI both run.
+`make check-proxy-self-test`, which CI runs on every pull request.
 ```
 
 14. Correct the README prerequisite line. `tests/functional/README.md:11-12` currently reads:
@@ -585,14 +587,16 @@ actually fired. Run the self-tests with
     Replace those two lines with:
 
 ```markdown
-- `python3` — required by `make lint` (the `check-proxy-self-test` guard) and by the
-  production-shape proxy; also used by the ad-hoc TLS phase
+- `python3` — the production-shape proxy and the ad-hoc TLS phase; `make check-proxy-self-test`
+  needs it too
 - `openssl` — only for the ad-hoc TLS phase; when it or `python3` is missing that phase
   skips cleanly (see the TLS Fixture section below)
 ```
 
-    Without this the same file says python3 is optional eleven lines above a section telling
-    contributors to run `make check-proxy-self-test`.
+    The existing wording calls `python3` TLS-phase-only, which was already inaccurate — the
+    production-shape proxy has always needed it — and this file gains a section below telling
+    contributors to run `make check-proxy-self-test`. This is a correction inside a file the
+    change already edits, not a new prerequisite: `make lint` is unaffected.
 
 15. Commit: `test(functional): add per-endpoint rewrite hooks to the shape proxy`.
 
@@ -620,6 +624,13 @@ actually fired. Run the self-tests with
     stderr otherwise. Overwrites the `BZR_*` capture globals.
   - `assert_user_login_enabled <login>` — returns 0 when the server reports `can_login` true for
     that exact login; otherwise calls `test_fail` and returns 1. Overwrites the `BZR_*` globals.
+  - `assert_user_group_membership <login> <group> <in|out>` — returns 0 when `<login>`'s own
+    `groups` array does (`in`) or does not (`out`) contain `<group>`; otherwise calls `test_fail`
+    and returns 1. Overwrites the `BZR_*` globals. This is the helper #625 consumes to assert the
+    group filter, so its name and three-argument shape are the interface, not an internal detail.
+
+**Tests, restated:** two new functional tests —
+`07-groups/fixture-enabled-non-member-user` and `07-groups/fixture-non-member-is-not-in-the-group`.
 
 ### Steps
 
@@ -731,9 +742,13 @@ elif assert_user_login_enabled "$NONMEMBER_EMAIL"; then
 fi
 ```
 
-2a. Assert the fixture's defining property, with a positive control. Insert this **after** the
-    existing `group-add-user` test block (so `testuser@test.bzr` is a known member) and before
-    the `group-list-users` test:
+2a. Assert the fixture's defining property, with a positive control. Insert this **immediately
+    after the existing `group-add-user` test block** (so `testuser@test.bzr` is a known member).
+
+    Steps 2a and 3 both add text between `group-add-user` and `group-list-users`, so fix the
+    order once: `group-add-user` → this new test → step 3's `TODO(#625)` comment →
+    `test_begin "group-list-users"`. Anchoring both on "before `group-list-users`" would let the
+    marker land above this new test instead of above the assertions it indicts.
 
 ```bash
 # The fixture's non-membership is what #625's assertion will rest on, so assert
@@ -770,8 +785,8 @@ fi
     keep the `out` half alone: without the control it passes on an empty array, which is the
     pass-for-the-wrong-reason failure this whole epic exists to remove.
 
-3. In the same file, immediately before `test_begin "group-list-users"` (currently at `:85`),
-   insert:
+3. In the same file, immediately before `test_begin "group-list-users"` — and **below** the test
+   step 2a inserted — insert:
 
 ```bash
 # TODO(#625): these list-users assertions pass whether or not the group filter is
@@ -837,18 +852,9 @@ names, each of which must exist.
 
 ### Steps
 
-1. In `CONTRIBUTING.md`'s `## Development setup`, the first paragraph currently reads
-   `Development requires Git, GNU Make, Rust 1.89 or newer, and the native packages needed by the`
-   `default features.` Change that opening sentence to:
-
-```markdown
-Development requires Git, GNU Make, Rust 1.89 or newer, `python3` (the `make lint` guard for the
-production-shape proxy runs its self-tests), and the native packages needed by the default
-features.
-```
-
-   Leave the rest of that paragraph unchanged. This is the provisioning half of Task 2's new
-   `make lint` prerequisite.
+1. **Do not touch `## Development setup`.** An earlier draft added `python3` to it, to provision a
+   `make lint` prerequisite that Task 2 no longer creates. `make lint` gains no new requirement,
+   so the setup paragraph stays as it is.
 
 2. In `CONTRIBUTING.md`, immediately after the paragraph ending
    `Do not describe an omitted check as passing.` and before the
@@ -1010,7 +1016,9 @@ changes.**
 
 Run in this order, each bare (no pipe), after all six tasks:
 
-1. `make lint` — expect exit 0, including the new `check-proxy-self-test` output ending `OK`.
+1. `make lint` — expect exit 0. Its prerequisite list is unchanged by this task set.
+1a. `make check-proxy-self-test` — expect exit 0, ending `OK`. Run it separately; it is a CI step,
+   not a `lint` prerequisite.
 2. `make test` — expect exit 0.
 3. `unset BZR_BIN && cargo build --release` — expect exit 0.
 4. `make functional-test-bz50` — expect the phase-0 banner to read
