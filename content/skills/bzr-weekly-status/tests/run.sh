@@ -77,6 +77,29 @@ cp "$WORK/new.json" "$stage/snapshot.json"
 [ -f "$root/runs/run-1/snapshot.json" ]
 [ -f "$root/runs/run-2/snapshot.json" ]
 
+mkdir "$WORK/race-bin"
+printf '%s\n' '#!/bin/sh' \
+  'case "$3" in' \
+  '*/latest) case "$2" in */.latest.*) rm "$3"; mkdir "$3";; esac;;' \
+  'esac' \
+  'exec /bin/mv "$@"' >"$WORK/race-bin/mv"
+chmod +x "$WORK/race-bin/mv"
+stage="$root/.staging/stage-race"
+mkdir "$stage"
+cp "$WORK/new.json" "$stage/snapshot.json"
+if PATH="$WORK/race-bin:$PATH" "$HERE/../scripts/publish-run.sh" "$root" run-race "$stage" \
+  >"$WORK/race.out" 2>"$WORK/race.err"; then
+	echo 'expected pointer replacement race failure' >&2
+	exit 1
+fi
+[ -d "$root/latest" ]
+grep -q "new run retained: $root/runs/run-race" "$WORK/race.err"
+[ -f "$root/runs/run-race/snapshot.json" ]
+if find "$root/latest" -name '.latest.run-race.*' -print -quit | grep -q .; then
+	echo 'expected temporary pointer cleanup after replacement race' >&2
+	exit 1
+fi
+
 stage="$root/.staging/stage-fail"
 mkdir "$stage"
 cp "$WORK/new.json" "$stage/snapshot.json"

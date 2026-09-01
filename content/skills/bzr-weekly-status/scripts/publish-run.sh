@@ -87,8 +87,13 @@ trap 'rm -f "$tmp_link"' EXIT HUP INT TERM
 	exit 2
 }
 ln -s "runs/$run_id" "$tmp_link"
-if ! mv -fh "$tmp_link" "$root/latest" 2>/dev/null &&
-	! mv -fT "$tmp_link" "$root/latest"; then
+if ! { mv -fh "$tmp_link" "$root/latest" 2>/dev/null ||
+	mv -fT "$tmp_link" "$root/latest"; } ||
+	[ ! -L "$root/latest" ] ||
+	[ "$(readlink "$root/latest")" != "runs/$run_id" ]; then
+	if [ -d "$root/latest" ] && [ ! -L "$root/latest" ]; then
+		rm -f "$root/latest/${tmp_link##*/}"
+	fi
 	echo "publish-run: could not update latest; new run retained: $final" >&2
 	exit 2
 fi
