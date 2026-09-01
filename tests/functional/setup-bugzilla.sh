@@ -136,17 +136,12 @@ cmd_start() {
     fi
 
     log "Starting container ${CONTAINER_NAME}..."
-    if [[ -n "$BZR_FUNC_PORT" ]]; then
-        $CONTAINER_RT run -d \
-            --name "$CONTAINER_NAME" \
-            -p "${BZR_FUNC_PORT}:80" \
-            "$IMAGE_NAME"
-    else
-        $CONTAINER_RT run -d \
-            --name "$CONTAINER_NAME" \
-            -p 80 \
-            "$IMAGE_NAME"
-    fi
+    local port_publish="80"
+    [[ -n "$BZR_FUNC_PORT" ]] && port_publish="${BZR_FUNC_PORT}:80"
+    $CONTAINER_RT run -d \
+        --name "$CONTAINER_NAME" \
+        -p "$port_publish" \
+        "$IMAGE_NAME"
 
     resolve_bz_port || exit 1
     log "Container listening on host port ${BZ_PORT}."
