@@ -90,6 +90,7 @@ async fn server_capabilities_normalizes_attachment_size_to_bytes() {
     Mock::given(method("GET"))
         .and(path("/rest/parameters"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            // TODO(#626): every stock server stringifies /parameters values; #626 owns the fix.
             "parameters": {"maxattachmentsize": 1000}
         })))
         .mount(&mock)
@@ -146,6 +147,7 @@ async fn server_capabilities_credentialless_skips_parameters_fetch() {
     Mock::given(method("GET"))
         .and(path("/rest/parameters"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            // TODO(#626): every stock server stringifies /parameters values; #626 owns the fix.
             "parameters": {"maxattachmentsize": 1000}
         })))
         .expect(0)

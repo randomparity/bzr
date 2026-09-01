@@ -88,6 +88,9 @@ async fn bug_clone_copies_fields() {
                 "severity": "major",
                 "assigned_to": "dev@test.com",
                 "op_sys": "Linux",
+                // TODO(#621): the server emits this key as `platform`; this
+                // fixture mirrors the client's own misconception, which is why
+                // the test passes. #621 owns the rename on read and write.
                 "rep_platform": "x86_64",
                 "cc": ["watcher@test.com"],
                 "keywords": ["regression"]
@@ -326,6 +329,9 @@ async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
                 "severity": "major",
                 "assigned_to": "dev@test.com",
                 "op_sys": "Linux",
+                // TODO(#621): the server emits this key as `platform`; this
+                // fixture mirrors the client's own misconception, which is why
+                // the test passes. #621 owns the rename on read and write.
                 "rep_platform": "x86_64",
                 "url": "https://example.com/source",
                 "whiteboard": "needs-triage",

@@ -57,6 +57,7 @@ fn get_nonempty_str_filters_empty_and_non_string() {
 #[test]
 fn get_datetime_str_covers_datetime_string_and_fallthrough() {
     let mut m = BTreeMap::new();
+    // TODO(#622): XMLRPC.pm strips the dashes (20240101T00:00:00); #622 owns the fix.
     m.insert("dt".into(), Value::DateTime("2024-01-01T00:00:00".into()));
     m.insert("s_full".into(), Value::String("2024-02-02".into()));
     m.insert("s_empty".into(), Value::String(String::new()));

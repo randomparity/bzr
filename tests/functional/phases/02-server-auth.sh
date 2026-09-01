@@ -12,6 +12,10 @@ test_begin "server-info" "server info"
 run_bzr server info
 if assert_success && assert_json_exists '.version'; then test_pass; fi
 
+# TODO(#626): this credentialed assertion never checks max_attachment_size, so a
+# permanently null value has always passed here. The credentialless `null`
+# assertion further down is correct under accepted ADR 0005 and stays; #626 owns
+# adding the non-null credentialed case.
 test_begin "server-capabilities" "server capabilities"
 run_bzr server capabilities
 if assert_success && assert_json_exists '.version' &&
