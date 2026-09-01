@@ -55,17 +55,42 @@ fn get_nonempty_str_filters_empty_and_non_string() {
 }
 
 #[test]
-fn get_datetime_str_covers_datetime_string_and_fallthrough() {
+fn get_datetime_str_normalizes_compact_values_and_preserves_fallthroughs() {
     let mut m = BTreeMap::new();
-    // TODO(#622): XMLRPC.pm strips the dashes (20240101T00:00:00); #622 owns the fix.
-    m.insert("dt".into(), Value::DateTime("2024-01-01T00:00:00".into()));
+    m.insert("dt".into(), Value::DateTime("20240101T00:00:00".into()));
+    m.insert(
+        "compact_string".into(),
+        Value::String("20240202T03:04:05".into()),
+    );
+    m.insert(
+        "canonical".into(),
+        Value::DateTime("2024-03-03T06:07:08Z".into()),
+    );
+    m.insert(
+        "iso_without_zone".into(),
+        Value::DateTime("2024-04-04T09:10:11".into()),
+    );
+    m.insert("dt_empty".into(), Value::DateTime(String::new()));
     m.insert("s_full".into(), Value::String("2024-02-02".into()));
     m.insert("s_empty".into(), Value::String(String::new()));
     m.insert("other".into(), Value::Int(42));
     assert_eq!(
         get_datetime_str(&m, "dt").as_deref(),
-        Some("2024-01-01T00:00:00")
+        Some("2024-01-01T00:00:00Z")
     );
+    assert_eq!(
+        get_datetime_str(&m, "compact_string").as_deref(),
+        Some("2024-02-02T03:04:05Z")
+    );
+    assert_eq!(
+        get_datetime_str(&m, "canonical").as_deref(),
+        Some("2024-03-03T06:07:08Z")
+    );
+    assert_eq!(
+        get_datetime_str(&m, "iso_without_zone").as_deref(),
+        Some("2024-04-04T09:10:11Z")
+    );
+    assert_eq!(get_datetime_str(&m, "dt_empty").as_deref(), Some(""));
     assert_eq!(
         get_datetime_str(&m, "s_full").as_deref(),
         Some("2024-02-02")

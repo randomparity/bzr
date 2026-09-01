@@ -23,6 +23,7 @@ const ATTACHMENT_LIST_FIELDS: &[&str] = &[
     "is_private",
     "is_patch",
     "data",
+    "flags",
 ];
 
 impl XmlRpcClient {
