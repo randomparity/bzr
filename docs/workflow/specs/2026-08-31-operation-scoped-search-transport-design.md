@@ -2,7 +2,7 @@
 
 Issue: [#611](https://github.com/randomparity/bzr/issues/611)
 
-Decision: [ADR 0030](../../adr/0030-operation-scoped-search-transport.md)
+Decision: [ADR 0032](../../adr/0032-operation-scoped-search-transport.md)
 
 ## Scope and outcome
 

@@ -1,4 +1,4 @@
-# ADR 0030: Resolve search transport once per operation
+# ADR 0032: Resolve search transport once per operation
 
 ## Status
 
