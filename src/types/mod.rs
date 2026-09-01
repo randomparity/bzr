@@ -4,6 +4,7 @@ pub(crate) mod capabilities;
 pub(crate) mod classification;
 pub(crate) mod comment;
 pub(crate) mod component;
+pub(crate) mod deserialization;
 pub(crate) mod field;
 pub(crate) mod flag;
 pub(crate) mod group;

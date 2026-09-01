@@ -166,6 +166,8 @@ fn default_error_code() -> i64 {
 
 /// Bugzilla returns error codes as integers on some versions and as
 /// strings on others (e.g. `"32610"` on Bugzilla 5.3). Accept both.
+/// This remains specialized because signed API codes and the `-1` default
+/// cannot use the shared unsigned number-or-string adapter.
 fn deserialize_code<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> std::result::Result<i64, D::Error> {

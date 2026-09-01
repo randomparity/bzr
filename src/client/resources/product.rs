@@ -1,46 +1,11 @@
-use std::fmt;
-
-use serde::de::{self, Deserializer, Visitor};
-use serde::Deserialize;
+use serde::de::Error as _;
+use serde::{Deserialize, Deserializer};
 
 use crate::client::encode_path;
 use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
+use crate::types::deserialization::u64_from_number_or_string;
 use crate::types::product::{CreateProductParams, Product, ProductListType, UpdateProductParams};
-
-struct ProductIdVisitor;
-
-impl Visitor<'_> for ProductIdVisitor {
-    type Value = u64;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("a positive integer or decimal numeric string product ID")
-    }
-
-    fn visit_u64<E: de::Error>(self, value: u64) -> std::result::Result<Self::Value, E> {
-        if value == 0 {
-            return Err(E::custom("expected a positive integer product ID"));
-        }
-        Ok(value)
-    }
-
-    fn visit_i64<E: de::Error>(self, value: i64) -> std::result::Result<Self::Value, E> {
-        if value <= 0 {
-            return Err(E::custom("expected a positive integer product ID"));
-        }
-        u64::try_from(value).map_err(|_| E::custom("expected a positive integer product ID"))
-    }
-
-    fn visit_str<E: de::Error>(self, value: &str) -> std::result::Result<Self::Value, E> {
-        let parsed: u64 = value
-            .parse()
-            .map_err(|_| E::custom("expected a positive integer product ID"))?;
-        if parsed == 0 {
-            return Err(E::custom("expected a positive integer product ID"));
-        }
-        Ok(parsed)
-    }
-}
 
 fn deserialize_product_ids<'de, D: Deserializer<'de>>(
     deserializer: D,
@@ -51,9 +16,15 @@ fn deserialize_product_ids<'de, D: Deserializer<'de>>(
         fn deserialize<D2: Deserializer<'de>>(
             deserializer: D2,
         ) -> std::result::Result<Self, D2::Error> {
-            deserializer
-                .deserialize_any(ProductIdVisitor)
-                .map(ProductIdWrapper)
+            let id = u64_from_number_or_string(
+                deserializer,
+                "a positive integer or decimal numeric string product ID",
+                "expected a positive integer product ID",
+            )?;
+            if id == 0 {
+                return Err(D2::Error::custom("expected a positive integer product ID"));
+            }
+            Ok(ProductIdWrapper(id))
         }
     }
 
