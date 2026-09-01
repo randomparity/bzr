@@ -118,7 +118,8 @@ assigned file surface.
    }
    ```
 
-2. In the same sibling test file, add a multi-page regression. Mount exactly three one-shot REST
+2. In the same sibling test file, add
+   `fetch_all_pages_raw_params_warns_once_and_uses_rest`. Mount exactly three one-shot REST
    responses with explicit bodies: offset `0` returns bugs with IDs `[1, 2]`, offset `2` returns a
    bug with ID `[3]`, and offset `3` returns an empty array. Do not use `bugs_body(n)` for the
    second page because that helper restarts IDs at one. Each mock must require `limit=2`,
@@ -143,10 +144,10 @@ assigned file surface.
    occurrences of `query contains raw URL parameters that require REST API` in the tracing capture
    and assert exactly one.
 
-3. Add an explicit-REST test with one unbounded raw-parameter request. Install the WARN capture,
-   call `fetch_page` with `test_client`, `paginate=true`, and `limit=0`, and assert the capture does
-   not contain the fallback warning. The mock must expect the raw `f1/o1/v1` values and
-   `include_fields=id,summary`.
+3. Add `fetch_page_raw_params_explicit_rest_is_silent` with one unbounded raw-parameter request.
+   Install the WARN capture, call `fetch_page` with `test_client`, `paginate=true`, and `limit=0`,
+   and assert the capture does not contain the fallback warning. The mock must expect the raw
+   `f1/o1/v1` values and `include_fields=id,summary`.
 
 4. Rename `fetch_page_rejects_limit_that_cannot_overfetch` to
    `fetch_page_raw_params_rejects_limit_that_cannot_overfetch`, then use the Hybrid client and
