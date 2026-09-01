@@ -856,10 +856,16 @@ names, each of which must exist.
    `make lint` prerequisite that Task 2 no longer creates. `make lint` gains no new requirement,
    so the setup paragraph stays as it is.
 
-2. In `CONTRIBUTING.md`, immediately after the paragraph ending
-   `Do not describe an omitted check as passing.` and before the
-   `Documentation-only changes should also confirm...` paragraph, insert everything between the
-   four-backtick fences below (the inner three-backtick `bash` block is part of the insert):
+2. In `CONTRIBUTING.md`, insert the new subsection at the **end** of `## Verification`:
+   immediately after the `Documentation-only changes should also confirm...` paragraph
+   (`CONTRIBUTING.md:69`) and immediately before the `## Pull requests` heading (`:72`).
+
+   Not earlier. Placing an `### Controlled-fault verification` heading before that paragraph
+   re-parents it under the new subsection, so general link-and-command-existence guidance would
+   read as a step of demonstrating a test goes red.
+
+   Insert everything between the four-backtick fences below (the inner three-backtick `bash`
+   block is part of the insert):
 
 ````markdown
 ### Controlled-fault verification
