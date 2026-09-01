@@ -48,6 +48,18 @@ fn normalize_datetime(value: &str) -> String {
         && bytes[12..14].iter().all(u8::is_ascii_digit)
         && bytes[14] == b':'
         && bytes[15..].iter().all(u8::is_ascii_digit);
+    let is_iso_without_zone = bytes.len() == 19
+        && bytes[..4].iter().all(u8::is_ascii_digit)
+        && bytes[4] == b'-'
+        && bytes[5..7].iter().all(u8::is_ascii_digit)
+        && bytes[7] == b'-'
+        && bytes[8..10].iter().all(u8::is_ascii_digit)
+        && bytes[10] == b'T'
+        && bytes[11..13].iter().all(u8::is_ascii_digit)
+        && bytes[13] == b':'
+        && bytes[14..16].iter().all(u8::is_ascii_digit)
+        && bytes[16] == b':'
+        && bytes[17..].iter().all(u8::is_ascii_digit);
 
     if is_compact {
         format!(
@@ -59,6 +71,8 @@ fn normalize_datetime(value: &str) -> String {
             &value[12..14],
             &value[15..]
         )
+    } else if is_iso_without_zone {
+        format!("{value}Z")
     } else {
         value.to_owned()
     }

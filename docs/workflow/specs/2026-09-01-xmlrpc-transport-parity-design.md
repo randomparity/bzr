@@ -11,9 +11,11 @@ as REST, and make XML-RPC attachment list preserve the flags already returned by
 ## Scope and constraints
 
 - Rust remains at 1.89.0 and no dependency is added.
-- `get_datetime_str` accepts Bugzilla's compact `YYYYMMDDTHH:MM:SS` form and canonical
-  `YYYY-MM-DDTHH:MM:SSZ`; both produce `YYYY-MM-DDTHH:MM:SSZ`.
-- Only the exact fixed-width ASCII compact form is rewritten. Other non-empty strings retain the
+- `get_datetime_str` accepts Bugzilla's compact `YYYYMMDDTHH:MM:SS`, dashed ISO
+  `YYYY-MM-DDTHH:MM:SS`, and canonical `YYYY-MM-DDTHH:MM:SSZ` forms; each produces canonical
+  RFC3339.
+- Only the exact fixed-width ASCII compact and dashed ISO forms are rewritten. Other non-empty
+  strings retain the
   current pass-through behavior. An empty `Value::String`, a missing value, and a
   non-string/non-datetime value remain `None`; non-compact `Value::DateTime` values, including an
   empty one, retain their current pass-through behavior.
@@ -25,10 +27,11 @@ as REST, and make XML-RPC attachment list preserve the flags already returned by
 
 ## Components and data flow
 
-`src/xmlrpc/resources/mappers.rs` owns a small private compact-shape recognizer. For both
+`src/xmlrpc/resources/mappers.rs` owns small private shape recognizers. For both
 `Value::DateTime` and a non-empty `Value::String`, `get_datetime_str` passes the value through that
 normalizer. A valid compact shape has eight ASCII date digits, `T`, and a colon-delimited six-digit
-time. The output inserts the two date dashes and terminal `Z`; a canonical value is unchanged.
+time. The output inserts the two date dashes and terminal `Z`. A dashed ISO value without a zone
+gets a terminal `Z`; a canonical value is unchanged.
 
 `src/xmlrpc/resources/attachment.rs` adds `flags` to the XML-RPC list request's `include_fields`.
 The existing `value_to_attachment` path already converts the returned array with `get_flags`, so no
@@ -53,8 +56,9 @@ turning a previously tolerated response into a command failure.
 - Correct the mapper fixture to the production compact XML-RPC spelling and first run
   `make test-one T=get_datetime_str` against the old implementation. The expected controlled fault
   is compact output where the test requires RFC3339.
-- Add unit cases for compact `Value::DateTime`, compact string, already-canonical input, and the
-  existing empty-string/type/missing fallthroughs, plus empty `Value::DateTime` pass-through.
+- Add unit cases for compact `Value::DateTime`, compact string, dashed ISO input,
+  already-canonical input, and the existing empty-string/type/missing fallthroughs, plus empty
+  `Value::DateTime` pass-through.
 - Strengthen the attachment request test to require `<string>flags</string>` in `include_fields`.
 - Run focused mapper and attachment tests, then `make test-fast`, `make lint`, and `make test`.
 - Run `make functional-test-all`; the bz50 arm must pass all four new parity assertions and the

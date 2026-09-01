@@ -66,6 +66,10 @@ fn get_datetime_str_normalizes_compact_values_and_preserves_fallthroughs() {
         "canonical".into(),
         Value::DateTime("2024-03-03T06:07:08Z".into()),
     );
+    m.insert(
+        "iso_without_zone".into(),
+        Value::DateTime("2024-04-04T09:10:11".into()),
+    );
     m.insert("dt_empty".into(), Value::DateTime(String::new()));
     m.insert("s_full".into(), Value::String("2024-02-02".into()));
     m.insert("s_empty".into(), Value::String(String::new()));
@@ -81,6 +85,10 @@ fn get_datetime_str_normalizes_compact_values_and_preserves_fallthroughs() {
     assert_eq!(
         get_datetime_str(&m, "canonical").as_deref(),
         Some("2024-03-03T06:07:08Z")
+    );
+    assert_eq!(
+        get_datetime_str(&m, "iso_without_zone").as_deref(),
+        Some("2024-04-04T09:10:11Z")
     );
     assert_eq!(get_datetime_str(&m, "dt_empty").as_deref(), Some(""));
     assert_eq!(

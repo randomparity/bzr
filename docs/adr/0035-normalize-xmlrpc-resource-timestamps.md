@@ -18,8 +18,9 @@ and view disagree. Verified against Bugzilla 5.0's `XMLRPC.pm` and `JSONRPC.pm` 
 ## Decision
 
 Normalize timestamps inside `get_datetime_str`, the shared boundary used by XML-RPC bug, comment,
-and attachment mappings. Convert the exact compact form `YYYYMMDDTHH:MM:SS` into
-`YYYY-MM-DDTHH:MM:SSZ`, and preserve already-canonical `YYYY-MM-DDTHH:MM:SSZ` values byte for byte.
+and attachment mappings. Convert the exact compact form `YYYYMMDDTHH:MM:SS` and dashed ISO form
+`YYYY-MM-DDTHH:MM:SS` into `YYYY-MM-DDTHH:MM:SSZ`, and preserve already-canonical
+`YYYY-MM-DDTHH:MM:SSZ` values byte for byte.
 Preserve other non-empty string values rather than broadening this fix into a new response-error
 contract. Use explicit ASCII shape checks and string assembly; add no date-time dependency.
 
