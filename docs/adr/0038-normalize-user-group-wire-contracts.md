@@ -38,6 +38,10 @@ denial. Successful group shape/filter proofs use credentials because stock Bugzi
 anonymous `match=*` before returning a body. The JSON schema version and schema files do not change
 because serialization remains unchanged.
 
+All current guidance surfaces, including compiled embedded skills, name both configuration routes
+when an email hint is missing: persistent `config set-server --email` and stateless
+`--server-email` with `--server-url`.
+
 ## Consequences
 
 - User and group reads tolerate the observed alternate wire shapes but still reject negative,
@@ -49,6 +53,8 @@ because serialization remains unchanged.
 - The production-shape proxy remains a small sequence of explicit transformations. Issue #634 may
   later generalize its registry, but this change does not depend on that refactor.
 - No published JSON key or value domain changes, so `SCHEMA_VERSION` stays `2.0.0`.
+- Version guidance changes are wording-only but include the README and embedded setup skill because
+  both are shipped operator entry points for the same `whoami` fallback contract.
 
 ## Considered & rejected
 

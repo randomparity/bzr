@@ -69,6 +69,11 @@ Native `/rest/whoami` exists on the repository's Bugzilla 5.3/master container a
 servers, but not on the 5.0 or 5.2 containers. Code comments, the missing-email error, and the CLI
 reference must say 5.3+/BMO versus 5.0/5.2 rather than 5.1+ versus 5.0.
 
+The missing-email diagnostic is valid for both connection forms: configure `--email` through
+`bzr config set-server` for a named server, or add `--server-email` to an inline `--server-url`
+invocation. The README and compiled `content/skills/bzr-setup/SKILL.md` carry the same version split
+and recovery flags; they are direct guidance dependencies, not new behavior.
+
 Functional proof runs credentialed inline `whoami` through the shape proxy. The proxy log must
 show a transformed native `whoami` response on bz53 and a transformed `/rest/user` response on
 bz50/bz52. The result must expose a numeric JSON ID in both arms. Existing credentialless
@@ -87,10 +92,12 @@ Proxy self-tests pin matching routes, transformed fields, unchanged unrelated pa
 count returned for logging. Functional phase 02 proves native/fallback `whoami`; phase 06 proves
 `full_name` on bz52 and both create-result paths through the proxy; phase 07 uses credentialed
 inline calls to prove recognized group filtering, user/group response normalization, and the
-enabled non-member exclusion. A separate credentialless phase-07 call asserts the stock server's
-access-denied response, covering the anonymous command path without claiming stock Bugzilla
-returns user data. A bz53 group-detail arm may skip because stock 5.3 rejects REST Group.get and
-the client correctly falls back to XML-RPC, which the JSON response-shape proxy does not transform.
+enabled non-member exclusion. Those calls run after the positive member is added and before it is
+removed, and the group-detail assertion requires at least one membership row before checking every
+member ID. A separate credentialless phase-07 call asserts the stock server's access-denied
+response, covering the anonymous command path without claiming stock Bugzilla returns user data.
+A bz53 group-detail arm may skip because stock 5.3 rejects REST Group.get and the client correctly
+falls back to XML-RPC, which the JSON response-shape proxy does not transform.
 
 The controlled-fault record is produced before the Rust/request fixes: the corrected wiremock
 query/body expectations and functional assertions must fail with the old implementation, while

@@ -292,6 +292,8 @@ shows no schema file or version edit.
 - Modify: `src/client/auth/mod_tests.rs`
 - Modify: `src/commands/runtime/shared/connection/mod.rs`
 - Modify: `docs/bzr-cli.md`
+- Modify: `README.md`
+- Modify: `content/skills/bzr-setup/SKILL.md`
 
 **Interfaces**
 
@@ -338,16 +340,19 @@ In phase 06, create per-run-unique user and group resources through the credenti
 require numeric `.id` output, with positive `user-create` and `group-create` log counts. The user
 real-name update stays on stock bz52 as Task 1's server-conformance proof.
 
-In phase 07, run credentialed inline `group list-users --details` through the proxy and assert:
+In phase 07, immediately after `group-add-user` and before `group-remove-user`, run credentialed
+inline `group list-users --details` through the proxy and assert:
 
 - the expected member is present;
 - `$NONMEMBER_EMAIL` is absent while enabled;
 - each returned `id` is numeric and each populated `can_login` is boolean;
 - the log contains a positive `user-read` transform.
 
-On bz50/bz52, run credentialed inline `group view` through the proxy and assert numeric group/member
-IDs and boolean `is_active`, plus a positive `group-read` log. On bz53, record a semantic skip
-because stock REST Group.get returns 32610 and the client uses XML-RPC, outside this JSON proxy.
+On bz50/bz52, in that same populated-membership window, run credentialed inline `group view`
+through the proxy and first assert `.membership | length > 0`; then assert numeric group/member IDs
+and boolean `is_active`, plus a positive `group-read` log. The non-empty check prevents universal
+member assertions from passing vacuously. On bz53, record a semantic skip because stock REST
+Group.get returns 32610 and the client uses XML-RPC, outside this JSON proxy.
 
 Add a separate credentialless inline `group list-users` call through the proxy and assert the
 stock server's access-denied exit/message. This is R3's anonymous-path coverage; it intentionally
@@ -371,28 +376,32 @@ Inventory the current guidance with:
 
 ```bash
 rg -n -i 'email.*(5\.0|whoami|older)|5\.0.*email|5\.1\+|< 5\.1' \
-  src docs/bzr-cli.md
+  README.md content/skills src docs/bzr-cli.md
 ```
 
 Change every direct code comment and public guidance occurrence from `5.1+`/`5.0` to `5.3+ or a
 BMO-derived server` versus `5.0/5.2`. This includes top-level inline-email help, client state,
-auth orchestration, connection guidance, and all matching CLI-reference passages. Historical
-design records are evidence of their time and remain unchanged. The missing-email runtime error
-must say:
+auth orchestration, connection guidance, the README, the compiled `bzr-setup` skill, and all
+matching CLI-reference passages. Historical design records are evidence of their time and remain
+unchanged. The missing-email runtime error must serve both named and inline connections, for
+example:
 
 ```text
-whoami requires Bugzilla 5.3+ or a BMO-derived server; add --email for Bugzilla 5.0/5.2
+whoami requires Bugzilla 5.3+ or a BMO-derived server; for Bugzilla 5.0/5.2 configure an email with `config set-server --email` or add `--server-email` to an inline `--server-url`
 ```
 
 Add wiremock tests for a missing native endpoint without an email hint and for the auth-detection
-fallback hint. Add a clap help assertion that the inline email description names 5.0/5.2, and add
-a phase-02 help assertion so the public text is exercised functionally.
+fallback hint, including the bz52-style inline-server case without `--server-email`. Add a clap
+help assertion that the inline email description names 5.0/5.2, and add a phase-02 help assertion
+so the public text is exercised functionally. Run `make skills-test` because the edited setup skill
+is embedded into the binary.
 
 Run:
 
 ```bash
 make test-one T=whoami
 make test-one T=parse_help
+make skills-test
 ```
 
 Expected: guidance tests pass, the inventory search finds no current-code/current-reference stale
