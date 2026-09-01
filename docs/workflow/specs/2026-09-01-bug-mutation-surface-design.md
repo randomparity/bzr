@@ -33,12 +33,15 @@ status locally, assemble one `ApplyRequest`, and either send the dry-run through
 connect once, validate the name with `get_field_values("status")`, and reuse that client through
 `apply_checked_connected`.
 
-`CreateBugParams.groups` becomes `Option<Vec<String>>`, using `Option::is_none` for omission. The
-ordinary create and clone paths wrap non-empty group vectors in `Some` and map an empty vector to
-`None`. `JsonCreateBug` uses a small presence-preserving `JsonGroups` input value: its default is
-absent, while its deserializer accepts only a JSON array and records that array as present. The
-overlay replaces this value only when the CLI supplied a non-empty group list. Conversion then
-moves the preserved option directly into `CreateBugParams`.
+`CreateBugParams.groups` remains the existing public `Vec<String>`. The non-exhaustive payload adds
+a private, serialization-only override renamed to the same wire key; its crate-private setter
+maintains the invariant that the ordinary and override fields cannot both serialize. Ordinary
+create, clone, and external Rust callers retain their existing source and wire behavior.
+`JsonCreateBug` uses a small presence-preserving `JsonGroups` input value: its default is absent,
+while its deserializer accepts only a JSON array and records that array as present. The overlay
+replaces this value only when the CLI supplied a non-empty group list. Conversion calls the
+payload setter only for present structured input, causing an explicit empty array to use the
+private override and non-empty input to use the public field.
 
 ## Error handling and compatibility
 
@@ -46,9 +49,10 @@ Resolve status validation introduces no new error type or wording; it extends th
 single-client path used by its sibling verbs. The server remains responsible for whether a valid
 status is a legal transition from each bug's current state.
 
-Group presence is an internal serialization correction. Existing omitted and non-empty inputs keep
-their wire shapes. `groups: null` remains a structured-input validation error, matching the
-unchanged schema. No persisted configuration or public result shape changes.
+Group presence is an internal serialization correction. The public `CreateBugParams.groups` Rust
+field remains a `Vec<String>`, and existing omitted and non-empty inputs keep their source and wire
+shapes. `groups: null` remains a structured-input validation error, matching the unchanged schema.
+No persisted configuration or public result shape changes.
 
 ## Threat model
 
