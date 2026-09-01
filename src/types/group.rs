@@ -1,14 +1,27 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+use crate::types::deserialization::{option_bool_from_int_or_bool, u64_from_number_or_string};
+
+fn deserialize_group_or_member_id<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<u64, D::Error> {
+    u64_from_number_or_string(
+        deserializer,
+        "an unsigned integer or decimal numeric string group/member ID",
+        "expected an unsigned integer group/member ID",
+    )
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct GroupInfo {
+    #[serde(deserialize_with = "deserialize_group_or_member_id")]
     pub id: u64,
     #[serde(default)]
     pub name: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "option_bool_from_int_or_bool")]
     pub is_active: Option<bool>,
     #[serde(default)]
     pub membership: Vec<GroupMember>,
@@ -21,6 +34,7 @@ pub const GROUP_INFO_FIELDS: &[&str] = &["id", "name", "description", "is_active
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct GroupMember {
+    #[serde(deserialize_with = "deserialize_group_or_member_id")]
     pub id: u64,
     #[serde(default)]
     pub name: Option<String>,

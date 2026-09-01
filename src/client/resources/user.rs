@@ -1,8 +1,33 @@
+use serde::Serialize;
+
 use crate::client::encode_path;
 use crate::client::{BugzillaClient, UserDetailLevel, UserSearchResponse};
 use crate::error::{BzrError, Result};
 use crate::types::transport::ApiMode;
 use crate::types::user::{BugzillaUser, CreateUserParams, UpdateUserParams, WhoamiResponse};
+
+#[derive(Serialize)]
+struct UpdateUserRequest<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    names: Option<&'a [String]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    full_name: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    email: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    login_denied_text: Option<&'a str>,
+}
+
+impl<'a> From<&'a UpdateUserParams> for UpdateUserRequest<'a> {
+    fn from(updates: &'a UpdateUserParams) -> Self {
+        Self {
+            names: updates.names.as_deref(),
+            full_name: updates.real_name.as_deref(),
+            email: updates.email.as_deref(),
+            login_denied_text: updates.login_denied_text.as_deref(),
+        }
+    }
+}
 
 impl BugzillaClient {
     pub async fn whoami(&self) -> Result<WhoamiResponse> {
@@ -73,7 +98,8 @@ impl BugzillaClient {
 
     /// Update a user's profile fields.
     pub async fn update_user(&self, user: &str, updates: &UpdateUserParams) -> Result<()> {
-        self.put_json(&format!("user/{}", encode_path(user)), updates)
+        let request = UpdateUserRequest::from(updates);
+        self.put_json(&format!("user/{}", encode_path(user)), &request)
             .await
     }
 }

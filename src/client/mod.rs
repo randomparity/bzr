@@ -12,6 +12,7 @@ use reqwest::header::HeaderValue;
 use serde::Deserialize;
 
 use crate::error::{BzrError, Result};
+use crate::types::deserialization::u64_from_number_or_string;
 use crate::types::transport::{ApiMode, AuthMethod};
 use crate::types::user::BugzillaUser;
 use crate::xmlrpc::protocol::XmlRpcClient;
@@ -106,7 +107,18 @@ pub struct BugzillaClientConfig<'a> {
 /// Used by bug creation, comment creation, product/component/user/group creation.
 #[derive(Deserialize)]
 pub(super) struct IdResponse {
+    #[serde(deserialize_with = "deserialize_id_response_id")]
     pub id: u64,
+}
+
+fn deserialize_id_response_id<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<u64, D::Error> {
+    u64_from_number_or_string(
+        deserializer,
+        "an unsigned integer or decimal numeric string resource ID",
+        "expected an unsigned integer resource ID",
+    )
 }
 
 impl BugzillaClient {

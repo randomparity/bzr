@@ -101,7 +101,7 @@ async fn search_users_details_sends_include_fields() {
 }
 
 #[tokio::test]
-async fn create_user_returns_id() {
+async fn create_user_returns_string_id() {
     let mock = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/rest/user"))
@@ -109,7 +109,7 @@ async fn create_user_returns_id() {
             "email": "new@example.com",
             "full_name": "New User",
         })))
-        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 99})))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": "99"})))
         .expect(1)
         .mount(&mock)
         .await;
@@ -258,7 +258,7 @@ async fn update_user_sends_put() {
             encode_path("alice@example.com")
         )))
         .and(body_json(serde_json::json!({
-            "real_name": "Alice Smith",
+            "full_name": "Alice Smith",
             "names": ["alice@example.com"],
         })))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
