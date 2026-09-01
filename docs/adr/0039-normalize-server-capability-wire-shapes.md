@@ -49,10 +49,12 @@ exactly two dot-separated components and one trailing `+` around decimal digits.
 `5.1+.2` retain their existing malformed fallback. Multi-component versions such as
 `5.3.3+` already parse their ordinary minor component and remain REST.
 
-Extend the existing production-shape proxy with one bounded server-capability transform:
+Extend the existing production-shape proxy with one bounded, explicitly enabled
+server-capability transform:
 stringify `maxattachmentsize`, expose a string-typed synthetic custom field, insert an
 empty status pseudo-entry, and emit a bare `5.2+` version. The functional auth phase will
-assert the resulting public document and proxy evidence.
+enable that mode and assert the resulting public document and proxy evidence. Existing
+proxy consumers retain the current default behavior.
 
 ## Consequences
 
