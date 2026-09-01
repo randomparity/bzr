@@ -32,9 +32,12 @@ Git hooks: `make install-hooks` installs a pre-commit hook
 and `make check-test-layout`) and a pre-push hook (`make test`, the quiet
 suite). Run `make setup` to install everything, including hooks.
 
-Functional tests start Bugzilla containers with fixed ports. Be cautious
-when running multiple workflows simultaneously as they may interfere with
-each other during this test phase.
+Functional tests start Bugzilla containers on a runtime-assigned host
+port under a name scoped to the checkout's own filesystem path, so
+concurrent worktrees or clones running functional tests at the same time
+no longer need manual port/name coordination. Two invocations from the
+exact same checkout directory at the same time still collide (same
+checkout id, same default container name).
 
 Test output selection for agent loops: `make test` runs quiet by default —
 a summary line per suite, with failing tests still printing their captured

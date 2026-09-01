@@ -6,6 +6,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# shellcheck source=tests/functional/container-env.sh
+source "$SCRIPT_DIR/container-env.sh"
+
 # ── Container runtime detection ─────────────────────────────────────
 if command -v podman &>/dev/null; then
     CONTAINER_RT=podman
@@ -17,19 +20,14 @@ else
 fi
 
 # ── Version-aware defaults ───────────────────────────────────────────
-BZ_VERSION="${BZR_BZ_VERSION:-bz50}"
-
 case "$BZ_VERSION" in
 bz50)
-    DEFAULT_PORT=8089
     DEFAULT_TIMEOUT=90
     ;;
 bz52)
-    DEFAULT_PORT=8090
     DEFAULT_TIMEOUT=240
     ;;
 bz53)
-    DEFAULT_PORT=8091
     DEFAULT_TIMEOUT=240
     ;;
 *)
@@ -38,9 +36,13 @@ bz53)
     ;;
 esac
 
-CONTAINER_NAME="${BZR_FUNC_CONTAINER:-bzr-func-test-${BZ_VERSION}}"
+BZR_FUNC_PORT="${BZR_FUNC_PORT:-}"
+CONTAINER_NAME=$(bugzilla_container_name) || {
+    echo "ERROR: [$BZ_VERSION] could not derive the Bugzilla container name" >&2
+    exit 1
+}
 IMAGE_NAME="${BZR_FUNC_IMAGE:-localhost/bzr-func-${BZ_VERSION}:latest}"
-BZ_PORT="${BZR_FUNC_PORT:-$DEFAULT_PORT}"
+BZ_PORT=""
 HEALTH_TIMEOUT="${BZR_FUNC_TIMEOUT:-$DEFAULT_TIMEOUT}"
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -75,6 +77,22 @@ wait_for_ready() {
     return 1
 }
 
+resolve_bz_port() {
+    local actual
+    if ! actual=$(bugzilla_container_port "$CONTAINER_RT" "$CONTAINER_NAME"); then
+        err "could not determine published port for ${CONTAINER_NAME}"
+        return 1
+    fi
+    if [[ -n "$BZR_FUNC_PORT" && "$BZR_FUNC_PORT" != "$actual" ]]; then
+        err "${CONTAINER_NAME} is already running on port ${actual}," \
+            "which does not match BZR_FUNC_PORT=${BZR_FUNC_PORT};" \
+            "stop it first or unset BZR_FUNC_PORT"
+        return 2
+    fi
+    BZ_PORT="$actual"
+    return 0
+}
+
 container_exists() {
     $CONTAINER_RT container inspect "$CONTAINER_NAME" >/dev/null 2>&1
     return $?
@@ -103,6 +121,7 @@ cmd_start() {
         log "Container ${CONTAINER_NAME} already exists. Use 'reset' to restart."
         if $CONTAINER_RT inspect --format '{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null | grep -q true; then
             log "Container is already running."
+            resolve_bz_port || exit 1
             wait_for_ready
             return 0
         fi
@@ -116,12 +135,16 @@ cmd_start() {
         cmd_build
     fi
 
-    log "Starting container ${CONTAINER_NAME} on port ${BZ_PORT}..."
+    log "Starting container ${CONTAINER_NAME}..."
+    local port_publish="80"
+    [[ -n "$BZR_FUNC_PORT" ]] && port_publish="${BZR_FUNC_PORT}:80"
     $CONTAINER_RT run -d \
         --name "$CONTAINER_NAME" \
-        -p "${BZ_PORT}:80" \
+        -p "$port_publish" \
         "$IMAGE_NAME"
 
+    resolve_bz_port || exit 1
+    log "Container listening on host port ${BZ_PORT}."
     wait_for_ready
 }
 
@@ -137,12 +160,23 @@ cmd_status() {
         $CONTAINER_RT inspect --format \
             'Name: {{.Name}}  State: {{.State.Status}}  Running: {{.State.Running}}  Pid: {{.State.Pid}}' \
             "$CONTAINER_NAME"
-        # Check REST API
-        if curl -sf "http://127.0.0.1:${BZ_PORT}/rest/version" >/dev/null 2>&1; then
-            echo "REST API: reachable"
-        else
+        local port_status=0
+        resolve_bz_port || port_status=$?
+        case "$port_status" in
+        0)
+            if curl -sf "http://127.0.0.1:${BZ_PORT}/rest/version" >/dev/null 2>&1; then
+                echo "REST API: reachable"
+            else
+                echo "REST API: not reachable"
+            fi
+            ;;
+        2)
+            echo "REST API: unknown — BZR_FUNC_PORT does not match the running container's actual port"
+            ;;
+        *)
             echo "REST API: not reachable"
-        fi
+            ;;
+        esac
     else
         echo "Container ${CONTAINER_NAME} does not exist."
         return 1
@@ -179,6 +213,7 @@ logs)
 *)
     echo "Usage: $0 {build|start|stop|status|reset|logs}"
     echo "  Set BZR_BZ_VERSION=bz50|bz52|bz53 (default: bz50)"
+    echo "  Host port is runtime-assigned by default; set BZR_FUNC_PORT to pin one"
     exit 1
     ;;
 esac

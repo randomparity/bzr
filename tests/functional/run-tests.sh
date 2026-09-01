@@ -20,14 +20,23 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
 # ── Constants ────────────────────────────────────────────────────────
-BZ_VERSION="${BZR_BZ_VERSION:-bz50}"
-case "$BZ_VERSION" in
-bz50) DEFAULT_PORT=8089 ;;
-bz52) DEFAULT_PORT=8090 ;;
-bz53) DEFAULT_PORT=8091 ;;
-*) DEFAULT_PORT=8089 ;;
-esac
-BZ_PORT="${BZR_FUNC_PORT:-$DEFAULT_PORT}"
+BZ_PORT="${BZR_FUNC_PORT:-}"
+if [[ -z "$BZ_PORT" ]]; then
+    _bz_runtime=$(container_runtime) || {
+        echo "ERROR: neither podman nor docker found in PATH" >&2
+        exit 1
+    }
+    _bz_container=$(bugzilla_container_name) || {
+        echo "ERROR: could not derive the Bugzilla container name" >&2
+        exit 1
+    }
+    BZ_PORT=$(bugzilla_container_port "$_bz_runtime" "$_bz_container") || {
+        echo "ERROR: could not determine Bugzilla container port for" \
+            "'$_bz_container'; is it running?" \
+            "(tests/functional/setup-bugzilla.sh start)" >&2
+        exit 1
+    }
+fi
 BZ_URL="http://127.0.0.1:${BZ_PORT}"
 ADMIN_EMAIL="admin@test.bzr"
 API_KEY="FuncTest0123456789abcdef0123456789abcdef"
@@ -51,10 +60,13 @@ CURRENT_TEST_GROUP=""
 # ── Config isolation ─────────────────────────────────────────────────
 FUNC_CONFIG_DIR=$(mktemp -d /tmp/bzr-func-config.XXXXXX)
 export XDG_CONFIG_HOME="$FUNC_CONFIG_DIR"
+FUNC_ATTACH_FILE="$FUNC_CONFIG_DIR/attach.txt"
+FUNC_DOWNLOAD_FILE="$FUNC_CONFIG_DIR/downloaded.txt"
+FUNC_PRIVATE_HYBRID_FILE="$FUNC_CONFIG_DIR/private-hybrid.txt"
+FUNC_PRIVATE_XMLRPC_FILE="$FUNC_CONFIG_DIR/private-xmlrpc.txt"
 
 cleanup() {
     rm -rf "$FUNC_CONFIG_DIR"
-    rm -f /tmp/bzr-func-test.txt /tmp/bzr-func-downloaded.txt
     _cleanup_tmpfiles
     return 0
 }

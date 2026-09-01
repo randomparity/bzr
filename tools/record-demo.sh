@@ -19,7 +19,6 @@ set -euo pipefail
 #        tools/record-demo.sh project-manager-reporting
 
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-BZ_URL=${BZ_URL:-http://127.0.0.1:8089}
 # Fixed key baked into the test container image (tests/functional/versions/*).
 API_KEY="FuncTest0123456789abcdef0123456789abcdef"
 ADMIN_EMAIL="admin@test.bzr"
@@ -209,6 +208,27 @@ if [[ "${1:-}" == "--drive-project-manager-reporting" ]]; then
   sleep 3
   printf '\n%b\n' "$prompt"
   exit 0
+fi
+
+if [[ -z "${BZ_URL:-}" ]]; then
+  SCRIPT_DIR="$REPO_ROOT/tests/functional"
+  # shellcheck source=tests/functional/container-env.sh
+  # shellcheck disable=SC1091 # resolved at runtime relative to REPO_ROOT
+  source "$SCRIPT_DIR/container-env.sh"
+  _rt=$(container_runtime) || {
+    echo "ERROR: neither podman nor docker found in PATH" >&2
+    exit 1
+  }
+  _name=$(bugzilla_container_name) || {
+    echo "ERROR: could not derive the Bugzilla container name" >&2
+    exit 1
+  }
+  _port=$(bugzilla_container_port "$_rt" "$_name") || {
+    echo "ERROR: could not determine Bugzilla container port for" \
+      "'$_name'; run: make functional-start" >&2
+    exit 1
+  }
+  BZ_URL="http://127.0.0.1:${_port}"
 fi
 
 if [[ "${1:-}" == "project-manager-reporting" ]]; then
