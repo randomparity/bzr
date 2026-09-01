@@ -20,18 +20,24 @@ shared `sort_key` adapter. Share only exact wire contracts:
 - non-negative `u64` from a JSON integer or decimal string; and
 - `Option<bool>` from null, a JSON boolean, or exact integer `0`/`1`.
 
-Product access IDs use the shared unsigned adapter and retain their private post-decode nonzero
-check. Attachment flags use the shared optional-bool adapter unchanged. Signed API error codes and
-integer-or-object relationship IDs remain specialized, with comments recording why their domains
-cannot use these helpers. ADR 0024 strict mappings and ADR 0028 sort keys remain unchanged.
+The unsigned decoder accepts caller-supplied expectation and invalid-value messages; its ordinary
+serde field adapter supplies generic unsigned wording. This keeps decoding logic shared without
+changing established consumer diagnostics.
+
+Product access IDs use the configured shared unsigned decoder with their existing messages and
+retain their private post-decode nonzero check. Attachment flags use the shared optional-bool
+adapter unchanged. Signed API error codes and integer-or-object relationship IDs remain
+specialized, with comments recording why their domains cannot use these helpers. ADR 0024 strict
+mappings and ADR 0028 sort keys remain unchanged.
 
 ## Consequences
 
 Future consumers with either exact wire contract can reuse one tested implementation. Domain
 validation that is narrower than the wire primitive, such as a positive product ID, remains with
-the consumer and is visible at the call site. Consolidation does not widen existing inputs, add a
-dependency, or expose a new public API. Two specialized parsers remain because merging them would
-change accepted shapes rather than remove duplication.
+the consumer and is visible at the call site. Configured diagnostic text preserves existing
+command-visible parse failures while the implementation moves. Consolidation does not widen
+existing inputs, add a dependency, or expose a new public API. Two specialized parsers remain
+because merging them would change accepted shapes rather than remove duplication.
 
 ## Considered & rejected
 

@@ -28,18 +28,22 @@ changing any command-visible behavior.
 
 ## Components and data flow
 
-`src/types/deserialization.rs` owns two serde-compatible functions:
+`src/types/deserialization.rs` owns two serde-compatible functions plus the configured unsigned
+decoder they share:
 
 - `u64_from_number_or_string` returns a `u64` from a non-negative JSON integer or a decimal string.
   It rejects booleans, floats, null, negative numbers and strings, and overflow.
+- `u64_from_number_or_string_with` performs the same decoding with caller-supplied expectation and
+  invalid-value messages. It exists so a migrated consumer can preserve its established serde
+  diagnostics rather than exposing the shared adapter's generic wording.
 - `option_bool_from_int_or_bool` returns `None` for null, `Some(bool)` for JSON booleans, and
   `Some(false)`/`Some(true)` for integer `0`/`1`. The caller's `#[serde(default)]` continues to
   supply `None` for an absent field.
 
-The product-access response keeps its private element wrapper. That wrapper calls the shared
-unsigned adapter, then rejects zero with the existing product-specific error. The attachment type
-points its three optional boolean fields at the shared optional-bool adapter. No other production
-consumer changes.
+The product-access response keeps its private element wrapper. That wrapper calls the configured
+shared unsigned decoder with the existing product expectation and invalid-value messages, then
+rejects zero with that same existing invalid-value message. The attachment type points its three
+optional boolean fields at the shared optional-bool adapter. No other production consumer changes.
 
 The general error-code parser stays in `client::response` because it accepts signed values and
 provides the API error default of `-1`. The relationship parser stays in `types::bug::links`
@@ -90,7 +94,8 @@ by existing transport controls or explicitly excluded by #620 and ADR 0024.
   boolean values; null and absent optional booleans; and negative, overflow, float, string, array,
   and out-of-domain malformed values.
 - Existing product resource tests remain green for number, string, mixed, zero, negative, and
-  malformed IDs.
+  malformed IDs. Message-level assertions cover zero, a negative number, malformed and negative
+  strings, and an invalid primitive so the refactor cannot change command-visible parse errors.
 - Existing attachment tests remain green for boolean, `0`/`1`, null/absence, and malformed values.
 - A strict adjacency regression includes a decimal string accepted by the tolerant signed error
   parser but outside ADR 0024's closed `100`–`102` set, and still rejects it.
