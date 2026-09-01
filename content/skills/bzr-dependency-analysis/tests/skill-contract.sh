@@ -37,7 +37,7 @@ fail() {
 
 require_literal() {
   local value=$1
-  rg -Fq -- "$value" "$skill" || fail "missing: $value"
+  grep -Fq -- "$value" "$skill" || fail "missing: $value"
 }
 
 require_words() {
@@ -48,7 +48,7 @@ require_words() {
 require_file_literal() {
   local path=$1
   local value=$2
-  rg -Fq -- "$value" "$path" || fail "missing from $path: $value"
+  grep -Fq -- "$value" "$path" || fail "missing from $path: $value"
 }
 
 expected_helper_commands=$(
@@ -65,9 +65,9 @@ actual_helper_commands=$(printf '%s\n' "$normalized_commands" |
 [[ "$actual_helper_commands" == "$expected_helper_commands" ]] ||
   fail 'collect/analyze/Markdown/Mermaid command blocks are not exact'
 
-first_collect=$(rg -n -m1 'scripts/collect\.py' "$skill" | cut -d: -f1)
-depth_default=$(rg -n -m1 'depth 5' "$skill" | cut -d: -f1)
-node_default=$(rg -n -m1 '200 nodes' "$skill" | cut -d: -f1)
+first_collect=$(grep -n -m1 'scripts/collect\.py' "$skill" | cut -d: -f1)
+depth_default=$(grep -n -m1 'depth 5' "$skill" | cut -d: -f1)
+node_default=$(grep -n -m1 '200 nodes' "$skill" | cut -d: -f1)
 [[ -n "$first_collect" && -n "$depth_default" && -n "$node_default" ]] ||
   fail 'DA-02 defaults or collection command are absent'
 ((depth_default < first_collect && node_default < first_collect)) ||
@@ -79,10 +79,10 @@ done
 
 resource_pattern='attachment|bug|classification|comment|component|config|field|group'
 resource_pattern+='|product|query|server|template|user|whoami'
-command_pattern="\`(?:bzr )?(?:${resource_pattern})"
-command_pattern+="(?: [a-z][a-z-]*)?\`"
-command_pattern+="|\\bbzr (?:${resource_pattern})"
-command_pattern+='(?: [a-z][a-z-]*)?'
+command_pattern="\`(bzr )?(${resource_pattern})"
+command_pattern+="( [a-z][a-z-]*)?\`"
+command_pattern+="|bzr (${resource_pattern})"
+command_pattern+='( [a-z][a-z-]*)?'
 while IFS= read -r documented; do
   documented=${documented#\`}
   documented=${documented%\`}
@@ -91,7 +91,7 @@ while IFS= read -r documented; do
   'bug view' | 'bug list' | 'bug search' | 'query run') ;;
   *) fail "non-allowlisted bzr command: $documented" ;;
   esac
-done < <(rg -o "$command_pattern" "$skill")
+done < <(grep -Eo "$command_pattern" "$skill")
 
 require_words 'server alias, scope kind, saved-query name, allowlisted parameter names, and collection command name'
 require_words 'never includes parameter values, a literal Custom Search URL, credentials, raw server errors, or a full command line'
