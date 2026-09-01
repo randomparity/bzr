@@ -442,7 +442,8 @@ async fn whoami_404_no_email_suggests_email_flag() {
         "should name the native whoami arm, got: {err}"
     );
     assert!(
-        err.contains("config set-server --email"),
+        err.contains("config set-server <name> --url <url> --email <email>")
+            && err.contains("preserving its existing options"),
         "should suggest named-server recovery, got: {err}"
     );
     assert!(

@@ -47,7 +47,11 @@ async fn whoami_missing_email_names_named_and_inline_recovery() {
         error.contains("5.3+/BMO-derived") && error.contains("native whoami"),
         "{error}"
     );
-    assert!(error.contains("config set-server --email"), "{error}");
+    assert!(
+        error.contains("config set-server <name> --url <url> --email <email>")
+            && error.contains("preserving its existing options"),
+        "{error}"
+    );
     assert!(error.contains("--server-email"), "{error}");
 }
 

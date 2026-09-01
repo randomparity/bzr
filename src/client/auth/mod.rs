@@ -290,8 +290,10 @@ async fn detect_auth_method(
     let hint = if whoami_not_found && email.is_none() {
         "auth detection failed: Bugzilla 5.3+/BMO-derived servers use native whoami; \
          this Bugzilla 5.0/5.2 server needs an email for the rest/valid_login fallback. \
-         Configure a named server with `bzr config set-server --email`, or add \
-         `--server-email` to an inline `--server-url` invocation."
+         Configure a named server by rerunning its complete \
+         `bzr config set-server <name> --url <url> --email <email> ...` command, \
+         preserving its existing options; or add `--server-email` to an inline \
+         `--server-url` invocation."
     } else if whoami_not_found {
         "auth detection failed: rest/valid_login did not confirm \
          your credentials. Check your API key and email address."

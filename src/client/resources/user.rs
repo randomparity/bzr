@@ -45,7 +45,7 @@ impl BugzillaClient {
                 } else {
                     Err(BzrError::Api {
                         code: 32614,
-                        message: "Bugzilla 5.3+/BMO-derived servers use native whoami; this Bugzilla 5.0/5.2 server needs an email-backed fallback. Configure a named server with `bzr config set-server --email`, or add `--server-email` to an inline `--server-url` invocation".into(),
+                        message: "Bugzilla 5.3+/BMO-derived servers use native whoami; this Bugzilla 5.0/5.2 server needs an email-backed fallback. Configure a named server by rerunning its complete `bzr config set-server <name> --url <url> --email <email> ...` command, preserving its existing options; or add `--server-email` to an inline `--server-url` invocation".into(),
                     })
                 }
             }
