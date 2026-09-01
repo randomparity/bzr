@@ -46,9 +46,11 @@ pub(crate) async fn execute(&mut self, params: &SearchParams) -> Result<Vec<Bug>
 ```
 
 On the first forced-REST execution, the handle emits the current warning immediately before the
-request and clears its pending-warning state; later executions remain silent. Forced REST calls
-the existing REST request path directly. Configured dispatch preserves the existing
-REST/XML-RPC/Hybrid match, including Hybrid empty-result fallback. Public
+request and clears its pending-warning state; later executions remain silent. Every execution
+first applies the existing `force_id_fields` normalization, so an include projection that omits
+`id` still fetches it and an explicit `exclude_fields=id` cannot remove the identifier required to
+deserialize `Bug`. Forced REST then calls the existing REST request path directly. Configured
+dispatch preserves the existing REST/XML-RPC/Hybrid match, including Hybrid empty-result fallback. Public
 `BugzillaClient::search_bugs` remains source-compatible by creating a handle and executing one
 request.
 
@@ -75,8 +77,9 @@ translated, retried differently, or converted into output.
 ## Verification
 
 - A focused multi-page wiremock test uses a Hybrid client plus raw Boolean-chart parameters,
-  proves every offset request reaches REST, proves the complete ordered result set is returned,
-  and counts exactly one warning.
+  an include projection that omits `id`, and `exclude_fields=id`; it proves every offset request
+  reaches REST with `id` forced into the effective field selection, proves the complete ordered
+  result set is returned, and counts exactly one warning.
 - A focused REST-mode variant proves the same raw-parameter paging emits no fallback warning.
 - A focused raw-parameter over-fetch validation case proves an error raised before the first
   request remains warning-free.
@@ -85,8 +88,9 @@ translated, retried differently, or converted into output.
 - Existing client tests continue to prove raw parameters bypass XML-RPC fallback and preserve REST
   validation.
 - The real-container project-manager Custom Search runs with configured XML-RPC, a one-row page
-  limit, raw Boolean-chart parameters, and `--paginate`; it proves all rows are returned and the
-  warning text occurs exactly once on stderr. The same phase retains its structured JSON checks.
+  limit, an output projection that omits `id`, raw Boolean-chart parameters, and `--paginate`; it
+  proves all rows deserialize and are returned with the requested structured output while the
+  warning text occurs exactly once on stderr.
 - `make lint`, `make test`, and `make functional-test-all` are the final guardrails.
 
 ## Global constraints

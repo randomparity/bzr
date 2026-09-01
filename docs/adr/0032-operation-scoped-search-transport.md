@@ -21,7 +21,7 @@ Represent one bug-search operation with a crate-private client handle. Construct
 resolves configured dispatch versus forced REST from the initial parameters. When forced REST is
 selected, the mutable handle emits the existing fallback warning immediately before its first
 request and records that the warning was emitted. Every request in that operation executes through
-the resolved transport.
+the resolved transport after applying the existing required-ID field normalization.
 
 The paging runtime constructs one handle before selecting its unbounded, over-fetch, or looped
 path. `BugzillaClient::search_bugs` preserves its existing one-request interface by constructing a
@@ -32,8 +32,9 @@ handle and executing it once.
 Transport selection and its diagnostic share the CLI operation lifetime, while the client remains
 immutable and reusable. Pagination cannot drift back to XML-RPC or repeat the warning on later
 pages. Lazy emission preserves warning-free input errors raised by paging before its first request.
-Single-request behavior, configured-mode dispatch, REST request construction, and error
-propagation remain unchanged.
+Keeping required-ID normalization inside the handle preserves projected-result deserialization for
+both the compatibility wrapper and paging. Single-request behavior, configured-mode dispatch,
+REST request construction, and error propagation remain unchanged.
 
 The client gains a small crate-private type and paging becomes aware of that operation abstraction,
 but not of REST request mechanics. A caller that intentionally changes raw parameters between
