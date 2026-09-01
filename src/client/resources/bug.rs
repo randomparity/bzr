@@ -201,6 +201,12 @@ fn append_raw_params(
     builder.query(raw_params)
 }
 
+pub(crate) struct BugSearch<'a> {
+    client: &'a BugzillaClient,
+    force_rest: bool,
+    warning_pending: bool,
+}
+
 impl BugzillaClient {
     pub async fn get_bug_history_since(
         &self,
@@ -221,32 +227,21 @@ impl BugzillaClient {
         Ok(history)
     }
 
-    pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
-        tracing::debug!(?params, %self.api_mode, "search parameters");
-        // Guarantee `id` is fetched so the non-defaulted `Bug.id` deserializes,
-        // even when the caller passed an id-less `--fields`. Only clone when
-        // normalization actually changed something, keeping the common
-        // no-`--fields` path allocation-free.
-        let (inc, exc) = force_id_fields(
-            params.include_fields.as_deref(),
-            params.exclude_fields.as_deref(),
-        );
-        let normalized =
-            (inc != params.include_fields || exc != params.exclude_fields).then(|| SearchParams {
-                include_fields: inc,
-                exclude_fields: exc,
-                ..params.clone()
-            });
-        let params = normalized.as_ref().unwrap_or(params);
-        // Raw params (boolean charts from URLs) only work with REST.
-        if !params.raw_params.is_empty() && self.api_mode != ApiMode::Rest {
-            tracing::warn!(
-                "query contains raw URL parameters that require REST API; \
-                 ignoring configured {} mode",
-                self.api_mode
-            );
-            return self.search_bugs_rest(params).await;
+    pub(crate) fn begin_bug_search(&self, params: &SearchParams) -> BugSearch<'_> {
+        let force_rest = !params.raw_params.is_empty() && self.api_mode != ApiMode::Rest;
+        BugSearch {
+            client: self,
+            force_rest,
+            warning_pending: force_rest,
         }
+    }
+
+    pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
+        let mut search = self.begin_bug_search(params);
+        search.execute(params).await
+    }
+
+    async fn search_bugs_configured(&self, params: &SearchParams) -> Result<Vec<Bug>> {
         match self.api_mode {
             ApiMode::Rest => self.search_bugs_rest(params).await,
             ApiMode::XmlRpc => self.xmlrpc_client().search_bugs(params).await,
@@ -297,7 +292,43 @@ impl BugzillaClient {
             Ok(rest_bugs)
         }
     }
+}
 
+impl BugSearch<'_> {
+    pub(crate) async fn execute(&mut self, params: &SearchParams) -> Result<Vec<Bug>> {
+        tracing::debug!(?params, %self.client.api_mode, "search parameters");
+        // Guarantee `id` is fetched so the non-defaulted `Bug.id` deserializes,
+        // even when the caller passed an id-less `--fields`. Only clone when
+        // normalization actually changed something, keeping the common
+        // no-`--fields` path allocation-free.
+        let (inc, exc) = force_id_fields(
+            params.include_fields.as_deref(),
+            params.exclude_fields.as_deref(),
+        );
+        let normalized =
+            (inc != params.include_fields || exc != params.exclude_fields).then(|| SearchParams {
+                include_fields: inc,
+                exclude_fields: exc,
+                ..params.clone()
+            });
+        let params = normalized.as_ref().unwrap_or(params);
+        if self.warning_pending {
+            tracing::warn!(
+                "query contains raw URL parameters that require REST API; \
+                 ignoring configured {} mode",
+                self.client.api_mode
+            );
+            self.warning_pending = false;
+        }
+        if self.force_rest {
+            self.client.search_bugs_rest(params).await
+        } else {
+            self.client.search_bugs_configured(params).await
+        }
+    }
+}
+
+impl BugzillaClient {
     async fn search_bugs_rest(&self, params: &SearchParams) -> Result<Vec<Bug>> {
         if has_negated_filters(params) && has_raw_boolean_chart_params(params) {
             return Err(crate::error::BzrError::input(

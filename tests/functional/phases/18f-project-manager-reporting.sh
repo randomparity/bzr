@@ -44,31 +44,40 @@ test_begin "pm-custom-search-saves-and-paginates-projected-json" "PM Custom Sear
 _PM_URL="${_PM_PUBLIC_URL}/buglist.cgi?product=FuncTestProd&f1=status_whiteboard&o1=substring&v1=${_PM_MARKER}&query_format=advanced"
 run_bzr query save "$_PM_QUERY" --from-url "$_PM_URL"
 if [[ $_PM_ALT_REMOVED -eq 0 && $_PM_PROFILE_OK -eq 0 ]] && assert_success; then
-    run_bzr query run "$_PM_QUERY" \
-        --fields id,summary,status,assigned_to,target_milestone,last_change_time,whiteboard \
-        --paginate
+    RUST_LOG=bzr=warn run_bzr --api xmlrpc query run "$_PM_QUERY" \
+        --fields summary,status,assigned_to,target_milestone,last_change_time,whiteboard \
+        --limit 1 --paginate
     if assert_success && assert_json_array_length '.' 3 &&
-        assert_json '.[0] | has("id") and has("summary") and has("status") and has("whiteboard")' "true" &&
+        assert_json '.[0] | (has("id") | not) and has("summary") and has("status") and has("whiteboard")' "true" &&
         assert_json 'map(.summary) | sort | join(",")' "Documentation readiness,Parser rollout,QA validation" &&
         assert_json 'map(select(.whiteboard | contains("blocked: owner needed"))) | length' "1"; then
-        test_pass
+        _PM_REST_WARNING_COUNT=$(awk '
+          index($0, "query contains raw URL parameters that require REST API") { count++ }
+          END { print count + 0 }
+        ' "$BZR_STDERR")
+        if [[ $_PM_REST_WARNING_COUNT -eq 1 ]]; then
+            test_pass
+        else
+            test_fail "raw-parameter REST fallback warning count = $_PM_REST_WARNING_COUNT, expected 1"
+        fi
     fi
 fi
 
 test_begin "pm-custom-search-emits-bare-projected-ndjson-rows" "PM Custom Search emits bare projected NDJSON rows"
-run_bzr_raw --output ndjson bug search --from-url "$_PM_URL" \
+RUST_LOG=bzr=warn run_bzr_raw --api rest --output ndjson bug search --from-url "$_PM_URL" \
     --fields id,summary,status,assigned_to,target_milestone,last_change_time,whiteboard \
-    --paginate
+    --limit 1 --paginate
 if assert_success && assert_ndjson_line_count 3 &&
     jq -s -e 'length == 3 and
       (map(.summary) | sort) == ["Documentation readiness", "Parser rollout", "QA validation"]' \
-      "$BZR_STDOUT" >/dev/null; then
+      "$BZR_STDOUT" >/dev/null &&
+    assert_stderr_not_contains "query contains raw URL parameters that require REST API"; then
     test_pass
 fi
 
 run_bzr query delete "$_PM_QUERY"
 [[ $BZR_EXIT -eq 0 ]] || test_fail "PM report fixture query cleanup failed"
-unset _PM_MARKER _PM_QUERY _PM_CREATE _PM_BLOCKER _PM_QA _PM_DOCS
+unset _PM_MARKER _PM_QUERY _PM_CREATE _PM_BLOCKER _PM_QA _PM_DOCS _PM_REST_WARNING_COUNT
 unset _PM_ALT_REMOVED _PM_PUBLIC_URL _PM_PROFILE_OK _PM_URL
 
 echo ""
