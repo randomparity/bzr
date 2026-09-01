@@ -85,10 +85,12 @@ The proxy transformation covers:
 
 Proxy self-tests pin matching routes, transformed fields, unchanged unrelated payloads, and the
 count returned for logging. Functional phase 02 proves native/fallback `whoami`; phase 06 proves
-`full_name` on bz52 and both create-result paths through the proxy; phase 07 proves recognized
-group filtering, anonymous access, user/group response normalization, and the enabled non-member
-exclusion. A bz53 group-detail arm may skip because stock 5.3 rejects REST Group.get and the
-client correctly falls back to XML-RPC, which the JSON response-shape proxy does not transform.
+`full_name` on bz52 and both create-result paths through the proxy; phase 07 uses credentialed
+inline calls to prove recognized group filtering, user/group response normalization, and the
+enabled non-member exclusion. A separate credentialless phase-07 call asserts the stock server's
+access-denied response, covering the anonymous command path without claiming stock Bugzilla
+returns user data. A bz53 group-detail arm may skip because stock 5.3 rejects REST Group.get and
+the client correctly falls back to XML-RPC, which the JSON response-shape proxy does not transform.
 
 The controlled-fault record is produced before the Rust/request fixes: the corrected wiremock
 query/body expectations and functional assertions must fail with the old implementation, while
@@ -116,7 +118,7 @@ backend, and applies no transformation to unsuccessful responses.
 The remote Bugzilla deployment is trusted to authorize operations and identify resources, but its
 serializer is not trusted to choose one JSON scalar representation. A local operator is trusted
 to choose the server and supply credentials. Anonymous callers remain limited to commands already
-classified as credentialless.
+classified as credentialless, and stock Bugzilla may still deny a particular anonymous read.
 
 ### Controls
 
@@ -128,7 +130,8 @@ classified as credentialless.
 - Route-specific proxy matching prevents a test transformation from silently changing unrelated
   responses; route/count logs prove the desired transform ran.
 - The group filter remains server-side and uses Bugzilla's recognized parameter; tests include a
-  positive member and enabled negative control.
+  positive member and enabled negative control. Credentialed calls prove successful filtering;
+  a separate credentialless call proves the stock-server denial path.
 
 ### Explicitly out of scope
 
@@ -145,7 +148,7 @@ updates, tolerance for valid alternate response shapes, and corrected version gu
 ## Verification
 
 - Focused Rust tests for group query parameters, update serialization, every annotated ID/boolean,
-  create IDs, and auth-probe IDs.
+  create IDs, auth-probe IDs, and all version-guidance surfaces.
 - `python3 tests/functional/redhat-shape-proxy.py --self-test`.
 - Controlled red runs before implementation, recorded in the PR body.
 - `make test-fast`, `make lint`, `make test`, and `make functional-test-all`.

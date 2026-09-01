@@ -33,8 +33,10 @@ remain `real_name`.
 Extend the existing production-shape proxy with explicit user/group transformations and route
 logs. Functional tests must prove the transformed response was observed, cover both create-result
 IDs, distinguish native `whoami` on Bugzilla 5.3+/BMO-derived servers from the user-lookup fallback
-on 5.0/5.2, and exercise anonymous group listing. The JSON schema version and schema files do not
-change because serialization remains unchanged.
+on 5.0/5.2, and exercise the credentialless group-list path as the stock server's expected access
+denial. Successful group shape/filter proofs use credentials because stock Bugzilla rejects
+anonymous `match=*` before returning a body. The JSON schema version and schema files do not change
+because serialization remains unchanged.
 
 ## Consequences
 
