@@ -114,9 +114,15 @@ refers to this target by name.
 
 ### Steps
 
-1. In `Makefile`'s `.PHONY` list, add `check-proxy-self-test` to the line that already carries
-   `check-no-spawn check-release-security-notes check-shell`, producing:
-   `        check-no-spawn check-release-security-notes check-shell check-proxy-self-test \`
+1. In `Makefile`'s `.PHONY` list, `Makefile:6` currently reads exactly
+   `        check-no-spawn check-release-security-notes check-shell clean help man \`.
+   Insert one token, keeping every existing one:
+   `        check-no-spawn check-release-security-notes check-shell check-proxy-self-test clean help man \`
+
+   Do not drop `clean help man`. `man` in particular must stay phony: `Makefile:156-157` writes
+   into a `man/` directory that `.gitignore:5` ignores, so once `make man` has run the directory
+   exists and a non-phony `man` target reports `make: 'man' is up to date.` and silently stops
+   regenerating the pages.
 
 2. Change the `lint` rule from
 
@@ -153,10 +159,9 @@ check-proxy-self-test: ## Run the production-shape proxy self-tests
    case and a final `OK`, and the command to exit 0. Run it bare — no pipe — so the exit status is
    the make target's own.
 
-6. Verify the workflow still parses: `make check-shell` is not a YAML linter, so instead run
-   `python3 -c "import sys; print('ok')"` is **not** a check — use
-   `git diff .github/workflows/ci.yml` and confirm the added line sits inside the `test-layout`
-   job's `steps:` list, aligned with its siblings.
+6. Verify the workflow edit with `git diff .github/workflows/ci.yml`: the added line must sit
+   inside the `test-layout` job's `steps:` list, aligned with its siblings. The repository has no
+   YAML linter in its guardrails, so this is a read, not a command.
 
 7. Commit: `ci: run the production-shape proxy self-tests as a guard`.
 
@@ -165,6 +170,8 @@ check-proxy-self-test: ## Run the production-shape proxy self-tests
 - `make check-proxy-self-test` exits 0 and runs every case in `ShapeTests`.
 - `make lint` includes it (visible in `make -n lint`, or by the guard's output during a real run).
 - `ci.yml`'s `test-layout` job has four `make check-*` steps.
+- `git diff Makefile` shows the `.PHONY` block gained exactly one token and lost none — in
+  particular `clean`, `help`, and `man` are still there.
 
 ## Task 3 — per-endpoint rewrite hooks in the proxy
 
@@ -261,9 +268,10 @@ def metadata_sort_key_route(path):
 ```
 
 5. Rewrite `shape_metadata_sort_keys_response`'s own guard to use the new predicate, keeping the
-   `is_field` / `is_product` locals it needs afterwards. Replace its first eight lines — from
-   `    parsed_path = urllib.parse.urlsplit(path).path` through
-   `        return data, 0` — with:
+   `is_field` / `is_product` locals it needs afterwards. Replace the span from
+   `    parsed_path = urllib.parse.urlsplit(path).path` through the following
+   `        return data, 0` — those two anchors and everything between them, nothing after —
+   with:
 
 ```python
     if not is_metadata_sort_key_route(path):
@@ -497,11 +505,24 @@ def apply_response_hooks(path, body):
     print `... ok`, a final `OK`, and exit status 0.
 
 12. Controlled fault, per the procedure Task 5 documents. Temporarily change the `product-ids`
-    hook's `matches` to `lambda path: path.startswith("/rest/product_accessibl")` (one dropped
-    character), re-run the self-test, and expect
+    hook's `matches` to `lambda path: path.startswith("/rest/product_accessibles")` — one
+    **added** character — re-run the self-test, and expect
     `test_response_hooks_report_product_ids_route` to FAIL with
-    `AssertionError: [] != [('product-ids', 'product-ids', 2)]`. Restore the character, re-run,
+    `AssertionError: [] != [('product-ids', 'product-ids', 2)]`. Restore the string, re-run,
     expect `OK`. Record both observations for the pull-request body.
+
+    The direction rule matters and is easy to get backwards: **shortening a `startswith` prefix
+    widens the match.** `'/rest/product_accessible'.startswith('/rest/product_accessibl')` is
+    `True`, so dropping a character leaves the hook firing and the self-test green — a fault that
+    proves nothing. Lengthening the prefix past the real path is what stops the match.
+
+12a. Verify no proxy consumer regressed, before committing:
+    `unset BZR_BIN && cargo build --release && make functional-test-bz50` (Task 1's target, so
+    run Task 1 first). Expect
+    `[03-products/production-shaped-product-and-field-metadata] ... PASS` and the
+    `18e-release-readiness` proxy test to PASS. The self-test alone proves the registry;
+    only an arm proves the three phases that consume it, and discovering a break here costs one
+    container instead of unpicking six commits after `functional-test-all`.
 
 13. Add the README section. In `tests/functional/README.md`, immediately before the
     `## Config Isolation` heading, insert:
@@ -533,7 +554,26 @@ actually fired. Run the self-tests with
 `make check-proxy-self-test`, which `make lint` and CI both run.
 ```
 
-14. Commit: `test(functional): add per-endpoint rewrite hooks to the shape proxy`.
+14. Correct the README prerequisite line. `tests/functional/README.md:11-12` currently reads:
+
+```markdown
+- `python3` and `openssl` — only for the ad-hoc TLS phase; when either is
+  missing that phase skips cleanly (see the TLS Fixture section below)
+```
+
+    Replace those two lines with:
+
+```markdown
+- `python3` — required by `make lint` (the `check-proxy-self-test` guard) and by the
+  production-shape proxy; also used by the ad-hoc TLS phase
+- `openssl` — only for the ad-hoc TLS phase; when it or `python3` is missing that phase
+  skips cleanly (see the TLS Fixture section below)
+```
+
+    Without this the same file says python3 is optional eleven lines above a section telling
+    contributors to run `make check-proxy-self-test`.
+
+15. Commit: `test(functional): add per-endpoint rewrite hooks to the shape proxy`.
 
 ### Acceptance criteria
 
@@ -697,7 +737,20 @@ names, each of which must exist.
 
 ### Steps
 
-1. In `CONTRIBUTING.md`, immediately after the paragraph ending
+1. In `CONTRIBUTING.md`'s `## Development setup`, the first paragraph currently reads
+   `Development requires Git, GNU Make, Rust 1.89 or newer, and the native packages needed by the`
+   `default features.` Change that opening sentence to:
+
+```markdown
+Development requires Git, GNU Make, Rust 1.89 or newer, `python3` (the `make lint` guard for the
+production-shape proxy runs its self-tests), and the native packages needed by the default
+features.
+```
+
+   Leave the rest of that paragraph unchanged. This is the provisioning half of Task 2's new
+   `make lint` prerequisite.
+
+2. In `CONTRIBUTING.md`, immediately after the paragraph ending
    `Do not describe an omitted check as passing.` and before the
    `Documentation-only changes should also confirm...` paragraph, insert:
 
@@ -722,15 +775,23 @@ record both observations in the pull-request body.
    the same command, and observe green.
 6. Put both observations in the pull-request body.
 
-**Rebuild explicitly before each functional run.** `tests/functional/phases/00-build.sh` uses
-`$BZR_BIN` verbatim when it is set and executable, and when it does build it discards `cargo`'s
-exit status, checking only that `target/release/bzr` exists. Either path can run the whole arm
-against a stale binary that never received your fault, which reports green and tells you your test
-does not bite when it was never exercised. So run the functional arm as:
+**A functional arm needs a fresh binary and a fresh container.** Two things can make the run
+report on something other than your fault:
+
+- **A stale binary.** `tests/functional/phases/00-build.sh` uses `$BZR_BIN` verbatim when it is
+  set and executable, and when it does build it discards `cargo`'s exit status, checking only
+  that `target/release/bzr` exists. Either path runs the whole arm against a binary that never
+  received your fault.
+- **A stale container.** `tests/functional/setup-bugzilla.sh` reuses an already-running container
+  for this checkout and version, so users, groups, and bugs from earlier runs persist. Residue
+  can satisfy the assertion under test in the faulted state, or fail it in the restored state.
+
+So run the functional arm as:
 
 ```bash
 unset BZR_BIN
 cargo build --release   # bare: its exit status is the gate
+BZR_BZ_VERSION=bz50 tests/functional/setup-bugzilla.sh reset
 make functional-test-bz50
 ```
 

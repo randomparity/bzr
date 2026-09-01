@@ -194,6 +194,13 @@ The proxy has three consumers, all of which must stay green:
   the line's spelling. `:49-53` is the third assertion in that phase, requiring
   `product list --type accessible` to return a non-empty array through the proxy — the
   `product-ids` hook's end-to-end consumer.
+- **The explicit `sys.stderr.flush()` after each marker write.** `lib.sh:622-623` redirects the
+  proxy's stderr to `$REDHAT_SHAPE_LOG`, a *file*, and `03-products.sh` reads that file with awk
+  while the proxy is still running (it is not stopped until `:87`). On CPython before 3.9 stderr
+  to a non-tty is block-buffered, so without the flush the markers sit in the buffer and the
+  mid-run counters read zero, failing the phase. On 3.9+ stderr is line-buffered and the flush
+  is redundant — which is exactly what makes it easy to drop in a refactor and invisible on a
+  modern box. It is part of the contract, not decoration.
 - `tests/functional/phases/18e-release-readiness.sh:136-166` pins `shape_bug_response`'s output
   byte-for-byte across `bug list --paginate`, `bug search --from-url`, and `bug adjacency`,
   asserting `.component == [$component, ($component + "-redhat-secondary")]` and the `version`
@@ -231,9 +238,23 @@ nobody is a convention, and it will not survive four pull requests.
 So `Makefile` gains `check-proxy-self-test`, running
 `python3 tests/functional/redhat-shape-proxy.py --self-test`, added to the `lint` prerequisite
 list and to `.PHONY`. It guards on `python3` the way `check-shell` guards on `shellcheck` — an
-actionable error rather than a silent skip — which is a new hard requirement for `make lint`.
-That is acceptable: `python3` is already required by `setup-bugzilla.sh`, the TLS fixture, and
-the proxy itself.
+actionable error rather than a silent skip.
+
+**Naming the whole prerequisite, not just the interpreter.** Four of the suite's fourteen cases
+(`redhat-shape-proxy.py:332-378`) start a real `ThreadingHTTPServer` on `127.0.0.1`, issue live
+requests with two-second timeouts, and join threads; they are essentially all of its 2.0s
+runtime. So `make lint` gains loopback TCP bind-and-connect and a few seconds of timing
+headroom, not merely `python3` — every existing `lint` prerequisite is offline filesystem work.
+This is documented rather than avoided, so a `make lint` failure in a restricted sandbox is
+diagnosable instead of mysterious; the suite was measured passing in an agent sandbox on this
+host (14 tests, 2.010s, `OK`). One residual is accepted and named:
+`test_unavailable_backend_returns_502` picks its unavailable port by binding port 0 and closing
+the socket, so a process that grabs that port in the window fails the case. The window is
+sub-millisecond and the case predates this change; promoting the suite to a gate raises the
+exposure, and the honest response is to record it here rather than to rewrite a working test.
+Since `python3` becomes a `make lint` requirement, `tests/functional/README.md`'s prerequisite
+list (which today calls it TLS-phase-only) and `CONTRIBUTING.md`'s development-setup section are
+corrected in the same change — a change that adds a prerequisite updates provisioning with it.
 
 **`make lint` alone would not be a gate.** No workflow runs it: `rg -n 'make lint|make check-'`
 over `.github/workflows/` returns only `ci.yml:46-48` (`check-test-layout`,
@@ -315,6 +336,18 @@ contributor's own build the gate and holds whether or not `00-build.sh` changes;
 that `00-build.sh` masks a failed build for every other caller — is a pre-existing harness defect
 this change neither depends on nor worsens, and it is tracked as
 [#630](https://github.com/randomparity/bzr/issues/630).
+
+**The container is the other half of what a controlled fault must control.** The same reuse
+Deliverable 1 records above applies here: `setup-bugzilla.sh:119-127` returns early whenever the
+named container is already running, so the ordinary second run of an arm lands on a warm, dirty
+instance. That breaks attribution in both directions — a mutation left by the pre-fault run can
+already satisfy the assertion under test, so the faulted arm passes; and residue from an aborted
+run, such as the `$NONMEMBER_EMAIL` group membership named above, can make the restored arm fail.
+Either way the red/green pair the pull-request body reports is not attributable to the fault. So
+the procedure resets the container before each of steps 3 and 5:
+`BZR_BZ_VERSION=<arm> tests/functional/setup-bugzilla.sh reset`, which is stop-then-start
+(`:186-190`) and yields a fresh instance from the image. Stale binary and stale instance are the
+two ways the same observation goes wrong, and the procedure closes both.
 
 ## Deliverable 5 — inventory of compromised fixtures
 
