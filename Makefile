@@ -144,7 +144,7 @@ check-shell: ## Lint shell scripts (shellcheck + shfmt, POSIX and bash)
 	@command -v shfmt >/dev/null || { echo "ERROR: shfmt is required for this guard"; echo "  Install: brew install shfmt  |  https://github.com/mvdan/sh/releases"; exit 1; }
 	shellcheck -s sh install.sh tests/installer/smoke.sh
 	shellcheck -s bash tools/*.sh
-	shellcheck -s bash tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/phases/*.sh
+	shellcheck -s bash tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/container-env.sh tests/functional/phases/*.sh
 	bash -n tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/phases/*.sh
 	shfmt -d -ln posix -i 2 install.sh tests/installer/smoke.sh
 	shfmt -d -ln bash -i 2 tools/*.sh

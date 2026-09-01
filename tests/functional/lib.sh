@@ -2,7 +2,7 @@
 # Test helper library for bzr functional tests.
 # Source this file; do not execute directly.
 
-SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=tests/functional/container-env.sh
 source "$SCRIPT_DIR/container-env.sh"
 
