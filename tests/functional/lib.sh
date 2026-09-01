@@ -571,21 +571,38 @@ assert_user_login_enabled() {
 # src/client/mod.rs:22). This reads the *user* resource, not
 # `group list-users`, so it is independent of the group filter #625 owns.
 #
-# An empty `groups` array would make an `out` assertion pass for the wrong
-# reason, so callers pair it with an `in` assertion on a user known to be a
-# member: that positive control is what proves the harness can see membership
-# at all. Overwrites the BZR_* capture globals.
+# Two ways an `out` assertion could pass for the wrong reason, both closed
+# below: the login might be missing from the result set entirely, which the
+# presence assertion inside this helper rejects; or `groups` might be empty for
+# every user because the credential cannot see membership, which callers reject
+# by pairing this with an `in` assertion on a user known to be a member.
+# Overwrites the BZR_* capture globals.
 assert_user_group_membership() {
     local login="$1"
     local group="$2"
     local want="$3"
-    local expected=0
-    [[ "$want" == "in" ]] && expected=1
+    local expected
+    case "$want" in
+    in) expected=1 ;;
+    out) expected=0 ;;
+    *)
+        test_fail "assert_user_group_membership: want must be in|out, got '$want'"
+        return 1
+        ;;
+    esac
     run_bzr user search "$login" --details
     if [[ $BZR_EXIT -ne 0 ]]; then
         test_fail "user search '$login' --details exited $BZR_EXIT"
         return 1
     fi
+    # Presence first. The membership filter below yields 0 both when <login>
+    # holds no <group> and when <login> is absent from the result set entirely,
+    # so without this an `out` assertion passes against a fixture that was never
+    # created — the same pass-for-the-wrong-reason this fixture exists to
+    # remove. The absence half has to prove the row is there before it can mean
+    # anything. The `in` control on a different login cannot cover this: it
+    # proves the credential can see membership, not that *this* row exists.
+    assert_json "[.[] | select(.name == \"$login\")] | length" "1" || return 1
     assert_json \
         "[[.[] | select(.name == \"$login\")][0].groups[]? | select(.name == \"$group\")] | length" \
         "$expected"

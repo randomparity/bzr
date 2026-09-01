@@ -108,8 +108,9 @@ removed and the residual returns to a recorded invariant — **a phase that adds
 `$NONMEMBER_EMAIL` to a group must remove it** — with that arm named. The `out` half is never
 kept without the control.
 
-`tests/functional/phases/07-groups.sh` provisions the fixture after `group add-user` and
-asserts it is enabled. It does **not** assert the non-member is absent from the group listing —
+`tests/functional/phases/07-groups.sh` provisions the fixture before `group add-user` and
+asserts it is enabled; the membership assertion then runs after `group add-user`, so its
+`testuser` positive control has a member to find. It does **not** assert the non-member is absent from the group listing —
 that assertion is red until #625 lands the filter fix, and it is #625's to write.
 
 ### Interaction with later phases

@@ -109,8 +109,9 @@ BZR_BZ_VERSION=bz50 tests/functional/setup-bugzilla.sh reset \
   && make functional-test-bz50
 ```
 
-Chain the commands rather than pasting them as separate lines, so a failed reset or build stops
-before the arm runs instead of testing the previous state.
+Keep the reset, the build, and the arm chained with `&&` rather than pasting them as three
+separate lines, so a failed reset or build stops before the arm runs instead of testing the
+previous state. (`unset` cannot fail, so it stands on its own line.)
 
 ## Pull requests
 
