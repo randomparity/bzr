@@ -57,7 +57,11 @@ production-shape fixture sections:
 - `ensure_enabled_nonmember_user` — idempotently creates that user and then guarantees it is
   login-enabled. Idempotent in both halves: an "already exists" create is success, and the
   enable runs unconditionally so a prior run that disabled the user is repaired. Returns
-  non-zero with a diagnostic on stderr when either half fails.
+  non-zero with a diagnostic on stderr when either half fails. It creates with an **explicit
+  `--password`**, matching the existing fixture at `06-users.sh:12` and `:51-52`: `--password`
+  is optional, and omitting it makes the server generate one and mail it
+  (`src/cli/user.rs:42-43`), which would put an outbound-mail path this harness does not
+  configure into a fixture's critical path.
 - `assert_user_login_enabled <login>` — runs `user search <login> --details` and fails the
   current test unless the server reports `can_login` true for that exact login. It overwrites
   the `BZR_*` capture globals, which its doc comment states, because every `assert_*` helper in
@@ -66,6 +70,14 @@ production-shape fixture sections:
 The enabled half is the load-bearing half and needs its own assertion: a fixture that silently
 degraded to disabled would make a dependent's absence assertion pass for the same wrong reason
 the current one does.
+
+**One assumption, stated rather than assumed:** that a freshly created, enabled user reports
+`can_login` true on bz50, bz52, and bz53. Nothing in the harness demonstrates it — the only
+`can_login` assertion today is `06-users.sh:66-69`, and it asserts `false` after an explicit
+disable. The first `make functional-test-all` run is what verifies it. If an arm comes back red
+on `fixture-enabled-non-member-user`, read that as this assumption failing on that server
+version, not as the helper being wrong, and fix the fixture rather than weakening the assertion —
+an assertion that tolerates a disabled user is worth nothing to the dependent that consumes it.
 
 `tests/functional/phases/07-groups.sh` provisions the fixture after `group add-user` and
 asserts it is enabled. It does **not** assert the non-member is absent from the group listing —
@@ -141,9 +153,11 @@ entry per hook that changed something. `_forward` calls it once for any 2xx resp
 `UnicodeDecodeError` or `json.JSONDecodeError` to the existing 502, and writes one
 `"{name} shaped route={route} count={count}"` line to stderr per applied hook.
 
-Each hook defines what its count counts: `bug-multivalue` counts the bug fields rewritten from
-scalar to array, `product-ids` counts the elements rewritten in `ids`, and `metadata-sort-keys`
-keeps its existing count of rewritten `sort_key` values.
+Each hook defines what its count counts: `bug-multivalue` counts every field whose scalar value
+was replaced by a list, the empty string included (`""` becomes `[]`, which the existing
+`test_shapes_scalar_empty_and_multi_values` case already exercises); `product-ids` counts the
+non-string elements rewritten in `ids`; and `metadata-sort-keys` keeps its existing count of
+rewritten `sort_key` values.
 
 The three existing rewrites become the three initial registry entries. Their transforms keep
 their names and gain the uniform signature:
@@ -158,10 +172,17 @@ their names and gain the uniform signature:
 
 The proxy has three consumers, all of which must stay green:
 
-- `tests/functional/phases/03-products.sh:44` counts lines matching
-  `metadata-sort-keys shaped route=field count=<n>` and the `product` variant in the proxy log.
-  That file belongs to a concurrent run and is not edited here, so the sort-key hook's `name`
-  and `route` values are fixed by that contract and the emitted line stays byte-identical.
+- `tests/functional/phases/03-products.sh:71-83` counts lines matching
+  `metadata-sort-keys shaped route=field count=[1-9][0-9]*` and the `product` variant in the
+  proxy log. That file belongs to a concurrent run and is not edited here, so the sort-key
+  hook's `name` and `route` values are fixed by that contract and the emitted line stays
+  byte-identical. Two details the pattern encodes: it matches only a **non-zero** count, which
+  agrees with the dispatcher writing no marker at zero; and `:81-84` further requires
+  `server capabilities` to emit *additional* `route=field` markers, so the field matcher's
+  coverage of the endpoints that command touches is part of the preserved contract, not just
+  the line's spelling. `:49-53` is the third assertion in that phase, requiring
+  `product list --type accessible` to return a non-empty array through the proxy — the
+  `product-ids` hook's end-to-end consumer.
 - `tests/functional/phases/18e-release-readiness.sh:136-166` pins `shape_bug_response`'s output
   byte-for-byte across `bug list --paginate`, `bug search --from-url`, and `bug adjacency`,
   asserting `.component == [$component, ($component + "-redhat-secondary")]` and the `version`
@@ -201,7 +222,24 @@ So `Makefile` gains `check-proxy-self-test`, running
 list and to `.PHONY`. It guards on `python3` the way `check-shell` guards on `shellcheck` — an
 actionable error rather than a silent skip — which is a new hard requirement for `make lint`.
 That is acceptable: `python3` is already required by `setup-bugzilla.sh`, the TLS fixture, and
-the proxy itself, and it is present on the GitHub runners CI uses.
+the proxy itself.
+
+**`make lint` alone would not be a gate.** No workflow runs it: `rg -n 'make lint|make check-'`
+over `.github/workflows/` returns only `ci.yml:46-48` (`check-test-layout`,
+`check-functional-test-ids`, `check-no-spawn`) and `ci.yml:264` (`check-shell`), and the
+pre-commit hook the Makefile writes at `:65` runs fmt, clippy, `check-test-layout`, and
+`check-functional-test-ids` — not `lint`. This repository's convention is that a guard reaches
+CI by being named as its own workflow step; `check-build-script` and
+`check-release-security-notes` sit in `lint`'s prerequisite list and are consequently run by
+nothing automated.
+
+So the gate is delivered in both places, following that convention: the `lint` prerequisite for
+contributors and agents, and one `- run: make check-proxy-self-test` step in `ci.yml`'s existing
+`test-layout` job, beside the three `make check-*` steps already there. `python3` is preinstalled
+on `ubuntu-latest`, so the job needs no new setup step. **This adds `.github/workflows/ci.yml` to
+the change surface** beyond the file list the issue suggests — a one-line step in an existing
+job, no new action, no permission change, no dependency — because without it the obligation this
+section imposes on four later entries is enforced by nothing they will run.
 
 ### Self-tests
 
@@ -213,10 +251,16 @@ updated to the new signature:
    number of rewritten fields.
 3. A `/rest/field/bug` body reports `("metadata-sort-keys", "field", 3)`, and a `/rest/product`
    body reports the `product` route — the contract `03-products.sh` asserts end to end.
-4. Every registered hook's rewriter returns a `(bytes, int)` pair on a payload it declines. This
+4. A `/rest/product_accessible` body with numeric `ids` reports
+   `("product-ids", "product-ids", <count>)`, and a `/rest/product` body does not. Without this
+   the `product-ids` matcher — a three-prefix `startswith` tuple — is dispatched by no case at
+   all: case 5 below calls every rewriter directly and bypasses matching entirely, so a dropped
+   prefix or a tuple that stops being a tuple would leave the whole suite green. The only
+   residual detector is `03-products.sh:49-53`, which this change may not edit and does not own.
+5. Every registered hook's rewriter returns a `(bytes, int)` pair on a payload it declines. This
    is the contract a new hook author gets wrong, so it is asserted over the registry rather than
    over a fixed list of names.
-5. A hook that matches but changes nothing produces no applied entry.
+6. A hook that matches but changes nothing produces no applied entry.
 
 ## Deliverable 4 — the controlled-fault procedure in CONTRIBUTING
 
@@ -280,9 +324,11 @@ sits on the credentialed `server capabilities` test.
 ## Testing and acceptance
 
 - `make lint` — now includes `check-proxy-self-test`, so all proxy cases pass as part of the
-  standard guardrail rather than as a remembered manual step. It also includes `check-shell`
-  (shellcheck and `bash -n` over `lib.sh` and every phase) and `check-functional-test-ids`,
-  which constrains the new `test_begin` identifier to `^[a-z0-9]+(-[a-z0-9]+)*$`.
+  guardrail contributors and agents are told to run. It also includes `check-shell` (shellcheck
+  and `bash -n` over `lib.sh` and every phase) and `check-functional-test-ids`, which constrains
+  the new `test_begin` identifier to `^[a-z0-9]+(-[a-z0-9]+)*$`.
+- `make check-proxy-self-test` in CI, as its own step in `ci.yml`'s `test-layout` job — the half
+  that makes the self-test obligation binding on a pull request rather than on memory.
 - `make test` — green; the markers are comments, so no Rust behavior changes.
 - `make functional-test-all` — green on bz50, bz52, and bz53. That covers all three proxy
   consumers: `03-products.sh` (sort-key markers), `18e-release-readiness.sh` (bug-transform
