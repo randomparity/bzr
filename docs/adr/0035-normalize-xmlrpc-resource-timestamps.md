@@ -11,7 +11,9 @@ canonical UTC RFC3339 `YYYY-MM-DDTHH:MM:SSZ`. The shared XML-RPC resource mapper
 both `dateTime.iso8601` and string values through unchanged. Bug, comment, and attachment commands
 therefore publish different timestamp strings for the same server data depending on transport.
 Attachment list requests also omit `flags` even though the mapper consumes them, so XML-RPC list
-and view disagree.
+and view disagree. Verified against Bugzilla 5.0's `XMLRPC.pm` and `JSONRPC.pm` serializers and
+`src/xmlrpc/resources/{mappers,attachment}.rs` at commit
+`9c70c1d0947ff619bedad0e721a9ccf102565c3d`.
 
 ## Decision
 
@@ -37,6 +39,9 @@ published field names do not change.
 
 ## Considered & rejected
 
+- **Do nothing.** verified: issue #622 and `src/xmlrpc/resources/{mappers,attachment}.rs` at commit
+  `9c70c1d0947ff619bedad0e721a9ccf102565c3d` show this preserves compact XML-RPC timestamps and an
+  attachment list request that omits the `flags` field consumed by its mapper.
 - **Normalize in each XML-RPC resource mapper.** judgment: three copies would encode one transport
   rule and invite the resource outputs to drift again.
 - **Normalize in the output writers.** verified: `src/xmlrpc/resources/bug.rs`, `comment.rs`, and
