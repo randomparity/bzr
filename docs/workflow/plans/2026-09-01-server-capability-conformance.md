@@ -42,7 +42,9 @@ capability fields.
    empty-name transition to the status fixture with an assertion that it is absent. Add
    DEBUG `TracingCapture` assertions for malformed `"not-a-number"` parameters
    (`reason=response_shape`) and HTTP 401 (`reason=request`); both stay null and exclude
-   the test API key from captured output.
+   the test API key from captured output. Put the raw test key and a non-secret marker in
+   one controlled response body; require the trace to retain the marker while redacting
+   the key.
 2. Run `make test-one T=server_capabilities_normalizes_attachment_size_to_bytes`; expect
    failure because string `maxattachmentsize` deserializes to `None` through the broad
    best-effort error arm.
@@ -105,18 +107,20 @@ no broader suffix leniency is introduced.
 `server-capability shaped route=<route> count=<n>` evidence lines. No later task consumes
 new shell globals.
 
-1. Add proxy self-tests before implementation for parameters stringification, field-type
-   string injection, empty status injection, bare version rewrite, and unrelated payload
-   preservation.
+1. Add proxy self-tests before implementation for opt-in parameters stringification,
+   field-type string injection, empty status injection, bare version rewrite, default-mode
+   preservation of capability/version routes, and unrelated payload preservation.
 2. Run `python3 tests/functional/redhat-shape-proxy.py --self-test`; expect the new tests to
    fail because the transformer is absent.
-3. Add one route-aware transformer returning the rewritten body plus named counters; call
-   it only for successful responses, log each non-zero route counter, and reuse existing
-   malformed-JSON 502 handling.
+3. Add one explicit `server-capabilities` proxy mode and one route-aware transformer
+   returning the rewritten body plus named counters. Call it only for successful responses
+   in that mode, log each non-zero route counter, reuse existing malformed-JSON 502
+   handling, and leave current default behavior unchanged for every existing caller.
 4. Run the proxy self-test again; expect all tests green.
 5. Strengthen the stock credentialed capability assertion with non-null attachment size
    and no empty transitions; retain the credentialless null assertion.
-6. Add one credentialed inline proxy case. Immediately after proxy startup, install
+6. Add one credentialed inline proxy case that starts explicit capability mode.
+   Immediately after proxy startup, install
    `trap 'cleanup; redhat_shape_stop' EXIT`; assert non-null attachment size, the
    test-named custom field's mapped type, no empty transitions, REST mode from `5.2+`, and
    all four rewrite evidence lines. On the normal path require `redhat_shape_stop` to

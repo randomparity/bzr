@@ -65,10 +65,14 @@ number field types plus the established omitted-type-to-`unknown` fallback. Two 
 `crate::test_helpers::TracingCapture` at DEBUG: a
 malformed authenticated parameter value must remain non-fatal and emit
 `reason=response_shape`, while HTTP 401 must remain non-fatal and emit `reason=request`.
-Both captured traces must exclude the test API key.
+At least one controlled response body contains the test API key plus a non-secret marker;
+the captured trace must retain the marker while excluding the raw key, proving the
+existing `BzrError` display-redaction seam rather than making a vacuous absence assertion.
 
-The existing functional response-shape proxy gains a single transformation function for
-server capability endpoints. It:
+The existing functional response-shape proxy gains an explicit server-capability mode and
+a single transformation function for those endpoints. The default mode leaves capability
+routes and `/rest/version` unchanged, preserving existing proxy consumers. In capability
+mode it:
 
 1. emits `5.2+` at `/rest/version`;
 2. stringifies `maxattachmentsize` at `/rest/parameters`;
@@ -76,8 +80,9 @@ server capability endpoints. It:
 4. inserts an empty-name status into `/rest/field/bug/bug_status`.
 
 The function returns named counters and logs each applied shape. Proxy self-tests cover
-each route and prove unrelated payloads are unchanged. The auth phase starts the proxy,
-installs a combined harness/proxy EXIT trap, runs a credentialed inline
+each route, prove default mode leaves capability routes unchanged, and prove unrelated
+payloads are unchanged. The auth phase starts the proxy in capability mode, installs a
+combined harness/proxy EXIT trap, runs a credentialed inline
 `server capabilities`, asserts non-null attachment size, the mapped proxy field, no empty
 transition, REST mode, and every expected proxy log, then stops the proxy and restores the
 ordinary harness trap. Existing stock and credentialless assertions stay in the same
