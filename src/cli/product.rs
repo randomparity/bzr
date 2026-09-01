@@ -12,9 +12,10 @@ pub(crate) enum ProductAction {
     ///
     /// `--type` selects which slice of the product catalog to list:
     /// `accessible` (default) -- products the caller can see;
-    /// `selectable` -- products the caller can file bugs against;
-    /// `enterable` -- a strict subset of `selectable` that excludes
-    /// products marked closed for new bugs. Most users want
+    /// `selectable` -- products the caller can choose when querying
+    /// bugs; `enterable` -- a strict subset of `selectable` that
+    /// excludes products marked closed for new bugs, i.e. products
+    /// the caller can file a new bug against. Most users want
     /// `accessible`.
     ///
     /// Examples:
@@ -35,11 +36,11 @@ pub(crate) enum ProductAction {
 
     /// View a product's full details: components, versions, milestones.
     ///
-    /// Prints the product's description, classification, default
-    /// milestone, the list of components (with default assignees
-    /// and CC lists), the list of versions, and the list of target
-    /// milestones. Useful for discovering valid `--component` and
-    /// `--version` values to pass to `bzr bug create`.
+    /// Prints the product's description, the list of components
+    /// (with default assignees), the list of versions, and the
+    /// list of target milestones. Useful for discovering valid
+    /// `--component` and `--version` values to pass to
+    /// `bzr bug create`.
     ///
     /// Examples:
     ///
@@ -100,8 +101,7 @@ pub(crate) enum ProductAction {
     /// Requires Bugzilla admin permissions. Pass any of the flags
     /// to change that property: `--description`,
     /// `--default-milestone`, `--is-open`. Only the supplied fields
-    /// are modified. Renaming a product is not supported by the
-    /// Bugzilla REST API.
+    /// are modified. `bzr` does not support renaming a product.
     ///
     /// `--default-milestone` must reference a milestone that
     /// already exists on the product (visible via
