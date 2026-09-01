@@ -36,6 +36,32 @@ if assert_success && assert_json 'keys | length' 2 && assert_json_exists '.name'
     test_pass
 fi
 
+test_begin "product-list-help-type-semantics" "product list --help describes --type correctly"
+run_bzr product list --help
+if assert_success &&
+    assert_stdout_contains "selectable\` -- products the caller can choose when querying" &&
+    assert_stdout_contains "the caller can file a new bug against" &&
+    assert_stdout_not_contains "selectable\` -- products the caller can file bugs against"; then
+    test_pass
+fi
+
+test_begin "product-view-help-matches-output" "product view --help matches format_product_detail"
+run_bzr product view --help
+if assert_success &&
+    assert_stdout_contains "Prints the product's description, the list of components" &&
+    assert_stdout_not_contains "classification" &&
+    assert_stdout_not_contains "CC lists"; then
+    test_pass
+fi
+
+test_begin "product-update-help-attributes-rename-to-bzr" "product update --help attributes missing rename to bzr"
+run_bzr product update --help
+if assert_success &&
+    assert_stdout_contains "\`bzr\` does not support renaming a product" &&
+    assert_stdout_not_contains "not supported by the"; then
+    test_pass
+fi
+
 test_begin "product-list-fields-unknown-exits-7" "product list --fields unknown exits 7"
 run_bzr product list --fields bogus_xyz
 if assert_exit_code 7; then test_pass; fi
