@@ -14,7 +14,9 @@ as REST, and make XML-RPC attachment list preserve the flags already returned by
 - `get_datetime_str` accepts Bugzilla's compact `YYYYMMDDTHH:MM:SS` form and canonical
   `YYYY-MM-DDTHH:MM:SSZ`; both produce `YYYY-MM-DDTHH:MM:SSZ`.
 - Only the exact fixed-width ASCII compact form is rewritten. Other non-empty strings retain the
-  current pass-through behavior; empty, missing, and non-string/non-datetime values remain `None`.
+  current pass-through behavior. An empty `Value::String`, a missing value, and a
+  non-string/non-datetime value remain `None`; non-compact `Value::DateTime` values, including an
+  empty one, retain their current pass-through behavior.
 - `ATTACHMENT_LIST_FIELDS` gains `flags`; list and by-ID mappings continue using `get_flags`.
 - REST production code, public field names, schemas, and `SCHEMA_VERSION` remain unchanged.
 - Functional proof is specific to Bugzilla 5.0, the supported Hybrid/XML-RPC server. Other matrix
@@ -52,7 +54,7 @@ turning a previously tolerated response into a command failure.
   `make test-one T=get_datetime_str` against the old implementation. The expected controlled fault
   is compact output where the test requires RFC3339.
 - Add unit cases for compact `Value::DateTime`, compact string, already-canonical input, and the
-  existing empty/type/missing fallthroughs.
+  existing empty-string/type/missing fallthroughs, plus empty `Value::DateTime` pass-through.
 - Strengthen the attachment request test to require `<string>flags</string>` in `include_fields`.
 - Run focused mapper and attachment tests, then `make test-fast`, `make lint`, and `make test`.
 - Run `make functional-test-all`; the bz50 arm must pass all four new parity assertions and the
