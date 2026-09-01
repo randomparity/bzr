@@ -39,3 +39,4 @@ rejected.
 | [0030](0030-dynamic-functional-test-container-ports.md) | Functional-test containers use runtime-assigned ports and checkout-scoped names | Accepted |
 | [0031](0031-compose-dependency-presentation-artifacts.md) | Compose dependency presentation artifacts through active capabilities | Accepted |
 | [0032](0032-operation-scoped-search-transport.md) | Resolve search transport once per operation | Accepted |
+| [0033](0033-share-lenient-deserialization-adapters.md) | Share lenient deserialization adapters by wire contract | Accepted |
