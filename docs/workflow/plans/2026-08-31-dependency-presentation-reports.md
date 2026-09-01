@@ -139,9 +139,13 @@ The Rust inventory proves recursive embedding and phase 18c proves both installe
 neither exact-inventory assertion may be left stale.
 
 Extend the `_DA_PATH` installed-root loop in
-`tests/functional/phases/18d-dependency-analysis.sh` with the template, fixture pair, focused test,
-and sibling PM safety reference. Add one harness assertion that all are regular files beneath
-`$SKILLS_PROJECT/.agents/skills`, then run:
+`tests/functional/phases/18d-dependency-analysis.sh` with only the dependency-owned template,
+fixture pair, and focused test; keep its existing containment rule under
+`$_DA_SKILL_ROOT_CANONICAL`. Check the sibling PM safety reference separately: require its exact
+installed location at
+`$SKILLS_PROJECT/.agents/skills/bzr-project-manager-reporting/reference/artifact-safety.md`, require
+it to be a regular file, canonicalize it beneath `$SKILLS_PROJECT/.agents/skills`, and do not widen
+the dependency-root loop to admit arbitrary sibling paths. Then run:
 
 ```bash
 python3 "$_DA_PRESENTATION_TEST"
