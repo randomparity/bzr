@@ -108,6 +108,78 @@ def shape_metadata_sort_keys_response(path, data):
     return json.dumps(value, separators=(",", ":")).encode(), changed
 
 
+def shape_user_group_response(method, path, data):
+    """Return explicit user/group production shapes, route, and changed count."""
+    route_path = urllib.parse.urlsplit(path).path
+    route = None
+    if method == "GET" and route_path == "/rest/whoami":
+        route = "whoami"
+    elif method == "GET" and (
+        route_path == "/rest/user" or route_path.startswith("/rest/user/")
+    ):
+        route = "user-read"
+    elif method == "GET" and (
+        route_path == "/rest/group" or route_path.startswith("/rest/group/")
+    ):
+        route = "group-read"
+    elif method == "POST" and route_path == "/rest/user":
+        route = "user-create"
+    elif method == "POST" and route_path == "/rest/group":
+        route = "group-create"
+    else:
+        return data, None, 0
+
+    value = json.loads(data)
+    changed = 0
+
+    def stringify_id(item):
+        nonlocal changed
+        if (
+            isinstance(item, dict)
+            and isinstance(item.get("id"), int)
+            and not isinstance(item.get("id"), bool)
+        ):
+            item["id"] = str(item["id"])
+            changed += 1
+
+    if route in ("whoami", "user-create", "group-create"):
+        stringify_id(value)
+    elif route == "user-read":
+        users = value.get("users") if isinstance(value, dict) else None
+        if isinstance(users, list):
+            for user in users:
+                stringify_id(user)
+                if not isinstance(user, dict):
+                    continue
+                can_login = user.get("can_login")
+                if isinstance(can_login, bool):
+                    user["can_login"] = int(can_login)
+                    changed += 1
+                groups = user.get("groups")
+                if isinstance(groups, list):
+                    for group in groups:
+                        stringify_id(group)
+    elif route == "group-read":
+        groups = value.get("groups") if isinstance(value, dict) else None
+        if isinstance(groups, list):
+            for group in groups:
+                stringify_id(group)
+                if not isinstance(group, dict):
+                    continue
+                is_active = group.get("is_active")
+                if isinstance(is_active, bool):
+                    group["is_active"] = int(is_active)
+                    changed += 1
+                membership = group.get("membership")
+                if isinstance(membership, list):
+                    for member in membership:
+                        stringify_id(member)
+
+    if changed == 0:
+        return data, route, 0
+    return json.dumps(value, separators=(",", ":")).encode(), route, changed
+
+
 def make_handler(backend_port):
     class Handler(http.server.BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -193,6 +265,19 @@ def make_handler(backend_port):
                     ) else "product"
                     sys.stderr.write(
                         f"metadata-sort-keys shaped route={route} count={changed}\n"
+                    )
+                    sys.stderr.flush()
+
+                try:
+                    body, route, changed = shape_user_group_response(
+                        method, self.path, body
+                    )
+                except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                    self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
+                    return
+                if changed:
+                    sys.stderr.write(
+                        f"user-group-shaped route={route} count={changed}\n"
                     )
                     sys.stderr.flush()
 
@@ -328,6 +413,77 @@ class ShapeTests(unittest.TestCase):
             body, count = shape_metadata_sort_keys_response(path, payload)
             self.assertEqual(body, payload)
             self.assertEqual(count, 0)
+
+    def test_shapes_whoami_and_create_ids(self):
+        for method, path, route in [
+            ("GET", "/rest/whoami?Bugzilla_api_key=secret", "whoami"),
+            ("POST", "/rest/user", "user-create"),
+            ("POST", "/rest/group", "group-create"),
+        ]:
+            body, actual_route, count = shape_user_group_response(
+                method, path, b'{"id":42}'
+            )
+            self.assertEqual(actual_route, route)
+            self.assertEqual(count, 1)
+            self.assertEqual(json.loads(body)["id"], "42")
+
+    def test_shapes_user_read_fields_and_preserves_absent_optional_fields(self):
+        payload = json.dumps({"users": [
+            {"id": 7, "can_login": True, "groups": [{"id": 3}]},
+            {"id": 8, "can_login": None, "groups": []},
+            {"id": 9},
+        ]}).encode()
+        body, route, count = shape_user_group_response(
+            "GET", "/rest/user?groups=admin", payload
+        )
+        shaped = json.loads(body)
+        self.assertEqual(route, "user-read")
+        self.assertEqual(count, 5)
+        self.assertEqual(shaped["users"][0], {
+            "id": "7", "can_login": 1, "groups": [{"id": "3"}]
+        })
+        self.assertIsNone(shaped["users"][1]["can_login"])
+        self.assertNotIn("can_login", shaped["users"][2])
+
+    def test_shapes_group_read_fields(self):
+        payload = json.dumps({"groups": [{
+            "id": 4,
+            "is_active": False,
+            "membership": [{"id": 12}],
+        }]}).encode()
+        body, route, count = shape_user_group_response(
+            "GET", "/rest/group?names=admin", payload
+        )
+        self.assertEqual(route, "group-read")
+        self.assertEqual(count, 3)
+        self.assertEqual(json.loads(body)["groups"][0], {
+            "id": "4", "is_active": 0, "membership": [{"id": "12"}]
+        })
+
+    def test_user_group_shape_leaves_unrelated_routes_untouched(self):
+        payload = b'{"id":42}'
+        for method, path in [
+            ("GET", "/rest/bug/42"),
+            ("PUT", "/rest/user/alice"),
+            ("POST", "/rest/group/4"),
+        ]:
+            body, route, count = shape_user_group_response(method, path, payload)
+            self.assertEqual(body, payload)
+            self.assertIsNone(route)
+            self.assertEqual(count, 0)
+
+    def test_user_group_shape_does_not_coerce_boolean_id(self):
+        payload = b'{"id":true}'
+        body, route, count = shape_user_group_response(
+            "GET", "/rest/whoami", payload
+        )
+        self.assertEqual(route, "whoami")
+        self.assertEqual(count, 0)
+        self.assertIs(json.loads(body)["id"], True)
+
+    def test_user_group_shape_rejects_malformed_json_on_matching_route(self):
+        with self.assertRaises(json.JSONDecodeError):
+            shape_user_group_response("GET", "/rest/user", b"not json")
 
     def test_readiness_endpoint(self):
         server, thread = self._start_server(1)

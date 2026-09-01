@@ -65,8 +65,10 @@ bzr --server-url https://bugzilla.example.com \
     whoami
 ```
 
-Add `--server-email <addr>` only if the server needs the Bugzilla 5.0 whoami
-fallback. For self-hosted TLS, use exactly one inline trust flag:
+Add `--server-email <addr>` for the Bugzilla 5.0/5.2 email-backed `whoami`
+fallback. Bugzilla 5.3+ and BMO-derived servers use native `whoami`. The named
+server equivalent is `bzr config set-server <name> ... --email <addr>`. For
+self-hosted TLS, use exactly one inline trust flag:
 `--server-tls-ca-cert <path>`, `--server-tls-pin-sha256 <pin>`,
 `--server-tls-pin-now`, or, only for controlled test systems,
 `--server-tls-insecure`.

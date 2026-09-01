@@ -1,5 +1,6 @@
 //! Auth detection orchestrator — split into submodules because the two
-//! probing strategies (`whoami` for Bugzilla 5.1+, `valid_login` for 5.0+)
+//! probing strategies (`whoami` for Bugzilla 5.3+/BMO-derived servers,
+//! `valid_login` for Bugzilla 5.0/5.2)
 //! are each self-contained with their own types and logic.
 //!
 //! # Auth detection decision matrix
@@ -12,8 +13,8 @@
 //!
 //! ## Endpoint order
 //!
-//! 1. `rest/whoami` (Bugzilla 5.1+). On `404` (endpoint absent), fall back to:
-//! 2. `rest/valid_login` (Bugzilla 5.0+) — only attempted when an email is
+//! 1. `rest/whoami` (Bugzilla 5.3+/BMO-derived). On `404`, fall back to:
+//! 2. `rest/valid_login` (Bugzilla 5.0/5.2) — only attempted when an email is
 //!    configured, since `valid_login` requires a `login` parameter.
 //!
 //! ## Auth-method order (within each endpoint)
@@ -241,7 +242,7 @@ async fn detect_auth_method(
 
     let mut malformed_response = None;
 
-    // Try whoami endpoint first (Bugzilla 5.1+). A TLS-certificate failure is
+    // Try whoami first (Bugzilla 5.3+/BMO-derived). A TLS-certificate failure is
     // propagated so the connection layer can offer TOFU / pin-rotation; other
     // transport errors fall back to header auth (see network_error_outcome).
     let whoami = detect_whoami_auth(http, base, api_key, &key_header).await;
@@ -259,7 +260,7 @@ async fn detect_auth_method(
         }
     };
 
-    // Fall back to valid_login endpoint (Bugzilla 5.0+, requires email)
+    // Fall back to valid_login on Bugzilla 5.0/5.2 (requires email).
     if let Some(login) = email {
         match detect_valid_login_auth(http, base, api_key, &key_header, login).await {
             ValidLoginOutcome::Authenticated(method) => {
@@ -287,9 +288,10 @@ async fn detect_auth_method(
     }
 
     let hint = if whoami_not_found && email.is_none() {
-        "auth detection failed: rest/whoami not available and no \
-         --email provided for rest/valid_login fallback. \
-         Re-run `bzr config set-server` with --email your@email."
+        "auth detection failed: rest/whoami not available and no email provided for \
+         the Bugzilla 5.0/5.2 rest/valid_login fallback. Configure a named server \
+         with `bzr config set-server --email`, or add `--server-email` to an inline \
+         `--server-url` invocation."
     } else if whoami_not_found {
         "auth detection failed: rest/valid_login did not confirm \
          your credentials. Check your API key and email address."

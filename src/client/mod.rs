@@ -79,7 +79,7 @@ pub struct BugzillaClient {
     pub(super) api_mode: ApiMode,
     pub(super) xmlrpc: XmlRpcClient,
     pub(super) strict_xmlrpc: Box<XmlRpcClient>,
-    /// Email hint for Bugzilla 5.0 compatibility (whoami fallback via user lookup).
+    /// Email hint for the Bugzilla 5.0/5.2 whoami fallback via user lookup.
     email_hint: Option<String>,
     /// The configured/inline server name this client resolved against, surfaced
     /// by `whoami` so a single call reports which server the identity belongs to.

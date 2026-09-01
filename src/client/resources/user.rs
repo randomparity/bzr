@@ -36,7 +36,7 @@ impl BugzillaClient {
         match resp {
             Ok(r) => self.parse_json(r).await,
             Err(BzrError::Api { code: 32614, .. } | BzrError::HttpStatus { status: 404, .. }) => {
-                // /rest/whoami not available (Bugzilla < 5.1). May surface as
+                // /rest/whoami is absent on Bugzilla 5.0/5.2. It may surface as
                 // API error 32614 (JSON response) or raw HTTP 404 (non-JSON server).
                 // Fall back to looking up the user by email if available.
                 tracing::debug!("whoami endpoint not found, falling back to user lookup");
@@ -45,7 +45,7 @@ impl BugzillaClient {
                 } else {
                     Err(BzrError::Api {
                         code: 32614,
-                        message: "whoami not available on this server; add --email to your server config for Bugzilla 5.0 compatibility".into(),
+                        message: "whoami not available on this server; configure a named server with `bzr config set-server --email`, or add `--server-email` to an inline `--server-url` invocation, for the Bugzilla 5.0/5.2 fallback".into(),
                     })
                 }
             }
@@ -53,7 +53,7 @@ impl BugzillaClient {
         }
     }
 
-    /// Fallback for Bugzilla < 5.1 which lacks `/rest/whoami`.
+    /// Fallback for Bugzilla 5.0/5.2, which lack `/rest/whoami`.
     async fn whoami_via_user_lookup(&self, email: &str) -> Result<WhoamiResponse> {
         let data: UserSearchResponse = self.get_json_query("user", &[("names", email)]).await?;
         data.users

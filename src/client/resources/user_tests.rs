@@ -29,6 +29,24 @@ async fn whoami_returns_user_info() {
 }
 
 #[tokio::test]
+async fn whoami_missing_email_names_named_and_inline_recovery() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock)
+        .await;
+
+    let error = test_client(&mock.uri())
+        .whoami()
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("config set-server --email"), "{error}");
+    assert!(error.contains("--server-email"), "{error}");
+}
+
+#[tokio::test]
 async fn search_users_returns_matches() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
