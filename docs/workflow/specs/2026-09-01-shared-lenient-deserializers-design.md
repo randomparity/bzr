@@ -28,14 +28,12 @@ changing any command-visible behavior.
 
 ## Components and data flow
 
-`src/types/deserialization.rs` owns two serde-compatible functions plus the configured unsigned
-decoder they share:
+`src/types/deserialization.rs` owns two serde-compatible decoders:
 
-- `u64_from_number_or_string` returns a `u64` from a non-negative JSON integer or a decimal string.
-  It rejects booleans, floats, null, negative numbers and strings, and overflow.
-- `u64_from_number_or_string_with` performs the same decoding with caller-supplied expectation and
-  invalid-value messages. It exists so a migrated consumer can preserve its established serde
-  diagnostics rather than exposing the shared adapter's generic wording.
+- `u64_from_number_or_string` returns a `u64` from a non-negative JSON integer or a decimal string
+  using caller-supplied expectation and invalid-value messages. It rejects booleans, floats, null,
+  negative numbers and strings, and overflow while preserving each consumer's established serde
+  diagnostics.
 - `option_bool_from_int_or_bool` returns `None` for null, `Some(bool)` for JSON booleans, and
   `Some(false)`/`Some(true)` for integer `0`/`1`. The caller's `#[serde(default)]` continues to
   supply `None` for an absent field.

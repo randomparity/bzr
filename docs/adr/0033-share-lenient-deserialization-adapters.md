@@ -20,9 +20,9 @@ shared `sort_key` adapter. Share only exact wire contracts:
 - non-negative `u64` from a JSON integer or decimal string; and
 - `Option<bool>` from null, a JSON boolean, or exact integer `0`/`1`.
 
-The unsigned decoder accepts caller-supplied expectation and invalid-value messages; its ordinary
-serde field adapter supplies generic unsigned wording. This keeps decoding logic shared without
-changing established consumer diagnostics.
+The unsigned decoder accepts caller-supplied expectation and invalid-value messages. This keeps
+decoding logic shared without changing established consumer diagnostics or adding an unused
+future-facing wrapper before a dependent issue supplies its first production caller.
 
 Product access IDs use the configured shared unsigned decoder with their existing messages and
 retain their private post-decode nonzero check. Attachment flags use the shared optional-bool
