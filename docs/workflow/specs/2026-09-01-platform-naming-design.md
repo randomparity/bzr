@@ -20,7 +20,9 @@ Create and update payloads serialize `platform`. Create CLI/JSON, clone override
 update CLI/JSON use `platform`. The legacy CLI spelling remains a hidden clap alias, so
 existing scripts work without advertising the deprecated spelling. Create JSON accepts
 the legacy key as a serde alias; clap/serde reject conflicting duplicate input rather than
-choosing an order-dependent winner.
+choosing an order-dependent winner. The published create schema encodes the same at-most-one
+constraint for both a single object and each array item, with schema validation tests for
+canonical-only, alias-only, and conflicting inputs.
 
 Search already exposes `--platform`; its mapping is corrected so every external and
 internal name is `platform`. Output headers remain the user-friendly `PLATFORM`.
@@ -44,5 +46,6 @@ the pre-fix deserializer. Serialization tests require both 2.1.x keys to agree; 
 and CLI tests require canonical write names and the legacy CLI alias. Focused tests run
 through `make test-one T=<substring>`, then `make test-fast`, `make lint`, and `make test`.
 Functional phase assertions create, view, update, and clone a platform and read every
-value back; `make functional-test-all` executes those checks on bz50, bz52, and bz53.
-
+value back. The existing cross-transport sequence also requires identical populated
+`.platform` values through REST, Hybrid, and forced XML-RPC. `make functional-test-all`
+executes those checks on bz50, bz52, and bz53.

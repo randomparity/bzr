@@ -57,17 +57,21 @@ create JSON accepts legacy `rep_platform` for the transition.
 ## Task 3: Cascade the published contract and functional proof
 
 Files: `src/output/mod.rs`, `schemas/bug.json`, `schemas/bug-create-input.json`,
-`docs/bzr-cli.md`, `README.md`, `content/skills/bzr-release-readiness/SKILL.md`,
-`content/skills/bzr-release-readiness/tests/fixtures/release-bugs.json`, and
-`tests/functional/phases/08-bugs.sh`, `10-bug-clone.sh`, `18a-json-envelope.sh`.
+`schemas/bug-update-input.json`, parser/schema drift tests, `docs/bzr-cli.md`, `README.md`,
+the embedded bzr-reference, dependency-analysis, and release-readiness skill consumers and
+fixtures, every active runtime/test/functional `2.0.0` version pin found by bounded search,
+and `tests/functional/phases/08-bugs.sh`, `10-bug-clone.sh`, `18a-json-envelope.sh`, and
+`99-sequences.sh`. Historical ADR/spec examples remain unchanged.
 
 Interfaces: all versioned envelopes report `2.1.0`; functional helpers read `.platform`
 from actual command output on each matrix server.
 
 1. Update schemas and contract examples to canonical `platform`, retaining only the
-   explicitly deprecated output/input alias documentation.
-2. Add functional create/view/update/clone readback assertions and update schema version.
+   explicitly deprecated output/input alias documentation. Encode at most one of the two
+   create-input names for object and array-item forms, and test canonical-only, alias-only,
+   and conflicting inputs.
+2. Add functional create/view/update/clone readback assertions, force REST/Hybrid/XML-RPC
+   platform comparison in the existing sequence, and update every active schema-version pin.
 3. Run `make test-fast`, `make lint`, `make test`, and `make functional-test-all`; all
    commands must exit zero, with all three Bugzilla arms passing.
 4. Review the diff for accidental template-persistence migration and leave it unchanged.
-
