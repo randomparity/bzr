@@ -19,8 +19,9 @@ persistence, or migration surface.
 ## Considered designs
 
 1. **Operation-scoped search handle (selected).** The client resolves configured versus forced
-   REST transport once, emits the warning during resolution, and returns a handle used for every
-   page. The type makes the chosen transport reusable without mutable global or client state.
+   REST transport once, records forced REST with a pending warning, and returns a handle used for
+   every page. Its first forced-REST execution emits the warning immediately before entering REST.
+   The type makes the chosen transport reusable without mutable global or client state.
 2. **Command-layer transport branching.** Paging could inspect raw parameters and call a newly
    exposed REST method, but that would duplicate a client-owned transport rule in the command
    layer and expose lower-level transport details.
