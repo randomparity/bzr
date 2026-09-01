@@ -43,15 +43,25 @@ a safety gate, not a renderer.
    new dependency presentation template. If either is absent or unreadable, or the marker differs,
    report that safe HTML composition is unavailable and render Markdown. Consume only the
    validated analysis document.
-5. Create one self-contained page, then run the dependency presentation validator against that
-   exact file. The validator parses the page, requires the report structure and text alternative,
+5. Create one self-contained page at a unique candidate path, never directly at the requested
+   destination. Run the dependency presentation validator with that exact file and its exact
+   validated analysis snapshot. The page carries template-defined semantic hooks for aggregate
+   values, nodes, edges, caps, policies, timestamps, boundaries, and provenance. The validator
+   compares those hooks with the snapshot, requires the report structure and equivalent graph text,
    rejects executable or remote content, restricts elements and attributes, checks inline CSS for
-   remote loads, and validates any optional bug-link host. A validation failure discards the HTML
-   claim and routes to Markdown before a browser opens the file.
-6. Open the validated page through the same active artifact capability at 1440 by 1000 and 390 by
-   844 CSS pixels at 100% zoom. Record both screenshots and a pass/fail checklist covering clipping,
-   overlap, hierarchy, readable labels, the graph text alternative, limitations, and provenance.
-   Correct a visible defect within the same snapshot and rerun validation before reopening.
+   remote loads, and validates optional bug links against confirmed origins. Negative tests mutate
+   one otherwise-safe semantic hook at a time and require rejection. A validation failure removes
+   the candidate, preserves any existing HTML destination, and routes to Markdown at a distinct
+   path before a browser opens the file.
+6. Open the validator-clean candidate through the same active artifact capability at 1440 by 1000
+   and 390 by 844 CSS pixels at 100% zoom. Record both screenshots and a pass/fail checklist. The
+   measurable checks require document `scrollWidth <= clientWidth`, every required section box to
+   remain within the horizontal viewport, body text at least 14 CSS pixels, graph labels at least 12
+   CSS pixels, and the headings, graph text alternative, limitations, and provenance to be visible.
+   Inspect residual overlap and hierarchy visually. Permit one correction attempt within the same
+   snapshot; rerun validation before reopening. An unresolved defect removes the candidate and
+   triggers Markdown fallback. After both viewports pass, atomically promote the same byte-identical
+   candidate to the destination.
 
 Artifact verification does not authorize graph recollection, new estimates, or inferred dates.
 If the capability cannot open the page or a safe correction cannot be completed, discard the HTML
@@ -80,6 +90,12 @@ The page uses one explicit `h1` and the following ordered sections:
   lower bounds, warnings, incomplete boundaries, absence of duration semantics, and sanitized
   provenance.
 
+A valid zero-node partial analysis keeps every section. The executive summary says `No nodes were
+collected from this partial snapshot` and foregrounds its truncation or collection limitation. The
+attention, map, bottleneck, and oldest-actionable sections say `No nodes were collected`; the map
+still provides that text alternative and renders no invented blocker or relationship. None of
+these statements implies that the installation contains no matching bugs.
+
 Counts, charts, and callouts cite the contributing server-qualified bug IDs or name the exact
 analysis field behind an aggregate. The report displays no proposed completion date, delivery
 date, schedule, or duration estimate. Components and topological layers may be described only as
@@ -102,9 +118,12 @@ The analysis schema binds evidence to a server alias but not to a URL. Bug ident
 render as server-qualified plain text by default. A link may be added only when the operator
 confirms that the current sanitized alias-to-base mapping is the original collection mapping. The
 writer then builds the link from the validated numeric ID, parses it, and restricts it to HTTP or
-HTTPS on that confirmed host. Without that confirmation, omit links and disclose why; never infer a
-binding from a matching alias. The validator receives only confirmed hosts and rejects every other
-link target.
+HTTPS on that confirmed origin: normalized scheme, lowercase host, effective port, and base path.
+Without that confirmation, omit links and disclose why; never infer a binding from a matching
+alias. The validator receives mappings as `alias=BASE_URL`, rejects userinfo and fragments, and
+requires every anchor to equal the canonical numeric `show_bug.cgi?id=N` URL derived from that
+exact base. It rejects scheme downgrade, alternate ports, lookalike hosts, and every unconfirmed
+target.
 
 The page carries inline CSS and optional inline SVG only. It contains no scripts, event-handler
 attributes, external styles, fonts, images, frames, media, object/embed elements, forms, refresh
@@ -143,6 +162,7 @@ Failure modes and gates:
 | Bugzilla text becomes active HTML or changes document structure | 5 | Validate the exact generated page plus deterministic hostile assertions; block |
 | Remote active content or an unexpected-host link is introduced | 5 | Parsed element/attribute allowlist and link-origin assertions; block |
 | Bugzilla text is obeyed as an instruction or tool input | 5 | Injection fixture plus recorded active-capability acceptance transcript/tool summary; block |
+| Generated statements diverge from the source snapshot | 4 | Exact-page semantic-hook comparison with mutated-fact negative tests; block |
 | Partial, boundary, unknown, or truncation evidence is hidden | 4 | Required fixture text and field-to-section assertions; block |
 | Structural evidence is presented as a schedule or date | 4 | Forbidden-claim assertions and human review of headings/callouts; block |
 | Graph direction, cycles, or server-qualified identity is wrong | 4 | Fixture relationship/text-alternative assertions; block |
@@ -176,25 +196,34 @@ Eval cases:
 - **DP-HTML-008 (privacy and provenance, block):** custom-search provenance includes allowlisted
   parameter names but no URL, values, credentials, raw server errors, or full command line.
 - **DP-HTML-009 (bounded work, block):** visual verification at both exact viewports finds a layout
-  defect; correction stays within the same snapshot and capability workflow, validation reruns
-  before reopening, and an unresolved defect triggers Markdown fallback.
+  defect; at most one correction stays within the same snapshot and capability workflow,
+  validation reruns before reopening, and an unresolved defect triggers Markdown fallback.
 - **DP-HTML-010 (alias drift, block):** when no original alias-to-base binding is confirmed, IDs are
-  plain text and the omission is disclosed; a mismatched host fails exact-page validation.
+  plain text and the omission is disclosed; downgrade, alternate-port, userinfo, fragment,
+  lookalike-host, and mismatched-origin links fail exact-page validation.
 - **DP-HTML-011 (safety-marker mismatch, block):** a readable reference with any first-line marker
   other than `Artifact safety contract: bzr-project-manager-reporting/v1` routes to Markdown.
+- **DP-HTML-012 (zero-node partial, block):** the existing empty partial fixture keeps all sections,
+  says no nodes were collected, foregrounds the limitation, renders no graph nodes or blocker
+  signal, and never implies global absence.
+- **DP-HTML-013 (candidate failure, block):** an unsafe or factually mutated candidate is removed,
+  an existing destination remains byte-identical, and Markdown is written only to a distinct path.
 
-The deterministic matrix has separate complete, hostile, partial/boundary, truncation, time, and
-provenance analysis inputs with expected HTML, plus marker-mismatch and capability-absence routing
-fixtures. Cycle/direction relationships appear in the partial fixture and must match its graph text
-alternative. A manifest maps every DP-HTML case to its input and assertions so no case is implied by
-an incompatible fixture state.
+The deterministic matrix has separate complete, hostile, partial/boundary, truncation, time,
+provenance, and zero-node analysis inputs with expected HTML, plus marker-mismatch,
+capability-absence, candidate-failure, and link-origin routing fixtures. Cycle/direction
+relationships appear in the partial fixture and must match its graph text alternative. A manifest
+maps every DP-HTML case to its input and assertions so no case is implied by an incompatible fixture
+state. For every source-bound category, one negative fixture mutates an otherwise-safe HTML value,
+node, edge, cap, timestamp group, policy, boundary, or provenance hook and must fail validation.
 
 Repository checks are code-based except the explicitly manual active-capability acceptance run.
-That run uses the hostile input, records the presentation prompt, generated-path identity,
-validator result, prohibited-tool summary, both viewport screenshots, and checklist verdict. It is
-a bounded acceptance record for this change, not a general agent-compliance harness. Visual
-readability and instruction-following remain active-capability gates and are never inferred from
-parser success or model self-grading.
+That run uses the hostile input plus the partial/truncation and time/provenance inputs, records each
+presentation prompt, generated-path identity, source-snapshot digest, validator result,
+prohibited-tool summary, both viewport screenshots, and checklist verdict. It is a bounded
+acceptance record for this change, not a general agent-compliance harness. Visual readability and
+instruction-following remain active-capability gates and are never inferred from parser success or
+model self-grading.
 
 ## Threat model
 
@@ -222,7 +251,9 @@ parser success or model self-grading.
   HTTP or HTTPS plus the operator-confirmed expected host before emitting an anchor. Without a
   confirmed original mapping, emit plain identities and disclose the omitted links.
 - Keep CSS and SVG inline and reject every remote or executable content category listed above.
-- Run parsed-document assertions against the exact generated page before opening it. Use the
+- Run source-bound parsed-document assertions against the exact generated page before opening it.
+  Stage the candidate separately, remove it on failure, preserve any destination, and atomically
+  promote only the byte-identical page that passed both validation and visual inspection. Use the
   deterministic hostile/instruction fixture and the bounded active-capability acceptance record as
   the AI boundary check, then open/render only the validated page for layout inspection.
 - Route an unavailable or unverifiable HTML capability to Markdown and state the limitation.
@@ -238,10 +269,11 @@ self-contained presentation artifact and would add separate trust boundaries.
 ## Verification
 
 - Contract tests validate the capability routing language, sibling safety reference, report
-  template, deterministic fixture matrix and case manifest, required sections, hostile escaping,
-  element/attribute allowlist, exact generated-file validation, optional expected-host numeric bug
-  links, alias-drift omission, graph/text alternative, caps, unknowns, timestamp ordering,
-  provenance, and forbidden schedule claims.
+  template, deterministic fixture matrix and case manifest, required and zero-node sections,
+  hostile escaping, element/attribute allowlist, source-bound exact generated-file validation,
+  safe candidate lifecycle, optional exact-origin numeric bug links, alias-drift omission,
+  graph/text alternative, caps, unknowns, timestamp ordering, provenance, and forbidden schedule
+  claims.
 - Existing renderer tests prove Markdown and Mermaid behavior is unchanged.
 - The installed-copy functional phase runs the dependency presentation contract against files
   installed by the release binary.
