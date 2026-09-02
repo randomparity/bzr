@@ -35,14 +35,17 @@ fn select_attachment(value: &serde_json::Value, attachment_id: u64) -> Result<At
 
     match attachments {
         serde_json::Value::Object(attachments) => {
-            let attachment = attachments
-                .get(&attachment_id.to_string())
-                .ok_or_else(not_found)?;
-            Attachment::deserialize(attachment).map_err(|error| {
+            let mut attachments = std::collections::HashMap::<String, Attachment>::deserialize(
+                attachments,
+            )
+            .map_err(|error| {
                 BzrError::Deserialize(format!(
                     "attachment by-ID `attachments` object entry: {error}"
                 ))
-            })
+            })?;
+            attachments
+                .remove(&attachment_id.to_string())
+                .ok_or_else(not_found)
         }
         serde_json::Value::Array(attachments) => {
             let attachments = serde_json::from_value::<Vec<Attachment>>(serde_json::Value::Array(

@@ -400,16 +400,23 @@ if redhat_shape_start "$BZ_PORT"; then
     fi
 
     if [[ $_AC_ATTACH_OK -eq 1 ]]; then
+        _AC_BODY_FETCH_BEFORE=$(awk \
+            '/attachment-comment shaped route=attachment-by-id-body count=/ { count++ } END { print count + 0 }' \
+            "$REDHAT_SHAPE_LOG")
         run_bzr --api rest \
             --server-url "http://127.0.0.1:${REDHAT_SHAPE_PORT}" \
             --server-api-key-env BZR_FUNC_INLINE_KEY --server-email "$ADMIN_EMAIL" \
             attachment download --bug "$_AC_ATTACH_BUG" --out-dir "$_AC_ATTACH_BULK"
+        _AC_BODY_FETCH_AFTER=$(awk \
+            '/attachment-comment shaped route=attachment-by-id-body count=/ { count++ } END { print count + 0 }' \
+            "$REDHAT_SHAPE_LOG")
         _AC_BULK_FILE=""
         if [[ -d "$_AC_ATTACH_BULK/$_AC_ATTACH_BUG" ]]; then
             _AC_BULK_FILE=$(find "$_AC_ATTACH_BULK/$_AC_ATTACH_BUG" \
                 -type f -print -quit)
         fi
-        if ! assert_success || [[ -z "$_AC_BULK_FILE" ]] ||
+        if ! assert_success || [[ $_AC_BODY_FETCH_AFTER -le $_AC_BODY_FETCH_BEFORE ]] ||
+            [[ -z "$_AC_BULK_FILE" ]] ||
             ! assert_file_contains "$_AC_BULK_FILE" "attachment-comment proxy bytes"; then
             _AC_ATTACH_OK=0
         fi
@@ -453,4 +460,5 @@ rm -f "$_AC_ATTACH_FILE" "$_AC_ATTACH_DOWNLOAD"
 rm -rf "$_AC_ATTACH_BULK"
 unset _AC_ATTACH_BUG _AC_ATTACH_FILE _AC_ATTACH_DOWNLOAD _AC_ATTACH_BULK
 unset _AC_ATTACH_ID _AC_ATTACH_OK _AC_ATTACH_ROUTE _AC_BULK_FILE
+unset _AC_BODY_FETCH_BEFORE _AC_BODY_FETCH_AFTER
 echo ""

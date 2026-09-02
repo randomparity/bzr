@@ -285,6 +285,20 @@ def shape_attachment_comment_response(method, path, data):
     elif is_list:
         exclusion = urllib.parse.parse_qs(parsed.query).get("exclude_fields")
         if exclusion == ["data"]:
+            attachment_lists = []
+            bugs = value.get("bugs") if isinstance(value, dict) else None
+            if isinstance(bugs, dict):
+                attachment_lists.extend(
+                    attachments for attachments in bugs.values()
+                    if isinstance(attachments, list)
+                )
+            attachments = value.get("attachments") if isinstance(value, dict) else None
+            if isinstance(attachments, list):
+                attachment_lists.append(attachments)
+            for attachments in attachment_lists:
+                for attachment in attachments:
+                    if isinstance(attachment, dict):
+                        attachment.pop("data", None)
             evidence["attachment-list-excludes-body"] = 1
 
     else:
@@ -346,7 +360,10 @@ def make_handler(backend_port):
             self._forward("POST")
 
         def do_PUT(self):
-            self._forward("PUT")
+            if attachment_comment_mode:
+                self._forward("PUT")
+            else:
+                self.send_error(501, "Unsupported method ('PUT')")
 
         def _forward(self, method):
             headers = {key: value for key, value in self.headers.items()
@@ -506,19 +523,68 @@ class ShapeTests(unittest.TestCase):
         self.assertEqual(evidence, {"comment-privacy": 2})
 
     def test_observes_exact_attachment_list_body_exclusion_without_query_values(self):
-        payload = b'{"bugs":{"42":[]}}'
+        payload = b'{"bugs":{"42":[{"id":123,"data":"Ynl0ZXM="}]}}'
         body, evidence = shape_attachment_comment_response(
             "GET",
             "/rest/bug/42/attachment?exclude_fields=data&Bugzilla_api_key=secret",
             payload,
         )
-        self.assertEqual(body, payload)
+        self.assertEqual(json.loads(body), {"bugs": {"42": [{"id": 123}]}})
         self.assertEqual(evidence, {"attachment-list-excludes-body": 1})
 
         _, evidence = shape_attachment_comment_response(
             "GET", "/rest/bug/42/attachment?exclude_fields=id,data", payload
         )
         self.assertEqual(evidence, {})
+
+    def test_put_is_rejected_outside_attachment_comment_mode(self):
+        previous_mode = os.environ.pop("BZR_FUNC_REDHAT_MODE", None)
+        blocker = socket.socket()
+        blocker.bind(("127.0.0.1", 0))
+        unavailable_port = blocker.getsockname()[1]
+        blocker.close()
+        server, thread = self._start_server(unavailable_port)
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.server_port}/rest/bug/attachment/123",
+                data=b"{}",
+                method="PUT",
+            )
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(request, timeout=2)
+            self.assertEqual(error.exception.code, 501)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+            if previous_mode is not None:
+                os.environ["BZR_FUNC_REDHAT_MODE"] = previous_mode
+
+    def test_put_is_forwarded_in_attachment_comment_mode(self):
+        previous_mode = os.environ.get("BZR_FUNC_REDHAT_MODE")
+        os.environ["BZR_FUNC_REDHAT_MODE"] = "attachment-comment"
+        blocker = socket.socket()
+        blocker.bind(("127.0.0.1", 0))
+        unavailable_port = blocker.getsockname()[1]
+        blocker.close()
+        server, thread = self._start_server(unavailable_port)
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.server_port}/rest/bug/attachment/123",
+                data=b"{}",
+                method="PUT",
+            )
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(request, timeout=2)
+            self.assertEqual(error.exception.code, 502)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+            if previous_mode is None:
+                os.environ.pop("BZR_FUNC_REDHAT_MODE", None)
+            else:
+                os.environ["BZR_FUNC_REDHAT_MODE"] = previous_mode
 
     def test_attachment_comment_shape_leaves_unrelated_routes_untouched(self):
         payload = b"not json"

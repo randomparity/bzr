@@ -314,6 +314,38 @@ async fn rest_attachment_by_id_returns_not_found_for_known_missing_envelopes() {
 }
 
 #[tokio::test]
+async fn rest_attachment_by_id_rejects_malformed_keyed_sibling_before_selection() {
+    for envelope in [
+        serde_json::json!({"attachments": {
+            "bad": 1,
+            "200": rest_attachment_by_id_value(200, "requested.txt")
+        }}),
+        serde_json::json!({"attachments": {
+            "bad": 1
+        }}),
+    ] {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/attachment/200"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(envelope))
+            .expect(2)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        for result in [
+            client.get_attachment(200).await,
+            client.get_attachment_metadata(200).await,
+        ] {
+            assert!(
+                matches!(result, Err(BzrError::Deserialize(_))),
+                "malformed keyed sibling must be decoded before selection: {result:?}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
 async fn rest_attachment_by_id_rejects_missing_or_scalar_envelope() {
     for envelope in [
         serde_json::json!({}),
