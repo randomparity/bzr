@@ -331,6 +331,7 @@ async fn bug_verbs_expect_unchanged_since_collision_skips_write() {
 async fn bug_verbs_expect_unchanged_since_match_writes_update() {
     let since = "2026-06-19T12:00:00Z";
     let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_status_field(&mock, DEFAULT_STATUSES).await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/5"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
