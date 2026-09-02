@@ -16,8 +16,9 @@ use Bugzilla's positive substring compatibility behavior. Their `!value` form
 must therefore emit `nowordssubstr`, the inverse of `anywordssubstr`. A
 negated role value is valid only when its post-`!` content contains at least
 one nonempty whitespace/comma-delimited word; bare `!` and separator-only
-forms fail input validation because Bugzilla treats their positive and
-negative forms identically rather than as complements.
+forms fail input validation because they define no word set to complement and
+can make `nowordssubstr` generate invalid empty `NOT()` SQL on supported
+Bugzilla releases.
 Exact-match fields continue to use `notequals`; native substring fields such as
 whiteboard and URL continue to use `notsubstring`.
 
