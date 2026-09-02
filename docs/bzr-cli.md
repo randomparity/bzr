@@ -189,7 +189,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │                   [--see-also-add <URL>] [--see-also-remove <URL>]
 │   │                   [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 │   │                   [--expect-unchanged-since <TIMESTAMP>]
-│   ├── resolve <ID...> [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>]
+│   ├── resolve <ID...> [--status <STATUS>] [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>]
 │   │                   [--comment-private] [--expect-unchanged-since <TIMESTAMP>]
 │   ├── close <ID...> [--status <STATUS>] [--as <RESOLUTION>] [--comment <BODY>]
 │   │                 [--comment-file <PATH>] [--comment-private]
