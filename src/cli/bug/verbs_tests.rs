@@ -24,6 +24,7 @@ fn parse_resolve_defaults_to_fixed() {
     match bug_action(&["bzr", "bug", "resolve", "12345"]) {
         BugAction::Resolve(resolve) => {
             assert_eq!(resolve.ids, vec![12345]);
+            assert_eq!(resolve.status, "RESOLVED");
             assert_eq!(resolve.as_resolution, "FIXED");
             assert!(resolve.comment.comment.is_none());
         }
@@ -39,6 +40,8 @@ fn parse_resolve_with_as_and_comment_and_batch() {
         "resolve",
         "12345",
         "12346",
+        "--status",
+        "CUSTOM_RESOLVED",
         "--as",
         "WONTFIX",
         "--comment",
@@ -47,6 +50,7 @@ fn parse_resolve_with_as_and_comment_and_batch() {
     ]) {
         BugAction::Resolve(resolve) => {
             assert_eq!(resolve.ids, vec![12345, 12346]);
+            assert_eq!(resolve.status, "CUSTOM_RESOLVED");
             assert_eq!(resolve.as_resolution, "WONTFIX");
             assert_eq!(resolve.comment.comment.as_deref(), Some("out of scope"));
             assert!(resolve.comment.comment_private);

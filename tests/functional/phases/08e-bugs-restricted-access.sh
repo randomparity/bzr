@@ -276,6 +276,68 @@ if assert_exit_code 2 && assert_stderr_json '.error.type' "not_found"; then
     test_pass
 fi
 
+# ── Structured empty groups on a default-control product ─────────────
+# `membercontrol = othercontrol = 2` is CONTROLMAPDEFAULT: without a groups
+# key, Bugzilla applies functest-grp; an explicit empty array must override
+# that default. This is deliberately distinct from the mandatory-control
+# fixture above, where every created bug belongs to the group regardless of
+# the payload.
+DEFAULT_GROUP_PRODUCT=$(unique_name GroupDefaultProd)
+DEFAULT_GROUP_COMPONENT=GroupDefaultComp
+_DG_JSON_DIR=$(mktemp -d /tmp/bzr-func-default-groups.XXXXXX)
+
+test_begin "fixture-product-with-a-default-group" "fixture: product with a default group control"
+run_bzr product create --name "$DEFAULT_GROUP_PRODUCT" \
+    --description "default group control" --version 1.0
+if assert_success; then
+    run_bzr component create --product "$DEFAULT_GROUP_PRODUCT" \
+        --name "$DEFAULT_GROUP_COMPONENT" --description "default group component" \
+        --default-assignee "$ADMIN_EMAIL"
+    if assert_success; then
+        _DG_SQL=$(mktemp /tmp/bzr-func-default-group.XXXXXX.sql)
+        cat >"$_DG_SQL" <<SQL
+INSERT INTO group_control_map
+    (group_id, product_id, entry, membercontrol, othercontrol, canedit,
+     editcomponents, editbugs, canconfirm)
+SELECT g.id, p.id, 1, 2, 2, 0, 0, 0, 0
+FROM groups AS g
+JOIN products AS p ON p.name = '${DEFAULT_GROUP_PRODUCT}'
+WHERE g.name = 'functest-grp'
+ON DUPLICATE KEY UPDATE entry = 1, membercontrol = 2, othercontrol = 2;
+SQL
+        if run_bugzilla_sql_file "$_DG_SQL"; then test_pass; else
+            test_fail "could not apply default group control"
+        fi
+        rm -f "$_DG_SQL"
+        unset _DG_SQL
+    fi
+fi
+
+write_json_fixture "$_DG_JSON_DIR/groups-omitted.json" \
+    "{\"product\":\"$DEFAULT_GROUP_PRODUCT\",\"component\":\"$DEFAULT_GROUP_COMPONENT\",\"summary\":\"default groups omitted\",\"version\":\"1.0\",\"op_sys\":\"Linux\",\"platform\":\"PC\",\"description\":\"d\"}"
+test_begin "bug-create-omitted-groups-applies-default-control" "bug create omitting groups applies default control"
+run_bzr bug create --from-json "$_DG_JSON_DIR/groups-omitted.json"
+if assert_success; then
+    DEFAULT_GROUP_OMITTED_BUG=$(jq -r '.id' "$BZR_STDOUT")
+    run_bzr bug view "$DEFAULT_GROUP_OMITTED_BUG"
+    if assert_success &&
+        assert_json '.groups | index("functest-grp") != null' "true"; then test_pass; fi
+fi
+
+write_json_fixture "$_DG_JSON_DIR/groups-empty.json" \
+    "{\"product\":\"$DEFAULT_GROUP_PRODUCT\",\"component\":\"$DEFAULT_GROUP_COMPONENT\",\"summary\":\"default groups explicit empty\",\"version\":\"1.0\",\"op_sys\":\"Linux\",\"platform\":\"PC\",\"description\":\"d\",\"groups\":[]}"
+test_begin "bug-create-explicit-empty-groups-overrides-default-control" "bug create groups [] overrides default control"
+run_bzr bug create --from-json "$_DG_JSON_DIR/groups-empty.json"
+if assert_success; then
+    DEFAULT_GROUP_EMPTY_BUG=$(jq -r '.id' "$BZR_STDOUT")
+    run_bzr bug view "$DEFAULT_GROUP_EMPTY_BUG"
+    if assert_success && assert_json '.groups | length' "0"; then test_pass; fi
+fi
+
+rm -r "$_DG_JSON_DIR"
+unset DEFAULT_GROUP_PRODUCT DEFAULT_GROUP_COMPONENT DEFAULT_GROUP_OMITTED_BUG
+unset DEFAULT_GROUP_EMPTY_BUG _DG_JSON_DIR
+
 # ── Credentialed error output (issue #505) ───────────────────────────
 # The `restricted` server authenticates with `--auth-method query_param`, so
 # its key travels in the request URL — the shape that leaks when a deployment

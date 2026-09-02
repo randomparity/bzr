@@ -6,13 +6,18 @@ pub const RESOLVE_LONG_ABOUT: &str = r#"Resolve one or more bugs (sets status RE
 and a resolution).
 
 Sugar for `bug update <IDs> --status RESOLVED --resolution <AS>`.
-`--as` defaults to `FIXED`; pass another resolution (`WONTFIX`,
-`INVALID`, `WORKSFORME`, `DUPLICATE`, ...) to override. Accepts
-multiple IDs (batch) and the same `--comment` flags as `bug update`.
+`RESOLVED` is a stock Bugzilla 5.x resolved status; override with
+`--status <STATUS>` for installs that define a custom resolved status.
+The target status is validated against the server's status list (exact,
+case-sensitive); an unknown value exits 7. `--as` defaults to `FIXED`;
+pass another resolution (`WONTFIX`, `INVALID`, `WORKSFORME`,
+`DUPLICATE`, ...) to override. Accepts multiple IDs (batch) and the
+same `--comment` flags as `bug update`.
 
 Examples:
 
   bzr bug resolve 12345
+  bzr bug resolve 12345 --status CUSTOM_RESOLVED
   bzr bug resolve 12345 12346 --as WONTFIX
   bzr bug resolve 12345 --comment "Fixed in 9.1""#;
 
@@ -66,6 +71,10 @@ pub(crate) struct ResolveArgs {
     /// Bug ID(s) to resolve.
     #[arg(required = true, num_args = 1..)]
     pub ids: Vec<u64>,
+    /// Status to transition to (default `RESOLVED`). Override for installs
+    /// with a custom resolved status. Validated against the server status list.
+    #[arg(long, value_name = "STATUS", default_value = "RESOLVED")]
+    pub status: String,
     /// Resolution to set (default `FIXED`).
     #[arg(long = "as", value_name = "RESOLUTION", default_value = "FIXED")]
     pub as_resolution: String,
