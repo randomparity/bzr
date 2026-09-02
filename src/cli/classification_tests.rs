@@ -39,19 +39,25 @@ fn classification_help_describes_disabled_stream_behavior() {
     let list_help = list.render_long_help().to_string();
 
     assert!(list_help.contains("API error 900"), "{list_help}");
+    assert!(list_help.contains("stdout in table mode"), "{list_help}");
     assert!(
-        list_help.contains("Table output writes the disabled note to stdout"),
+        list_help.contains("empty collection to stdout"),
         "{list_help}"
     );
+    assert!(list_help.contains("note to stderr."), "{list_help}");
     assert!(
-        list_help.contains("JSON-family output writes an empty collection to stdout"),
+        list_help.contains("successfully fetched lone \"Unclassified\" row is")
+            && list_help.contains("preserved, with the"),
         "{list_help}"
     );
-    assert!(list_help.contains("the note\nto stderr."), "{list_help}");
 
     let top_help = classification.render_long_help().to_string();
     assert!(top_help.contains("API error 900"), "{top_help}");
-    assert!(top_help.contains("stdout for table output"), "{top_help}");
+    assert!(top_help.contains("writes the note to stdout"), "{top_help}");
+    assert!(
+        top_help.contains("fetched \"Unclassified\" row is\npreserved"),
+        "{top_help}"
+    );
 }
 
 #[test]

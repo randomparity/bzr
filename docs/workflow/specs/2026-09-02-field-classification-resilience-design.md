@@ -22,10 +22,10 @@ This removes the root duplication with a smaller change than introducing a new p
 At the classification command boundary, match only `BzrError::Api { code: 900, .. }` from the
 whole list enumeration. This preserves the client's existing public result type and avoids hiding
 other API failures. ADR 0042 records this command-specific exception to ADR 0015: code 900 means
-the optional feature is disabled, rather than an unrelated request failure. Both error 900 and the
-successfully fetched lone `Unclassified` sentinel are rendered as disabled: raw/table mode prints
-the existing note on stdout without an empty-table sequel; JSON and NDJSON write an empty
-collection on stdout and the note on stderr.
+the optional feature is disabled, rather than an unrelated request failure. For error 900,
+raw/table mode prints the existing note on stdout without an empty-table sequel; JSON and NDJSON
+write an empty collection on stdout and the note on stderr. A successfully fetched lone
+`Unclassified` row preserves the existing row output and stderr note.
 
 Rejected approaches are duplicating the serde default, collapsing error 900 into an
 indistinguishable client-side empty vector, and emitting human prose into structured stdout.
@@ -39,9 +39,9 @@ indistinguishable client-side empty vector, and emitting human prose into struct
    first definition.
 2. `client::resources::server` removes its endpoint duplicate and maps the shared definitions to
    `CustomFieldSummary` exactly as today.
-3. `commands::classification` converts error 900 or a lone `Unclassified` result into one
-   `write_disabled` path whose destination depends on output format. Successful multi-row lists
-   and every unrelated error retain current behavior.
+3. `commands::classification` converts error 900 into a `write_disabled` path whose destination
+   depends on output format. A lone `Unclassified` result and successful multi-row lists retain
+   their existing row output; every unrelated error retains current behavior.
 4. Functional phase 05 exercises text/date/int fields and credentialless classification listing
    against each supported stock container.
 
@@ -66,6 +66,8 @@ contract.
 - API code 900 anywhere in classification enumeration is the only error that degrades. Raw/table
   stdout is exactly the existing disabled note plus a newline and stderr is empty. JSON-family
   stdout is an empty valid collection and stderr contains that note.
+- A successfully fetched lone `Unclassified` row remains in output and the disabled note remains
+  on stderr.
 - Other classification errors remain errors with their existing exit codes.
 - The resolved field name is one percent-encoded path segment; aliases are resolved before
   encoding.
@@ -99,8 +101,8 @@ Tests must be observed failing against the pre-fix implementation before product
   fixtures that observe alias requests use the encoded path emitted by the shared helper and carry
   the required field `name` that the consolidated response model reads.
 - Classification command tests cover code 900 in table, JSON, and NDJSON modes, exact stream
-  placement, lone-`Unclassified` compatibility, and unrelated-error propagation. Empty NDJSON
-  output is zero records.
+  placement, preserved lone-`Unclassified` compatibility, and unrelated-error propagation. Empty
+  NDJSON output for error 900 is zero records.
 - Functional phase 05 covers `short_desc`, a date field, and an integer field, plus credentialless
   `classification list` on default `useclassification=0`, asserting exit 0 and exact raw stdout.
 - `make lint`, `make test`, and `make functional-test-all` must pass.

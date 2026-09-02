@@ -56,8 +56,7 @@ pub(crate) async fn execute(
                         .is_some_and(|name| name.eq_ignore_ascii_case("Unclassified"))
             );
             if disabled {
-                write_disabled_classifications(format, &projection, w);
-                return Ok(());
+                let _ = writeln!(w.err, "{DISABLED_NOTE}");
             }
             write_classifications(&classifications, format, &projection, w.out);
         }

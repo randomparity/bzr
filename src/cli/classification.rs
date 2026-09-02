@@ -9,11 +9,11 @@ pub(crate) enum ClassificationAction {
     /// reads the names from the `classification` field's legal values and
     /// fetches each one's detail.
     ///
-    /// Classifications are an optional Bugzilla feature. Disabled servers
-    /// either expose only "Unclassified" or return API error 900 to
-    /// unprivileged users. Table output writes the disabled note to stdout.
-    /// JSON-family output writes an empty collection to stdout and the note
-    /// to stderr.
+    /// Classifications are an optional Bugzilla feature. An API error 900 from
+    /// a disabled server writes the note to stdout in table mode; JSON-family
+    /// output writes an empty collection to stdout and the note to stderr. A
+    /// successfully fetched lone "Unclassified" row is preserved, with the
+    /// note on stderr.
     ///
     /// Examples:
     ///

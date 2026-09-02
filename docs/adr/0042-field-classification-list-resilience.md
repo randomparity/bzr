@@ -27,8 +27,8 @@ Keep API error 900 distinguishable at the command boundary. `classification list
 code anywhere in its enumeration request sequence as a disabled-classification state: table
 output prints the existing note on
 stdout and stops, while JSON-family output writes an empty collection and sends the note to
-stderr so structured stdout stays parseable. Other API errors propagate unchanged. A lone fetched
-`Unclassified` row uses the same presentation policy.
+stderr so structured stdout stays parseable. Other API errors propagate unchanged. A successfully
+fetched lone `Unclassified` row keeps the existing row output and accompanying stderr note.
 
 This is a bounded exception to ADR 0015's default that a server-only error is surfaced: Bugzilla
 code 900 means the optional classification feature is disabled, and issue #629 explicitly requires
@@ -43,7 +43,8 @@ and issue #629 permits explicitly deferring the separate major-schema retype.
 All consumers of `/rest/field/bug` share omission behavior. Non-select field lookup reaches the
 existing empty-values message, and arbitrary field names cannot add path structure. Disabled
 classification listing succeeds for unprivileged callers without hiding unrelated failures.
-JSON-family callers receive an empty list rather than human prose on stdout.
+JSON-family callers receive an empty list rather than human prose on stdout for error 900, while
+successful sentinel responses remain backward compatible.
 
 The classification sort-key wire domain remains unchanged and retains the fork/direct-database
 negative-value limitation recorded by issue #629.

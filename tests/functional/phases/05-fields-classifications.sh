@@ -72,7 +72,7 @@ if assert_success && assert_json '.name' "Unclassified"; then test_pass; fi
 
 test_begin "classification-list" "classification list"
 run_bzr classification list
-if assert_success && assert_json_array_length '.' 0 &&
+if assert_success && assert_json_array_length '.' 1 && assert_json '.[0].name' "Unclassified" &&
     assert_stderr_contains "Note: only the default 'Unclassified' classification exists; this server likely has classifications disabled."; then test_pass; fi
 
 test_begin "credentialless-classification-list-disabled" "credentialless classification list when disabled"

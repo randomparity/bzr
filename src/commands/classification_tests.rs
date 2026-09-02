@@ -182,7 +182,7 @@ async fn classification_list_returns_sorted_json() {
 }
 
 #[tokio::test]
-async fn classification_list_notes_disabled_for_case_insensitive_unclassified() {
+async fn classification_list_preserves_case_insensitive_unclassified_with_note() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/field/bug/classification"))
@@ -209,8 +209,8 @@ async fn classification_list_notes_disabled_for_case_insensitive_unclassified() 
     )
     .await;
     assert!(result.is_ok());
-    assert_eq!(__io.out_str(), format!("{DISABLED_NOTE}\n"));
-    assert!(__io.err_str().is_empty());
+    assert!(__io.out_str().contains("uNcLaSsIfIeD"));
+    assert_eq!(__io.err_str(), format!("{DISABLED_NOTE}\n"));
 }
 
 #[tokio::test]

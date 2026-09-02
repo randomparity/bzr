@@ -106,11 +106,13 @@ async fn get_field_values_defaults_omitted_values_to_empty() {
 #[tokio::test]
 async fn get_field_values_encodes_resolved_field_name_as_one_path_segment() {
     let mock = MockServer::start().await;
-    let field_name = "cf_release/channel?include_fields=id";
+    let field_name = "cf_release/channel?include_fields=id% raw";
     Mock::given(method("GET"))
-        .and(path(format!("/rest/field/bug/{}", encode_path(field_name))))
+        .and(path(
+            "/rest/field/bug/cf%5Frelease%2Fchannel%3Finclude%5Ffields%3Did%25%20raw",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "fields": [{"name": "cf_release/channel?include_fields=id", "values": []}]
+            "fields": [{"name": "cf_release/channel?include_fields=id% raw", "values": []}]
         })))
         .expect(1)
         .mount(&mock)
