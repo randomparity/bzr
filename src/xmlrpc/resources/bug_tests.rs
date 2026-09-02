@@ -43,6 +43,17 @@ async fn search_bugs_returns_results() {
     assert_eq!(bugs[0].summary.as_deref(), Some("Test bug"));
     assert_eq!(bugs[0].status.as_deref(), Some("NEW"));
     assert_eq!(bugs[0].product.as_deref(), Some("TestProduct"));
+
+    let requests = mock.received_requests().await.unwrap();
+    let body = String::from_utf8(requests[0].body.clone()).unwrap();
+    assert!(body.contains("<name>include_fields</name>"));
+    assert!(body.contains("<string>target_milestone</string>"));
+    for view_only in ["groups", "estimated_time", "remaining_time"] {
+        assert!(
+            !body.contains(&format!("<string>{view_only}</string>")),
+            "default search should not request view-only field {view_only}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -326,6 +337,8 @@ fn value_to_bug_rejects_malformed_group_and_time_tracking_fields() {
         ),
         ("estimated_time", Value::String("8".into())),
         ("remaining_time", Value::Int(5)),
+        ("estimated_time", Value::Double(f64::NAN)),
+        ("remaining_time", Value::Double(f64::INFINITY)),
     ];
 
     for (field, value) in malformed {

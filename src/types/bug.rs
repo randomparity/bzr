@@ -13,6 +13,7 @@ mod payload;
 mod search;
 
 pub use adjacency::{BugAdjacencyBug, BugAdjacencyError, BugAdjacencyRequest, BugAdjacencyResult};
+pub(crate) use fields::BUG_SEARCH_DEFAULT_FIELDS;
 pub use fields::{
     apply_exclude, canonical_excludes, canonical_field_list, default_selected_fields,
     field_selected, partition_include, selected_custom_detail_fields, selected_keys, BugField,

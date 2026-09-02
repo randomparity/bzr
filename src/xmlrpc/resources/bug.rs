@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 
 use crate::error::{BzrError, Result};
-use crate::types::bug::{partition_filters, Bug, SearchParams, FIELD_MAPPINGS};
+use crate::types::bug::{
+    partition_filters, Bug, SearchParams, BUG_SEARCH_DEFAULT_FIELDS, FIELD_MAPPINGS,
+};
 use crate::xmlrpc::protocol::Value;
 use crate::xmlrpc::protocol::XmlRpcClient;
 use crate::xmlrpc::resources::mappers::{
@@ -98,14 +100,22 @@ fn add_vec_filters(rpc_params: &mut BTreeMap<String, Value>, params: &SearchPara
 
 fn add_field_lists(rpc_params: &mut BTreeMap<String, Value>, params: &SearchParams) {
     // Bugzilla XML-RPC requires field lists as arrays; the REST API accepts CSV strings.
-    for (key, value) in [
-        ("include_fields", &params.include_fields),
-        ("exclude_fields", &params.exclude_fields),
-    ] {
-        if let Some(ref fields) = *value {
-            let arr: Vec<Value> = fields.split(',').map(|f| Value::from(f.trim())).collect();
-            rpc_params.insert(key.into(), Value::Array(arr));
-        }
+    let include_fields = params
+        .include_fields
+        .as_deref()
+        .unwrap_or(BUG_SEARCH_DEFAULT_FIELDS);
+    let include_fields = include_fields
+        .split(',')
+        .map(|field| Value::from(field.trim()))
+        .collect();
+    rpc_params.insert("include_fields".into(), Value::Array(include_fields));
+
+    if let Some(exclude_fields) = params.exclude_fields.as_deref() {
+        let exclude_fields = exclude_fields
+            .split(',')
+            .map(|field| Value::from(field.trim()))
+            .collect();
+        rpc_params.insert("exclude_fields".into(), Value::Array(exclude_fields));
     }
 }
 
@@ -153,7 +163,7 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
     };
     let optional_time = |key| match m.get(key) {
         None => Ok(None),
-        Some(Value::Double(value)) => Ok(Some(*value)),
+        Some(Value::Double(value)) if value.is_finite() => Ok(Some(*value)),
         Some(_) => Err(BzrError::XmlRpc(format!(
             "bug {key} field has unexpected XML-RPC type"
         ))),

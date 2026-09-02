@@ -1,5 +1,12 @@
 use std::collections::HashSet;
 
+/// Stable default field set shared by REST and XML-RPC bug searches.
+pub(crate) const BUG_SEARCH_DEFAULT_FIELDS: &str =
+    "id,summary,status,resolution,dupe_of,product,component,version,\
+    assigned_to,priority,severity,creation_time,last_change_time,creator,\
+    url,whiteboard,keywords,blocks,depends_on,cc,op_sys,rep_platform,deadline,\
+    target_milestone,flags";
+
 /// Which fields the caller asked to include / exclude, as the raw
 /// comma-separated `--fields` / `--exclude-fields` values. `Default`
 /// (both `None`) means "use the default column set".
