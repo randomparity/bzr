@@ -39,7 +39,7 @@ For installation and quick start, see [README.md](../README.md).
 | `--server <NAME>` | Use a specific server from config instead of the default |
 | `--server-url <URL>` | Connect to an ad-hoc server by URL, without using config. Defines an ephemeral server for this one invocation: nothing is read from or written to the config file. `--server-api-key-env` is optional for read-only commands and required for writes and identity-derived commands; conflicts with `--server`. Pairs with `--config` for sandboxed throwaway runs. |
 | `--server-api-key-env <ENV>` | Environment variable holding the API key for `--server-url`. The key is read from this variable, never passed as a literal flag, so the secret stays out of the process argument list. Only meaningful with `--server-url`. |
-| `--server-email <EMAIL>` | Login email for `--server-url`, for the Bugzilla 5.0 whoami fallback. Optional; only meaningful with `--server-url`. |
+| `--server-email <EMAIL>` | Login email for `--server-url`, for the Bugzilla 5.0/5.2 whoami fallback. Bugzilla 5.3+/BMO-derived servers use native `whoami`. Optional; only meaningful with `--server-url`. |
 | `--server-tls-insecure` | Accept invalid TLS certificates for one `--server-url` invocation. Mutually exclusive with the other `--server-tls-*` trust options and never persisted. |
 | `--server-tls-ca-cert <PATH>` | Add a PEM CA certificate file to trust for one `--server-url` invocation. Mutually exclusive with the other `--server-tls-*` trust options and never persisted. |
 | `--server-tls-pin-sha256 <PIN>` | Pin the server certificate fingerprint for one `--server-url` invocation. Uses the same `sha256//<base64>` format as named server config and never persists. |
@@ -1670,6 +1670,11 @@ Validate the shape with `bzr schema whoami`. `whoami` is an identity-derived
 command, so it requires a credential; an anonymous connection fails before the
 network call rather than returning `auth_mode: anonymous`.
 
+Bugzilla 5.3+ and BMO-derived servers provide native `/rest/whoami`. Bugzilla
+5.0 and 5.2 use an email-backed user lookup instead: configure a named server
+with `bzr config set-server <NAME> ... --email <EMAIL>`, or pair an inline
+`--server-url` invocation with `--server-email <EMAIL>`.
+
 ---
 
 ## `bzr server` -- Server Diagnostics
@@ -1844,7 +1849,9 @@ bzr config set-server legacy --url https://bugzilla.example.com --api-key abc123
 bzr config set-server public-bz --url https://bugzilla.example.org
 ```
 
-The `--email` flag is required for older Bugzilla servers (5.0 or earlier) that don't support the `/rest/whoami` endpoint.
+The `--email` flag supplies the Bugzilla 5.0/5.2 fallback for named servers;
+Bugzilla 5.3+ and BMO-derived servers use native `/rest/whoami`. Inline
+connections use `--server-email` with `--server-url` instead.
 
 Public Bugzilla servers can be configured without an API key for read-only
 exploration:
@@ -1879,7 +1886,7 @@ The first server added is automatically set as the default.
 | `--url <URL>` | Yes | Server URL |
 | `--api-key <KEY>` | No | API key value (less secure: can leak via shell history or process args) |
 | `--api-key-env <ENV_VAR>` | No | Environment variable name containing the API key |
-| `--email <EMAIL>` | No | Login email (required for Bugzilla 5.0 or earlier) |
+| `--email <EMAIL>` | No | Login email for the Bugzilla 5.0/5.2 `whoami` fallback |
 | `--auth-method <METHOD>` | No | Override auto-detected auth method (`header` or `query_param`) |
 | `--tls-insecure` | No | Disable TLS certificate verification (self-signed, expired, wrong hostname) |
 
@@ -2716,11 +2723,13 @@ severity = "critical"
 
 Detection probes endpoints in order:
 
-1. `rest/whoami` (Bugzilla 5.1+) — tries header auth, then query param
-2. `rest/valid_login` (Bugzilla 5.0+, requires `--email`) — tries header auth, then query param
+1. `rest/whoami` (Bugzilla 5.3+/BMO-derived) — tries header auth, then query param
+2. `rest/valid_login` (Bugzilla 5.0/5.2, requires an email hint) — tries header auth, then query param
 3. If step 2 detects query param, verifies by probing `rest/bug?limit=1` with header auth — if the probe succeeds, prefers header auth (avoids leaking API keys in URLs)
 
-For servers running Bugzilla 5.0 or earlier, provide your `--email` when configuring, as auth detection uses the `/rest/valid_login` endpoint which requires it.
+For Bugzilla 5.0/5.2, configure a named server with `bzr config set-server
+<NAME> ... --email <EMAIL>`, or pass `--server-email <EMAIL>` beside an inline
+`--server-url`; auth detection uses `/rest/valid_login`, which requires it.
 
 If auto-detection picks the wrong method (e.g. on servers with custom extensions), override it with `--auth-method`:
 

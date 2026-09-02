@@ -4,6 +4,7 @@ use super::ConfigAction;
 use crate::cli::{Cli, Commands};
 use crate::types::transport::AuthMethod;
 use clap::error::ErrorKind;
+use clap::CommandFactory as _;
 use clap::Parser as _;
 
 fn config_action(args: &[&str]) -> ConfigAction {
@@ -57,6 +58,18 @@ fn parse_config_set_server_minimal_defaults() {
         }
         _ => panic!("expected SetServer"),
     }
+}
+
+#[test]
+fn set_server_email_help_names_supported_whoami_arms() {
+    let mut cmd = Cli::command();
+    let set_server = cmd
+        .find_subcommand_mut("config")
+        .and_then(|config| config.find_subcommand_mut("set-server"))
+        .unwrap_or_else(|| panic!("bzr config set-server subcommand must exist"));
+    let help = set_server.render_long_help().to_string();
+    assert!(help.contains("Bugzilla 5.0/5.2 whoami fallback"), "{help}");
+    assert!(help.contains("5.3+/BMO-derived"), "{help}");
 }
 
 #[test]

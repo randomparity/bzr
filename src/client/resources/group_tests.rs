@@ -13,8 +13,7 @@ async fn get_group_members_returns_users() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/rest/user"))
-        // TODO(#625): Bugzilla ignores an unrecognized `group` param; #625 switches to `groups`.
-        .and(query_param("group", "admin"))
+        .and(query_param("groups", "admin"))
         .and(query_param("include_fields", USER_FIELDS_BASIC))
         .and(query_param("match", "*"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -50,8 +49,7 @@ async fn get_group_members_details_sends_include_fields() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/rest/user"))
-        // TODO(#625): Bugzilla ignores an unrecognized `group` param; #625 switches to `groups`.
-        .and(query_param("group", "admin"))
+        .and(query_param("groups", "admin"))
         .and(query_param("include_fields", USER_FIELDS_DETAILED))
         .and(query_param("match", "*"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -86,8 +84,7 @@ async fn get_group_members_empty() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/rest/user"))
-        // TODO(#625): Bugzilla ignores an unrecognized `group` param; #625 switches to `groups`.
-        .and(query_param("group", "nobody"))
+        .and(query_param("groups", "nobody"))
         .and(query_param("match", "*"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"users": []})))
         .mount(&mock)
@@ -106,8 +103,7 @@ async fn get_group_members_api_error() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/rest/user"))
-        // TODO(#625): Bugzilla ignores an unrecognized `group` param; #625 switches to `groups`.
-        .and(query_param("group", "nonexistent"))
+        .and(query_param("groups", "nonexistent"))
         .and(query_param("match", "*"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "error": true,
@@ -449,7 +445,7 @@ fn xmlrpc_group_response(id: i64, name: &str, description: &str) -> String {
 }
 
 #[tokio::test]
-async fn create_group_returns_id() {
+async fn create_group_returns_string_id() {
     let mock = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/rest/group"))
@@ -458,7 +454,7 @@ async fn create_group_returns_id() {
             "description": "Test team",
             "is_active": true,
         })))
-        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 5})))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": "5"})))
         .expect(1)
         .mount(&mock)
         .await;

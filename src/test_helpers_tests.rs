@@ -1,4 +1,8 @@
+#![expect(clippy::disallowed_methods, clippy::unwrap_used)]
+
 use super::*;
+
+use tracing::instrument::WithSubscriber as _;
 
 #[test]
 fn xmlrpc_bug_response_contains_expected_bug_fields() {
@@ -26,4 +30,21 @@ fn captured_io_writers_route_to_owned_buffers() {
     }
     assert_eq!(io.out_str(), "to stdout\n");
     assert_eq!(io.err_str(), "to stderr\n");
+}
+
+#[test]
+fn tracing_capture_follows_an_async_future_across_threads() {
+    let (capture, _guard) = TracingCapture::install(tracing::Level::DEBUG);
+    let future = async { tracing::debug!("cross-thread tracing marker") }.with_current_subscriber();
+
+    std::thread::spawn(move || {
+        tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap()
+            .block_on(future);
+    })
+    .join()
+    .unwrap();
+
+    assert!(capture.output().contains("cross-thread tracing marker"));
 }

@@ -305,8 +305,11 @@ bzr --server-url https://bugzilla.internal --server-tls-ca-cert /etc/pki/interna
 export BZR_API_KEY=YOUR_API_KEY
 bzr config set-server myserver --url https://bugzilla.example.com --api-key-env BZR_API_KEY
 
-# For Bugzilla 5.0 or earlier (XMLRPC)
+# For the Bugzilla 5.0/5.2 email-backed whoami fallback
 bzr config set-server myserver --url https://bugzilla.example.com --api-key-env BZR_API_KEY --email "user@example.com"
+
+# Stateless form of the same fallback (5.3+/BMO-derived servers use native whoami)
+bzr --server-url https://bugzilla.example.com --server-api-key-env BZR_API_KEY --server-email "user@example.com" whoami
 
 # Legacy/insecure: stores the API key in config.toml and may leak via shell history
 bzr config set-server myserver --url https://bugzilla.example.com --api-key YOUR_API_KEY

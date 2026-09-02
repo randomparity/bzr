@@ -3,6 +3,19 @@
 use super::*;
 
 #[test]
+fn id_response_deserializes_string_id() {
+    let response: IdResponse = serde_json::from_str(r#"{"id":"42"}"#).unwrap();
+    assert_eq!(response.id, 42);
+}
+
+#[test]
+fn id_response_rejects_malformed_ids() {
+    for json in [r#"{"id":"-1"}"#, r#"{"id":1.5}"#, r#"{"id":true}"#] {
+        assert!(serde_json::from_str::<IdResponse>(json).is_err(), "{json}");
+    }
+}
+
+#[test]
 fn new_trims_trailing_slash_and_keeps_email_hint() {
     let client = BugzillaClient::new(BugzillaClientConfig {
         base_url: "https://bugzilla.example.com/",
