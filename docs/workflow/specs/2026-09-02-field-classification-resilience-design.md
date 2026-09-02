@@ -1,0 +1,99 @@
+# Field and classification read resilience
+
+## Scope and outcome
+
+Issue #629 requires three related read-path corrections: accept omitted `values` for non-select
+bug fields, use one model for `/rest/field/bug`, and make disabled classification listing useful
+to unprivileged users. It also requires percent-encoding field-name path segments and live
+functional coverage. [ADR 0042](../../adr/0042-field-classification-list-resilience.md) records
+the ownership and presentation decisions.
+
+`Classification.sort_key` and the schema 3.0 cascade are excluded. Issue #629 explicitly permits
+deferral, and ADR 0028 deliberately excluded that unrelated sort key. Issue #628, unrelated
+worktrees, and the campaign-owned ADR index are also outside this branch.
+
+## Approach
+
+The chosen approach moves the richer `FieldDef` shape from the server resource into the field
+resource as the sole internal `FieldDefinition`, defaulting optional endpoint members there.
+`get_field_values` and server-capability custom-field assembly deserialize that same type.
+This removes the root duplication with a smaller change than introducing a new public type.
+
+At the classification command boundary, match only `BzrError::Api { code: 900, .. }` from list
+enumeration. This preserves the client's existing public result type and avoids hiding other API
+failures. Both error 900 and the successfully fetched lone `Unclassified` sentinel are rendered
+as disabled: raw/table mode prints the existing note on stdout without an empty-table sequel;
+JSON and NDJSON write an empty collection on stdout and the note on stderr.
+
+Rejected approaches are duplicating the serde default, collapsing error 900 into an
+indistinguishable client-side empty vector, and emitting human prose into structured stdout.
+
+## Components and data flow
+
+1. `client::resources::field` owns `FieldDefinition` and `FieldBugResponse`. The definition
+   contains `name`, lenient numeric `field_type`, `is_custom`, and defaulted `values`. A
+   crate-resource-visible `all_bug_fields` helper supplies server capabilities; field lookup
+   resolves aliases, encodes the path segment with the existing `encode_path`, and selects the
+   first definition.
+2. `client::resources::server` removes its endpoint duplicate and maps the shared definitions to
+   `CustomFieldSummary` exactly as today.
+3. `commands::classification` converts error 900 or a lone `Unclassified` result into one
+   `write_disabled` path whose destination depends on output format. Successful multi-row lists
+   and every unrelated error retain current behavior.
+4. Functional phase 05 exercises text/date/int fields and credentialless classification listing
+   against each supported stock container.
+
+## Error and output contract
+
+- An existing field whose response omits `values` returns an empty vector. Table output is exactly
+  `No values for field '<requested-name>'.` followed by a newline; JSON-family output remains an
+  empty collection.
+- An empty `fields` array remains `BzrError::NotFound`.
+- A classification detail response with API code 900 is the only error that degrades. Raw/table
+  stdout is exactly the existing disabled note plus a newline and stderr is empty. JSON-family
+  stdout is an empty valid collection and stderr contains that note.
+- Other classification errors remain errors with their existing exit codes.
+- The resolved field name is one percent-encoded path segment; aliases are resolved before
+  encoding.
+
+## Security and trust boundaries
+
+The design adds no entry point or permission. It narrows two existing boundaries:
+
+- A local operator controls the field-name argument, which crosses into URL construction. The
+  existing `client::encode_path` is the control; it encodes the complete resolved value as one
+  segment. Tests use slash, percent, question-mark, and space characters to prove no path or query
+  injection.
+- A configured Bugzilla server controls JSON response shape and API error codes. Serde defaults
+  only the members upstream documents as omitted, while required field identity remains required.
+  The degradation match is bounded to numeric code 900 and leaks only the existing generic note.
+- Credentials continue through the shared connection/auth pipeline. The new functional
+  unprivileged arm uses the already configured credentialless `public` server and never exposes a
+  secret.
+
+Out of scope are malicious server payload-size limits and TLS/auth changes; existing transport
+controls own them. The negative classification sort-key case remains the accepted ADR 0028
+exclusion described above.
+
+## Verification
+
+Tests must be observed failing against the pre-fix implementation before production edits.
+
+- Field resource tests cover omitted `values`, encoded names, unchanged alias resolution, and
+  not-found behavior. A recorded all-fields response containing select and non-select rows proves
+  the one shared model serves server capabilities.
+- Classification command tests cover code 900 in table and JSON modes, exact stream placement,
+  lone-`Unclassified` compatibility, and unrelated-error propagation.
+- Functional phase 05 covers `short_desc`, a date field, and an integer field, plus credentialless
+  `classification list` on default `useclassification=0`, asserting exit 0 and exact raw stdout.
+- `make lint`, `make test`, and `make functional-test-all` must pass.
+
+## Durable workflow context
+
+- Branch: `feat/field-classification-resilience-629`
+- Base branch: `main` at `f5314bcfa4f9bb8fe0349908ef206ac2d8d5e547`
+- Host: arm64 macOS; targets: seven declared release targets; relationship: different.
+- Guardrails: focused `make test-one T=<substring>`, `make lint`, `make test`, and
+  `make functional-test-all`. The ADR index is not individually hard-gated and remains
+  campaign-owned.
+
