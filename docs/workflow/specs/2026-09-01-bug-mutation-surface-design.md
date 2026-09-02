@@ -90,9 +90,11 @@ on each bug's current state and remains the server's responsibility, as for clos
 - Add structured-create tests that distinguish omitted groups from an explicit empty array at the
   request body. First run `make test-one T=from_json_explicit_empty_groups` before implementation
   and record the body-matcher failure showing the empty member was omitted.
-- Before replacing derived payload serialization, add an all-fields parity oracle for
-  `CreateBugParams`; run it against the derived baseline and again against the private wire view so
-  every unchanged field name, value, and omission rule remains covered.
+- Before replacing derived payload serialization, add two exact parity oracles for
+  `CreateBugParams`: one maximally populated object covering every field name/value and one
+  minimal/default object whose complete JSON contains only the four required fields. Run both
+  against the derived baseline and again unchanged against the private wire view so every
+  unchanged field name, value, and omission rule remains covered.
 - Preserve and extend default resolve and non-empty create-group coverage.
 - Extend phase 11b for an explicit resolve status plus client-side invalid-status rejection.
 - Extend the restricted-access phase with a dedicated product whose group control is default (2),
