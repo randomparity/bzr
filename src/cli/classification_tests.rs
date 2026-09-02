@@ -3,7 +3,7 @@
 use super::ClassificationAction;
 use crate::cli::{Cli, Commands};
 use clap::error::ErrorKind;
-use clap::Parser as _;
+use clap::{CommandFactory as _, Parser as _};
 
 fn classification_action(args: &[&str]) -> ClassificationAction {
     match Cli::try_parse_from(args).unwrap().command {
@@ -25,6 +25,33 @@ fn parse_classification_list() {
         classification_action(&["bzr", "classification", "list"]),
         ClassificationAction::List { .. }
     ));
+}
+
+#[test]
+fn classification_help_describes_disabled_stream_behavior() {
+    let mut command = Cli::command();
+    let classification = command
+        .find_subcommand_mut("classification")
+        .unwrap_or_else(|| panic!("classification subcommand must exist"));
+    let list = classification
+        .find_subcommand_mut("list")
+        .unwrap_or_else(|| panic!("classification list subcommand must exist"));
+    let list_help = list.render_long_help().to_string();
+
+    assert!(list_help.contains("API error 900"), "{list_help}");
+    assert!(
+        list_help.contains("Table output writes the disabled note to stdout"),
+        "{list_help}"
+    );
+    assert!(
+        list_help.contains("JSON-family output writes an empty collection to stdout"),
+        "{list_help}"
+    );
+    assert!(list_help.contains("the note\nto stderr."), "{list_help}");
+
+    let top_help = classification.render_long_help().to_string();
+    assert!(top_help.contains("API error 900"), "{top_help}");
+    assert!(top_help.contains("stdout for table output"), "{top_help}");
 }
 
 #[test]
