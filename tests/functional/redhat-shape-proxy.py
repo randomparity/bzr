@@ -261,20 +261,21 @@ def shape_attachment_comment_response(method, path, data):
     if is_upload:
         ids = value.get("ids") if isinstance(value, dict) else None
         if isinstance(ids, list):
-            changed = 0
             for index, attachment_id in enumerate(ids):
                 if isinstance(attachment_id, int) and not isinstance(
                     attachment_id, bool
                 ):
                     ids[index] = str(attachment_id)
-                    changed += 1
-            if changed:
-                evidence["attachment-upload"] = changed
+            observed = sum(isinstance(attachment_id, str) for attachment_id in ids)
+            if observed:
+                evidence["attachment-upload"] = observed
 
     elif is_by_id:
         attachments = value.get("attachments") if isinstance(value, dict) else None
         if isinstance(attachments, dict):
             value["attachments"] = list(attachments.values())
+            attachments = value["attachments"]
+        if isinstance(attachments, list):
             exclusion = urllib.parse.parse_qs(parsed.query).get("exclude_fields")
             evidence[
                 "attachment-by-id-metadata"
@@ -310,15 +311,16 @@ def shape_attachment_comment_response(method, path, data):
             for bug in bugs.values():
                 if isinstance(bug, dict) and isinstance(bug.get("comments"), list):
                     comments.extend(bug["comments"])
-        changed = 0
+        observed = 0
         for comment in comments:
             if isinstance(comment, dict) and isinstance(
                 comment.get("is_private"), bool
             ):
                 comment["is_private"] = int(comment["is_private"])
-                changed += 1
-        if changed:
-            evidence["comment-privacy"] = changed
+            if isinstance(comment, dict) and type(comment.get("is_private")) is int:
+                observed += 1
+        if observed:
+            evidence["comment-privacy"] = observed
 
     if not evidence:
         return data, {}
@@ -491,6 +493,13 @@ class ShapeTests(unittest.TestCase):
         self.assertEqual(json.loads(body), {"ids": ["123"]})
         self.assertEqual(evidence, {"attachment-upload": 1})
 
+    def test_observes_native_attachment_upload_string_ids(self):
+        body, evidence = shape_attachment_comment_response(
+            "POST", "/rest/bug/42/attachment", b'{"ids":["123"]}'
+        )
+        self.assertEqual(json.loads(body), {"ids": ["123"]})
+        self.assertEqual(evidence, {"attachment-upload": 1})
+
     def test_shapes_attachment_by_id_envelopes_as_flat_arrays(self):
         payload = b'{"attachments":{"123":{"id":123,"data":"Ynl0ZXM="}}}'
         for path, expected_evidence in [
@@ -507,6 +516,14 @@ class ShapeTests(unittest.TestCase):
             )
             self.assertEqual(evidence, expected_evidence)
 
+    def test_observes_native_attachment_by_id_flat_arrays(self):
+        payload = b'{"attachments":[{"id":123,"data":"Ynl0ZXM="}]}'
+        body, evidence = shape_attachment_comment_response(
+            "GET", "/rest/bug/attachment/123", payload
+        )
+        self.assertEqual(json.loads(body), json.loads(payload))
+        self.assertEqual(evidence, {"attachment-by-id-body": 1})
+
     def test_shapes_comment_privacy_as_binary_integers(self):
         payload = json.dumps({"bugs": {"42": {"comments": [
             {"id": 1, "is_private": False},
@@ -521,6 +538,14 @@ class ShapeTests(unittest.TestCase):
             [comment["is_private"] for comment in comments], [0, 1, None]
         )
         self.assertEqual(evidence, {"comment-privacy": 2})
+
+    def test_observes_native_comment_privacy_integers(self):
+        payload = b'{"comments":[{"id":1,"is_private":1}]}'
+        body, evidence = shape_attachment_comment_response(
+            "GET", "/rest/bug/42/comment", payload
+        )
+        self.assertEqual(json.loads(body), json.loads(payload))
+        self.assertEqual(evidence, {"comment-privacy": 1})
 
     def test_observes_exact_attachment_list_body_exclusion_without_query_values(self):
         payload = b'{"bugs":{"42":[{"id":123,"data":"Ynl0ZXM="}]}}'
