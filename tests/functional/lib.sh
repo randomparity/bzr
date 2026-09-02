@@ -620,6 +620,16 @@ TLS_PORT=""
 TLS_CA_CERT=""
 TLS_GOOD_PIN=""
 
+functional_proxy_default_port() {
+    local backend_port="$1"
+    local offset="$2"
+    if [[ $((backend_port + offset)) -le 65535 ]]; then
+        printf '%d\n' "$((backend_port + offset))"
+    else
+        printf '%d\n' "$((backend_port - offset))"
+    fi
+}
+
 # tls_tools_available — returns 0 iff the host tooling for the HTTPS fixture is
 # present. When it is not, the TLS phase skips cleanly so run-all-versions stays
 # predictable on hosts without TLS tooling.
@@ -635,7 +645,7 @@ tls_tools_available() {
 # does not become ready, so the caller can fail the phase without hanging.
 tls_fixture_start() {
     local backend_port="$1"
-    TLS_PORT="${BZR_FUNC_TLS_PORT:-$((backend_port + 1000))}"
+    TLS_PORT="${BZR_FUNC_TLS_PORT:-$(functional_proxy_default_port "$backend_port" 1000)}"
     TLS_FIXTURE_DIR=$(mktemp -d /tmp/bzr-func-tls.XXXXXX)
     TLS_CA_CERT="$TLS_FIXTURE_DIR/ca.pem"
 
@@ -717,7 +727,7 @@ REDHAT_SHAPE_LOG=""
 
 redhat_shape_start() {
     local backend_port="$1"
-    REDHAT_SHAPE_PORT="${BZR_FUNC_REDHAT_PORT:-$((backend_port + 2000))}"
+    REDHAT_SHAPE_PORT="${BZR_FUNC_REDHAT_PORT:-$(functional_proxy_default_port "$backend_port" 2000)}"
     REDHAT_SHAPE_LOG="$FUNC_CONFIG_DIR/redhat-shape-proxy.log"
     python3 "$SCRIPT_DIR/redhat-shape-proxy.py" "$REDHAT_SHAPE_PORT" \
         "$backend_port" >"$REDHAT_SHAPE_LOG" 2>&1 &

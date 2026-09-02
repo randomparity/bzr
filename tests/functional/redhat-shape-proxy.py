@@ -4,6 +4,7 @@
 import http.client
 import http.server
 import json
+import os
 import signal
 import socket
 import sys
@@ -180,7 +181,65 @@ def shape_user_group_response(method, path, data):
     return json.dumps(value, separators=(",", ":")).encode(), route, changed
 
 
+def shape_server_capabilities_response(path, data, *, enabled):
+    """Return opt-in production shapes used by the capability functional proof."""
+    if not enabled:
+        return data, {}
+
+    route = urllib.parse.urlsplit(path).path
+    if route not in {
+        "/rest/version",
+        "/rest/parameters",
+        "/rest/field/bug/bug_status",
+        "/rest/field/bug",
+    }:
+        return data, {}
+
+    value = json.loads(data)
+    if not isinstance(value, dict):
+        return data, {}
+
+    if route == "/rest/version":
+        value["version"] = "5.2+"
+        evidence = {"version": 1}
+    elif route == "/rest/parameters":
+        parameters = value.get("parameters")
+        if not isinstance(parameters, dict) or "maxattachmentsize" not in parameters:
+            return data, {}
+        parameters["maxattachmentsize"] = str(parameters["maxattachmentsize"])
+        evidence = {"parameters": 1}
+    elif route == "/rest/field/bug/bug_status":
+        fields = value.get("fields")
+        if not isinstance(fields, list):
+            return data, {}
+        status_field = next(
+            (field for field in fields if isinstance(field, dict)), None
+        )
+        values = status_field.get("values") if status_field is not None else None
+        if not isinstance(values, list):
+            return data, {}
+        values.insert(0, {"name": "", "can_change_to": []})
+        evidence = {"status": 1}
+    else:
+        fields = value.get("fields")
+        if not isinstance(fields, list):
+            return data, {}
+        fields.append({
+            "name": "cf_bzr_proxy_probe",
+            "type": "2",
+            "is_custom": True,
+            "values": [],
+        })
+        evidence = {"field-type": 1}
+
+    return json.dumps(value, separators=(",", ":")).encode(), evidence
+
+
 def make_handler(backend_port):
+    server_capability_mode = os.environ.get("BZR_FUNC_REDHAT_MODE") == (
+        "server-capabilities"
+    )
+
     class Handler(http.server.BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
@@ -255,6 +314,21 @@ def make_handler(backend_port):
 
             if 200 <= status < 300:
                 try:
+                    body, evidence = shape_server_capabilities_response(
+                        self.path, body, enabled=server_capability_mode
+                    )
+                except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                    self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
+                    return
+                for route, count in evidence.items():
+                    sys.stderr.write(
+                        f"server-capability shaped route={route} count={count}\n"
+                    )
+                if evidence:
+                    sys.stderr.flush()
+
+            if 200 <= status < 300:
+                try:
                     body, changed = shape_metadata_sort_keys_response(self.path, body)
                 except (UnicodeDecodeError, json.JSONDecodeError) as error:
                     self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
@@ -296,6 +370,63 @@ def make_handler(backend_port):
 
 
 class ShapeTests(unittest.TestCase):
+    def test_server_capability_shapes_are_opt_in(self):
+        payload = b'{"version":"5.0.6"}'
+        body, evidence = shape_server_capabilities_response(
+            "/rest/version", payload, enabled=False
+        )
+        self.assertEqual(body, payload)
+        self.assertEqual(evidence, {})
+
+    def test_shapes_server_capability_routes(self):
+        cases = [
+            (
+                "/rest/version",
+                {"version": "5.0.6"},
+                {"version": "5.2+"},
+                {"version": 1},
+            ),
+            (
+                "/rest/parameters",
+                {"parameters": {"maxattachmentsize": 1000}},
+                {"parameters": {"maxattachmentsize": "1000"}},
+                {"parameters": 1},
+            ),
+            (
+                "/rest/field/bug/bug_status",
+                {"fields": [{"values": [{"name": "NEW"}]}]},
+                {"fields": [{"values": [
+                    {"name": "", "can_change_to": []}, {"name": "NEW"}
+                ]}]},
+                {"status": 1},
+            ),
+        ]
+        for path, payload, expected, evidence in cases:
+            body, actual_evidence = shape_server_capabilities_response(
+                path, json.dumps(payload).encode(), enabled=True
+            )
+            self.assertEqual(json.loads(body), expected)
+            self.assertEqual(actual_evidence, evidence)
+
+        body, evidence = shape_server_capabilities_response(
+            "/rest/field/bug", b'{"fields":[]}', enabled=True
+        )
+        self.assertEqual(evidence, {"field-type": 1})
+        self.assertEqual(json.loads(body)["fields"], [{
+            "name": "cf_bzr_proxy_probe",
+            "type": "2",
+            "is_custom": True,
+            "values": [],
+        }])
+
+    def test_server_capability_shape_leaves_unrelated_payload_untouched(self):
+        payload = b'{"products":[]}'
+        body, evidence = shape_server_capabilities_response(
+            "/rest/product", payload, enabled=True
+        )
+        self.assertEqual(body, payload)
+        self.assertEqual(evidence, {})
+
     def test_identifies_termless_bug_search_without_matching_scoped_or_detail_reads(self):
         self.assertTrue(is_termless_bug_search("/rest/bug?limit=1&include_fields=id"))
         self.assertTrue(is_termless_bug_search("/rest/bug?product=&limit=1"))

@@ -1,5 +1,12 @@
 use std::collections::HashSet;
 
+/// Stable default field set shared by REST and XML-RPC bug searches.
+pub(crate) const BUG_SEARCH_DEFAULT_FIELDS: &str =
+    "id,summary,status,resolution,dupe_of,product,component,version,\
+    assigned_to,priority,severity,creation_time,last_change_time,creator,\
+    url,whiteboard,keywords,blocks,depends_on,cc,op_sys,rep_platform,deadline,\
+    target_milestone,flags";
+
 /// Which fields the caller asked to include / exclude, as the raw
 /// comma-separated `--fields` / `--exclude-fields` values. `Default`
 /// (both `None`) means "use the default column set".
@@ -45,6 +52,9 @@ pub enum BugField {
     Cc,
     DupeOf,
     TargetMilestone,
+    Groups,
+    EstimatedTime,
+    RemainingTime,
     Flags,
 }
 
@@ -76,6 +86,9 @@ impl BugField {
             BugField::Cc => "cc",
             BugField::DupeOf => "dupe_of",
             BugField::TargetMilestone => "target_milestone",
+            BugField::Groups => "groups",
+            BugField::EstimatedTime => "estimated_time",
+            BugField::RemainingTime => "remaining_time",
             BugField::Flags => "flags",
         }
     }
@@ -107,6 +120,9 @@ impl BugField {
             BugField::Cc => &["cc"],
             BugField::DupeOf => &["dupe_of"],
             BugField::TargetMilestone => &["target_milestone", "milestone"],
+            BugField::Groups => &["groups"],
+            BugField::EstimatedTime => &["estimated_time"],
+            BugField::RemainingTime => &["remaining_time"],
             BugField::Flags => &["flags"],
         }
     }
@@ -138,6 +154,9 @@ impl BugField {
             BugField::Cc => "CC",
             BugField::DupeOf => "DUPE_OF",
             BugField::TargetMilestone => "MILESTONE",
+            BugField::Groups => "GROUPS",
+            BugField::EstimatedTime => "ESTIMATED_TIME",
+            BugField::RemainingTime => "REMAINING_TIME",
             BugField::Flags => "FLAGS",
         }
     }
@@ -179,6 +198,9 @@ pub const BUG_FIELDS: &[BugField] = &[
     BugField::Cc,
     BugField::DupeOf,
     BugField::TargetMilestone,
+    BugField::Groups,
+    BugField::EstimatedTime,
+    BugField::RemainingTime,
     BugField::Flags,
 ];
 

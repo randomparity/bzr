@@ -451,6 +451,13 @@ upstream Bugzilla and `bzl-search`.
 
 Display detailed information about one or more bugs.
 
+Structured output includes `groups` for the bug's current group restrictions.
+It also includes numeric `estimated_time` and `remaining_time` values when the
+authenticated caller may view Bugzilla time-tracking fields; when the server
+withholds those fields, bzr omits their keys instead of emitting `null` or
+failing the read. All three are selectable with `--fields`, for example
+`--fields groups,estimated_time,remaining_time`.
+
 The detail view includes the bug's `target_milestone` and `flags` when set.
 Each flag renders as `name` + status token, with the requestee in parentheses
 when present (e.g. `review+`, `needinfo?(qa@example.com)`) — the same syntax
@@ -652,11 +659,11 @@ table always includes the fixed fields `ID`, `SUMMARY`, `STATUS`, `RESOLUTION`,
 `BLOCKS`, and `DEPENDS ON`; the two adjacency columns are complete,
 comma-separated ID lists.
 
-Under `--json`, the usual `2.0.0` envelope contains a closed result object:
+Under `--json`, the usual `2.0.1` envelope contains a closed result object:
 
 ```json
 {
-  "schema_version": "2.0.0",
+  "schema_version": "2.0.1",
   "data": {
     "requests": [
       {"requested": "00123", "bug_id": 123},
@@ -2461,7 +2468,7 @@ Every pretty `--json` response is wrapped in a stable envelope:
 
 ```json
 {
-  "schema_version": "2.0.0",
+  "schema_version": "2.0.1",
   "data": <the command's payload>
 }
 ```
@@ -2476,7 +2483,7 @@ bzr --json schema | jq -r '.schema_version'   # the contract version itself
 ```
 
 `--json` error output carries the version too, beside an `error` object:
-`{"schema_version":"2.0.0","error":{"type":...,"message":...,"exit_code":...}}`.
+`{"schema_version":"2.0.1","error":{"type":...,"message":...,"exit_code":...}}`.
 
 Two outputs are deliberately **not** enveloped:
 

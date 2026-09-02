@@ -713,9 +713,18 @@ fn bug_object_is_open_and_documents_builtins() {
     // documented so the schema stays useful.
     let schema = schema_for("bug");
     let props = schema.get("properties").and_then(Value::as_object).unwrap();
-    for field in ["id", "summary", "status", "keywords", "custom_fields"]
-        .iter()
-        .filter(|f| **f != "custom_fields")
+    for field in [
+        "id",
+        "summary",
+        "status",
+        "keywords",
+        "groups",
+        "estimated_time",
+        "remaining_time",
+        "custom_fields",
+    ]
+    .iter()
+    .filter(|f| **f != "custom_fields")
     {
         assert!(props.contains_key(*field), "bug schema missing '{field}'");
     }

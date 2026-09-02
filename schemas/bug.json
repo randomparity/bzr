@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/randomparity/bzr/schemas/bug.json",
   "title": "Bug",
-  "description": "The object emitted by `bug view` (single) and each element of the `bug list`/`bug search`/`bug my` arrays. Server-specific custom fields are flattened in as additional top-level properties. The `--fields`/`--exclude-fields` options may project the property set, so any built-in property may be absent; for that reason `required` is empty even though the built-ins are always present absent projection.",
+  "description": "The object emitted by `bug view` (single) and each element of the `bug list`/`bug search`/`bug my` arrays. Server-specific custom fields are flattened in as additional top-level properties. The `--fields`/`--exclude-fields` options may project the property set, so any built-in property may be absent. Permission-gated fields such as `estimated_time` and `remaining_time` may also be absent when the server withholds them. For those reasons `required` is empty.",
   "type": "object",
   "properties": {
     "id": {
@@ -98,6 +98,18 @@
     },
     "target_milestone": {
       "type": ["string", "null"]
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "estimated_time": {
+      "type": ["number", "null"]
+    },
+    "remaining_time": {
+      "type": ["number", "null"]
     },
     "flags": {
       "type": "array",

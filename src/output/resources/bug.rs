@@ -132,6 +132,13 @@ fn render_builtin_field(field: BugField, bug: &Bug) -> String {
         BugField::Cc => bug.cc.join(", "),
         BugField::DupeOf => bug.dupe_of.map(|id| id.to_string()).unwrap_or_default(),
         BugField::TargetMilestone => bug.target_milestone.clone().unwrap_or_default(),
+        BugField::Groups => bug.groups.join(", "),
+        BugField::EstimatedTime => bug
+            .estimated_time
+            .map_or_else(String::new, |v| v.to_string()),
+        BugField::RemainingTime => bug
+            .remaining_time
+            .map_or_else(String::new, |v| v.to_string()),
         BugField::Flags => render_flags_inline(&bug.flags),
     }
 }
@@ -193,6 +200,7 @@ enum DetailValue {
     Status,
     OptionalText(fn(&Bug) -> Option<&str>),
     OptionalId(fn(&Bug) -> Option<u64>),
+    OptionalHours(fn(&Bug) -> Option<f64>),
     StringList(fn(&Bug) -> &[String]),
     OptionalStringList(fn(&Bug) -> Option<&[String]>),
     IdList(fn(&Bug) -> &[u64]),
@@ -284,6 +292,21 @@ const BUILTIN_DETAIL_FIELDS: &[BuiltinDetailField] = &[
         value: DetailValue::IdList(|bug| &bug.depends_on),
     },
     BuiltinDetailField {
+        field: BugField::Groups,
+        label: "Groups",
+        value: DetailValue::StringList(|bug| &bug.groups),
+    },
+    BuiltinDetailField {
+        field: BugField::EstimatedTime,
+        label: "Estimated time",
+        value: DetailValue::OptionalHours(|bug| bug.estimated_time),
+    },
+    BuiltinDetailField {
+        field: BugField::RemainingTime,
+        label: "Remaining time",
+        value: DetailValue::OptionalHours(|bug| bug.remaining_time),
+    },
+    BuiltinDetailField {
         field: BugField::Flags,
         label: "Flags",
         value: DetailValue::Flags,
@@ -298,6 +321,7 @@ fn render_builtin_detail_field(field: BuiltinDetailField, bug: &Bug) -> Option<D
         ),
         DetailValue::OptionalText(accessor) => accessor(bug).unwrap_or("-").to_string(),
         DetailValue::OptionalId(accessor) => accessor(bug)?.to_string(),
+        DetailValue::OptionalHours(accessor) => accessor(bug)?.to_string(),
         DetailValue::StringList(accessor) => {
             let values = accessor(bug);
             if values.is_empty() {
