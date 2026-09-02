@@ -71,10 +71,10 @@ No persisted configuration or public result shape changes.
 
 The local operator controls CLI and JSON input. Resolve rejects empty input locally, matches status
 names exactly against the authenticated server's field list, and uses typed JSON serialization
-rather than string construction. Structured groups remain bounded by the existing input-file and
-JSON parsing path and serialize as a typed string array; no shell, path, query, or template
-destination is introduced. Status error output can reveal only status names already visible to the
-authenticated operator through the same API.
+rather than string construction. Structured groups preserve the existing unbounded input-file and
+JSON parsing behavior without adding amplification, and serialize as a typed string array; no
+shell, path, query, or template destination is introduced. Status error output can reveal only
+status names already visible to the authenticated operator through the same API.
 
 ### Out of scope
 
