@@ -122,7 +122,15 @@ async fn detect_version_and_mode_inner(
 fn version_to_api_mode(version: &str) -> ApiMode {
     let parts: Vec<&str> = version.split('.').collect();
     let major = parts.first().and_then(|s| s.parse::<u32>().ok());
-    let minor = parts.get(1).and_then(|s| s.parse::<u32>().ok());
+    let minor = parts
+        .get(1)
+        .and_then(|s| s.parse::<u32>().ok())
+        .or_else(|| {
+            (parts.len() == 2)
+                .then(|| parts[1].strip_suffix('+'))
+                .flatten()
+                .and_then(|s| s.parse::<u32>().ok())
+        });
 
     match (major, minor) {
         (Some(major), _) if major < 5 => ApiMode::XmlRpc,
