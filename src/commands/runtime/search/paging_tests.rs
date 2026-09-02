@@ -111,6 +111,66 @@ async fn fetch_page_raw_params_rejects_limit_that_cannot_overfetch() {
 }
 
 #[tokio::test]
+async fn fetch_page_rejects_zero_limit_with_nonzero_offset_before_search() {
+    let mock = MockServer::start().await;
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        limit: Some(0),
+        offset: Some(1),
+        ..Default::default()
+    };
+
+    let result = fetch_page(
+        &client,
+        &params,
+        false,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await;
+    let Err(err) = result else {
+        panic!("expected zero-limit paging validation");
+    };
+
+    assert!(
+        matches!(&err, crate::error::BzrError::InputValidation { message, .. }
+        if message.contains("--limit 0") && message.contains("nonzero --offset"))
+    );
+    assert!(mock.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn fetch_page_allows_zero_limit_with_zero_offset() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("limit", "0"))
+        .and(query_param("offset", "0"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(bugs_body(1)))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        limit: Some(0),
+        offset: Some(0),
+        ..Default::default()
+    };
+
+    let page = fetch_page(
+        &client,
+        &params,
+        false,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(page.bugs.len(), 1);
+}
+
+#[tokio::test]
 async fn fetch_all_pages_raw_params_warns_once_and_uses_rest() {
     let mock = MockServer::start().await;
     for (offset, body) in [

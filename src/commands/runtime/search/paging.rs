@@ -61,6 +61,16 @@ fn checked_next_offset(offset: u32, page_size: u32) -> Result<u32> {
     })
 }
 
+fn validate_page_window(params: &SearchParams) -> Result<()> {
+    if params.limit == Some(0) && params.offset.is_some_and(|offset| offset > 0) {
+        return Err(BzrError::input(
+            "--limit 0 cannot be combined with a nonzero --offset; --limit 0 means an unbounded search"
+                .into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Fetch results honoring `--offset`/`--paginate`. With `paginate`, returns
 /// every match or errors if the safety cap is reached before an empty page.
 /// Otherwise returns one window, with `truncated` set when the server had more
@@ -80,6 +90,7 @@ pub(crate) async fn fetch_page(
     progress: Option<ProgressFormat>,
     w: &mut Writers<'_>,
 ) -> Result<Page> {
+    validate_page_window(params)?;
     if paginate {
         let bugs = fetch_all_pages(client, params, progress, w).await?;
         return Ok(Page {
