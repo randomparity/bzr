@@ -34,14 +34,17 @@ connect once, validate the name with `get_field_values("status")`, and reuse tha
 `apply_checked_connected`.
 
 `CreateBugParams.groups` remains the existing public `Vec<String>`. The non-exhaustive payload adds
-a private, serialization-only override renamed to the same wire key; its crate-private setter
-maintains the invariant that the ordinary and override fields cannot both serialize. Ordinary
-create, clone, and external Rust callers retain their existing source and wire behavior.
+a crate-visible, non-public `groups_present` marker and replaces derived serialization with a
+private wire view containing one computed `groups: Option<&[String]>` field. The wire view omits an
+empty vector unless the marker is true, and otherwise serializes the vector once. This remains
+duplicate-free even if in-crate code mutates the public vector after the marker is set. Ordinary
+create, clone, and external Rust callers retain their existing source and wire behavior; existing
+in-crate full struct expressions initialize the marker to false.
 `JsonCreateBug` uses a small presence-preserving `JsonGroups` input value: its default is absent,
 while its deserializer accepts only a JSON array and records that array as present. The overlay
 replaces this value only when the CLI supplied a non-empty group list. Conversion calls the
 payload setter only for present structured input, causing an explicit empty array to use the
-private override and non-empty input to use the public field.
+presence marker and non-empty input to use the public field.
 
 ## Error handling and compatibility
 

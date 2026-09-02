@@ -17,11 +17,12 @@ commit `fa230aec233a9d61609c11d8d0a3df6ac9b72e8b` by `src/commands/bug/create_js
 ## Decision
 
 Keep the existing `bug create --from-json` `groups` key as the user-facing opt-out surface and
-preserve the public Rust shape of `CreateBugParams.groups: Vec<String>`. Add a private,
-serialization-only group override to the existing non-exhaustive payload type. The public field
-continues omitting an empty vector and serializing non-empty values; the private override emits
-`"groups": []` only when structured input explicitly supplied an empty array. A crate-private
-setter maintains the invariant that only one field can serialize under the `groups` key.
+preserve the public Rust shape of `CreateBugParams.groups: Vec<String>`. Add a crate-visible,
+non-public presence marker to the existing non-exhaustive payload type and replace its derived
+serializer with a serializer backed by a private wire view. The wire view computes exactly one
+`groups` member: it omits an empty vector by default, emits `"groups": []` when structured input
+explicitly supplied an empty array, and emits non-empty values regardless of the marker. A
+crate-private setter records structured-input presence.
 
 Structured input preserves the same distinction before it reaches the payload. A missing key maps
 to `None`, an array maps to `Some(array)`, and JSON `null` remains rejected so the accepted input
@@ -32,7 +33,9 @@ schema does not broaden. A non-empty `--groups` flag continues to override the J
 Existing Rust callers and flag, template, clone, and structured inputs that omit groups retain
 their current field type and server behavior. Structured input can now express the Bugzilla
 empty-array opt-out without a new flag or schema key. The published input schema and
-`SCHEMA_VERSION` do not change. Only the structured-input adapter uses the private override.
+`SCHEMA_VERSION` do not change. Existing in-crate full struct expressions initialize the private
+marker to false; only the structured-input adapter sets it true. The wire view cannot emit a
+duplicate `groups` key even if later in-crate code mutates the public vector.
 
 ## Considered & rejected
 
