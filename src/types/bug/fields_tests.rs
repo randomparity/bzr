@@ -31,3 +31,23 @@ fn field_selected_treats_aliases_as_same_field() {
 
     assert!(!field_selected(spec, "assigned_to"));
 }
+
+#[test]
+fn projection_recognizes_groups_and_time_tracking_fields() {
+    for field in ["groups", "estimated_time", "remaining_time"] {
+        let resolved = resolve_bug_field(field).unwrap_or(BugField::Id);
+        assert_eq!(resolved.canonical(), field);
+        assert!(field_selected(ColumnSpec::new(Some(field), None), field));
+    }
+
+    let partition = partition_include("groups,estimated_time,remaining_time");
+    assert!(partition.unknown.is_empty());
+    assert_eq!(
+        partition
+            .ordered
+            .iter()
+            .map(|field| field.key())
+            .collect::<Vec<_>>(),
+        vec!["groups", "estimated_time", "remaining_time"]
+    );
+}
