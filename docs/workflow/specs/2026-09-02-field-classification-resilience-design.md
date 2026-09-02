@@ -45,6 +45,18 @@ indistinguishable client-side empty vector, and emitting human prose into struct
 4. Functional phase 05 exercises text/date/int fields and credentialless classification listing
    against each supported stock container.
 
+Because the established `encode_path` helper encodes underscore, alias lookup changes the literal
+request from `bug_status` to `bug%5Fstatus`. Existing wiremock call-site fixtures and the functional
+Red Hat response-shape proxy must accept that encoded spelling. Those are direct verification
+dependencies of the required path change, not changes to their command behavior.
+
+The unified definition also keeps `name` required, as the all-fields consumer already did after
+#626. Earlier single-field fixtures omitted `name` only because their narrower duplicate never
+read it; every existing successful `/rest/field/bug/<name>` fixture must add its real resolved
+field name while retaining values and assertions. This includes `classification` fixtures as well
+as alias fixtures. Defaulting identity to preserve incomplete mocks would weaken the production
+contract.
+
 ## Error and output contract
 
 - An existing field whose response omits `values` returns an empty vector. Table output is exactly
@@ -83,7 +95,9 @@ Tests must be observed failing against the pre-fix implementation before product
 
 - Field resource tests cover omitted `values`, encoded names, unchanged alias resolution, and
   not-found behavior. A recorded all-fields response containing select and non-select rows proves
-  the one shared model serves server capabilities.
+  the one shared model serves server capabilities. Existing command, integration, and proxy
+  fixtures that observe alias requests use the encoded path emitted by the shared helper and carry
+  the required field `name` that the consolidated response model reads.
 - Classification command tests cover code 900 in table, JSON, and NDJSON modes, exact stream
   placement, lone-`Unclassified` compatibility, and unrelated-error propagation. Empty NDJSON
   output is zero records.
