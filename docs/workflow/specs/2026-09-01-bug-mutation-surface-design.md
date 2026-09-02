@@ -96,7 +96,9 @@ on each bug's current state and remains the server's responsibility, as for clos
   against the derived baseline and again unchanged against the private wire view so every
   unchanged field name, value, and omission rule remains covered.
 - Preserve and extend default resolve and non-empty create-group coverage.
-- Extend phase 11b for an explicit resolve status plus client-side invalid-status rejection.
+- Extend phase 11b with the stock non-default `VERIFIED` status, asserting the created bug reaches
+  `VERIFIED` with its resolution, plus client-side invalid-status rejection. Retain the existing
+  no-flag `RESOLVED` assertion so the phase fails if command assembly ignores the override.
 - Extend the restricted-access phase with a dedicated product whose group control is default (2),
   not mandatory (3). Assert omission applies that group, then create with `groups: []` and assert
   the resulting bug's group list is empty.
