@@ -7,6 +7,8 @@ use crate::cli::{ClassificationAction, ProjectionArgs};
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
+const DISABLED_NOTE: &str = "Note: only the default 'Unclassified' classification exists; this server likely has classifications disabled.";
+
 fn list_with(projection: ProjectionArgs) -> ClassificationAction {
     ClassificationAction::List { projection }
 }
@@ -57,6 +59,18 @@ async fn mount_one_classification(mock: &wiremock::MockServer) {
                 "sort_key": 0,
                 "products": []
             }]
+        })))
+        .mount(mock)
+        .await;
+}
+
+async fn mount_classification_list_error(mock: &wiremock::MockServer, code: i64) {
+    Mock::given(method("GET"))
+        .and(path("/rest/field/bug/classification"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "error": true,
+            "code": code,
+            "message": "Classifications are disabled"
         })))
         .mount(mock)
         .await;
@@ -168,19 +182,19 @@ async fn classification_list_returns_sorted_json() {
 }
 
 #[tokio::test]
-async fn classification_list_notes_disabled_when_only_unclassified() {
+async fn classification_list_notes_disabled_for_case_insensitive_unclassified() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/field/bug/classification"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "fields": [{"name": "classification", "values": [{"name": "Unclassified", "sort_key": 0}]}]
+            "fields": [{"name": "classification", "values": [{"name": "uNcLaSsIfIeD", "sort_key": 0}]}]
         })))
         .mount(&mock)
         .await;
     Mock::given(method("GET"))
-        .and(path("/rest/classification/Unclassified"))
+        .and(path("/rest/classification/uNcLaSsIfIeD"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "classifications": [{"id": 1, "name": "Unclassified", "description": "Default", "sort_key": 0, "products": []}]
+            "classifications": [{"id": 1, "name": "uNcLaSsIfIeD", "description": "Default", "sort_key": 0, "products": []}]
         })))
         .mount(&mock)
         .await;
@@ -195,11 +209,90 @@ async fn classification_list_notes_disabled_when_only_unclassified() {
     )
     .await;
     assert!(result.is_ok());
-    assert!(
-        __io.err_str().contains("classifications disabled"),
-        "expected disabled note on stderr, got: {}",
-        __io.err_str()
+    assert_eq!(__io.out_str(), format!("{DISABLED_NOTE}\n"));
+    assert!(__io.err_str().is_empty());
+}
+
+#[tokio::test]
+async fn classification_list_api_900_writes_disabled_note_to_table_stdout() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_classification_list_error(&mock, 900).await;
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &list_with(ProjectionArgs::default()),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "list should degrade API 900: {result:?}");
+    assert_eq!(io.out_str(), format!("{DISABLED_NOTE}\n"));
+    assert!(io.err_str().is_empty());
+}
+
+#[tokio::test]
+async fn classification_list_api_900_writes_empty_json_and_stderr_note() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_classification_list_error(&mock, 900).await;
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &list_with(ProjectionArgs::default()),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "list should degrade API 900: {result:?}");
+    assert_eq!(
+        crate::test_helpers::json_envelope_data(io.out_str()),
+        serde_json::json!([])
     );
+    assert_eq!(io.err_str(), format!("{DISABLED_NOTE}\n"));
+}
+
+#[tokio::test]
+async fn classification_list_api_900_writes_no_ndjson_records_and_stderr_note() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_classification_list_error(&mock, 900).await;
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &list_with(ProjectionArgs::default()),
+        &crate::commands::runtime::invocation::CommandContext::new(
+            None,
+            OutputFormat::Ndjson,
+            None,
+        ),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "list should degrade API 900: {result:?}");
+    assert!(io.out_str().is_empty(), "NDJSON must have zero records");
+    assert_eq!(io.err_str(), format!("{DISABLED_NOTE}\n"));
+}
+
+#[tokio::test]
+async fn classification_list_propagates_unrelated_api_error() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_classification_list_error(&mock, 901).await;
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &list_with(ProjectionArgs::default()),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(matches!(
+        result,
+        Err(crate::error::BzrError::Api { code: 901, .. })
+    ));
+    assert!(io.out_str().is_empty());
+    assert!(io.err_str().is_empty());
 }
 
 #[tokio::test]
