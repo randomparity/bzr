@@ -84,13 +84,6 @@ pub(crate) fn get_u64(m: &BTreeMap<String, Value>, key: &str) -> Option<u64> {
         .and_then(|v| u64::try_from(v).ok())
 }
 
-pub(crate) fn get_f64(m: &BTreeMap<String, Value>, key: &str) -> Option<f64> {
-    match m.get(key) {
-        Some(Value::Double(value)) => Some(*value),
-        _ => None,
-    }
-}
-
 /// Extract a required non-negative `u64` ID from a struct member.
 ///
 /// XML-RPC transmits integers as signed `i64`, but domain identifiers

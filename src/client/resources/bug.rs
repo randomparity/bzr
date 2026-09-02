@@ -17,6 +17,12 @@ use crate::types::transport::ApiMode;
 const BUG_DEFAULT_FIELDS: &str = "id,summary,status,resolution,dupe_of,product,component,version,\
     assigned_to,priority,severity,creation_time,last_change_time,creator,\
     url,whiteboard,keywords,blocks,depends_on,cc,op_sys,rep_platform,deadline,\
+    target_milestone,flags";
+
+const BUG_VIEW_DEFAULT_FIELDS: &str =
+    "id,summary,status,resolution,dupe_of,product,component,version,\
+    assigned_to,priority,severity,creation_time,last_change_time,creator,\
+    url,whiteboard,keywords,blocks,depends_on,cc,op_sys,rep_platform,deadline,\
     target_milestone,groups,estimated_time,remaining_time,flags";
 
 /// Ensure `id` is present in an include list and absent from an exclude list,
@@ -413,7 +419,7 @@ impl BugzillaClient {
         include_fields: Option<&str>,
         exclude_fields: Option<&str>,
     ) -> Result<Bug> {
-        let fields = include_fields.unwrap_or(BUG_DEFAULT_FIELDS);
+        let fields = include_fields.unwrap_or(BUG_VIEW_DEFAULT_FIELDS);
         let mut req_builder = self
             .http
             .get(self.url(&format!("bug/{id}")))

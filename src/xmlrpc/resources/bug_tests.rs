@@ -317,6 +317,32 @@ fn value_to_bug_captures_groups_and_time_tracking_fields() {
 }
 
 #[test]
+fn value_to_bug_rejects_malformed_group_and_time_tracking_fields() {
+    let malformed = [
+        ("groups", Value::String("functest-grp".into())),
+        (
+            "groups",
+            Value::Array(vec![Value::String("functest-grp".into()), Value::Int(7)]),
+        ),
+        ("estimated_time", Value::String("8".into())),
+        ("remaining_time", Value::Int(5)),
+    ];
+
+    for (field, value) in malformed {
+        let mut payload = BTreeMap::new();
+        payload.insert("id".into(), Value::Int(42));
+        payload.insert(field.into(), value);
+
+        let result = value_to_bug(&Value::Struct(payload));
+
+        assert!(
+            matches!(&result, Err(BzrError::XmlRpc(message)) if message.contains(field)),
+            "malformed {field} should name the field: {result:?}"
+        );
+    }
+}
+
+#[test]
 fn value_to_bug_converts_custom_field_arrays() {
     let mut payload = BTreeMap::new();
     payload.insert("id".into(), Value::Int(42));

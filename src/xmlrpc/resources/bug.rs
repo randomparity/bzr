@@ -5,8 +5,8 @@ use crate::types::bug::{partition_filters, Bug, SearchParams, FIELD_MAPPINGS};
 use crate::xmlrpc::protocol::Value;
 use crate::xmlrpc::protocol::XmlRpcClient;
 use crate::xmlrpc::resources::mappers::{
-    get_datetime_str, get_f64, get_flags, get_int_array, get_nonempty_str, get_str, get_str_array,
-    get_u64, require_u64, xmlrpc_id, xmlrpc_value_to_json, EXPECTED_STRUCT_RESPONSE,
+    get_datetime_str, get_flags, get_int_array, get_nonempty_str, get_str, get_str_array, get_u64,
+    require_u64, xmlrpc_id, xmlrpc_value_to_json, EXPECTED_STRUCT_RESPONSE,
 };
 
 impl XmlRpcClient {
@@ -133,6 +133,31 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
     let m = val
         .as_struct()
         .ok_or_else(|| BzrError::XmlRpc("expected struct for bug".into()))?;
+    let groups = match m.get("groups") {
+        None => Vec::new(),
+        Some(Value::Array(values)) => values
+            .iter()
+            .enumerate()
+            .map(|(index, value)| match value {
+                Value::String(group) => Ok(group.clone()),
+                _ => Err(BzrError::XmlRpc(format!(
+                    "bug groups element {index} has unexpected XML-RPC type"
+                ))),
+            })
+            .collect::<Result<Vec<_>>>()?,
+        Some(_) => {
+            return Err(BzrError::XmlRpc(
+                "bug groups field has unexpected XML-RPC type".into(),
+            ));
+        }
+    };
+    let optional_time = |key| match m.get(key) {
+        None => Ok(None),
+        Some(Value::Double(value)) => Ok(Some(*value)),
+        Some(_) => Err(BzrError::XmlRpc(format!(
+            "bug {key} field has unexpected XML-RPC type"
+        ))),
+    };
 
     Ok(Bug {
         id: require_u64(m, "id", "bug")?,
@@ -159,9 +184,9 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         op_sys: get_nonempty_str(m, "op_sys"),
         rep_platform: get_nonempty_str(m, "rep_platform"),
         target_milestone: get_nonempty_str(m, "target_milestone"),
-        groups: get_str_array(m, "groups"),
-        estimated_time: get_f64(m, "estimated_time"),
-        remaining_time: get_f64(m, "remaining_time"),
+        groups,
+        estimated_time: optional_time("estimated_time")?,
+        remaining_time: optional_time("remaining_time")?,
         flags: get_flags(m, "flags"),
         custom_fields: custom_fields_from_xmlrpc(m),
     })
