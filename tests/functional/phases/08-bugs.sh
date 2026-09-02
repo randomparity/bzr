@@ -207,6 +207,10 @@ test_begin "bug-search" "bug search"
 run_bzr bug search "Bug two searchable"
 if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
 
+test_begin "bug-search-zero-offset" "bug search preserves a valid zero-offset window"
+run_bzr bug search "Bug two searchable" --limit 1 --offset 0
+if assert_success && assert_json_array_length '.' 1; then test_pass; fi
+
 test_begin "bug-list-status-multiple-or" "bug list --status multiple (OR)"
 run_bzr bug list --product FuncTestProd --status NEW --status CONFIRMED
 if assert_success; then test_pass; fi

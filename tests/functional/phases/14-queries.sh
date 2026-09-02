@@ -52,6 +52,10 @@ test_begin "query-run-with-limit-override" "query run with limit override"
 run_bzr query run prod-bugs --limit 1
 if assert_success && assert_json_array_length '.' 1; then test_pass; fi
 
+test_begin "query-run-zero-offset" "query run preserves a valid zero-offset window"
+run_bzr query run prod-bugs --limit 1 --offset 0
+if assert_success && assert_json_array_length '.' 1; then test_pass; fi
+
 test_begin "query-run-with-fields-override" "query run with fields override"
 run_bzr query run prod-bugs --fields id,summary,status
 if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi

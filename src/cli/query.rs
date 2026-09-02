@@ -45,7 +45,8 @@ pub(crate) struct QueryRunFilterArgs {
     /// Override the saved Resolution filter.
     #[arg(long)]
     pub resolution: Vec<String>,
-    /// Override the saved QA Contact filter.
+    /// Override the saved QA Contact login-substring filter.
+    /// Prefix with ! to exclude substring matches; ! alone is invalid.
     #[arg(long)]
     pub qa_contact: Vec<String>,
 }
