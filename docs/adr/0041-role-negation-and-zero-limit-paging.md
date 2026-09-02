@@ -24,7 +24,7 @@ behavior. bzr emits Bugzilla's `nowordssubstr` boolean-chart operator for
 exact or substring negation operators.
 
 bzr rejects an effective zero limit combined with a nonzero offset before any
-request. This validation applies at the shared paging boundary so `bug list`,
+`Bug.search` request. This validation applies at the shared paging boundary so `bug list`,
 `bug search`, `bug my`, and `query run` behave consistently, including saved
 queries and imported URLs. `limit=0` without an offset remains the unbounded
 request used by normal searches and `--count`.
@@ -33,6 +33,8 @@ request used by normal searches and `--count`.
 
 - `--assignee alice` and `--assignee '!alice'` become complementary substring
   filters; creator and QA-contact filters follow the same rule.
+- A negated role value whose remainder contains no word is rejected instead of
+  being sent to Bugzilla, whose empty-word behavior is not complementary.
 - Role negation intentionally differs from exact-match non-role filters, so CLI
   help and the reference documentation state the distinction.
 - An invalid zero-limit window fails with input-validation exit 7 instead of

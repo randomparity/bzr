@@ -13,7 +13,11 @@ silently discards.
 
 The role-valued filters `assigned_to`, `creator`/`reporter`, and `qa_contact`
 use Bugzilla's positive substring compatibility behavior. Their `!value` form
-must therefore emit `nowordssubstr`, the inverse of `anywordssubstr`.
+must therefore emit `nowordssubstr`, the inverse of `anywordssubstr`. A
+negated role value is valid only when its post-`!` content contains at least
+one nonempty whitespace/comma-delimited word; bare `!` and separator-only
+forms fail input validation because Bugzilla treats their positive and
+negative forms identically rather than as complements.
 Exact-match fields continue to use `notequals`; native substring fields such as
 whiteboard and URL continue to use `notsubstring`.
 
@@ -31,11 +35,16 @@ already clears offsets before issuing its `limit=0` request.
 request builder remains the single encoder of boolean-chart triples.
 
 The shared paging module gains a validator over resolved `SearchParams`.
-Callers invoke it immediately before paging/search execution and before making
-a network request. `bug list` and `bug my` validate the base params they build;
-the shared search execution path covers `bug search` and `query run` after
-their URL/saved-query/CLI resolution. This keeps validation at the smallest
-shared seams without changing count-mode rewriting.
+`fetch_page` invokes it immediately before the `Bug.search` request. This one
+boundary covers `bug list`, `bug my`, `bug search`, and `query run` after their
+URL/saved-query/CLI resolution. Connection setup and `bug my` identity lookup
+may already have occurred; the contract is local rejection before the invalid
+search request, not network-free error precedence. Count-mode rewriting stays
+unchanged.
+
+The client search boundary rejects zero-word negated role filters before REST
+or XML-RPC request construction. That check is shared because both transports
+consume the same mapping table.
 
 CLI long help and per-flag help state that assignee, creator, and QA-contact
 values are substring role matches and that `!` excludes those substring
@@ -52,11 +61,13 @@ offset. The CLI reference mirrors these rules.
   duplicate raw `offset` parameters.
 - Mixed positive and negated filters retain their existing AND/OR composition;
   only each role negation's operator changes.
+- Bare or separator-only negated role values fail input validation; empty
+  positive role values retain their existing server-defined behavior.
 
 ## Verification
 
-Focused request tests pin `nowordssubstr` for assigned-to, creator, and
-QA-contact while retaining `notequals` for exact fields. Shared paging tests
+Focused REST and XML-RPC request tests pin `nowordssubstr` for assigned-to,
+creator, and QA-contact while retaining `notequals` for exact fields. Shared paging tests
 prove the invalid pair fails before transport and the three valid boundary
 cases remain accepted. Command tests cover all four consumers, including a
 saved-query or URL-derived effective pair.
@@ -74,8 +85,8 @@ Required gates are `make lint`, `make test`, and
 
 The local operator controls filter and paging values crossing the CLI/config
 boundary into HTTP query parameters. Existing typed `u32` parsing bounds the
-numbers, reqwest owns URL encoding, and the new validator fails before
-transport without echoing server data or credentials. The change adds no
+numbers, reqwest owns URL encoding, and the new validators fail before the
+invalid search request without echoing server data or credentials. The change adds no
 network endpoint, authorization rule, secret handling, or permission. A
 malicious Bugzilla server and server-side search correctness beyond the two
 documented behaviors remain outside scope.
