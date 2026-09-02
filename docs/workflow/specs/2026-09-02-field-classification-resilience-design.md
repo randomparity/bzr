@@ -70,7 +70,8 @@ contract.
   on stderr.
 - Other classification errors remain errors with their existing exit codes.
 - The resolved field name is one percent-encoded path segment; aliases are resolved before
-  encoding.
+  encoding. Exact `.` and `..` names are rejected before URL construction because the URL parser
+  normalizes their encoded forms as navigation segments.
 
 ## Security and trust boundaries
 
@@ -78,8 +79,9 @@ The design adds no entry point or permission. It narrows two existing boundaries
 
 - A local operator controls the field-name argument, which crosses into URL construction. The
   existing `client::encode_path` is the control; it encodes the complete resolved value as one
-  segment. Tests use slash, percent, question-mark, and space characters to prove no path or query
-  injection.
+  segment, while exact `.` and `..` are rejected before the URL parser can normalize them. Tests
+  use slash, percent, question-mark, and space characters and prove dot-only inputs send no
+  request.
 - A configured Bugzilla server controls JSON response shape and API error codes. Serde defaults
   only the members upstream documents as omitted, while required field identity remains required.
   The degradation match is bounded to numeric code 900 and leaks only the existing generic note.

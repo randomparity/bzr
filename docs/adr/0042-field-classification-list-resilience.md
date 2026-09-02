@@ -22,6 +22,8 @@ Define one internal field-definition response model in the field resource and re
 single-field lookup and server capabilities. Its `values`, `type`, and `is_custom` members retain
 the server-capabilities defaults. Percent-encode the resolved field name before placing it in the
 request path.
+Reject exact resolved field names `.` and `..` before URL construction because URL parsers
+normalize their percent-encoded forms as path-navigation segments.
 
 Keep API error 900 distinguishable at the command boundary. `classification list` treats that
 code anywhere in its enumeration request sequence as a disabled-classification state: table

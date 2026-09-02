@@ -125,6 +125,26 @@ async fn get_field_values_encodes_resolved_field_name_as_one_path_segment() {
 }
 
 #[tokio::test]
+async fn get_field_values_rejects_dot_segments_without_a_request() {
+    for field_name in [".", ".."] {
+        let mock = MockServer::start().await;
+        let client = test_client(&mock.uri());
+
+        let result = client.get_field_values(field_name).await;
+
+        assert!(matches!(
+            result,
+            Err(crate::error::BzrError::InputValidation {
+                field: Some(ref field),
+                value: Some(ref value),
+                ..
+            }) if field == "field" && value == field_name
+        ));
+        assert!(mock.received_requests().await.unwrap().is_empty());
+    }
+}
+
+#[tokio::test]
 async fn get_field_values_resolves_severity_alias() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
