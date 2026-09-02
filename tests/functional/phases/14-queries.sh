@@ -59,9 +59,9 @@ if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
 test_begin "query-run-count" "query run --count"
 _QCOUNT_MARK=$(unique_name query-count)
 make_bug --marker "$_QCOUNT_MARK" --product FuncTestProd --component Backend \
-    --op-sys Linux --rep-platform PC --description d --summary "query count 1" >/dev/null
+    --op-sys Linux --platform PC --description d --summary "query count 1" >/dev/null
 make_bug --marker "$_QCOUNT_MARK" --product FuncTestProd --component Backend \
-    --op-sys Linux --rep-platform PC --description d --summary "query count 2" >/dev/null
+    --op-sys Linux --platform PC --description d --summary "query count 2" >/dev/null
 run_bzr query save count-bugs --product FuncTestProd --whiteboard "$_QCOUNT_MARK" --limit 1
 if assert_success && assert_json '.action' "saved"; then
     run_bzr query run count-bugs --count

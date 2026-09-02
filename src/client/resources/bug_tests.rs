@@ -158,7 +158,7 @@ async fn get_bug_default_fields_include_bug_json_fields() {
         .and(path("/rest/bug/1"))
         .and(query_param(
             "include_fields",
-            "id,summary,status,resolution,dupe_of,product,component,version,assigned_to,priority,severity,creation_time,last_change_time,creator,url,whiteboard,keywords,blocks,depends_on,cc,op_sys,rep_platform,deadline,target_milestone,groups,estimated_time,remaining_time,flags",
+            "id,summary,status,resolution,dupe_of,product,component,version,assigned_to,priority,severity,creation_time,last_change_time,creator,url,whiteboard,keywords,blocks,depends_on,cc,op_sys,platform,deadline,target_milestone,groups,estimated_time,remaining_time,flags",
         ))
         .respond_with(ResponseTemplate::new(200).set_body_json(
             serde_json::json!({"bugs": [{"id": 1, "summary": "test", "status": "NEW"}]}),

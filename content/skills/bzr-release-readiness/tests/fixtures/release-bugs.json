@@ -172,7 +172,7 @@
           "target_milestone",
           "version",
           "op_sys",
-          "rep_platform",
+          "platform",
           "resolution",
           "qa_contact",
           "bug_file_loc"

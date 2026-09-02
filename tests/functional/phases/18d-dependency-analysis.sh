@@ -74,7 +74,7 @@ _DA_MARKER="bzr-dependency-analysis-demo-v1"
 _DA_ALIAS="adj/$BZ_VERSION-$$"
 _DA_MISSING_ALIAS="missing/$BZ_VERSION-$$"
 _DA_CREATE=(--product FuncTestProd --component Backend --op-sys Linux
-  --rep-platform PC --description "dependency analysis fixture")
+  --platform PC --description "dependency analysis fixture")
 _DA_HOSTILE_SUMMARY='<script>alert(1)</script> [click](https://evil.invalid)'
 _DA_HOSTILE_SUMMARY+=' ``` %%{init: {"theme":"dark"}}%%'
 _DA_BASE=$(make_bug "${_DA_CREATE[@]}" --summary "$_DA_HOSTILE_SUMMARY")
@@ -586,7 +586,7 @@ for _DA_ADJ_MODE in rest xmlrpc; do
   run_bzr_raw --json --server "$_DA_ADJ_SERVER" \
     bug adjacency "$_DA_ROOT" "$_DA_ALIAS"
   if assert_exit_code 0 &&
-    assert_raw_json '.schema_version' '2.0.1' &&
+    assert_raw_json '.schema_version' '2.1.0' &&
     assert_json '.requests == [
       {requested: "'"$_DA_ROOT"'", bug_id: '"$_DA_ROOT"'},
       {requested: "'"$_DA_ALIAS"'", bug_id: '"$_DA_LEFT"'}

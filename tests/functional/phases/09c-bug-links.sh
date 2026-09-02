@@ -21,7 +21,7 @@ LINK_C=""
 test_begin "bug-create-link-node-a" "bug create (link node A)"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Link node A" --description "links graph node A" \
-    --op-sys All --rep-platform All
+    --op-sys All --platform All
 if assert_success && assert_json_exists '.id'; then
     LINK_A=$(jq -r '.id' "$BZR_STDOUT")
     test_pass
@@ -30,7 +30,7 @@ fi
 test_begin "bug-create-link-node-b" "bug create (link node B)"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Link node B" --description "links graph node B" \
-    --op-sys All --rep-platform All
+    --op-sys All --platform All
 if assert_success && assert_json_exists '.id'; then
     LINK_B=$(jq -r '.id' "$BZR_STDOUT")
     test_pass
@@ -39,7 +39,7 @@ fi
 test_begin "bug-create-link-node-c" "bug create (link node C)"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Link node C" --description "links graph node C" \
-    --op-sys All --rep-platform All
+    --op-sys All --platform All
 if assert_success && assert_json_exists '.id'; then
     LINK_C=$(jq -r '.id' "$BZR_STDOUT")
     test_pass

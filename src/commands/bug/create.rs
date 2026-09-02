@@ -22,7 +22,7 @@ struct MergedFields {
     severity: Option<String>,
     assigned_to: Option<String>,
     op_sys: Option<String>,
-    rep_platform: Option<String>,
+    platform: Option<String>,
     url: Option<String>,
     whiteboard: Option<String>,
     target_milestone: Option<String>,
@@ -47,7 +47,7 @@ impl MergedFields {
             severity: self.severity.clone(),
             assigned_to: self.assigned_to.clone(),
             op_sys: self.op_sys.clone(),
-            rep_platform: self.rep_platform.clone(),
+            platform: self.platform.clone(),
             ..Default::default()
         }
     }
@@ -120,7 +120,7 @@ fn build_editor_template(
     buf.push_str(&row("OpSys:", params.op_sys.as_deref().unwrap_or(unset)));
     buf.push_str(&row(
         "Platform:",
-        params.rep_platform.as_deref().unwrap_or(unset),
+        params.platform.as_deref().unwrap_or(unset),
     ));
     buf
 }
@@ -191,7 +191,7 @@ fn merge_fields(args: &CreateArgs, tmpl: Option<&BugTemplate>) -> Result<MergedF
         severity,
         assignee,
         op_sys,
-        rep_platform,
+        platform,
         create_fields,
         ..
     } = args;
@@ -229,7 +229,7 @@ fn merge_fields(args: &CreateArgs, tmpl: Option<&BugTemplate>) -> Result<MergedF
         op_sys: op_sys
             .clone()
             .or_else(|| tmpl.and_then(|t| t.op_sys.clone())),
-        rep_platform: rep_platform
+        platform: platform
             .clone()
             .or_else(|| tmpl.and_then(|t| t.rep_platform.clone())),
         url: create_fields
@@ -344,7 +344,7 @@ pub(super) async fn handle(
         severity: merged.severity,
         assigned_to: merged.assigned_to,
         op_sys: merged.op_sys,
-        rep_platform: merged.rep_platform,
+        platform: merged.platform,
         alias: create_fields.alias.clone(),
         url: merged.url,
         whiteboard: merged.whiteboard,

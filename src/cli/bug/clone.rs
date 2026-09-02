@@ -6,7 +6,7 @@ pub const LONG_ABOUT: &str = r#"Clone an existing bug, optionally overriding fie
 
 Copies the source bug's product, component, version, summary,
 description, priority, severity, assignee, op-sys,
-rep-platform, URL, whiteboard, target milestone, deadline, CC
+platform, URL, whiteboard, target milestone, deadline, CC
 list, and keywords into a new bug. Pass any of the override
 flags (`--summary`, `--product`, `--url`, ...) to change values
 for the clone; unspecified fields inherit from the source.
@@ -64,8 +64,8 @@ pub(crate) struct CloneArgs {
     #[arg(long)]
     pub op_sys: Option<String>,
     /// Override hardware platform
-    #[arg(long)]
-    pub rep_platform: Option<String>,
+    #[arg(long, alias = "rep-platform")]
+    pub platform: Option<String>,
     #[command(flatten)]
     pub create_fields: CloneCreateFieldArgs,
     /// Skip adding "Cloned from bug #N" comment

@@ -14,7 +14,7 @@ echo "── Phase 16b: Complex sequences ────────────�
 test_begin "bug-update-with-no-change-fields-is-rejected-exit-7" "bug update with no change fields is rejected (exit 7)"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "No-op update guard" --description "noop guard" \
-    --priority Normal --severity normal --op-sys All --rep-platform All
+    --priority Normal --severity normal --op-sys All --platform All
 if assert_success && assert_json_exists '.id'; then
     SEQ_NOOP=$(jq -r '.id' "$BZR_STDOUT")
     run_bzr bug update "$SEQ_NOOP"
@@ -29,7 +29,7 @@ else test_skip "create failed"; fi
 test_begin "bug-lifecycle-state-verification-new-confirmed-resolved" "bug lifecycle state verification (new → confirmed → resolved)"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Lifecycle bug" --description "lifecycle" \
-    --priority Normal --severity normal --op-sys All --rep-platform All
+    --priority Normal --severity normal --op-sys All --platform All
 if assert_success && assert_json_exists '.id'; then
     SEQ_LIFE=$(jq -r '.id' "$BZR_STDOUT")
     run_bzr bug update "$SEQ_LIFE" --status CONFIRMED
@@ -60,7 +60,7 @@ else test_skip "create failed"; fi
 test_begin "cross-transport-read-parity-rest-hybrid-xmlrpc" "cross-transport read parity (rest / hybrid / xmlrpc)"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Parity bug" --description "parity" \
-    --priority High --severity normal --op-sys All --rep-platform All
+    --priority High --severity normal --op-sys All --platform All
 if assert_success && assert_json_exists '.id'; then
     SEQ_PAR=$(jq -r '.id' "$BZR_STDOUT")
     run_bzr bug update "$SEQ_PAR" --whiteboard "parity-marker-106"
@@ -68,14 +68,17 @@ if assert_success && assert_json_exists '.id'; then
         run_bzr --api rest bug view "$SEQ_PAR"
         if assert_success &&
             assert_json '.whiteboard' "parity-marker-106" &&
+            assert_json '.platform' "All" &&
             assert_json '.summary' "Parity bug"; then
             run_bzr --api hybrid bug view "$SEQ_PAR"
             if assert_success &&
                 assert_json '.whiteboard' "parity-marker-106" &&
+                assert_json '.platform' "All" &&
                 assert_json '.summary' "Parity bug"; then
                 run_bzr --api xmlrpc bug view "$SEQ_PAR"
                 if assert_success &&
                     assert_json '.whiteboard' "parity-marker-106" &&
+                    assert_json '.platform' "All" &&
                     assert_json '.summary' "Parity bug"; then
                     test_pass
                 fi
@@ -89,7 +92,7 @@ else test_skip "create failed"; fi
 test_begin "batch-update-partial-failure-exit-11-commits-valid-leg" "batch update partial failure (exit 11) commits valid leg"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Batch valid leg" --description "batch" \
-    --priority Normal --severity normal --op-sys All --rep-platform All
+    --priority Normal --severity normal --op-sys All --platform All
 if assert_success && assert_json_exists '.id'; then
     SEQ_BVALID=$(jq -r '.id' "$BZR_STDOUT")
     run_bzr bug update "$SEQ_BVALID" 999999 --whiteboard "batch-partial-107"
@@ -106,10 +109,10 @@ else test_skip "create failed"; fi
 test_begin "clone-preserves-source-description-in-comment" "clone preserves source description in comment #0"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Clone description source" --description "CLONE-DESC-MARKER-108" \
-    --priority Normal --severity normal --op-sys Linux --rep-platform PC
+    --priority Normal --severity normal --op-sys Linux --platform PC
 if assert_success && assert_json_exists '.id'; then
     SEQ_CSRC=$(jq -r '.id' "$BZR_STDOUT")
-    run_bzr bug clone "$SEQ_CSRC" --op-sys Linux --rep-platform PC
+    run_bzr bug clone "$SEQ_CSRC" --op-sys Linux --platform PC
     if assert_success && assert_json_exists '.id'; then
         SEQ_CDST=$(jq -r '.id' "$BZR_STDOUT")
         run_bzr comment list "$SEQ_CDST"

@@ -65,7 +65,7 @@ pub struct SearchParams {
     pub op_sys: Vec<String>,
     /// Filter by Platform / Hardware (repeatable). Exact match. The
     /// Bugzilla `Bug.search` API parameter is `platform` (the bug
-    /// record field is `rep_platform`); we match the search-API
+    /// record field is `platform`); we match the search-API
     /// name here.
     pub platform: Vec<String>,
     /// Filter by Resolution (repeatable). Exact match. Empty
@@ -369,8 +369,8 @@ pub const FIELD_MAPPINGS: &[FieldMapping] = &[
     FieldMapping {
         field: FilterField::Platform,
         struct_field: "platform",
-        url_param: "rep_platform",
-        internal_name: "rep_platform",
+        url_param: "platform",
+        internal_name: "platform",
         negation_operator: NegationOp::NotEquals,
     },
     FieldMapping {

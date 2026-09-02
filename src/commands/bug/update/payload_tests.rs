@@ -102,6 +102,19 @@ fn build_update_params_populates_scalar_parity_fields() {
 }
 
 #[test]
+fn build_update_params_serializes_platform() {
+    let mut action = make_update_action(vec![42]);
+    let BugAction::Update(args) = &mut action else {
+        panic!("expected update action");
+    };
+    args.platform = Some("x86_64".into());
+
+    let (_ids, params) = build_update_params(as_update_args(&action)).unwrap();
+    assert_eq!(params.platform.as_deref(), Some("x86_64"));
+    assert_eq!(serde_json::to_value(params).unwrap()["platform"], "x86_64");
+}
+
+#[test]
 fn build_update_params_accepts_valid_deadline_verbatim() {
     let mut action = make_update_action(vec![42]);
     *update_deadline_mut(&mut action).expect("update action") = Some("2026-12-31".into());

@@ -192,7 +192,7 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         depends_on: get_int_array(m, "depends_on"),
         cc: get_str_array(m, "cc"),
         op_sys: get_nonempty_str(m, "op_sys"),
-        rep_platform: get_nonempty_str(m, "rep_platform"),
+        platform: get_nonempty_str(m, "platform"),
         target_milestone: get_nonempty_str(m, "target_milestone"),
         groups,
         estimated_time: optional_time("estimated_time")?,

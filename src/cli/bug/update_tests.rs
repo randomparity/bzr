@@ -37,6 +37,8 @@ fn parse_update_multiple_ids_and_scalar_fields() {
         "FIXED",
         "--assignee",
         "me@example.com",
+        "--platform",
+        "x86_64",
         "--priority",
         "high",
         "--severity",
@@ -54,6 +56,7 @@ fn parse_update_multiple_ids_and_scalar_fields() {
     assert_eq!(update.status.as_deref(), Some("RESOLVED"));
     assert_eq!(update.resolution.as_deref(), Some("FIXED"));
     assert_eq!(update.assignee.as_deref(), Some("me@example.com"));
+    assert_eq!(update.platform.as_deref(), Some("x86_64"));
     assert_eq!(update.priority.as_deref(), Some("high"));
     assert_eq!(update.severity.as_deref(), Some("major"));
     assert_eq!(update.summary.as_deref(), Some("new summary"));
