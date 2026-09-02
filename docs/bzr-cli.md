@@ -242,9 +242,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 ├── component
 │   ├── list --product <P> [--fields <F>] [--exclude-fields <F>]
 │   ├── view <PRODUCT> <COMPONENT> [--fields <F>] [--exclude-fields <F>]
-│   ├── create [--from-json <PATH>] [--product <P>] [--name <N>] [--description <D>] [--default-assignee <E>]
-│   └── update [<ID>] [--from-json <PATH>] [--product <P>] [--component <C>]
-│              [--name <N>] [--description <D>] [--default-assignee <E>]
+│   └── create [--from-json <PATH>] [--product <P>] [--name <N>] [--description <D>] [--default-assignee <E>]
 ├── config
 │   ├── set-server <NAME> --url <URL> [--api-key <KEY> | --api-key-env <ENV_VAR>] [--email <EMAIL>] [--auth-method <METHOD>]
 │   │                     [--tls-insecure] [--tls-ca-cert <PATH>] [--tls-pin-sha256 <PIN>] [--tls-pin-now] [--tls-pin-clear]
@@ -911,11 +909,12 @@ The `bug create` payload shape is published as `bzr schema bug-create-input`.
 `bug update` accepts its own structured update input via `--from-json` and
 publishes `bzr schema bug-update-input`.
 
-Admin create/update commands for products, components, users, and groups also
-accept `--from-json`, but only object-shaped payloads. Their schemas are
-published as `<resource>-create-input` and `<resource>-update-input`, for
-example `bzr schema product-create-input`. As with bug input, explicit CLI
-flags override the matching JSON fields and unknown JSON keys are rejected.
+Admin create/update commands for products, users, and groups, plus component
+create, also accept `--from-json`, but only object-shaped payloads. Their
+schemas are published as `<resource>-create-input` and, where supported,
+`<resource>-update-input`, for example `bzr schema product-create-input`. As
+with bug input, explicit CLI flags override the matching JSON fields and
+unknown JSON keys are rejected.
 
 ```bash
 printf '%s' '{"product":"Fedora","component":"kernel","summary":"S"}' \
