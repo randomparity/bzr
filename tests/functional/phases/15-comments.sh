@@ -144,4 +144,44 @@ fi
 
 rm -f "$_CBF"
 unset _CB _CBF
+
+# Exercise the integer privacy response seen on production Bugzilla servers
+# through the public REST command path. The proxy mode is opt-in so the default
+# functional consumers continue to see the container's native response.
+_AC_COMMENT_BUG=$(make_bug --product FuncTestProd --component Backend \
+    --op-sys Linux --rep-platform PC --description d \
+    --summary "attachment-comment proxy comment host")
+run_bzr comment add "$_AC_COMMENT_BUG" --body "proxy private comment" --private
+
+test_begin "production-shaped-comment-privacy" "production-shaped integer comment privacy"
+export BZR_FUNC_REDHAT_MODE=attachment-comment
+if redhat_shape_start "$BZ_PORT"; then
+    unset BZR_FUNC_REDHAT_MODE
+    trap 'cleanup; redhat_shape_stop' EXIT
+    export BZR_FUNC_INLINE_KEY="$API_KEY"
+    run_bzr --api rest \
+        --server-url "http://127.0.0.1:${REDHAT_SHAPE_PORT}" \
+        --server-api-key-env BZR_FUNC_INLINE_KEY --server-email "$ADMIN_EMAIL" \
+        comment list "$_AC_COMMENT_BUG"
+    _AC_COMMENT_OK=1
+    if ! assert_success ||
+        ! jq -e 'any(.[]; .text == "proxy private comment" and .is_private == true)' \
+            "$BZR_STDOUT" >/dev/null ||
+        ! grep -Fq "attachment-comment shaped route=comment-privacy count=" \
+            "$REDHAT_SHAPE_LOG"; then
+        _AC_COMMENT_OK=0
+    fi
+    redhat_shape_stop || _AC_COMMENT_OK=0
+    trap cleanup EXIT
+    unset BZR_FUNC_INLINE_KEY
+    if [[ $_AC_COMMENT_OK -eq 1 ]]; then
+        test_pass
+    else
+        test_fail "production-shaped comment proof failed; proxy log: $REDHAT_SHAPE_LOG"
+    fi
+else
+    unset BZR_FUNC_REDHAT_MODE
+    test_fail "attachment-comment response-shape proxy did not become ready: $REDHAT_SHAPE_LOG"
+fi
+unset _AC_COMMENT_BUG _AC_COMMENT_OK
 echo ""

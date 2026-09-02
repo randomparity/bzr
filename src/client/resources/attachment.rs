@@ -1,9 +1,13 @@
+use std::fmt;
+
 use base64::Engine;
-use serde::Deserialize;
+use serde::de::{SeqAccess, Visitor};
+use serde::{Deserialize, Deserializer};
 
 use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
 use crate::types::attachment::{Attachment, UpdateAttachmentParams, UploadAttachmentParams};
+use crate::types::deserialization::u64_from_number_or_string;
 use crate::types::transport::ApiMode;
 
 #[derive(Deserialize)]
@@ -18,26 +22,105 @@ struct FlatAttachmentsResponse {
     attachments: Vec<Attachment>,
 }
 
-#[derive(Deserialize)]
-struct AttachmentByIdResponse {
-    attachments: std::collections::HashMap<String, Attachment>,
-}
+/// Select an attachment from the by-ID response envelopes returned by
+/// different Bugzilla versions.
+fn select_attachment(value: &serde_json::Value, attachment_id: u64) -> Result<Attachment> {
+    let attachments = value.get("attachments").ok_or_else(|| {
+        BzrError::Deserialize("attachment by-ID response: missing `attachments` member".into())
+    })?;
+    let not_found = || BzrError::NotFound {
+        resource: "attachment",
+        id: attachment_id.to_string(),
+    };
 
-/// Pull the single attachment out of a by-ID response, mapping an empty map
-/// to `NotFound`. Shared by the full and metadata-only REST fetches.
-fn single_attachment(data: AttachmentByIdResponse, attachment_id: u64) -> Result<Attachment> {
-    data.attachments
-        .into_values()
-        .next()
-        .ok_or_else(|| BzrError::NotFound {
-            resource: "attachment",
-            id: attachment_id.to_string(),
-        })
+    match attachments {
+        serde_json::Value::Object(attachments) => {
+            let mut attachments = std::collections::HashMap::<String, Attachment>::deserialize(
+                attachments,
+            )
+            .map_err(|error| {
+                BzrError::Deserialize(format!(
+                    "attachment by-ID `attachments` object entry: {error}"
+                ))
+            })?;
+            let attachment = attachments
+                .remove(&attachment_id.to_string())
+                .ok_or_else(not_found)?;
+            if attachment.id != attachment_id {
+                return Err(BzrError::Deserialize(format!(
+                    "attachment by-ID `attachments` object key {attachment_id} contains ID {}",
+                    attachment.id
+                )));
+            }
+            Ok(attachment)
+        }
+        serde_json::Value::Array(attachments) => {
+            let attachments = attachments
+                .iter()
+                .map(Attachment::deserialize)
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| {
+                    BzrError::Deserialize(format!("attachment by-ID `attachments` array: {error}"))
+                })?;
+            attachments
+                .into_iter()
+                .find(|attachment| attachment.id == attachment_id)
+                .ok_or_else(not_found)
+        }
+        _ => Err(BzrError::Deserialize(
+            "attachment by-ID response: `attachments` must be an object or array".into(),
+        )),
+    }
 }
 
 #[derive(Deserialize)]
 struct AttachmentCreateResponse {
+    #[serde(deserialize_with = "deserialize_attachment_ids")]
     ids: Vec<u64>,
+}
+
+fn deserialize_attachment_ids<'de, D>(deserializer: D) -> std::result::Result<Vec<u64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct AttachmentIdsVisitor;
+
+    impl<'de> Visitor<'de> for AttachmentIdsVisitor {
+        type Value = Vec<u64>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("a sequence of attachment IDs")
+        }
+
+        fn visit_seq<A>(self, mut sequence: A) -> std::result::Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            struct AttachmentId(u64);
+
+            impl<'de> Deserialize<'de> for AttachmentId {
+                fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+                where
+                    D: Deserializer<'de>,
+                {
+                    u64_from_number_or_string(
+                        deserializer,
+                        "an attachment ID as a number or string",
+                        "attachment ID must be a non-negative integer or decimal string",
+                    )
+                    .map(Self)
+                }
+            }
+
+            let mut ids = Vec::new();
+            while let Some(AttachmentId(id)) = sequence.next_element()? {
+                ids.push(id);
+            }
+            Ok(ids)
+        }
+    }
+
+    deserializer.deserialize_seq(AttachmentIdsVisitor)
 }
 
 fn extract_bugs_envelope(value: &serde_json::Value) -> Result<Vec<Attachment>> {
@@ -75,7 +158,10 @@ impl BugzillaClient {
 
     async fn get_attachments_rest(&self, bug_id: u64) -> Result<Vec<Attachment>> {
         let value = self
-            .get_json_value(&format!("bug/{bug_id}/attachment"))
+            .get_json_query(
+                &format!("bug/{bug_id}/attachment"),
+                &[("exclude_fields", "data")],
+            )
             .await?;
         Self::try_envelopes(
             &value,
@@ -104,10 +190,10 @@ impl BugzillaClient {
     }
 
     async fn get_attachment_rest(&self, attachment_id: u64) -> Result<Attachment> {
-        let data: AttachmentByIdResponse = self
-            .get_json(&format!("bug/attachment/{attachment_id}"))
+        let value = self
+            .get_json_value(&format!("bug/attachment/{attachment_id}"))
             .await?;
-        single_attachment(data, attachment_id)
+        select_attachment(&value, attachment_id)
     }
 
     /// Fetch a single attachment's metadata without its (base64) bytes.
@@ -127,13 +213,13 @@ impl BugzillaClient {
     }
 
     async fn get_attachment_metadata_rest(&self, attachment_id: u64) -> Result<Attachment> {
-        let data: AttachmentByIdResponse = self
+        let value = self
             .get_json_query(
                 &format!("bug/attachment/{attachment_id}"),
                 &[("exclude_fields", "data")],
             )
             .await?;
-        single_attachment(data, attachment_id)
+        select_attachment(&value, attachment_id)
     }
 
     pub async fn download_attachment(&self, attachment_id: u64) -> Result<(String, Vec<u8>)> {
