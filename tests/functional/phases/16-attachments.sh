@@ -335,4 +335,122 @@ else test_skip "XML-RPC attachment flag parity applies to bz50"; fi
 rm -f "$_AF"
 unset -f _assert_transport_timestamp_parity
 unset _AB _AF _AID _XP_LIST _XP_VIEW
+
+# Prove the production attachment response variants together so the same
+# self-contained fixture covers create, metadata reads, body reads, list body
+# exclusion, bulk re-fetch, and a named credentialless metadata read.
+_AC_ATTACH_BUG=$(make_bug --product FuncTestProd --component Backend \
+    --op-sys Linux --rep-platform PC --description d \
+    --summary "attachment-comment proxy attachment host")
+_AC_ATTACH_FILE=$(mktemp "$FUNC_CONFIG_DIR/ac-attachment.XXXXXX")
+_AC_ATTACH_DOWNLOAD=$(mktemp "$FUNC_CONFIG_DIR/ac-download.XXXXXX")
+_AC_ATTACH_BULK=$(mktemp -d "$FUNC_CONFIG_DIR/ac-bulk.XXXXXX")
+printf 'attachment-comment proxy bytes' >"$_AC_ATTACH_FILE"
+
+test_begin "production-shaped-attachment-wire-variants" "production-shaped attachment wire variants"
+export BZR_FUNC_REDHAT_MODE=attachment-comment
+if redhat_shape_start "$BZ_PORT"; then
+    unset BZR_FUNC_REDHAT_MODE
+    trap 'cleanup; redhat_shape_stop' EXIT
+    export BZR_FUNC_INLINE_KEY="$API_KEY"
+    _AC_ATTACH_OK=1
+
+    run_bzr --api rest \
+        --server-url "http://127.0.0.1:${REDHAT_SHAPE_PORT}" \
+        --server-api-key-env BZR_FUNC_INLINE_KEY --server-email "$ADMIN_EMAIL" \
+        attachment upload "$_AC_ATTACH_BUG" "$_AC_ATTACH_FILE" \
+        --summary "proxy attachment" --comment "proxy upload comment" --comment-private
+    if ! assert_success || ! assert_json_exists '.id'; then
+        _AC_ATTACH_OK=0
+    else
+        _AC_ATTACH_ID=$(jq -r '.id' "$BZR_STDOUT")
+    fi
+
+    if [[ $_AC_ATTACH_OK -eq 1 ]]; then
+        run_bzr --api rest \
+            --server-url "http://127.0.0.1:${REDHAT_SHAPE_PORT}" \
+            --server-api-key-env BZR_FUNC_INLINE_KEY --server-email "$ADMIN_EMAIL" \
+            attachment view "$_AC_ATTACH_ID"
+        if ! assert_success || ! assert_json '.summary' "proxy attachment"; then
+            _AC_ATTACH_OK=0
+        fi
+    fi
+
+    if [[ $_AC_ATTACH_OK -eq 1 ]]; then
+        run_bzr --api rest \
+            --server-url "http://127.0.0.1:${REDHAT_SHAPE_PORT}" \
+            --server-api-key-env BZR_FUNC_INLINE_KEY --server-email "$ADMIN_EMAIL" \
+            attachment download "$_AC_ATTACH_ID" --out "$_AC_ATTACH_DOWNLOAD"
+        if ! assert_success ||
+            ! assert_file_contains "$_AC_ATTACH_DOWNLOAD" "attachment-comment proxy bytes"; then
+            _AC_ATTACH_OK=0
+        fi
+    fi
+
+    if [[ $_AC_ATTACH_OK -eq 1 ]]; then
+        run_bzr --api rest \
+            --server-url "http://127.0.0.1:${REDHAT_SHAPE_PORT}" \
+            --server-api-key-env BZR_FUNC_INLINE_KEY --server-email "$ADMIN_EMAIL" \
+            attachment list "$_AC_ATTACH_BUG"
+        if ! assert_success ||
+            ! jq -e --argjson id "$_AC_ATTACH_ID" 'any(.[]; .id == $id)' \
+                "$BZR_STDOUT" >/dev/null; then
+            _AC_ATTACH_OK=0
+        fi
+    fi
+
+    if [[ $_AC_ATTACH_OK -eq 1 ]]; then
+        run_bzr --api rest \
+            --server-url "http://127.0.0.1:${REDHAT_SHAPE_PORT}" \
+            --server-api-key-env BZR_FUNC_INLINE_KEY --server-email "$ADMIN_EMAIL" \
+            attachment download --bug "$_AC_ATTACH_BUG" --out-dir "$_AC_ATTACH_BULK"
+        _AC_BULK_FILE=""
+        if [[ -d "$_AC_ATTACH_BULK/$_AC_ATTACH_BUG" ]]; then
+            _AC_BULK_FILE=$(find "$_AC_ATTACH_BULK/$_AC_ATTACH_BUG" \
+                -type f -print -quit)
+        fi
+        if ! assert_success || [[ -z "$_AC_BULK_FILE" ]] ||
+            ! assert_file_contains "$_AC_BULK_FILE" "attachment-comment proxy bytes"; then
+            _AC_ATTACH_OK=0
+        fi
+    fi
+
+    run_bzr config set-server attachment-comment-public \
+        --url "http://127.0.0.1:${REDHAT_SHAPE_PORT}" --api rest
+    if ! assert_success; then _AC_ATTACH_OK=0; fi
+    if [[ $_AC_ATTACH_OK -eq 1 ]]; then
+        run_bzr --server attachment-comment-public attachment view "$_AC_ATTACH_ID"
+        if ! assert_success || ! assert_json '.summary' "proxy attachment"; then
+            _AC_ATTACH_OK=0
+        fi
+    fi
+    run_bzr config remove-server attachment-comment-public
+    if ! assert_success; then _AC_ATTACH_OK=0; fi
+
+    for _AC_ATTACH_ROUTE in attachment-upload comment-privacy \
+        attachment-by-id-metadata attachment-by-id-body \
+        attachment-list-excludes-body; do
+        if ! grep -Fq \
+            "attachment-comment shaped route=${_AC_ATTACH_ROUTE} count=" \
+            "$REDHAT_SHAPE_LOG"; then
+            _AC_ATTACH_OK=0
+        fi
+    done
+    redhat_shape_stop || _AC_ATTACH_OK=0
+    trap cleanup EXIT
+    unset BZR_FUNC_INLINE_KEY
+    if [[ $_AC_ATTACH_OK -eq 1 ]]; then
+        test_pass
+    else
+        test_fail "production-shaped attachment proof failed; proxy log: $REDHAT_SHAPE_LOG"
+    fi
+else
+    unset BZR_FUNC_REDHAT_MODE
+    test_fail "attachment-comment response-shape proxy did not become ready: $REDHAT_SHAPE_LOG"
+fi
+
+rm -f "$_AC_ATTACH_FILE" "$_AC_ATTACH_DOWNLOAD"
+rm -rf "$_AC_ATTACH_BULK"
+unset _AC_ATTACH_BUG _AC_ATTACH_FILE _AC_ATTACH_DOWNLOAD _AC_ATTACH_BULK
+unset _AC_ATTACH_ID _AC_ATTACH_OK _AC_ATTACH_ROUTE _AC_BULK_FILE
 echo ""
