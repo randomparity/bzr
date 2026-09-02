@@ -51,7 +51,7 @@ else test_skip "no BUG1"; fi
 test_begin "verbose-response-body-diagnostics-redact-api-keys" "verbose response-body diagnostics redact API keys"
 _TRACE_SECRET="TraceEchoSecret0123456789"
 _TRACE_BUG=$(make_bug --product FuncTestProd --component Backend --op-sys Linux \
-    --rep-platform PC --description d \
+    --platform PC --description d \
     --summary "response echo Bugzilla_api_key=${_TRACE_SECRET}")
 if [[ -n "$_TRACE_BUG" ]]; then
     run_bzr_raw -vvv bug view "$_TRACE_BUG"
@@ -72,8 +72,8 @@ if assert_success && assert_ndjson_line_count 0; then test_pass; fi
 
 test_begin "output-ndjson-one-value-per-line" "--output ndjson (one value per line)"
 _NM="nd$$x${RANDOM}"
-make_bug --marker "$_NM" --product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d --summary "ndjson 1" >/dev/null
-make_bug --marker "$_NM" --product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d --summary "ndjson 2" >/dev/null
+make_bug --marker "$_NM" --product FuncTestProd --component Backend --op-sys Linux --platform PC --description d --summary "ndjson 1" >/dev/null
+make_bug --marker "$_NM" --product FuncTestProd --component Backend --op-sys Linux --platform PC --description d --summary "ndjson 2" >/dev/null
 run_bzr_raw --output ndjson bug list --whiteboard "$_NM"
 if assert_success && assert_ndjson_line_count 2; then test_pass; fi
 unset _NM
@@ -81,7 +81,7 @@ unset _NM
 # --dry-run previews a mutation without writing it.
 test_begin "dry-run-bug-create-previews-without-writing" "--dry-run bug create previews without writing"
 _DM="dry$$x${RANDOM}"
-run_bzr --dry-run bug create --product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d --whiteboard "$_DM" --summary "dryrun preview"
+run_bzr --dry-run bug create --product FuncTestProd --component Backend --op-sys Linux --platform PC --description d --whiteboard "$_DM" --summary "dryrun preview"
 if assert_success && assert_json '.action' "dry-run"; then
     run_bzr bug list --whiteboard "$_DM" --count
     if assert_count 0; then test_pass; fi

@@ -36,7 +36,8 @@ struct JsonCreateBug {
     severity: Option<String>,
     assignee: Option<String>,
     op_sys: Option<String>,
-    rep_platform: Option<String>,
+    #[serde(alias = "rep_platform")]
+    platform: Option<String>,
     alias: Option<String>,
     url: Option<String>,
     whiteboard: Option<String>,
@@ -153,7 +154,7 @@ impl JsonCreateBug {
             severity: self.severity,
             assigned_to: self.assignee,
             op_sys: self.op_sys,
-            rep_platform: self.rep_platform,
+            platform: self.platform,
             alias: self.alias,
             url: self.url,
             whiteboard: self.whiteboard,
@@ -202,7 +203,7 @@ fn overlay_cli(mut json: JsonCreateBug, args: &CreateArgs) -> Result<JsonCreateB
         severity,
         assignee,
         op_sys,
-        rep_platform,
+        platform,
         blocks,
         depends_on,
         create_fields,
@@ -216,7 +217,7 @@ fn overlay_cli(mut json: JsonCreateBug, args: &CreateArgs) -> Result<JsonCreateB
     merge_set(&mut json.severity, severity.as_deref());
     merge_set(&mut json.assignee, assignee.as_deref());
     merge_set(&mut json.op_sys, op_sys.as_deref());
-    merge_set(&mut json.rep_platform, rep_platform.as_deref());
+    merge_set(&mut json.platform, platform.as_deref());
     merge_set(&mut json.alias, create_fields.alias.as_deref());
     merge_set(&mut json.url, create_fields.url.as_deref());
     merge_set(&mut json.whiteboard, create_fields.whiteboard.as_deref());

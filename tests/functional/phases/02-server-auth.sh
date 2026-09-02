@@ -98,7 +98,7 @@ if assert_exit_code 3 && assert_stderr_contains "requires credentials"; then tes
 test_begin "credentialless-named-write-fails-before-mutation" "credentialless named write fails before mutation"
 run_bzr_raw --json --server public bug create \
   --product FuncTestProd --component Backend --summary "public write" \
-  --description "should not write" --op-sys Linux --rep-platform PC
+  --description "should not write" --op-sys Linux --platform PC
 if assert_exit_code 3 && assert_stderr_contains "requires credentials"; then test_pass; fi
 
 test_begin "inline-credentialless-server-info" "inline credentialless server info"

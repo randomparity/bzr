@@ -25,7 +25,7 @@ bzr bug create --template <name> --summary "..." --description "..."
 A template supplies saved field defaults so you only fill in what is bug-specific.
 Templates can carry routing fields and create metadata: `--product`,
 `--component`, `--version`, `--priority`, `--severity`, `--assignee`,
-`--op-sys`, `--rep-platform`, `--description`, `--url`, `--whiteboard`,
+`--op-sys`, `--platform`, `--description`, `--url`, `--whiteboard`,
 `--target-milestone`, `--deadline`, `--cc`, `--keywords`, `--groups`, and
 `--flag`.
 

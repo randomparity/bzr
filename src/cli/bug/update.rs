@@ -123,6 +123,9 @@ pub(crate) struct UpdateArgs {
     /// Reassign
     #[arg(long)]
     pub assignee: Option<String>,
+    /// Set this bug's hardware platform.
+    #[arg(long)]
+    pub platform: Option<String>,
     /// Priority
     #[arg(long)]
     pub priority: Option<String>,

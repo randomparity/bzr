@@ -58,7 +58,14 @@
           "type": ["string", "null"],
           "examples": ["Linux"]
         },
+        "platform": {
+          "description": "Hardware platform. Canonical spelling; use this for new integrations.",
+          "type": ["string", "null"],
+          "examples": ["x86_64"]
+        },
         "rep_platform": {
+          "deprecated": true,
+          "description": "Deprecated compatibility alias for `platform`; removed at the next major schema version.",
           "type": ["string", "null"],
           "examples": ["x86_64"]
         },
@@ -171,6 +178,9 @@
         }
       },
       "required": [],
+      "not": {
+        "required": ["platform", "rep_platform"]
+      },
       "additionalProperties": false
     }
   }

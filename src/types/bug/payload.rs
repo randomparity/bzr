@@ -20,7 +20,7 @@ pub struct CreateBugParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub op_sys: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub rep_platform: Option<String>,
+    pub platform: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub alias: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -119,6 +119,8 @@ pub struct UpdateBugParams {
     pub reset_qa_contact: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assigned_to: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub platform: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

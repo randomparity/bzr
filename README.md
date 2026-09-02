@@ -375,7 +375,7 @@ bzr group add-user --group testers --user alice@example.com
 
 All list and view commands support `--output json` for scripting and piping to
 tools like `jq`. Output is wrapped in a versioned envelope —
-`{"schema_version": "2.0.1", "data": <payload>}` — so read fields under `.data`
+`{"schema_version": "2.1.0", "data": <payload>}` — so read fields under `.data`
 (`--output ndjson` records stay bare). See
 [docs/bzr-cli.md](https://github.com/randomparity/bzr/blob/main/docs/bzr-cli.md#json-output)
 for the stability policy.

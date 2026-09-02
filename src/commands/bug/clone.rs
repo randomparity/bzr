@@ -27,7 +27,7 @@ pub(super) async fn handle(
         severity,
         assignee,
         op_sys,
-        rep_platform,
+        platform,
         create_fields,
         no_comment,
         add_depends_on,
@@ -70,7 +70,7 @@ pub(super) async fn handle(
         severity: severity.clone().or(source.severity),
         assigned_to: assignee.clone().or(source.assigned_to),
         op_sys: op_sys.clone().or(source.op_sys),
-        rep_platform: rep_platform.clone().or(source.rep_platform),
+        platform: platform.clone().or(source.platform),
         url: create_fields.url.clone().or(source.url),
         whiteboard: create_fields.whiteboard.clone().or(source.whiteboard),
         target_milestone: create_fields

@@ -34,7 +34,7 @@ Operate on bugs.
 - `bzr bug clone 12345`
   - Override create fields on the clone: `--summary --product --component
     --version --description --priority --severity --assignee --op-sys
-    --rep-platform --url --whiteboard --target-milestone --deadline --cc
+    --platform --url --whiteboard --target-milestone --deadline --cc
     --keywords --groups --flag`.
   - Exits 11 when the bug is created but the "Cloned from bug #N" comment fails;
     the new bug ID is still printed.
@@ -72,7 +72,7 @@ Operate on bugs.
     lexical order; canonical `bugs` are unique and numeric-ID ordered, and
     `blocks`/`depends_on` are sorted and deduplicated.
   - Table output has `Requests` (requested/result) and `Canonical bugs`
-    sections. JSON is the `2.0.1` envelope with `.data.requests` and
+    sections. JSON is the `2.1.0` envelope with `.data.requests` and
     `.data.bugs`; NDJSON is one bare compact result object. Inspect the closed
     payload with `bzr schema bug-adjacency`.
   - Only Bugzilla codes `100` (invalid alias), `101` (invalid numeric ID), and

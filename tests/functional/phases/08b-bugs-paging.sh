@@ -18,7 +18,7 @@ echo "── Phase 8b: Bug paging / count / sort ──────────�
 # each other, since --whiteboard matches by substring.
 _PGMARK="pgtest$$x${RANDOM}"
 _PGOTHER="pgother$$x${RANDOM}"
-_PG_CREATE=(--product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d)
+_PG_CREATE=(--product FuncTestProd --component Backend --op-sys Linux --platform PC --description d)
 
 P1=$(make_bug --marker "$_PGMARK" "${_PG_CREATE[@]}" --summary "paging 1")
 make_bug --marker "$_PGMARK" "${_PG_CREATE[@]}" --summary "paging 2" >/dev/null
@@ -82,8 +82,8 @@ run_bzr product create --name "$_VPA" --description d --version "$_VVA"
 run_bzr component create --product "$_VPA" --name C --description d --default-assignee "$ADMIN_EMAIL"
 run_bzr product create --name "$_VPB" --description d --version "$_VVB"
 run_bzr component create --product "$_VPB" --name C --description d --default-assignee "$ADMIN_EMAIL"
-VBA=$(make_bug --product "$_VPA" --component C --op-sys Linux --rep-platform PC --description d --version "$_VVA" --summary "ver filter a")
-VBB=$(make_bug --product "$_VPB" --component C --op-sys Linux --rep-platform PC --description d --version "$_VVB" --summary "ver filter b")
+VBA=$(make_bug --product "$_VPA" --component C --op-sys Linux --platform PC --description d --version "$_VVA" --summary "ver filter a")
+VBB=$(make_bug --product "$_VPB" --component C --op-sys Linux --platform PC --description d --version "$_VVB" --summary "ver filter b")
 
 test_begin "bug-list-version-filters-discriminatingly" "bug list --version filters discriminatingly"
 run_bzr bug list --version "$_VVA"

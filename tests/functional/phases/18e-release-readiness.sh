@@ -12,7 +12,7 @@ _RR_QUERY="release-readiness-demo"
 _RR_URL_QUERY="release-readiness-demo-url"
 _RR_FIELDS="id,summary,status,priority,severity,assigned_to,target_milestone,version,deadline,last_change_time,whiteboard,depends_on"
 _RR_CREATE=(--product "$_RR_PRODUCT" --component Release --version "$_RR_VERSION"
-  --op-sys Linux --rep-platform PC --description "release-readiness fixture")
+  --op-sys Linux --platform PC --description "release-readiness fixture")
 
 _RR_FIXTURE_OK=1
 run_bzr product create --name "$_RR_PRODUCT" \

@@ -46,7 +46,7 @@ fn parse_create_core_fields() {
         "me@example.com",
         "--op-sys",
         "Linux",
-        "--rep-platform",
+        "--platform",
         "x86_64",
     ]);
     assert_eq!(create.product.as_deref(), Some("Fedora"));
@@ -58,9 +58,27 @@ fn parse_create_core_fields() {
     assert_eq!(create.severity.as_deref(), Some("major"));
     assert_eq!(create.assignee.as_deref(), Some("me@example.com"));
     assert_eq!(create.op_sys.as_deref(), Some("Linux"));
-    assert_eq!(create.rep_platform.as_deref(), Some("x86_64"));
+    assert_eq!(create.platform.as_deref(), Some("x86_64"));
     assert!(create.template.is_none());
     assert!(create.from_json.is_none());
+}
+
+#[test]
+fn parse_create_accepts_hidden_legacy_platform_alias() {
+    let create = create_args(&[
+        "bzr",
+        "bug",
+        "create",
+        "--product",
+        "P",
+        "--component",
+        "C",
+        "--summary",
+        "S",
+        "--rep-platform",
+        "x86_64",
+    ]);
+    assert_eq!(create.platform.as_deref(), Some("x86_64"));
 }
 
 #[test]

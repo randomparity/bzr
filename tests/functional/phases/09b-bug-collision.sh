@@ -13,7 +13,7 @@
 # ══════════════════════════════════════════════════════════════════════
 echo "── Phase 9b: Mid-air collision guard ───────────────────────"
 
-_CC=(--product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d)
+_CC=(--product FuncTestProd --component Backend --op-sys Linux --platform PC --description d)
 
 test_begin "bug-update-expect-unchanged-since-happy-path" "bug update --expect-unchanged-since happy path"
 CID=$(make_bug "${_CC[@]}" --summary "collision happy")

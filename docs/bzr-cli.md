@@ -164,7 +164,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │       [--sort <FIELD>] [--order asc|desc]
 │   ├── create [--from-json <PATH>] [--template <T>] [--product <P>] [--component <C>] --summary <S>
 │   │          [--version <V>] [--description <D>] [--description-file <PATH>] [--priority <P>] [--severity <S>]
-│   │          [--assignee <A>] [--op-sys <OS>] [--rep-platform <PLAT>]
+│   │          [--assignee <A>] [--op-sys <OS>] [--platform <PLAT>]
 │   │          [--blocks <IDs>] [--depends-on <IDs>] [--alias <A>] [--url <U>]
 │   │          [--whiteboard <W>] [--target-milestone <T>] [--deadline <DATE>]
 │   │          [--cc <C>...] [--keywords <K>...] [--groups <G>...] [--flag <F>...]
@@ -172,12 +172,12 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │          [--with-attachment <PATH>...] [--attachment-description <TEXT>...]
 │   ├── clone <ID> [--summary <S>] [--product <P>] [--component <C>] [--version <V>]
 │   │              [--description <D>] [--priority <P>] [--severity <S>] [--assignee <A>]
-│   │              [--op-sys <OS>] [--rep-platform <PLAT>]
+│   │              [--op-sys <OS>] [--platform <PLAT>]
 │   │              [--url <U>] [--whiteboard <W>] [--target-milestone <T>] [--deadline <DATE>]
 │   │              [--cc <C>...] [--keywords <K>...] [--groups <G>...] [--flag <F>...]
 │   │              [--no-comment] [--add-depends-on] [--add-blocks] [--no-cc] [--no-keywords]
 │   ├── update [<ID...>] [--from-json <PATH>] [--status <S>] [--resolution <R>] [--dupe-of <ID>]
-│   │                   [--assignee <A>] [--priority <P>] [--severity <S>] [--summary <S>]
+│   │                   [--assignee <A>] [--platform <PLAT>] [--priority <P>] [--severity <S>] [--summary <S>]
 │   │                   [--alias <A>] [--deadline <DATE>] [--estimated-time <HOURS>]
 │   │                   [--remaining-time <HOURS>] [--work-time <HOURS>]
 │   │                   [--whiteboard <W>] [--url <U>] [--target-milestone <M>]
@@ -441,11 +441,10 @@ bzr bug list --whiteboard '!wip' --resolution '!FIXED'
 bzr bug list --version 9.4 --version 9.5 --op-sys Linux
 ```
 
-The `--platform` flag matches the Bugzilla `Bug.search` API
-parameter name. The output-side bug field is `rep_platform` (and
-`bzr bug create` accepts `--rep-platform` for the input side of bug
-creation); the search/list filter uses `--platform` to match
-upstream Bugzilla and `bzl-search`.
+`platform` is the canonical Bugzilla hardware-field name for search, bug
+objects, create, update, and clone. Schema 2.1.x also emits the deprecated
+`rep_platform` output alias and accepts it in create JSON; the hidden
+`--rep-platform` CLI alias follows the same one-release transition.
 
 ### `bzr bug view`
 
@@ -659,11 +658,11 @@ table always includes the fixed fields `ID`, `SUMMARY`, `STATUS`, `RESOLUTION`,
 `BLOCKS`, and `DEPENDS ON`; the two adjacency columns are complete,
 comma-separated ID lists.
 
-Under `--json`, the usual `2.0.1` envelope contains a closed result object:
+Under `--json`, the usual `2.1.0` envelope contains a closed result object:
 
 ```json
 {
-  "schema_version": "2.0.1",
+  "schema_version": "2.1.0",
   "data": {
     "requests": [
       {"requested": "00123", "bug_id": 123},
@@ -790,7 +789,7 @@ bzr bug create --from-json bugs.json
 | `--severity <S>` | No | | Severity level |
 | `--assignee <A>` | No | | Assignee email |
 | `--op-sys <OS>` | No | | Operating system (required by some Bugzilla installations) |
-| `--rep-platform <PLAT>` | No | | Hardware platform (required by some Bugzilla installations) |
+| `--platform <PLAT>` | No | | Hardware platform (required by some Bugzilla installations) |
 | `--blocks <IDs>` | No | | Bug IDs this bug blocks (comma-separated) |
 | `--depends-on <IDs>` | No | | Bug IDs this bug depends on (comma-separated) |
 | `--alias <A>` | No | | Set an alias for the new bug |
@@ -897,7 +896,7 @@ before the first write, but it is not a reservation.
 - A top-level **object** files one bug and returns the usual `{"resource":"bug","action":"created","id":N}` result.
 - A top-level **array** files one bug per element and returns a partial-failure result `{"resource":"bug","action":"created","created":[...],"failed":[{"index":N,"error":"..."}]}`. If any element fails, the command exits **11** (`BatchPartialFailure`); all input is validated before any bug is created, so a malformed element never half-creates a batch.
 
-Accepted keys match the create flag names: `product`, `component`, `summary`, `version`, `description`, `priority`, `severity`, `assignee`, `op_sys`, `rep_platform`, `alias`, `url`, `whiteboard`, `target_milestone`, `deadline`, `blocks`, `depends_on`, `cc`, `keywords`, `groups`, `flags` (an array of flag-syntax strings). **Unknown keys are rejected** (exit 7) rather than silently ignored, so a typo fails fast. `product`, `component`, and `summary` are required (in the JSON or via a CLI flag).
+Accepted keys match the create flag names: `product`, `component`, `summary`, `version`, `description`, `priority`, `severity`, `assignee`, `op_sys`, `platform`, `alias`, `url`, `whiteboard`, `target_milestone`, `deadline`, `blocks`, `depends_on`, `cc`, `keywords`, `groups`, `flags` (an array of flag-syntax strings). Schema 2.1.x also accepts deprecated `rep_platform`, but not both spellings together. **Unknown keys are rejected** (exit 7) rather than silently ignored, so a typo fails fast. `product`, `component`, and `summary` are required (in the JSON or via a CLI flag).
 
 **Compound keys** (the JSON equivalent of the `--with-comment` / `--with-attachment` flags, see [Compound create](#compound-create-comment--attachments)):
 
@@ -929,7 +928,7 @@ bzr bug create --from-json bugs.json --json | jq '.data.created'
 
 Clone an existing bug, copying its fields into a new bug. Override flags
 (`--summary`, `--product`, `--component`, `--version`, `--description`,
-`--priority`, `--severity`, `--assignee`, `--op-sys`, `--rep-platform`,
+`--priority`, `--severity`, `--assignee`, `--op-sys`, `--platform`,
 `--url`, `--whiteboard`, `--target-milestone`, and `--deadline`) take
 precedence over values copied from the source.
 
@@ -962,7 +961,7 @@ bzr bug clone 12345 --no-comment --no-cc --no-keywords
 | `--severity <S>` | No | Override severity |
 | `--assignee <A>` | No | Override assignee |
 | `--op-sys <OS>` | No | Override operating system |
-| `--rep-platform <PLAT>` | No | Override hardware platform |
+| `--platform <PLAT>` | No | Override hardware platform |
 | `--url <U>` | No | Override URL |
 | `--whiteboard <W>` | No | Override Status Whiteboard |
 | `--target-milestone <T>` | No | Override Target Milestone |
@@ -1024,6 +1023,7 @@ bzr bug update --from-json updates.json --json | jq '.data.failed'
 | `--reset-assigned-to` | No | Reset assignee to the component default |
 | `--reset-qa-contact` | No | Reset QA contact to the component default |
 | `--assignee <A>` | No | Reassign to email |
+| `--platform <PLAT>` | No | Set hardware platform |
 | `--priority <P>` | No | Set priority |
 | `--severity <S>` | No | Set severity |
 | `--summary <S>` | No | Update summary text |
@@ -1062,7 +1062,7 @@ reads the document from stdin.
 
 Accepted update keys are `id`, `status`, `resolution`, `dupe_of`, `alias`,
 `deadline`, `estimated_time`, `remaining_time`, `work_time`,
-`reset_assigned_to`, `reset_qa_contact`, `assignee`, `priority`, `severity`,
+`reset_assigned_to`, `reset_qa_contact`, `assignee`, `platform`, `priority`, `severity`,
 `summary`, `whiteboard`, `url`, `target_milestone`, `flags`,
 `blocks_add`, `blocks_remove`, `depends_on_add`, `depends_on_remove`,
 `keywords_add`, `keywords_remove`, `cc_add`, `cc_remove`, `groups_add`,
@@ -2468,7 +2468,7 @@ Every pretty `--json` response is wrapped in a stable envelope:
 
 ```json
 {
-  "schema_version": "2.0.1",
+  "schema_version": "2.1.0",
   "data": <the command's payload>
 }
 ```
@@ -2483,7 +2483,7 @@ bzr --json schema | jq -r '.schema_version'   # the contract version itself
 ```
 
 `--json` error output carries the version too, beside an `error` object:
-`{"schema_version":"2.0.1","error":{"type":...,"message":...,"exit_code":...}}`.
+`{"schema_version":"2.1.0","error":{"type":...,"message":...,"exit_code":...}}`.
 
 Two outputs are deliberately **not** enveloped:
 

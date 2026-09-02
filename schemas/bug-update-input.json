@@ -73,6 +73,10 @@
           "type": ["string", "null"],
           "examples": ["dev@example.com"]
         },
+        "platform": {
+          "type": ["string", "null"],
+          "examples": ["x86_64"]
+        },
         "priority": {
           "type": ["string", "null"],
           "examples": ["P2"]

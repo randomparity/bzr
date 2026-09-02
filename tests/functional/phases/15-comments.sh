@@ -123,7 +123,7 @@ else test_skip "no BUG1"; fi
 
 # comment add --body-file (and stdin via `-`). Self-contained fixtures; stdin is
 # fed by redirection, not a pipe, so run_bzr's exit capture stays in this shell.
-_CB=$(make_bug --product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d --summary "comment bodyfile host")
+_CB=$(make_bug --product FuncTestProd --component Backend --op-sys Linux --platform PC --description d --summary "comment bodyfile host")
 _CBF=$(mktemp /tmp/bzr-func-cbody.XXXXXX)
 
 test_begin "comment-add-body-file" "comment add --body-file"
