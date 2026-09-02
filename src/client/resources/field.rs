@@ -1,17 +1,41 @@
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
-use crate::client::BugzillaClient;
+use crate::client::{encode_path, BugzillaClient};
 use crate::error::{BzrError, Result};
+use crate::types::deserialization::u64_from_number_or_string;
 use crate::types::{resolve_field_alias, FieldValue};
 
-#[derive(Deserialize)]
-struct FieldBugResponse {
-    fields: Vec<FieldEntry>,
+#[derive(Default)]
+pub(super) struct UnsignedWire(pub(super) u64);
+
+impl<'de> Deserialize<'de> for UnsignedWire {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        u64_from_number_or_string(
+            deserializer,
+            "a non-negative integer or decimal numeric string",
+            "expected a non-negative integer",
+        )
+        .map(Self)
+    }
 }
 
 #[derive(Deserialize)]
-struct FieldEntry {
-    values: Vec<FieldValue>,
+pub(super) struct FieldDefinition {
+    pub(super) name: String,
+    #[serde(rename = "type", default)]
+    pub(super) field_type: UnsignedWire,
+    #[serde(default)]
+    pub(super) is_custom: bool,
+    #[serde(default)]
+    pub(super) values: Vec<FieldValue>,
+}
+
+#[derive(Deserialize)]
+struct FieldBugResponse {
+    fields: Vec<FieldDefinition>,
 }
 
 impl BugzillaClient {
@@ -22,7 +46,9 @@ impl BugzillaClient {
     /// no legal values.
     pub async fn get_field_values(&self, field_name: &str) -> Result<Vec<FieldValue>> {
         let resolved = resolve_field_alias(field_name);
-        let data: FieldBugResponse = self.get_json(&format!("field/bug/{resolved}")).await?;
+        let data: FieldBugResponse = self
+            .get_json(&format!("field/bug/{}", encode_path(resolved.as_ref())))
+            .await?;
         let field = data
             .fields
             .into_iter()
@@ -32,6 +58,11 @@ impl BugzillaClient {
                 id: field_name.to_string(),
             })?;
         Ok(field.values)
+    }
+
+    /// Fetch all bug field definitions.
+    pub(super) async fn all_bug_fields(&self) -> Result<Vec<FieldDefinition>> {
+        Ok(self.get_json::<FieldBugResponse>("field/bug").await?.fields)
     }
 }
 

@@ -19,14 +19,14 @@ fn ok_put(id: u64) -> ResponseTemplate {
 fn status_field_body(statuses: &[&str]) -> serde_json::Value {
     let mut values = vec![serde_json::json!({"name": serde_json::Value::Null})];
     values.extend(statuses.iter().map(|s| serde_json::json!({"name": s})));
-    serde_json::json!({"fields": [{"values": values}]})
+    serde_json::json!({"fields": [{"name": "bug_status", "values": values}]})
 }
 
 /// Mount the `GET field/bug/bug_status` mock the status-verb validator
 /// queries before writing.
 async fn mount_status_field(mock: &wiremock::MockServer, statuses: &[&str]) {
     Mock::given(method("GET"))
-        .and(path("/rest/field/bug/bug_status"))
+        .and(path("/rest/field/bug/bug%5Fstatus"))
         .respond_with(ResponseTemplate::new(200).set_body_json(status_field_body(statuses)))
         .mount(mock)
         .await;
@@ -532,7 +532,7 @@ async fn close_wrong_case_status_is_rejected() {
 async fn reopen_dry_run_skips_validation_and_write() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     Mock::given(method("GET"))
-        .and(path("/rest/field/bug/bug_status"))
+        .and(path("/rest/field/bug/bug%5Fstatus"))
         .respond_with(ResponseTemplate::new(200).set_body_json(status_field_body(DEFAULT_STATUSES)))
         .expect(0)
         .mount(&mock)
@@ -565,7 +565,7 @@ async fn reopen_dry_run_skips_validation_and_write() {
 async fn close_dry_run_rejects_empty_status_without_network() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     Mock::given(method("GET"))
-        .and(path("/rest/field/bug/bug_status"))
+        .and(path("/rest/field/bug/bug%5Fstatus"))
         .respond_with(ResponseTemplate::new(200).set_body_json(status_field_body(DEFAULT_STATUSES)))
         .expect(0)
         .mount(&mock)

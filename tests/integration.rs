@@ -318,9 +318,10 @@ async fn field_list_integration() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
-        .and(path("/rest/field/bug/bug_status"))
+        .and(path("/rest/field/bug/bug%5Fstatus"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "fields": [{
+                "name": "bug_status",
                 "values": [
                     {"name": "NEW", "sort_key": 100, "is_active": true},
                     {"name": "RESOLVED", "sort_key": 500, "is_active": true}
@@ -1822,9 +1823,10 @@ async fn e2e_field_list_via_cli_args() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
-        .and(path("/rest/field/bug/bug_status"))
+        .and(path("/rest/field/bug/bug%5Fstatus"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "fields": [{
+                "name": "bug_status",
                 "values": [
                     {"name": "NEW", "sort_key": 100, "is_active": true}
                 ]

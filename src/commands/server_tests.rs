@@ -54,9 +54,9 @@ async fn server_capabilities_outputs_documented_shape() {
         .mount(&mock)
         .await;
     Mock::given(method("GET"))
-        .and(path("/rest/field/bug/bug_status"))
+        .and(path("/rest/field/bug/bug%5Fstatus"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "fields": [{"values": [
+            "fields": [{"name": "bug_status", "values": [
                 {"name": "NEW", "can_change_to": [{"name": "ASSIGNED"}]}
             ]}]
         })))

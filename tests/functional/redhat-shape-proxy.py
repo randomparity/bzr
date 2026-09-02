@@ -191,7 +191,7 @@ def shape_server_capabilities_response(path, data, *, enabled):
     if route not in {
         "/rest/version",
         "/rest/parameters",
-        "/rest/field/bug/bug_status",
+        "/rest/field/bug/bug%5Fstatus",
         "/rest/field/bug",
     }:
         return data, {}
@@ -209,7 +209,7 @@ def shape_server_capabilities_response(path, data, *, enabled):
             return data, {}
         parameters["maxattachmentsize"] = str(parameters["maxattachmentsize"])
         evidence = {"parameters": 1}
-    elif route == "/rest/field/bug/bug_status":
+    elif route == "/rest/field/bug/bug%5Fstatus":
         fields = value.get("fields")
         if not isinstance(fields, list):
             return data, {}
@@ -656,9 +656,9 @@ class ShapeTests(unittest.TestCase):
                 {"parameters": 1},
             ),
             (
-                "/rest/field/bug/bug_status",
-                {"fields": [{"values": [{"name": "NEW"}]}]},
-                {"fields": [{"values": [
+                "/rest/field/bug/bug%5Fstatus",
+                {"fields": [{"name": "bug_status", "values": [{"name": "NEW"}]}]},
+                {"fields": [{"name": "bug_status", "values": [
                     {"name": "", "can_change_to": []}, {"name": "NEW"}
                 ]}]},
                 {"status": 1},

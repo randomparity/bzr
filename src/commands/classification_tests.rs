@@ -22,7 +22,7 @@ async fn mount_two_classifications(mock: &wiremock::MockServer) {
     Mock::given(method("GET"))
         .and(path("/rest/field/bug/classification"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "fields": [{"values": [
+            "fields": [{"name": "classification", "values": [
                 {"name": "Acme", "sort_key": 5},
                 {"name": "Unclassified", "sort_key": 0}
             ]}]
@@ -127,7 +127,7 @@ async fn classification_list_returns_sorted_json() {
     Mock::given(method("GET"))
         .and(path("/rest/field/bug/classification"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "fields": [{"values": [
+            "fields": [{"name": "classification", "values": [
                 {"name": "Acme", "sort_key": 5},
                 {"name": "Unclassified", "sort_key": 0}
             ]}]
@@ -173,7 +173,7 @@ async fn classification_list_notes_disabled_when_only_unclassified() {
     Mock::given(method("GET"))
         .and(path("/rest/field/bug/classification"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "fields": [{"values": [{"name": "Unclassified", "sort_key": 0}]}]
+            "fields": [{"name": "classification", "values": [{"name": "Unclassified", "sort_key": 0}]}]
         })))
         .mount(&mock)
         .await;

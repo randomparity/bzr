@@ -1,48 +1,14 @@
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 
+use super::field::UnsignedWire;
 use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
 use crate::types::capabilities::{
     api_modes_for, auth_modes_for, field_type_name, supports_rest_surface, CustomFieldSummary,
     ServerCapabilities, StatusTransitionSummary,
 };
-use crate::types::deserialization::u64_from_number_or_string;
 use crate::types::server_info::{ServerExtensions, ServerInfoResponse, ServerVersion};
 use crate::types::FieldValue;
-
-/// One field as returned by `/rest/field/bug` (the all-fields listing).
-#[derive(Default)]
-struct UnsignedWire(u64);
-
-impl<'de> Deserialize<'de> for UnsignedWire {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        u64_from_number_or_string(
-            deserializer,
-            "a non-negative integer or decimal numeric string",
-            "expected a non-negative integer",
-        )
-        .map(Self)
-    }
-}
-
-#[derive(Deserialize)]
-struct FieldDef {
-    name: String,
-    #[serde(rename = "type", default)]
-    field_type: UnsignedWire,
-    #[serde(default)]
-    is_custom: bool,
-    #[serde(default)]
-    values: Vec<FieldValue>,
-}
-
-#[derive(Deserialize)]
-struct AllFieldsResponse {
-    fields: Vec<FieldDef>,
-}
 
 #[derive(Deserialize)]
 struct ParametersResponse {
@@ -108,9 +74,9 @@ impl BugzillaClient {
 
     /// Custom (`cf_*`) fields with their mapped type name and legal values.
     async fn custom_field_summaries(&self) -> Result<Vec<CustomFieldSummary>> {
-        let response: AllFieldsResponse = self.get_json("field/bug").await?;
-        let summaries = response
-            .fields
+        let summaries = self
+            .all_bug_fields()
+            .await?
             .into_iter()
             .filter(|field| field.is_custom)
             .map(|field| CustomFieldSummary {
