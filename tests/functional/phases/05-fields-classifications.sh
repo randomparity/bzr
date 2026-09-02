@@ -32,6 +32,36 @@ test_begin "field-list-nonexistent-xyz-error-case" "field list nonexistent_xyz (
 run_bzr field list nonexistent_xyz
 if assert_failure; then test_pass; fi
 
+test_begin "field-list-short-desc-no-values" "field list short_desc has no values"
+run_bzr_raw --output table field list short_desc
+if ! assert_exit_code 0; then
+    :
+elif [[ $(<"$BZR_STDOUT_RAW") != "No values for field 'short_desc'." ]]; then
+    test_fail "expected exact short_desc no-values message"
+else
+    test_pass
+fi
+
+test_begin "field-list-deadline-no-values" "field list deadline has no values"
+run_bzr_raw --output table field list deadline
+if ! assert_exit_code 0; then
+    :
+elif [[ $(<"$BZR_STDOUT_RAW") != "No values for field 'deadline'." ]]; then
+    test_fail "expected exact deadline no-values message"
+else
+    test_pass
+fi
+
+test_begin "field-list-bug-id-no-values" "field list bug_id has no values"
+run_bzr_raw --output table field list bug_id
+if ! assert_exit_code 0; then
+    :
+elif [[ $(<"$BZR_STDOUT_RAW") != "No values for field 'bug_id'." ]]; then
+    test_fail "expected exact bug_id no-values message"
+else
+    test_pass
+fi
+
 test_begin "field-aliases" "field aliases"
 run_bzr field aliases
 if assert_success && assert_stdout_contains "status" && assert_stdout_contains "bug_status"; then test_pass; fi
@@ -42,8 +72,20 @@ if assert_success && assert_json '.name' "Unclassified"; then test_pass; fi
 
 test_begin "classification-list" "classification list"
 run_bzr classification list
-if assert_success && assert_json_array_min_length '.' 1 &&
-    assert_json_contains '[.[].name] | join(",")' "Unclassified"; then test_pass; fi
+if assert_success && assert_json_array_length '.' 1 && assert_json '.[0].name' "Unclassified" &&
+    assert_stderr_contains "Note: only the default 'Unclassified' classification exists; this server likely has classifications disabled."; then test_pass; fi
+
+test_begin "credentialless-classification-list-disabled" "credentialless classification list when disabled"
+run_bzr_raw --output table --server public classification list
+if ! assert_exit_code 0; then
+    :
+elif [[ $(<"$BZR_STDOUT_RAW") != "Note: only the default 'Unclassified' classification exists; this server likely has classifications disabled." ]]; then
+    test_fail "expected exact disabled-classifications note on stdout"
+elif [[ -s "$BZR_STDERR" ]]; then
+    test_fail "expected empty stderr for disabled classifications"
+else
+    test_pass
+fi
 
 test_begin "field-list-fields-projects-keys" "field list --fields projects keys"
 # Project to `name` only; assert the key set is exactly {name} (element 0 may be

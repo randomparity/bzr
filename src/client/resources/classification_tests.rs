@@ -39,6 +39,7 @@ async fn list_classifications_enumerates_via_field_values() {
         .and(path("/rest/field/bug/classification"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "fields": [{
+                "name": "classification",
                 "values": [
                     {"name": "Acme", "sort_key": 5},
                     {"name": "Unclassified", "sort_key": 0}

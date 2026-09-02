@@ -3,7 +3,10 @@
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use crate::client::test_helpers::{test_client, test_client_anon};
+use crate::client::{
+    encode_path,
+    test_helpers::{test_client, test_client_anon},
+};
 use tracing::instrument::WithSubscriber as _;
 
 /// Mock `/rest/version` returning the given version string.
@@ -21,9 +24,13 @@ async fn mount_version(mock: &MockServer, version: &str) {
 /// statuses, one carrying transitions and one without.
 async fn mount_status_field(mock: &MockServer) {
     Mock::given(method("GET"))
-        .and(path("/rest/field/bug/bug_status"))
+        .and(path(format!(
+            "/rest/field/bug/{}",
+            encode_path("bug_status")
+        )))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "fields": [{
+                "name": "bug_status",
                 "values": [
                     {"name": "", "can_change_to": [{"name": "NEW"}]},
                     {"name": "NEW", "can_change_to": [{"name": "ASSIGNED"}, {"name": "RESOLVED"}]},
@@ -124,7 +131,7 @@ async fn server_capabilities_keeps_numeric_attachment_size_compatibility() {
 }
 
 #[tokio::test]
-async fn server_capabilities_accepts_string_and_missing_field_types() {
+async fn server_capabilities_accepts_string_and_missing_field_types_and_values() {
     let mock = MockServer::start().await;
     mount_version(&mock, "5.0.4").await;
     mount_status_field(&mock).await;
@@ -132,7 +139,8 @@ async fn server_capabilities_accepts_string_and_missing_field_types() {
         .and(path("/rest/field/bug"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "fields": [
-                {"name": "cf_string_type", "type": "2", "is_custom": true},
+                {"name": "cf_string_type", "type": "2", "is_custom": true,
+                 "values": [{"name": "1.0"}]},
                 {"name": "cf_missing_type", "is_custom": true}
             ]
         })))
@@ -143,7 +151,9 @@ async fn server_capabilities_accepts_string_and_missing_field_types() {
     let caps = client.server_capabilities().await.unwrap();
 
     assert_eq!(caps.custom_fields[0].field_type, "single_select");
+    assert_eq!(caps.custom_fields[0].values, vec!["1.0"]);
     assert_eq!(caps.custom_fields[1].field_type, "unknown");
+    assert!(caps.custom_fields[1].values.is_empty());
 }
 
 #[tokio::test]
@@ -213,7 +223,10 @@ async fn server_capabilities_empty_status_field_yields_no_transitions() {
     mount_version(&mock, "5.0.4").await;
     mount_all_fields(&mock).await;
     Mock::given(method("GET"))
-        .and(path("/rest/field/bug/bug_status"))
+        .and(path(format!(
+            "/rest/field/bug/{}",
+            encode_path("bug_status")
+        )))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"fields": []})))
         .mount(&mock)
         .await;

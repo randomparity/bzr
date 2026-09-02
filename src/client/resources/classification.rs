@@ -30,7 +30,8 @@ impl BugzillaClient {
     /// names are read from the `classification` bug field's legal values and
     /// each is then fetched for its full detail (id, description, products).
     /// Results are ordered by the field's `sort_key`, then name. On servers
-    /// with classifications disabled the field exposes only `Unclassified`.
+    /// with classifications disabled, an unprivileged request can fail with API
+    /// error 900 before the field exposes only `Unclassified`.
     pub async fn list_classifications(&self) -> Result<Vec<Classification>> {
         let values = self.get_field_values("classification").await?;
         let mut classifications = Vec::with_capacity(values.len());

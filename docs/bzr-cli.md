@@ -1741,8 +1741,11 @@ product count. JSON output is the full classification array.
 
 Bugzilla has no bulk classification endpoint, so bzr reads the names from the
 `classification` field's legal values and fetches each one's detail.
-Classifications are an optional feature; when they are disabled the only
-entry is `Unclassified`, and bzr prints a note to stderr.
+Classifications are an optional feature. When a disabled server returns API
+error 900, table output writes the disabled note to stdout. JSON output writes
+an empty classification array to stdout and the note to stderr; NDJSON writes
+no stdout records and the note to stderr. If Bugzilla successfully returns only
+`Unclassified`, bzr preserves that row and writes the note to stderr.
 
 ```bash
 bzr classification list
