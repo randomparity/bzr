@@ -55,12 +55,13 @@ fn select_attachment(value: &serde_json::Value, attachment_id: u64) -> Result<At
             Ok(attachment)
         }
         serde_json::Value::Array(attachments) => {
-            let attachments = serde_json::from_value::<Vec<Attachment>>(serde_json::Value::Array(
-                attachments.clone(),
-            ))
-            .map_err(|error| {
-                BzrError::Deserialize(format!("attachment by-ID `attachments` array: {error}"))
-            })?;
+            let attachments = attachments
+                .iter()
+                .map(Attachment::deserialize)
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| {
+                    BzrError::Deserialize(format!("attachment by-ID `attachments` array: {error}"))
+                })?;
             attachments
                 .into_iter()
                 .find(|attachment| attachment.id == attachment_id)
