@@ -373,6 +373,31 @@ async fn rest_attachment_by_id_rejects_missing_or_scalar_envelope() {
 }
 
 #[tokio::test]
+async fn rest_attachment_by_id_rejects_key_with_mismatched_embedded_id() {
+    let envelope = serde_json::json!({"attachments": {
+        "200": rest_attachment_by_id_value(100, "wrong.txt")
+    }});
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/200"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(envelope))
+        .expect(2)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    for result in [
+        client.get_attachment(200).await,
+        client.get_attachment_metadata(200).await,
+    ] {
+        assert!(
+            matches!(result, Err(BzrError::Deserialize(_))),
+            "keyed envelope with mismatched embedded ID must be rejected: {result:?}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn hybrid_uses_xmlrpc_directly_for_get_attachment() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))

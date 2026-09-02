@@ -43,9 +43,16 @@ fn select_attachment(value: &serde_json::Value, attachment_id: u64) -> Result<At
                     "attachment by-ID `attachments` object entry: {error}"
                 ))
             })?;
-            attachments
+            let attachment = attachments
                 .remove(&attachment_id.to_string())
-                .ok_or_else(not_found)
+                .ok_or_else(not_found)?;
+            if attachment.id != attachment_id {
+                return Err(BzrError::Deserialize(format!(
+                    "attachment by-ID `attachments` object key {attachment_id} contains ID {}",
+                    attachment.id
+                )));
+            }
+            Ok(attachment)
         }
         serde_json::Value::Array(attachments) => {
             let attachments = serde_json::from_value::<Vec<Attachment>>(serde_json::Value::Array(
