@@ -583,9 +583,10 @@ pub(crate) enum Commands {
     /// related products under a shared umbrella (e.g. "Components",
     /// "Services"). Disabled installations either return a single
     /// "Unclassified" entry or API error 900 to unprivileged users. For error
-    /// 900, table output writes the note to stdout; JSON-family output uses an
-    /// empty collection plus a stderr note. A fetched "Unclassified" row is
-    /// preserved and accompanied by the note on stderr.
+    /// 900, table output writes the note to stdout. JSON writes an empty
+    /// collection and NDJSON emits no stdout records; both put the note on
+    /// stderr. A fetched "Unclassified" row is preserved and accompanied by
+    /// the note on stderr.
     ///
     /// Examples:
     ///

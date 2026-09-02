@@ -40,14 +40,16 @@ fn classification_help_describes_disabled_stream_behavior() {
 
     assert!(list_help.contains("API error 900"), "{list_help}");
     assert!(list_help.contains("stdout in table mode"), "{list_help}");
+    assert!(list_help.contains("JSON writes"), "{list_help}");
+    assert!(list_help.contains("an empty collection"), "{list_help}");
     assert!(
-        list_help.contains("empty collection to stdout"),
+        list_help.contains("NDJSON emits no stdout records"),
         "{list_help}"
     );
-    assert!(list_help.contains("note to stderr."), "{list_help}");
+    assert!(list_help.contains("note on stderr."), "{list_help}");
     assert!(
-        list_help.contains("successfully fetched lone \"Unclassified\" row is")
-            && list_help.contains("preserved, with the"),
+        list_help.contains("successfully fetched lone \"Unclassified\" row")
+            && list_help.contains("preserved, with the note"),
         "{list_help}"
     );
 
@@ -55,7 +57,13 @@ fn classification_help_describes_disabled_stream_behavior() {
     assert!(top_help.contains("API error 900"), "{top_help}");
     assert!(top_help.contains("writes the note to stdout"), "{top_help}");
     assert!(
-        top_help.contains("fetched \"Unclassified\" row is\npreserved"),
+        top_help.contains("NDJSON emits no stdout records"),
+        "{top_help}"
+    );
+    assert!(
+        top_help.contains("fetched \"Unclassified\" row is preserved")
+            || (top_help.contains("fetched \"Unclassified\" row is")
+                && top_help.contains("preserved and accompanied")),
         "{top_help}"
     );
 }
