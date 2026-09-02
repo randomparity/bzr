@@ -31,8 +31,9 @@ view, and create remain the complete component command surface.
 Stock Bugzilla users no longer see a command that cannot succeed. Completion and
 schema discovery match the actual implementation. A user of a Bugzilla fork that
 implemented the non-standard endpoint must use another client or maintain the removed
-surface downstream. Reversion requires only reverting this code change; there is no
-data migration.
+surface downstream. Restoring the executable surface requires no data migration, but a
+durable product reversal must supersede this ADR and reconcile ADR 0003's supersession
+metadata.
 
 ## Considered & rejected
 

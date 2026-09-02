@@ -62,5 +62,7 @@ continues through the existing unknown-schema input error and exits 7.
 ## Compatibility and rollback
 
 This intentionally breaks callers using a non-stock fork that implemented the invented
-endpoint. Reverting the change restores the command and schema; no persisted data or
-server state is migrated.
+endpoint. Before merge, abandoning the branch restores the prior code and records. After
+merge, an emergency code revert can mechanically restore the command and schema, but a
+durable product reversal must supersede ADR 0037 and reconcile ADR metadata. No persisted
+data or server state is migrated.
