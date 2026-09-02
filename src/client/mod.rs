@@ -12,6 +12,7 @@ use reqwest::header::HeaderValue;
 use serde::Deserialize;
 
 use crate::error::{BzrError, Result};
+use crate::types::deserialization::u64_from_number_or_string;
 use crate::types::transport::{ApiMode, AuthMethod};
 use crate::types::user::BugzillaUser;
 use crate::xmlrpc::protocol::XmlRpcClient;
@@ -78,7 +79,7 @@ pub struct BugzillaClient {
     pub(super) api_mode: ApiMode,
     pub(super) xmlrpc: XmlRpcClient,
     pub(super) strict_xmlrpc: Box<XmlRpcClient>,
-    /// Email hint for Bugzilla 5.0 compatibility (whoami fallback via user lookup).
+    /// Email hint for the Bugzilla 5.0/5.2 whoami fallback via user lookup.
     email_hint: Option<String>,
     /// The configured/inline server name this client resolved against, surfaced
     /// by `whoami` so a single call reports which server the identity belongs to.
@@ -106,7 +107,18 @@ pub struct BugzillaClientConfig<'a> {
 /// Used by bug creation, comment creation, product/component/user/group creation.
 #[derive(Deserialize)]
 pub(super) struct IdResponse {
+    #[serde(deserialize_with = "deserialize_id_response_id")]
     pub id: u64,
+}
+
+fn deserialize_id_response_id<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<u64, D::Error> {
+    u64_from_number_or_string(
+        deserializer,
+        "an unsigned integer or decimal numeric string resource ID",
+        "expected an unsigned integer resource ID",
+    )
 }
 
 impl BugzillaClient {

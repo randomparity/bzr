@@ -1,8 +1,33 @@
+use serde::Serialize;
+
 use crate::client::encode_path;
 use crate::client::{BugzillaClient, UserDetailLevel, UserSearchResponse};
 use crate::error::{BzrError, Result};
 use crate::types::transport::ApiMode;
 use crate::types::user::{BugzillaUser, CreateUserParams, UpdateUserParams, WhoamiResponse};
+
+#[derive(Serialize)]
+struct UpdateUserRequest<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    names: Option<&'a [String]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    full_name: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    email: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    login_denied_text: Option<&'a str>,
+}
+
+impl<'a> From<&'a UpdateUserParams> for UpdateUserRequest<'a> {
+    fn from(updates: &'a UpdateUserParams) -> Self {
+        Self {
+            names: updates.names.as_deref(),
+            full_name: updates.real_name.as_deref(),
+            email: updates.email.as_deref(),
+            login_denied_text: updates.login_denied_text.as_deref(),
+        }
+    }
+}
 
 impl BugzillaClient {
     pub async fn whoami(&self) -> Result<WhoamiResponse> {
@@ -11,7 +36,7 @@ impl BugzillaClient {
         match resp {
             Ok(r) => self.parse_json(r).await,
             Err(BzrError::Api { code: 32614, .. } | BzrError::HttpStatus { status: 404, .. }) => {
-                // /rest/whoami not available (Bugzilla < 5.1). May surface as
+                // /rest/whoami is absent on Bugzilla 5.0/5.2. It may surface as
                 // API error 32614 (JSON response) or raw HTTP 404 (non-JSON server).
                 // Fall back to looking up the user by email if available.
                 tracing::debug!("whoami endpoint not found, falling back to user lookup");
@@ -20,7 +45,7 @@ impl BugzillaClient {
                 } else {
                     Err(BzrError::Api {
                         code: 32614,
-                        message: "whoami not available on this server; add --email to your server config for Bugzilla 5.0 compatibility".into(),
+                        message: "Bugzilla 5.3+/BMO-derived servers use native whoami; this Bugzilla 5.0/5.2 server needs an email-backed fallback. Configure a named server by rerunning its complete `bzr config set-server <name> --url <url> --email <email> ...` command, preserving its existing options; or add `--server-email` to an inline `--server-url` invocation".into(),
                     })
                 }
             }
@@ -28,7 +53,7 @@ impl BugzillaClient {
         }
     }
 
-    /// Fallback for Bugzilla < 5.1 which lacks `/rest/whoami`.
+    /// Fallback for Bugzilla 5.0/5.2, which lack `/rest/whoami`.
     async fn whoami_via_user_lookup(&self, email: &str) -> Result<WhoamiResponse> {
         let data: UserSearchResponse = self.get_json_query("user", &[("names", email)]).await?;
         data.users
@@ -73,7 +98,8 @@ impl BugzillaClient {
 
     /// Update a user's profile fields.
     pub async fn update_user(&self, user: &str, updates: &UpdateUserParams) -> Result<()> {
-        self.put_json(&format!("user/{}", encode_path(user)), updates)
+        let request = UpdateUserRequest::from(updates);
+        self.put_json(&format!("user/{}", encode_path(user)), &request)
             .await
     }
 }

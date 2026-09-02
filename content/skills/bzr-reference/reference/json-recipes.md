@@ -1,7 +1,7 @@
 # bzr --json + jq recipes
 
 All read paths support `--json`. Output is wrapped in a versioned envelope —
-`{"schema_version": "2.0.0", "data": <payload>}` — so read fields under `.data`.
+`{"schema_version": "2.0.1", "data": <payload>}` — so read fields under `.data`.
 Pipe to `jq`. (`--output ndjson` records stay bare; see below.)
 
 ```

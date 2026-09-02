@@ -13,6 +13,7 @@ fn version_to_mode_pre_5() {
 #[test]
 fn version_to_mode_5_0() {
     assert_eq!(version_to_api_mode("5.0"), ApiMode::Hybrid);
+    assert_eq!(version_to_api_mode("5.0+"), ApiMode::Hybrid);
     assert_eq!(version_to_api_mode("5.0.4"), ApiMode::Hybrid);
     assert_eq!(version_to_api_mode("5.0.4.rh103"), ApiMode::Hybrid);
 }
@@ -20,8 +21,17 @@ fn version_to_mode_5_0() {
 #[test]
 fn version_to_mode_5_1_plus() {
     assert_eq!(version_to_api_mode("5.1"), ApiMode::Rest);
+    assert_eq!(version_to_api_mode("5.1+"), ApiMode::Rest);
+    assert_eq!(version_to_api_mode("5.2+"), ApiMode::Rest);
     assert_eq!(version_to_api_mode("5.1.2"), ApiMode::Rest);
+    assert_eq!(version_to_api_mode("5.3.3+"), ApiMode::Rest);
     assert_eq!(version_to_api_mode("6.0"), ApiMode::Rest);
+}
+
+#[test]
+fn version_to_mode_rejects_non_bare_minor_suffixes() {
+    assert_eq!(version_to_api_mode("5.1++"), ApiMode::Hybrid);
+    assert_eq!(version_to_api_mode("5.1+.2"), ApiMode::Hybrid);
 }
 
 #[tokio::test]

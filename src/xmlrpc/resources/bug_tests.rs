@@ -43,6 +43,17 @@ async fn search_bugs_returns_results() {
     assert_eq!(bugs[0].summary.as_deref(), Some("Test bug"));
     assert_eq!(bugs[0].status.as_deref(), Some("NEW"));
     assert_eq!(bugs[0].product.as_deref(), Some("TestProduct"));
+
+    let requests = mock.received_requests().await.unwrap();
+    let body = String::from_utf8(requests[0].body.clone()).unwrap();
+    assert!(body.contains("<name>include_fields</name>"));
+    assert!(body.contains("<string>target_milestone</string>"));
+    for view_only in ["groups", "estimated_time", "remaining_time"] {
+        assert!(
+            !body.contains(&format!("<string>{view_only}</string>")),
+            "default search should not request view-only field {view_only}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -296,6 +307,52 @@ fn value_to_bug_captures_custom_fields() {
 
     assert_eq!(bug.custom_fields["cf_release"], serde_json::json!("9.6"));
     assert!(!bug.custom_fields.contains_key("x_extension"));
+}
+
+#[test]
+fn value_to_bug_captures_groups_and_time_tracking_fields() {
+    let mut payload = BTreeMap::new();
+    payload.insert("id".into(), Value::Int(42));
+    payload.insert(
+        "groups".into(),
+        Value::Array(vec![Value::String("functest-grp".into())]),
+    );
+    payload.insert("estimated_time".into(), Value::Double(8.0));
+    payload.insert("remaining_time".into(), Value::Double(5.0));
+
+    let bug = value_to_bug(&Value::Struct(payload)).unwrap();
+
+    assert_eq!(bug.groups, vec!["functest-grp"]);
+    assert_eq!(bug.estimated_time, Some(8.0));
+    assert_eq!(bug.remaining_time, Some(5.0));
+}
+
+#[test]
+fn value_to_bug_rejects_malformed_group_and_time_tracking_fields() {
+    let malformed = [
+        ("groups", Value::String("functest-grp".into())),
+        (
+            "groups",
+            Value::Array(vec![Value::String("functest-grp".into()), Value::Int(7)]),
+        ),
+        ("estimated_time", Value::String("8".into())),
+        ("remaining_time", Value::Int(5)),
+        ("estimated_time", Value::Double(f64::NAN)),
+        ("remaining_time", Value::Double(f64::INFINITY)),
+    ];
+
+    for (field, value) in malformed {
+        let mut payload = BTreeMap::new();
+        payload.insert("id".into(), Value::Int(42));
+        payload.insert(field.into(), value);
+
+        let result = value_to_bug(&Value::Struct(payload));
+
+        assert!(
+            matches!(&result, Err(BzrError::XmlRpc(message)) if message.contains(field)),
+            "malformed {field} should name the field: {result:?}"
+        );
+    }
 }
 
 #[test]

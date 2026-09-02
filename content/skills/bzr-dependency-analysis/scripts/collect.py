@@ -14,7 +14,7 @@ from urllib.parse import parse_qsl, urlparse
 
 
 SCHEMA = "bzr-dependency-collection/v1"
-BZR_SCHEMA_VERSION = "2.0.0"
+BZR_SCHEMA_VERSION = "2.0.1"
 MAX_NODES = 9_999
 MAX_RELATIONSHIPS = 9_999
 TIMESTAMP_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\Z")

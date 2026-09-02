@@ -134,10 +134,11 @@ pub struct Cli {
     #[arg(long, value_name = "ENV", global = true, requires = "server_url")]
     pub server_api_key_env: Option<String>,
 
-    /// Login email for `--server-url` (older-Bugzilla whoami fallback).
+    /// Login email for `--server-url` (Bugzilla 5.0/5.2 whoami fallback).
     ///
     /// Optional. Mirrors the per-server `email` config field; needed only for
-    /// the Bugzilla 5.0 whoami fallback. Only meaningful with `--server-url`.
+    /// the Bugzilla 5.0/5.2 fallback; 5.3+/BMO-derived servers use native
+    /// `whoami`. Only meaningful with `--server-url`.
     #[arg(long, value_name = "EMAIL", global = true, requires = "server_url")]
     pub server_email: Option<String>,
 

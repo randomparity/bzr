@@ -29,6 +29,33 @@ async fn whoami_returns_user_info() {
 }
 
 #[tokio::test]
+async fn whoami_missing_email_names_named_and_inline_recovery() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock)
+        .await;
+
+    let error = test_client(&mock.uri())
+        .whoami()
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("Bugzilla 5.0/5.2"), "{error}");
+    assert!(
+        error.contains("5.3+/BMO-derived") && error.contains("native whoami"),
+        "{error}"
+    );
+    assert!(
+        error.contains("config set-server <name> --url <url> --email <email>")
+            && error.contains("preserving its existing options"),
+        "{error}"
+    );
+    assert!(error.contains("--server-email"), "{error}");
+}
+
+#[tokio::test]
 async fn search_users_returns_matches() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
@@ -101,7 +128,7 @@ async fn search_users_details_sends_include_fields() {
 }
 
 #[tokio::test]
-async fn create_user_returns_id() {
+async fn create_user_returns_string_id() {
     let mock = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/rest/user"))
@@ -109,7 +136,7 @@ async fn create_user_returns_id() {
             "email": "new@example.com",
             "full_name": "New User",
         })))
-        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 99})))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": "99"})))
         .expect(1)
         .mount(&mock)
         .await;
@@ -258,7 +285,7 @@ async fn update_user_sends_put() {
             encode_path("alice@example.com")
         )))
         .and(body_json(serde_json::json!({
-            "real_name": "Alice Smith",
+            "full_name": "Alice Smith",
             "names": ["alice@example.com"],
         })))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({

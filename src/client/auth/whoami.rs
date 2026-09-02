@@ -2,13 +2,25 @@ use reqwest::header::HeaderValue;
 use serde::Deserialize;
 
 use crate::bugzilla_auth::{AUTH_HEADER_NAME, AUTH_QUERY_PARAM};
+use crate::types::deserialization::u64_from_number_or_string;
 use crate::types::transport::AuthMethod;
 
 use super::MalformedProbeResponse;
 
 #[derive(Deserialize)]
 struct WhoamiProbeResponse {
+    #[serde(deserialize_with = "deserialize_whoami_probe_id")]
     id: u64,
+}
+
+fn deserialize_whoami_probe_id<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<u64, D::Error> {
+    u64_from_number_or_string(
+        deserializer,
+        "an unsigned integer or decimal numeric string whoami ID",
+        "expected an unsigned integer whoami ID",
+    )
 }
 
 pub(super) enum WhoamiOutcome {

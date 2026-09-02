@@ -45,6 +45,9 @@ fn make_bug(id: u64, summary: &str, status: &str) -> Bug {
         op_sys: None,
         rep_platform: None,
         target_milestone: None,
+        groups: vec![],
+        estimated_time: None,
+        remaining_time: None,
         flags: Vec::new(),
         custom_fields: std::collections::BTreeMap::new(),
     }
@@ -239,10 +242,10 @@ fn write_bug_adjacency_json_has_the_closed_result_shape() {
 }
 
 #[test]
-fn write_bug_adjacency_json_uses_schema_version_2_0_0() {
+fn write_bug_adjacency_json_uses_schema_version_2_0_1() {
     let output = capture_bug_adjacency(OutputFormat::Json, sample_adjacency());
     let value: serde_json::Value = serde_json::from_str(&output).unwrap();
-    assert_eq!(value["schema_version"], "2.0.0");
+    assert_eq!(value["schema_version"], "2.0.1");
 }
 
 #[test]
@@ -701,6 +704,22 @@ fn bug_to_json_keeps_flags_when_selected() {
 }
 
 #[test]
+fn bug_to_json_projects_groups_and_time_tracking_fields() {
+    let mut bug = make_bug(7, "s", "NEW");
+    bug.groups = vec!["functest-grp".into()];
+    bug.estimated_time = Some(8.0);
+    bug.remaining_time = Some(5.0);
+    let spec = ColumnSpec::new(Some("groups,estimated_time,remaining_time"), None);
+
+    let value = bug_to_json(&bug, spec);
+
+    assert_eq!(value["groups"], serde_json::json!(["functest-grp"]));
+    assert_eq!(value["estimated_time"], 8.0);
+    assert_eq!(value["remaining_time"], 5.0);
+    assert_eq!(value.as_object().unwrap().len(), 3);
+}
+
+#[test]
 fn write_bug_detail_table_shows_dupe_of() {
     let bug = crate::types::Bug {
         id: 42,
@@ -727,6 +746,9 @@ fn write_bug_detail_table_shows_dupe_of() {
         op_sys: None,
         rep_platform: None,
         target_milestone: None,
+        groups: vec![],
+        estimated_time: None,
+        remaining_time: None,
         flags: Vec::new(),
         custom_fields: std::collections::BTreeMap::new(),
     };
@@ -771,6 +793,9 @@ fn write_bug_detail_table_handles_minimal_bug() {
         op_sys: None,
         rep_platform: None,
         target_milestone: None,
+        groups: vec![],
+        estimated_time: None,
+        remaining_time: None,
         flags: Vec::new(),
         custom_fields: std::collections::BTreeMap::new(),
     };
@@ -1001,6 +1026,9 @@ fn sample_bug(id: u64, summary: &str) -> Bug {
         op_sys: None,
         rep_platform: None,
         target_milestone: None,
+        groups: vec![],
+        estimated_time: None,
+        remaining_time: None,
         flags: Vec::new(),
         custom_fields: std::collections::BTreeMap::new(),
     }
@@ -1153,7 +1181,7 @@ fn validate_table_columns_ok_for_all_blank_include() {
 /// The serde key sequence of `Bug`, in struct-declaration order. Locks the
 /// `preserve_order` decision (Finding 4) and is the reference for the registry
 /// drift guard (Finding 3).
-const BUG_STRUCT_KEY_ORDER: [&str; 25] = [
+const BUG_STRUCT_KEY_ORDER: [&str; 26] = [
     "id",
     "summary",
     "status",
@@ -1178,6 +1206,7 @@ const BUG_STRUCT_KEY_ORDER: [&str; 25] = [
     "op_sys",
     "rep_platform",
     "target_milestone",
+    "groups",
     "flags",
 ];
 
@@ -1368,7 +1397,9 @@ fn bugs_to_json_projects_every_element() {
 
 #[test]
 fn columns_registry_is_one_to_one_with_bug_serde_keys() {
-    let bug = make_bug(1, "s", "NEW");
+    let mut bug = make_bug(1, "s", "NEW");
+    bug.estimated_time = Some(8.0);
+    bug.remaining_time = Some(5.0);
     let value = serde_json::to_value(&bug).unwrap();
     let serde_keys: std::collections::HashSet<String> =
         value.as_object().unwrap().keys().cloned().collect();

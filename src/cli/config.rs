@@ -64,13 +64,11 @@ pub(crate) enum ConfigAction {
         /// itself is not.
         #[arg(long, conflicts_with = "api_key")]
         api_key_env: Option<String>,
-        /// Login email used for fallback auth on older Bugzilla servers.
+        /// Login email for the Bugzilla 5.0/5.2 whoami fallback.
         ///
-        /// Required only when bzr's auto-detected auth method
-        /// (header API-key) is unavailable and the server falls
-        /// back to query-parameter auth, which uses
-        /// `email`+`api_key` as a credential pair. Most modern
-        /// Bugzilla servers don't need this.
+        /// Bugzilla 5.3+/BMO-derived servers use native whoami. Bugzilla
+        /// 5.0/5.2 needs this email regardless of whether the API key uses
+        /// header or query-parameter transport.
         #[arg(long)]
         email: Option<String>,
         /// Override bzr's auto-detected API-key transport.

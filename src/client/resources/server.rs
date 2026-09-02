@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
@@ -6,15 +6,33 @@ use crate::types::capabilities::{
     api_modes_for, auth_modes_for, field_type_name, supports_rest_surface, CustomFieldSummary,
     ServerCapabilities, StatusTransitionSummary,
 };
+use crate::types::deserialization::u64_from_number_or_string;
 use crate::types::server_info::{ServerExtensions, ServerInfoResponse, ServerVersion};
 use crate::types::FieldValue;
 
 /// One field as returned by `/rest/field/bug` (the all-fields listing).
+#[derive(Default)]
+struct UnsignedWire(u64);
+
+impl<'de> Deserialize<'de> for UnsignedWire {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        u64_from_number_or_string(
+            deserializer,
+            "a non-negative integer or decimal numeric string",
+            "expected a non-negative integer",
+        )
+        .map(Self)
+    }
+}
+
 #[derive(Deserialize)]
 struct FieldDef {
     name: String,
     #[serde(rename = "type", default)]
-    field_type: i64,
+    field_type: UnsignedWire,
     #[serde(default)]
     is_custom: bool,
     #[serde(default)]
@@ -34,7 +52,7 @@ struct ParametersResponse {
 #[derive(Deserialize)]
 struct ParametersBody {
     #[serde(default)]
-    maxattachmentsize: Option<u64>,
+    maxattachmentsize: Option<UnsignedWire>,
 }
 
 impl BugzillaClient {
@@ -97,7 +115,9 @@ impl BugzillaClient {
             .filter(|field| field.is_custom)
             .map(|field| CustomFieldSummary {
                 name: field.name,
-                field_type: field_type_name(field.field_type).to_string(),
+                field_type: i64::try_from(field.field_type.0)
+                    .map_or("unknown", field_type_name)
+                    .to_string(),
                 values: field
                     .values
                     .into_iter()
@@ -119,12 +139,24 @@ impl BugzillaClient {
             // Best-effort: degrade to `None` but leave a `-vv` trail so a
             // credentialed caller can tell "server refused parameters" from
             // "parameter unset". The error's Display is API-key-redacted.
+            Err(BzrError::Deserialize(err)) => {
+                tracing::debug!(
+                    %err,
+                    reason = tracing::field::display("response_shape"),
+                    "max_attachment_size undetermined: /rest/parameters failed"
+                );
+                None
+            }
             Err(err) => {
-                tracing::debug!(%err, "max_attachment_size undetermined: /rest/parameters failed");
+                tracing::debug!(
+                    %err,
+                    reason = tracing::field::display("request"),
+                    "max_attachment_size undetermined: /rest/parameters failed"
+                );
                 None
             }
         };
-        kib.map(|kib| kib.saturating_mul(1024))
+        kib.map(|kib| kib.0.saturating_mul(1024))
     }
 }
 
@@ -135,6 +167,9 @@ fn status_transitions(values: Vec<FieldValue>) -> Vec<StatusTransitionSummary> {
         .into_iter()
         .filter_map(|value| {
             let from = value.name?;
+            if from.is_empty() {
+                return None;
+            }
             let can_change_to = value.can_change_to?;
             Some(StatusTransitionSummary {
                 from,

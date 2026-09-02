@@ -163,7 +163,7 @@ async fn user_update_from_json_uses_json_target() {
         .and(path("/rest/user/alice%40test%2Ecom"))
         .and(body_json(serde_json::json!({
             "names": ["alice@test.com"],
-            "real_name": "Alice Smith",
+            "full_name": "Alice Smith",
             "email": "alice.new@test.com",
             "login_denied_text": "Closed"
         })))

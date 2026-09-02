@@ -247,14 +247,92 @@ else test_skip "no attachment id"; fi
 
 test_begin "attachment-update-content-type-and-flag" "attachment update --content-type and --flag"
 if [[ -n "${_AID:-}" ]]; then
-    run_bzr attachment update "$_AID" --content-type text/plain --flag 'bzr_attachment_review?'
+    run_bzr attachment update "$_AID" --content-type text/plain --flag 'bzr-attachment-review?'
     if assert_success; then
         run_bzr attachment view "$_AID"
         if assert_json '.content_type' "text/plain" &&
-            assert_json_contains '[.flags[].name] | join(",")' "bzr_attachment_review"; then test_pass; fi
+            assert_json_contains '[.flags[].name] | join(",")' "bzr-attachment-review"; then test_pass; fi
     fi
 else test_skip "no attachment id"; fi
 
+_assert_transport_timestamp_parity() {
+    local resource="$1"
+    local filter="$2"
+    shift 2
+    local rest="$FUNC_CONFIG_DIR/xmlrpc-parity-${resource}-rest.json"
+    local xmlrpc="$FUNC_CONFIG_DIR/xmlrpc-parity-${resource}-xmlrpc.json"
+
+    run_bzr --api rest "$@"
+    if ! assert_success; then return; fi
+    if ! jq -cS "$filter" "$BZR_STDOUT" >"$rest"; then
+        test_fail "could not capture REST $resource timestamps"
+        return
+    fi
+
+    run_bzr --api xmlrpc "$@"
+    if ! assert_success; then return; fi
+    if ! jq -cS "$filter" "$BZR_STDOUT" >"$xmlrpc"; then
+        test_fail "could not capture XML-RPC $resource timestamps"
+        return
+    fi
+
+    if cmp -s "$rest" "$xmlrpc"; then
+        test_pass
+    else
+        test_fail "REST and XML-RPC $resource timestamps differ"
+    fi
+}
+
+test_begin "bug-view-timestamps-match-rest-and-xmlrpc-on-bz50" "bug view timestamps match across bz50 transports"
+if [[ "$BZ_VERSION" == "bz50" ]] && [[ -n "${_AB:-}" ]]; then
+    _assert_transport_timestamp_parity bug \
+        '{creation_time, last_change_time}' bug view "$_AB"
+else test_skip "XML-RPC transport parity applies to bz50"; fi
+
+test_begin "comment-list-timestamps-match-rest-and-xmlrpc-on-bz50" "comment list timestamps match across bz50 transports"
+if [[ "$BZ_VERSION" == "bz50" ]] && [[ -n "${_AB:-}" ]]; then
+    _assert_transport_timestamp_parity comment \
+        '[.[] | {id, creation_time}] | sort_by(.id)' comment list "$_AB"
+else test_skip "XML-RPC transport parity applies to bz50"; fi
+
+test_begin "attachment-list-timestamps-match-rest-and-xmlrpc-on-bz50" "attachment list timestamps match across bz50 transports"
+if [[ "$BZ_VERSION" == "bz50" ]] && [[ -n "${_AB:-}" ]]; then
+    _assert_transport_timestamp_parity attachment \
+        '[.[] | {id, creation_time, last_change_time}] | sort_by(.id)' \
+        attachment list "$_AB"
+else test_skip "XML-RPC transport parity applies to bz50"; fi
+
+test_begin "attachment-list-and-view-flags-match-on-bz50" "XML-RPC attachment list and view flags match on bz50"
+if [[ "$BZ_VERSION" == "bz50" ]] && [[ -n "${_AB:-}" ]] && [[ -n "${_AID:-}" ]]; then
+    _XP_LIST="$FUNC_CONFIG_DIR/xmlrpc-parity-flags-list.json"
+    _XP_VIEW="$FUNC_CONFIG_DIR/xmlrpc-parity-flags-view.json"
+    run_bzr --api xmlrpc attachment list "$_AB"
+    if assert_success; then
+        if ! jq -ceS --argjson id "$_AID" \
+            '[.[] | select(.id == $id)][0].flags | sort_by(.name, .status, .setter, .requestee)' \
+            "$BZR_STDOUT" >"$_XP_LIST" ||
+            ! jq -e 'length > 0 and any(.[]; .name == "bzr-attachment-review")' \
+                "$_XP_LIST" >/dev/null; then
+            test_fail "XML-RPC attachment list did not return the review flag"
+        else
+            run_bzr --api xmlrpc attachment view "$_AID"
+            if assert_success; then
+                if ! jq -ceS '.flags | sort_by(.name, .status, .setter, .requestee)' \
+                    "$BZR_STDOUT" >"$_XP_VIEW" ||
+                    ! jq -e 'length > 0 and any(.[]; .name == "bzr-attachment-review")' \
+                        "$_XP_VIEW" >/dev/null; then
+                    test_fail "XML-RPC attachment view did not return the review flag"
+                elif cmp -s "$_XP_LIST" "$_XP_VIEW"; then
+                    test_pass
+                else
+                    test_fail "XML-RPC attachment list and view flags differ"
+                fi
+            fi
+        fi
+    fi
+else test_skip "XML-RPC attachment flag parity applies to bz50"; fi
+
 rm -f "$_AF"
-unset _AB _AF _AID
+unset -f _assert_transport_timestamp_parity
+unset _AB _AF _AID _XP_LIST _XP_VIEW
 echo ""

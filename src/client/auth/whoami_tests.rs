@@ -37,6 +37,15 @@ fn whoami_response_id_zero_means_unauthenticated() {
 }
 
 #[test]
+fn whoami_response_string_id_deserializes() {
+    let resp: WhoamiProbeResponse = serde_json::from_str(r#"{"id":"42"}"#).unwrap();
+    assert_eq!(resp.id, 42);
+
+    let zero: WhoamiProbeResponse = serde_json::from_str(r#"{"id":"0"}"#).unwrap();
+    assert_eq!(zero.id, 0);
+}
+
+#[test]
 fn whoami_response_missing_id_errors() {
     let json = r#"{"name": "test"}"#;
     let result = serde_json::from_str::<WhoamiProbeResponse>(json);

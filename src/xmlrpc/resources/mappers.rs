@@ -32,9 +32,49 @@ pub(crate) fn get_nonempty_str(m: &BTreeMap<String, Value>, key: &str) -> Option
 pub(crate) fn get_datetime_str(m: &BTreeMap<String, Value>, key: &str) -> Option<String> {
     let val = m.get(key)?;
     match val {
-        Value::DateTime(s) => Some(s.clone()),
-        Value::String(s) if !s.is_empty() => Some(s.clone()),
+        Value::DateTime(s) => Some(normalize_datetime(s)),
+        Value::String(s) if !s.is_empty() => Some(normalize_datetime(s)),
         _ => None,
+    }
+}
+
+fn normalize_datetime(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let is_compact = bytes.len() == 17
+        && bytes[..8].iter().all(u8::is_ascii_digit)
+        && bytes[8] == b'T'
+        && bytes[9..11].iter().all(u8::is_ascii_digit)
+        && bytes[11] == b':'
+        && bytes[12..14].iter().all(u8::is_ascii_digit)
+        && bytes[14] == b':'
+        && bytes[15..].iter().all(u8::is_ascii_digit);
+    let is_iso_without_zone = bytes.len() == 19
+        && bytes[..4].iter().all(u8::is_ascii_digit)
+        && bytes[4] == b'-'
+        && bytes[5..7].iter().all(u8::is_ascii_digit)
+        && bytes[7] == b'-'
+        && bytes[8..10].iter().all(u8::is_ascii_digit)
+        && bytes[10] == b'T'
+        && bytes[11..13].iter().all(u8::is_ascii_digit)
+        && bytes[13] == b':'
+        && bytes[14..16].iter().all(u8::is_ascii_digit)
+        && bytes[16] == b':'
+        && bytes[17..].iter().all(u8::is_ascii_digit);
+
+    if is_compact {
+        format!(
+            "{}-{}-{}T{}:{}:{}Z",
+            &value[..4],
+            &value[4..6],
+            &value[6..8],
+            &value[9..11],
+            &value[12..14],
+            &value[15..]
+        )
+    } else if is_iso_without_zone {
+        format!("{value}Z")
+    } else {
+        value.to_owned()
     }
 }
 

@@ -34,6 +34,49 @@ fn bug_deserializes_full() {
 }
 
 #[test]
+fn bug_deserializes_and_serializes_groups_and_time_tracking_fields() {
+    let bug: Bug = serde_json::from_value(serde_json::json!({
+        "id": 42,
+        "groups": ["functest-grp"],
+        "estimated_time": 8.0,
+        "remaining_time": 5.0
+    }))
+    .unwrap();
+
+    assert_eq!(bug.groups, vec!["functest-grp"]);
+    assert_eq!(bug.estimated_time, Some(8.0));
+    assert_eq!(bug.remaining_time, Some(5.0));
+
+    let serialized = serde_json::to_value(bug).unwrap();
+    assert_eq!(serialized["groups"], serde_json::json!(["functest-grp"]));
+    assert_eq!(serialized["estimated_time"], 8.0);
+    assert_eq!(serialized["remaining_time"], 5.0);
+}
+
+#[test]
+fn bug_omits_permission_gated_time_fields_when_server_omits_them() {
+    let bug: Bug = serde_json::from_value(serde_json::json!({
+        "id": 42,
+        "groups": []
+    }))
+    .unwrap();
+
+    assert_eq!(bug.estimated_time, None);
+    assert_eq!(bug.remaining_time, None);
+
+    let serialized = serde_json::to_value(bug).unwrap();
+    assert_eq!(serialized["groups"], serde_json::json!([]));
+    assert!(!serialized
+        .as_object()
+        .unwrap()
+        .contains_key("estimated_time"));
+    assert!(!serialized
+        .as_object()
+        .unwrap()
+        .contains_key("remaining_time"));
+}
+
+#[test]
 fn bug_deserializes_scalar_and_array_component_version_as_lists() {
     let scalar: Bug =
         serde_json::from_str(r#"{"id":1,"component":"General","version":"rawhide"}"#).unwrap();
