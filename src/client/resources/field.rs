@@ -46,9 +46,9 @@ impl BugzillaClient {
     /// no legal values.
     pub async fn get_field_values(&self, field_name: &str) -> Result<Vec<FieldValue>> {
         let resolved = resolve_field_alias(field_name);
-        if matches!(resolved.as_ref(), "." | "..") {
+        if matches!(resolved.as_ref(), "" | "." | "..") {
             return Err(BzrError::InputValidation {
-                message: "field name must not be '.' or '..'".to_string(),
+                message: "field name must not be empty, '.', or '..'".to_string(),
                 field: Some("field".to_string()),
                 value: Some(field_name.to_string()),
             });

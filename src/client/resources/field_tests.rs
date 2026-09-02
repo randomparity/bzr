@@ -125,8 +125,8 @@ async fn get_field_values_encodes_resolved_field_name_as_one_path_segment() {
 }
 
 #[tokio::test]
-async fn get_field_values_rejects_dot_segments_without_a_request() {
-    for field_name in [".", ".."] {
+async fn get_field_values_rejects_empty_or_dot_segments_without_a_request() {
+    for field_name in ["", ".", ".."] {
         let mock = MockServer::start().await;
         let client = test_client(&mock.uri());
 
