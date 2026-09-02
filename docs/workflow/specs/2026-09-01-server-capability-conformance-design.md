@@ -83,8 +83,11 @@ mode it:
 
 The function returns named counters and logs each applied shape. Proxy self-tests cover
 each route, prove default mode leaves capability routes unchanged, and prove unrelated
-payloads are unchanged. The auth phase starts the proxy in capability mode, installs a
-combined harness/proxy EXIT trap, runs a credentialed inline
+payloads are unchanged. The shared functional helper derives distinct TLS and response-shape
+listen ports with their existing offsets, reversing an offset only when adding it would exceed
+65535. A focused auth-phase regression fixes the high backend-port boundary so a runtime-assigned
+port cannot prevent the proxy proof from starting. The auth phase starts the proxy in capability
+mode, installs a combined harness/proxy EXIT trap, runs a credentialed inline
 `server capabilities`, asserts non-null attachment size, the mapped proxy field, no empty
 transition, REST mode, and every expected proxy log, then stops the proxy and restores the
 ordinary harness trap. Existing stock and credentialless assertions stay in the same
@@ -100,6 +103,9 @@ phase; therefore the all-version run proves both sides on bz50, bz52, and bz53.
 - Out-of-range field type codes produce `unknown`; malformed non-decimal wire values fail
   the required all-fields request rather than inventing a type.
 - Proxy startup or missing rewrite evidence fails the functional case.
+- Derived proxy ports remain valid and distinct from both the backend and one another near the
+  TCP port ceiling; explicit `BZR_FUNC_TLS_PORT` and `BZR_FUNC_REDHAT_PORT` overrides are
+  unchanged.
 
 ## Threat model
 

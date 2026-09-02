@@ -99,35 +99,40 @@ no broader suffix leniency is introduced.
 
 ## Task 3: Prove production shapes through the functional proxy
 
-**Files:** modify `tests/functional/redhat-shape-proxy.py` and
-`tests/functional/phases/02-server-auth.sh`.
+**Files:** modify `tests/functional/redhat-shape-proxy.py`,
+`tests/functional/phases/02-server-auth.sh`, and the shared proxy-port calculation in
+`tests/functional/lib.sh`.
 
 **Interfaces:** consume `redhat_shape_start`, `redhat_shape_stop`,
 `REDHAT_SHAPE_PORT`, and `REDHAT_SHAPE_LOG` from `tests/functional/lib.sh`; emit stable
 `server-capability shaped route=<route> count=<n>` evidence lines. No later task consumes
 new shell globals.
 
-1. Add proxy self-tests before implementation for opt-in parameters stringification,
+1. Add a focused auth-phase regression proving TLS and response-shape default ports remain
+   valid and distinct for a backend port near 65535. Preserve the existing positive offsets
+   when they fit and reverse each offset only when addition would overflow.
+2. Add proxy self-tests before implementation for opt-in parameters stringification,
    field-type string injection, empty status injection, bare version rewrite, default-mode
    preservation of capability/version routes, and unrelated payload preservation.
-2. Run `python3 tests/functional/redhat-shape-proxy.py --self-test`; expect the new tests to
+3. Run `python3 tests/functional/redhat-shape-proxy.py --self-test`; expect the new tests to
    fail because the transformer is absent.
-3. Add one explicit `server-capabilities` proxy mode and one route-aware transformer
+4. Add one explicit `server-capabilities` proxy mode and one route-aware transformer
    returning the rewritten body plus named counters. Call it only for successful responses
    in that mode, log each non-zero route counter, reuse existing malformed-JSON 502
    handling, and leave current default behavior unchanged for every existing caller.
-4. Run the proxy self-test again; expect all tests green.
-5. Strengthen the stock credentialed capability assertion with non-null attachment size
+5. Run the proxy self-test again; expect all tests green.
+6. Strengthen the stock credentialed capability assertion with non-null attachment size
    and no empty transitions; retain the credentialless null assertion.
-6. Add one credentialed inline proxy case that starts explicit capability mode.
+7. Add one credentialed inline proxy case that starts explicit capability mode.
    Immediately after proxy startup, install
    `trap 'cleanup; redhat_shape_stop' EXIT`; assert non-null attachment size, the
    test-named custom field's mapped type, no empty transitions, REST mode from `5.2+`, and
    all four rewrite evidence lines. On the normal path require `redhat_shape_stop` to
    succeed, then restore `trap cleanup EXIT`.
-7. Run `make functional-test-bz52`; expect the phase and full arm green. Then run
+8. Run `BZR_FUNC_PORT=64484 make functional-test-bz50` to prove the high-port regression,
+   then run `make functional-test-bz52`; expect both full arms green. Then run
    `make functional-test-all`; expect bz50, bz52, and bz53 green.
-8. Commit with `test(functional): prove server capability response shapes` after relevant
+9. Commit with `test(functional): prove server capability response shapes` after relevant
    hooks pass.
 
 **Acceptance:** every public criterion has live-container proof; proxy self-tests prove

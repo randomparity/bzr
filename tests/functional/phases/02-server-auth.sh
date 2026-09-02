@@ -98,6 +98,17 @@ if assert_success && assert_json_exists '.id' &&
     assert_json '.auth_mode' 'api_key'; then test_pass; fi
 unset BZR_FUNC_INLINE_KEY
 
+test_begin "proxy-default-ports-stay-distinct-near-limit" "proxy default ports stay valid and distinct near the limit"
+_HIGH_BACKEND_PORT=65000
+_TLS_DEFAULT_PORT=$(functional_proxy_default_port "$_HIGH_BACKEND_PORT" 1000)
+_REDHAT_DEFAULT_PORT=$(functional_proxy_default_port "$_HIGH_BACKEND_PORT" 2000)
+if [[ $_TLS_DEFAULT_PORT -eq 64000 && $_REDHAT_DEFAULT_PORT -eq 63000 ]]; then
+    test_pass
+else
+    test_fail "derived proxy ports must be valid and distinct"
+fi
+unset _HIGH_BACKEND_PORT _TLS_DEFAULT_PORT _REDHAT_DEFAULT_PORT
+
 test_begin "production-shaped-server-capabilities" "production-shaped server capabilities"
 export BZR_FUNC_REDHAT_MODE=server-capabilities
 if redhat_shape_start "$BZ_PORT"; then
