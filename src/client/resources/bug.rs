@@ -7,23 +7,21 @@ use crate::error::{BzrError, Result, BUGZILLA_INTERNAL_ERROR};
 use crate::http::XMLRPC_FALLBACK_TIMEOUT;
 use crate::types::bug::{
     partition_filters, Bug, BugLinksNode, CreateBugParams, HistoryEntry, SearchParams,
-    UpdateBugParams, FIELD_MAPPINGS, LINKS_ID_CHUNK, LINKS_INCLUDE_FIELDS,
+    UpdateBugParams, BUG_SEARCH_DEFAULT_FIELDS, FIELD_MAPPINGS, LINKS_ID_CHUNK,
+    LINKS_INCLUDE_FIELDS,
 };
 use crate::types::transport::ApiMode;
 
-/// Default fields requested for Bug queries. Matches the fields in [`Bug`] and
-/// avoids requesting server-side fields we don't use — some Bugzilla extensions
-/// crash when serializing certain fields (e.g. group visibility) via the REST API.
-const BUG_DEFAULT_FIELDS: &str = "id,summary,status,resolution,dupe_of,product,component,version,\
+const BUG_VIEW_DEFAULT_FIELDS: &str =
+    "id,summary,status,resolution,dupe_of,product,component,version,\
     assigned_to,priority,severity,creation_time,last_change_time,creator,\
     url,whiteboard,keywords,blocks,depends_on,cc,op_sys,rep_platform,deadline,\
-    target_milestone,flags";
+    target_milestone,groups,estimated_time,remaining_time,flags";
 
 /// Ensure `id` is present in an include list and absent from an exclude list,
 /// so the non-defaulted `Bug.id` always deserializes. `None` include is left
-/// as-is (the REST sink injects `BUG_DEFAULT_FIELDS`, which leads with `id`;
-/// XML-RPC returns `id` by server default). Returns owned strings only when a
-/// change is needed.
+/// as-is (the search sinks inject `BUG_SEARCH_DEFAULT_FIELDS`, which leads with
+/// `id`). Returns owned strings only when a change is needed.
 fn force_id_fields(
     include: Option<&str>,
     exclude: Option<&str>,
@@ -351,7 +349,7 @@ impl BugzillaClient {
         req_builder = append_raw_params(req_builder, &params.raw_params);
 
         if params.include_fields.is_none() {
-            req_builder = req_builder.query(&[("include_fields", BUG_DEFAULT_FIELDS)]);
+            req_builder = req_builder.query(&[("include_fields", BUG_SEARCH_DEFAULT_FIELDS)]);
         }
         let req = self.apply_auth(req_builder);
         let resp = self.send(req).await?;
@@ -413,7 +411,7 @@ impl BugzillaClient {
         include_fields: Option<&str>,
         exclude_fields: Option<&str>,
     ) -> Result<Bug> {
-        let fields = include_fields.unwrap_or(BUG_DEFAULT_FIELDS);
+        let fields = include_fields.unwrap_or(BUG_VIEW_DEFAULT_FIELDS);
         let mut req_builder = self
             .http
             .get(self.url(&format!("bug/{id}")))
