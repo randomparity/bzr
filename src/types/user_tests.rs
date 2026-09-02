@@ -57,6 +57,31 @@ fn bugzilla_user_deserializes_full() {
 }
 
 #[test]
+fn bugzilla_user_deserializes_production_shapes() {
+    let user: BugzillaUser = serde_json::from_value(serde_json::json!({
+        "id": "123",
+        "can_login": 1,
+        "groups": [{"id": "7", "name": "admin"}]
+    }))
+    .unwrap();
+
+    assert_eq!(user.id, 123);
+    assert_eq!(user.can_login, Some(true));
+    assert_eq!(user.groups[0].id, Some(7));
+}
+
+#[test]
+fn bugzilla_user_rejects_malformed_production_shapes() {
+    for value in [
+        serde_json::json!({"id": "-1"}),
+        serde_json::json!({"id": 1, "can_login": 2}),
+        serde_json::json!({"id": 1, "groups": [{"id": "1.5"}]}),
+    ] {
+        assert!(serde_json::from_value::<BugzillaUser>(value).is_err());
+    }
+}
+
+#[test]
 fn bugzilla_user_deserializes_minimal() {
     let json = serde_json::json!({"id": 1});
     let user: BugzillaUser = serde_json::from_value(json).unwrap();
@@ -93,6 +118,12 @@ fn whoami_response_deserializes() {
     assert_eq!(whoami.name.as_deref(), Some("bob"));
     assert_eq!(whoami.real_name.as_deref(), Some("Bob Jones"));
     assert_eq!(whoami.login.as_deref(), Some("bob@example.com"));
+}
+
+#[test]
+fn whoami_response_deserializes_string_id() {
+    let whoami: WhoamiResponse = serde_json::from_value(serde_json::json!({"id": "42"})).unwrap();
+    assert_eq!(whoami.id, 42);
 }
 
 #[test]

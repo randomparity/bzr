@@ -24,7 +24,7 @@ use tls_trust::{pin_current_cert_for_session, probe_cached_connection};
 /// On first connection to a server, detects the auth method when credentials
 /// exist and the API mode, then persists these settings to the config file.
 /// The server's configured email (if any) is stored in the client for
-/// Bugzilla 5.0 whoami fallback.
+/// Bugzilla 5.0/5.2 whoami fallback; 5.3+/BMO-derived servers use native whoami.
 ///
 /// When a TLS certificate error occurs and no trust mechanism is configured,
 /// offers an interactive TOFU (trust-on-first-use) prompt. When a pinned

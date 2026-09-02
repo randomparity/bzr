@@ -247,11 +247,11 @@ else test_skip "no attachment id"; fi
 
 test_begin "attachment-update-content-type-and-flag" "attachment update --content-type and --flag"
 if [[ -n "${_AID:-}" ]]; then
-    run_bzr attachment update "$_AID" --content-type text/plain --flag 'bzr_attachment_review?'
+    run_bzr attachment update "$_AID" --content-type text/plain --flag 'bzr-attachment-review?'
     if assert_success; then
         run_bzr attachment view "$_AID"
         if assert_json '.content_type' "text/plain" &&
-            assert_json_contains '[.flags[].name] | join(",")' "bzr_attachment_review"; then test_pass; fi
+            assert_json_contains '[.flags[].name] | join(",")' "bzr-attachment-review"; then test_pass; fi
     fi
 else test_skip "no attachment id"; fi
 
@@ -311,7 +311,7 @@ if [[ "$BZ_VERSION" == "bz50" ]] && [[ -n "${_AB:-}" ]] && [[ -n "${_AID:-}" ]];
         if ! jq -ceS --argjson id "$_AID" \
             '[.[] | select(.id == $id)][0].flags | sort_by(.name, .status, .setter, .requestee)' \
             "$BZR_STDOUT" >"$_XP_LIST" ||
-            ! jq -e 'length > 0 and any(.[]; .name == "bzr_attachment_review")' \
+            ! jq -e 'length > 0 and any(.[]; .name == "bzr-attachment-review")' \
                 "$_XP_LIST" >/dev/null; then
             test_fail "XML-RPC attachment list did not return the review flag"
         else
@@ -319,7 +319,7 @@ if [[ "$BZ_VERSION" == "bz50" ]] && [[ -n "${_AB:-}" ]] && [[ -n "${_AID:-}" ]];
             if assert_success; then
                 if ! jq -ceS '.flags | sort_by(.name, .status, .setter, .requestee)' \
                     "$BZR_STDOUT" >"$_XP_VIEW" ||
-                    ! jq -e 'length > 0 and any(.[]; .name == "bzr_attachment_review")' \
+                    ! jq -e 'length > 0 and any(.[]; .name == "bzr-attachment-review")' \
                         "$_XP_VIEW" >/dev/null; then
                     test_fail "XML-RPC attachment view did not return the review flag"
                 elif cmp -s "$_XP_LIST" "$_XP_VIEW"; then

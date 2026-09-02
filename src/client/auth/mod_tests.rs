@@ -434,8 +434,21 @@ async fn whoami_404_no_email_suggests_email_flag() {
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(
-        err.contains("--email"),
-        "should suggest --email flag, got: {err}"
+        err.contains("Bugzilla 5.0/5.2"),
+        "unexpected version hint: {err}"
+    );
+    assert!(
+        err.contains("5.3+/BMO-derived") && err.contains("native whoami"),
+        "should name the native whoami arm, got: {err}"
+    );
+    assert!(
+        err.contains("config set-server <name> --url <url> --email <email>")
+            && err.contains("preserving its existing options"),
+        "should suggest named-server recovery, got: {err}"
+    );
+    assert!(
+        err.contains("--server-email") && err.contains("--server-url"),
+        "should suggest inline recovery, got: {err}"
     );
 }
 

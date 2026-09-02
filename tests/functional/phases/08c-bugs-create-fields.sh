@@ -103,10 +103,10 @@ if [[ -n "$GID" ]]; then
 fi
 
 test_begin "bug-create-flag-round-trips" "bug create --flag round-trips"
-FID=$(make_bug "${_CF[@]}" --summary "flag create" --flag 'bzr_bug_review?')
+FID=$(make_bug "${_CF[@]}" --summary "flag create" --flag 'bzr-bug-review?')
 run_bzr bug view "$FID"
 if assert_success &&
-    assert_json_contains '[.flags[].name] | join(",")' "bzr_bug_review"; then test_pass; fi
+    assert_json_contains '[.flags[].name] | join(",")' "bzr-bug-review"; then test_pass; fi
 
 # #458: compound create — bug + first comment + attachment in one invocation.
 _CA_FILE="$_FJ/trace.log"

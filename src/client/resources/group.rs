@@ -37,7 +37,7 @@ impl BugzillaClient {
             .get_json_query(
                 "user",
                 &[
-                    ("group", group_name),
+                    ("groups", group_name),
                     ("include_fields", fields),
                     ("match", "*"),
                 ],

@@ -62,6 +62,31 @@ fn group_info_deserializes_full() {
 }
 
 #[test]
+fn group_info_deserializes_production_shapes() {
+    let group: GroupInfo = serde_json::from_value(serde_json::json!({
+        "id": "42",
+        "is_active": 1,
+        "membership": [{"id": "9"}]
+    }))
+    .unwrap();
+
+    assert_eq!(group.id, 42);
+    assert_eq!(group.is_active, Some(true));
+    assert_eq!(group.membership[0].id, 9);
+}
+
+#[test]
+fn group_info_rejects_malformed_production_shapes() {
+    for value in [
+        serde_json::json!({"id": "-1"}),
+        serde_json::json!({"id": 1, "is_active": 2}),
+        serde_json::json!({"id": 1, "membership": [{"id": "1.5"}]}),
+    ] {
+        assert!(serde_json::from_value::<GroupInfo>(value).is_err());
+    }
+}
+
+#[test]
 fn group_info_deserializes_minimal() {
     let json = serde_json::json!({"id": 7});
     let group: GroupInfo = serde_json::from_value(json).unwrap();

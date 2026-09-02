@@ -13,6 +13,7 @@ mod payload;
 mod search;
 
 pub use adjacency::{BugAdjacencyBug, BugAdjacencyError, BugAdjacencyRequest, BugAdjacencyResult};
+pub(crate) use fields::BUG_SEARCH_DEFAULT_FIELDS;
 pub use fields::{
     apply_exclude, canonical_excludes, canonical_field_list, default_selected_fields,
     field_selected, partition_include, selected_custom_detail_fields, selected_keys, BugField,
@@ -30,7 +31,7 @@ pub use search::{
     FIELD_MAPPINGS,
 };
 
-const BUG_BUILT_IN_FIELD_COUNT: usize = 25;
+const BUG_BUILT_IN_FIELD_COUNT: usize = 28;
 
 fn is_custom_field_name(name: &str) -> bool {
     name.starts_with("cf_")
@@ -63,6 +64,9 @@ pub struct Bug {
     pub op_sys: Option<String>,
     pub rep_platform: Option<String>,
     pub target_milestone: Option<String>,
+    pub groups: Vec<String>,
+    pub estimated_time: Option<f64>,
+    pub remaining_time: Option<f64>,
     pub flags: Vec<Flag>,
     pub custom_fields: BTreeMap<String, Value>,
 }
@@ -116,6 +120,12 @@ struct BugWire {
     rep_platform: Option<String>,
     #[serde(default)]
     target_milestone: Option<String>,
+    #[serde(default)]
+    groups: Vec<String>,
+    #[serde(default)]
+    estimated_time: Option<f64>,
+    #[serde(default)]
+    remaining_time: Option<f64>,
     #[serde(default)]
     flags: Vec<Flag>,
     #[serde(flatten)]
@@ -171,6 +181,9 @@ impl From<BugWire> for Bug {
             op_sys: wire.op_sys,
             rep_platform: wire.rep_platform,
             target_milestone: wire.target_milestone,
+            groups: wire.groups,
+            estimated_time: wire.estimated_time,
+            remaining_time: wire.remaining_time,
             flags: wire.flags,
             custom_fields: wire
                 .extra
@@ -226,6 +239,13 @@ impl Serialize for Bug {
         map.serialize_entry("op_sys", &self.op_sys)?;
         map.serialize_entry("rep_platform", &self.rep_platform)?;
         map.serialize_entry("target_milestone", &self.target_milestone)?;
+        map.serialize_entry("groups", &self.groups)?;
+        if let Some(estimated_time) = self.estimated_time {
+            map.serialize_entry("estimated_time", &estimated_time)?;
+        }
+        if let Some(remaining_time) = self.remaining_time {
+            map.serialize_entry("remaining_time", &remaining_time)?;
+        }
         map.serialize_entry("flags", &self.flags)?;
         for (name, value) in self
             .custom_fields

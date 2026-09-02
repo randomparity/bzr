@@ -1,10 +1,31 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::types::deserialization::{option_bool_from_int_or_bool, u64_from_number_or_string};
 use crate::types::transport::AuthMode;
+
+fn deserialize_user_or_group_id<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<u64, D::Error> {
+    u64_from_number_or_string(
+        deserializer,
+        "an unsigned integer or decimal numeric string user/group ID",
+        "expected an unsigned integer user/group ID",
+    )
+}
+
+#[derive(Deserialize)]
+struct UserGroupId(#[serde(deserialize_with = "deserialize_user_or_group_id")] u64);
+
+fn deserialize_optional_user_group_id<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<u64>, D::Error> {
+    Option::<UserGroupId>::deserialize(deserializer).map(|id| id.map(|id| id.0))
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct BugzillaUser {
+    #[serde(deserialize_with = "deserialize_user_or_group_id")]
     pub id: u64,
     #[serde(default)]
     pub name: Option<String>,
@@ -14,7 +35,7 @@ pub struct BugzillaUser {
     pub email: Option<String>,
     #[serde(default)]
     pub groups: Vec<UserGroup>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "option_bool_from_int_or_bool")]
     pub can_login: Option<bool>,
 }
 
@@ -26,7 +47,7 @@ pub const BUGZILLA_USER_FIELDS: &[&str] =
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct UserGroup {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_optional_user_group_id")]
     pub id: Option<u64>,
     #[serde(default)]
     pub name: Option<String>,
@@ -37,6 +58,7 @@ pub struct UserGroup {
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct WhoamiResponse {
+    #[serde(deserialize_with = "deserialize_user_or_group_id")]
     pub id: u64,
     #[serde(default)]
     pub name: Option<String>,

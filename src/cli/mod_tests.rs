@@ -251,6 +251,13 @@ fn parse_inline_server_flags() {
 }
 
 #[test]
+fn inline_server_email_help_names_supported_whoami_arms() {
+    let help = Cli::command().render_long_help().to_string();
+    assert!(help.contains("Bugzilla 5.0/5.2 whoami fallback"), "{help}");
+    assert!(help.contains("5.3+/BMO-derived"), "{help}");
+}
+
+#[test]
 fn inline_server_url_no_longer_requires_api_key_env() {
     let cli = Cli::try_parse_from([
         "bzr",

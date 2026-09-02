@@ -4,6 +4,7 @@
 import http.client
 import http.server
 import json
+import os
 import signal
 import socket
 import sys
@@ -108,7 +109,137 @@ def shape_metadata_sort_keys_response(path, data):
     return json.dumps(value, separators=(",", ":")).encode(), changed
 
 
+def shape_user_group_response(method, path, data):
+    """Return explicit user/group production shapes, route, and changed count."""
+    route_path = urllib.parse.urlsplit(path).path
+    route = None
+    if method == "GET" and route_path == "/rest/whoami":
+        route = "whoami"
+    elif method == "GET" and (
+        route_path == "/rest/user" or route_path.startswith("/rest/user/")
+    ):
+        route = "user-read"
+    elif method == "GET" and (
+        route_path == "/rest/group" or route_path.startswith("/rest/group/")
+    ):
+        route = "group-read"
+    elif method == "POST" and route_path == "/rest/user":
+        route = "user-create"
+    elif method == "POST" and route_path == "/rest/group":
+        route = "group-create"
+    else:
+        return data, None, 0
+
+    value = json.loads(data)
+    changed = 0
+
+    def stringify_id(item):
+        nonlocal changed
+        if (
+            isinstance(item, dict)
+            and isinstance(item.get("id"), int)
+            and not isinstance(item.get("id"), bool)
+        ):
+            item["id"] = str(item["id"])
+            changed += 1
+
+    if route in ("whoami", "user-create", "group-create"):
+        stringify_id(value)
+    elif route == "user-read":
+        users = value.get("users") if isinstance(value, dict) else None
+        if isinstance(users, list):
+            for user in users:
+                stringify_id(user)
+                if not isinstance(user, dict):
+                    continue
+                can_login = user.get("can_login")
+                if isinstance(can_login, bool):
+                    user["can_login"] = int(can_login)
+                    changed += 1
+                groups = user.get("groups")
+                if isinstance(groups, list):
+                    for group in groups:
+                        stringify_id(group)
+    elif route == "group-read":
+        groups = value.get("groups") if isinstance(value, dict) else None
+        if isinstance(groups, list):
+            for group in groups:
+                stringify_id(group)
+                if not isinstance(group, dict):
+                    continue
+                is_active = group.get("is_active")
+                if isinstance(is_active, bool):
+                    group["is_active"] = int(is_active)
+                    changed += 1
+                membership = group.get("membership")
+                if isinstance(membership, list):
+                    for member in membership:
+                        stringify_id(member)
+
+    if changed == 0:
+        return data, route, 0
+    return json.dumps(value, separators=(",", ":")).encode(), route, changed
+
+
+def shape_server_capabilities_response(path, data, *, enabled):
+    """Return opt-in production shapes used by the capability functional proof."""
+    if not enabled:
+        return data, {}
+
+    route = urllib.parse.urlsplit(path).path
+    if route not in {
+        "/rest/version",
+        "/rest/parameters",
+        "/rest/field/bug/bug_status",
+        "/rest/field/bug",
+    }:
+        return data, {}
+
+    value = json.loads(data)
+    if not isinstance(value, dict):
+        return data, {}
+
+    if route == "/rest/version":
+        value["version"] = "5.2+"
+        evidence = {"version": 1}
+    elif route == "/rest/parameters":
+        parameters = value.get("parameters")
+        if not isinstance(parameters, dict) or "maxattachmentsize" not in parameters:
+            return data, {}
+        parameters["maxattachmentsize"] = str(parameters["maxattachmentsize"])
+        evidence = {"parameters": 1}
+    elif route == "/rest/field/bug/bug_status":
+        fields = value.get("fields")
+        if not isinstance(fields, list):
+            return data, {}
+        status_field = next(
+            (field for field in fields if isinstance(field, dict)), None
+        )
+        values = status_field.get("values") if status_field is not None else None
+        if not isinstance(values, list):
+            return data, {}
+        values.insert(0, {"name": "", "can_change_to": []})
+        evidence = {"status": 1}
+    else:
+        fields = value.get("fields")
+        if not isinstance(fields, list):
+            return data, {}
+        fields.append({
+            "name": "cf_bzr_proxy_probe",
+            "type": "2",
+            "is_custom": True,
+            "values": [],
+        })
+        evidence = {"field-type": 1}
+
+    return json.dumps(value, separators=(",", ":")).encode(), evidence
+
+
 def make_handler(backend_port):
+    server_capability_mode = os.environ.get("BZR_FUNC_REDHAT_MODE") == (
+        "server-capabilities"
+    )
+
     class Handler(http.server.BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
@@ -183,6 +314,21 @@ def make_handler(backend_port):
 
             if 200 <= status < 300:
                 try:
+                    body, evidence = shape_server_capabilities_response(
+                        self.path, body, enabled=server_capability_mode
+                    )
+                except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                    self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
+                    return
+                for route, count in evidence.items():
+                    sys.stderr.write(
+                        f"server-capability shaped route={route} count={count}\n"
+                    )
+                if evidence:
+                    sys.stderr.flush()
+
+            if 200 <= status < 300:
+                try:
                     body, changed = shape_metadata_sort_keys_response(self.path, body)
                 except (UnicodeDecodeError, json.JSONDecodeError) as error:
                     self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
@@ -193,6 +339,19 @@ def make_handler(backend_port):
                     ) else "product"
                     sys.stderr.write(
                         f"metadata-sort-keys shaped route={route} count={changed}\n"
+                    )
+                    sys.stderr.flush()
+
+                try:
+                    body, route, changed = shape_user_group_response(
+                        method, self.path, body
+                    )
+                except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                    self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
+                    return
+                if changed:
+                    sys.stderr.write(
+                        f"user-group-shaped route={route} count={changed}\n"
                     )
                     sys.stderr.flush()
 
@@ -211,6 +370,63 @@ def make_handler(backend_port):
 
 
 class ShapeTests(unittest.TestCase):
+    def test_server_capability_shapes_are_opt_in(self):
+        payload = b'{"version":"5.0.6"}'
+        body, evidence = shape_server_capabilities_response(
+            "/rest/version", payload, enabled=False
+        )
+        self.assertEqual(body, payload)
+        self.assertEqual(evidence, {})
+
+    def test_shapes_server_capability_routes(self):
+        cases = [
+            (
+                "/rest/version",
+                {"version": "5.0.6"},
+                {"version": "5.2+"},
+                {"version": 1},
+            ),
+            (
+                "/rest/parameters",
+                {"parameters": {"maxattachmentsize": 1000}},
+                {"parameters": {"maxattachmentsize": "1000"}},
+                {"parameters": 1},
+            ),
+            (
+                "/rest/field/bug/bug_status",
+                {"fields": [{"values": [{"name": "NEW"}]}]},
+                {"fields": [{"values": [
+                    {"name": "", "can_change_to": []}, {"name": "NEW"}
+                ]}]},
+                {"status": 1},
+            ),
+        ]
+        for path, payload, expected, evidence in cases:
+            body, actual_evidence = shape_server_capabilities_response(
+                path, json.dumps(payload).encode(), enabled=True
+            )
+            self.assertEqual(json.loads(body), expected)
+            self.assertEqual(actual_evidence, evidence)
+
+        body, evidence = shape_server_capabilities_response(
+            "/rest/field/bug", b'{"fields":[]}', enabled=True
+        )
+        self.assertEqual(evidence, {"field-type": 1})
+        self.assertEqual(json.loads(body)["fields"], [{
+            "name": "cf_bzr_proxy_probe",
+            "type": "2",
+            "is_custom": True,
+            "values": [],
+        }])
+
+    def test_server_capability_shape_leaves_unrelated_payload_untouched(self):
+        payload = b'{"products":[]}'
+        body, evidence = shape_server_capabilities_response(
+            "/rest/product", payload, enabled=True
+        )
+        self.assertEqual(body, payload)
+        self.assertEqual(evidence, {})
+
     def test_identifies_termless_bug_search_without_matching_scoped_or_detail_reads(self):
         self.assertTrue(is_termless_bug_search("/rest/bug?limit=1&include_fields=id"))
         self.assertTrue(is_termless_bug_search("/rest/bug?product=&limit=1"))
@@ -328,6 +544,77 @@ class ShapeTests(unittest.TestCase):
             body, count = shape_metadata_sort_keys_response(path, payload)
             self.assertEqual(body, payload)
             self.assertEqual(count, 0)
+
+    def test_shapes_whoami_and_create_ids(self):
+        for method, path, route in [
+            ("GET", "/rest/whoami?Bugzilla_api_key=secret", "whoami"),
+            ("POST", "/rest/user", "user-create"),
+            ("POST", "/rest/group", "group-create"),
+        ]:
+            body, actual_route, count = shape_user_group_response(
+                method, path, b'{"id":42}'
+            )
+            self.assertEqual(actual_route, route)
+            self.assertEqual(count, 1)
+            self.assertEqual(json.loads(body)["id"], "42")
+
+    def test_shapes_user_read_fields_and_preserves_absent_optional_fields(self):
+        payload = json.dumps({"users": [
+            {"id": 7, "can_login": True, "groups": [{"id": 3}]},
+            {"id": 8, "can_login": None, "groups": []},
+            {"id": 9},
+        ]}).encode()
+        body, route, count = shape_user_group_response(
+            "GET", "/rest/user?groups=admin", payload
+        )
+        shaped = json.loads(body)
+        self.assertEqual(route, "user-read")
+        self.assertEqual(count, 5)
+        self.assertEqual(shaped["users"][0], {
+            "id": "7", "can_login": 1, "groups": [{"id": "3"}]
+        })
+        self.assertIsNone(shaped["users"][1]["can_login"])
+        self.assertNotIn("can_login", shaped["users"][2])
+
+    def test_shapes_group_read_fields(self):
+        payload = json.dumps({"groups": [{
+            "id": 4,
+            "is_active": False,
+            "membership": [{"id": 12}],
+        }]}).encode()
+        body, route, count = shape_user_group_response(
+            "GET", "/rest/group?names=admin", payload
+        )
+        self.assertEqual(route, "group-read")
+        self.assertEqual(count, 3)
+        self.assertEqual(json.loads(body)["groups"][0], {
+            "id": "4", "is_active": 0, "membership": [{"id": "12"}]
+        })
+
+    def test_user_group_shape_leaves_unrelated_routes_untouched(self):
+        payload = b'{"id":42}'
+        for method, path in [
+            ("GET", "/rest/bug/42"),
+            ("PUT", "/rest/user/alice"),
+            ("POST", "/rest/group/4"),
+        ]:
+            body, route, count = shape_user_group_response(method, path, payload)
+            self.assertEqual(body, payload)
+            self.assertIsNone(route)
+            self.assertEqual(count, 0)
+
+    def test_user_group_shape_does_not_coerce_boolean_id(self):
+        payload = b'{"id":true}'
+        body, route, count = shape_user_group_response(
+            "GET", "/rest/whoami", payload
+        )
+        self.assertEqual(route, "whoami")
+        self.assertEqual(count, 0)
+        self.assertIs(json.loads(body)["id"], True)
+
+    def test_user_group_shape_rejects_malformed_json_on_matching_route(self):
+        with self.assertRaises(json.JSONDecodeError):
+            shape_user_group_response("GET", "/rest/user", b"not json")
 
     def test_readiness_endpoint(self):
         server, thread = self._start_server(1)
