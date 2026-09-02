@@ -1,48 +1,114 @@
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 
 use crate::types::flag::FlagUpdate;
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default)]
 #[non_exhaustive]
 pub struct CreateBugParams {
     pub product: String,
     pub component: String,
     pub summary: String,
     pub version: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub severity: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub assigned_to: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub op_sys: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub platform: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub alias: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub whiteboard: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub target_milestone: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub deadline: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub blocks: Vec<u64>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub depends_on: Vec<u64>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub cc: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub keywords: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub groups: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) groups_present: bool,
     pub flags: Vec<FlagUpdate>,
+}
+
+impl CreateBugParams {
+    pub(crate) fn set_groups_from_structured_input(&mut self, groups: Vec<String>) {
+        self.groups = groups;
+        self.groups_present = true;
+    }
+}
+
+#[derive(Serialize)]
+struct CreateBugParamsWire<'a> {
+    product: &'a String,
+    component: &'a String,
+    summary: &'a String,
+    version: &'a String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    priority: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    severity: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    assigned_to: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    op_sys: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    platform: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    alias: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    whiteboard: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    target_milestone: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    deadline: Option<&'a str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    blocks: &'a Vec<u64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    depends_on: &'a Vec<u64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    cc: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    keywords: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    groups: Option<&'a [String]>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    flags: &'a Vec<FlagUpdate>,
+}
+
+impl Serialize for CreateBugParams {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        CreateBugParamsWire {
+            product: &self.product,
+            component: &self.component,
+            summary: &self.summary,
+            version: &self.version,
+            description: self.description.as_deref(),
+            priority: self.priority.as_deref(),
+            severity: self.severity.as_deref(),
+            assigned_to: self.assigned_to.as_deref(),
+            op_sys: self.op_sys.as_deref(),
+            platform: self.platform.as_deref(),
+            alias: self.alias.as_deref(),
+            url: self.url.as_deref(),
+            whiteboard: self.whiteboard.as_deref(),
+            target_milestone: self.target_milestone.as_deref(),
+            deadline: self.deadline.as_deref(),
+            blocks: &self.blocks,
+            depends_on: &self.depends_on,
+            cc: &self.cc,
+            keywords: &self.keywords,
+            groups: (self.groups_present || !self.groups.is_empty())
+                .then_some(self.groups.as_slice()),
+            flags: &self.flags,
+        }
+        .serialize(serializer)
+    }
 }
 
 /// Represents an incremental update to a list field (blocks, `depends_on`).
