@@ -232,6 +232,113 @@ fn rest_attachment_by_id_response_json(id: u64) -> serde_json::Value {
     })
 }
 
+fn rest_attachment_by_id_value(id: u64, name: &str) -> serde_json::Value {
+    serde_json::json!({
+        "id": id,
+        "bug_id": 42,
+        "file_name": name,
+        "summary": "rest",
+        "content_type": "text/plain",
+        "creator": "alice@test",
+        "creation_time": "2026-01-01T00:00:00Z",
+        "last_change_time": "2026-01-01T00:00:00Z",
+        "size": 1,
+        "is_obsolete": false,
+        "is_private": false
+    })
+}
+
+#[tokio::test]
+async fn rest_attachment_by_id_selects_requested_id_from_keyed_and_flat_envelopes() {
+    for envelope in [
+        serde_json::json!({"attachments": {
+            "100": rest_attachment_by_id_value(100, "leading.txt"),
+            "200": rest_attachment_by_id_value(200, "requested.txt")
+        }}),
+        serde_json::json!({"attachments": [
+            rest_attachment_by_id_value(100, "leading.txt"),
+            rest_attachment_by_id_value(200, "requested.txt")
+        ]}),
+    ] {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/attachment/200"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(envelope))
+            .expect(2)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let attachment = client.get_attachment(200).await.unwrap();
+        assert_eq!(attachment.id, 200);
+        assert_eq!(attachment.file_name.as_deref(), Some("requested.txt"));
+
+        let metadata = client.get_attachment_metadata(200).await.unwrap();
+        assert_eq!(metadata.id, 200);
+        assert_eq!(metadata.file_name.as_deref(), Some("requested.txt"));
+    }
+}
+
+#[tokio::test]
+async fn rest_attachment_by_id_returns_not_found_for_known_missing_envelopes() {
+    for envelope in [
+        serde_json::json!({"attachments": {}}),
+        serde_json::json!({"attachments": []}),
+        serde_json::json!({"attachments": {
+            "100": rest_attachment_by_id_value(100, "other.txt")
+        }}),
+        serde_json::json!({"attachments": [
+            rest_attachment_by_id_value(100, "other.txt")
+        ]}),
+    ] {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/attachment/200"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(envelope))
+            .expect(2)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        for result in [
+            client.get_attachment(200).await,
+            client.get_attachment_metadata(200).await,
+        ] {
+            assert!(
+                matches!(result, Err(BzrError::NotFound { .. })),
+                "recognized envelope missing attachment must be NotFound: {result:?}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn rest_attachment_by_id_rejects_missing_or_scalar_envelope() {
+    for envelope in [
+        serde_json::json!({}),
+        serde_json::json!({"attachments": 42}),
+    ] {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/attachment/200"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(envelope))
+            .expect(2)
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        for result in [
+            client.get_attachment(200).await,
+            client.get_attachment_metadata(200).await,
+        ] {
+            assert!(
+                matches!(result, Err(BzrError::Deserialize(_))),
+                "missing or scalar envelope must be a deserialize error: {result:?}"
+            );
+        }
+    }
+}
+
 #[tokio::test]
 async fn hybrid_uses_xmlrpc_directly_for_get_attachment() {
     let mock = MockServer::start().await;

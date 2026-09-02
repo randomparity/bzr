@@ -22,21 +22,44 @@ struct FlatAttachmentsResponse {
     attachments: Vec<Attachment>,
 }
 
-#[derive(Deserialize)]
-struct AttachmentByIdResponse {
-    attachments: std::collections::HashMap<String, Attachment>,
-}
+/// Select an attachment from the by-ID response envelopes returned by
+/// different Bugzilla versions.
+fn select_attachment(value: &serde_json::Value, attachment_id: u64) -> Result<Attachment> {
+    let attachments = value.get("attachments").ok_or_else(|| {
+        BzrError::Deserialize("attachment by-ID response: missing `attachments` member".into())
+    })?;
+    let not_found = || BzrError::NotFound {
+        resource: "attachment",
+        id: attachment_id.to_string(),
+    };
 
-/// Pull the single attachment out of a by-ID response, mapping an empty map
-/// to `NotFound`. Shared by the full and metadata-only REST fetches.
-fn single_attachment(data: AttachmentByIdResponse, attachment_id: u64) -> Result<Attachment> {
-    data.attachments
-        .into_values()
-        .next()
-        .ok_or_else(|| BzrError::NotFound {
-            resource: "attachment",
-            id: attachment_id.to_string(),
-        })
+    match attachments {
+        serde_json::Value::Object(attachments) => {
+            let attachment = attachments
+                .get(&attachment_id.to_string())
+                .ok_or_else(not_found)?;
+            Attachment::deserialize(attachment).map_err(|error| {
+                BzrError::Deserialize(format!(
+                    "attachment by-ID `attachments` object entry: {error}"
+                ))
+            })
+        }
+        serde_json::Value::Array(attachments) => {
+            let attachments = serde_json::from_value::<Vec<Attachment>>(serde_json::Value::Array(
+                attachments.clone(),
+            ))
+            .map_err(|error| {
+                BzrError::Deserialize(format!("attachment by-ID `attachments` array: {error}"))
+            })?;
+            attachments
+                .into_iter()
+                .find(|attachment| attachment.id == attachment_id)
+                .ok_or_else(not_found)
+        }
+        _ => Err(BzrError::Deserialize(
+            "attachment by-ID response: `attachments` must be an object or array".into(),
+        )),
+    }
 }
 
 #[derive(Deserialize)]
@@ -153,10 +176,10 @@ impl BugzillaClient {
     }
 
     async fn get_attachment_rest(&self, attachment_id: u64) -> Result<Attachment> {
-        let data: AttachmentByIdResponse = self
-            .get_json(&format!("bug/attachment/{attachment_id}"))
+        let value = self
+            .get_json_value(&format!("bug/attachment/{attachment_id}"))
             .await?;
-        single_attachment(data, attachment_id)
+        select_attachment(&value, attachment_id)
     }
 
     /// Fetch a single attachment's metadata without its (base64) bytes.
@@ -176,13 +199,13 @@ impl BugzillaClient {
     }
 
     async fn get_attachment_metadata_rest(&self, attachment_id: u64) -> Result<Attachment> {
-        let data: AttachmentByIdResponse = self
+        let value = self
             .get_json_query(
                 &format!("bug/attachment/{attachment_id}"),
                 &[("exclude_fields", "data")],
             )
             .await?;
-        single_attachment(data, attachment_id)
+        select_attachment(&value, attachment_id)
     }
 
     pub async fn download_attachment(&self, attachment_id: u64) -> Result<(String, Vec<u8>)> {
