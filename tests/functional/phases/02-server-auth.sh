@@ -51,10 +51,26 @@ WHERE NOT EXISTS (
     SELECT 1 FROM flagtypes WHERE name = 'bzr_attachment_review' AND target_type = 'a'
 );
 
+INSERT INTO flagtypes
+    (name, description, target_type, is_active, is_requestable,
+     is_requesteeble, is_multiplicable, sortkey)
+SELECT 'bzr-bug-review', 'Functional test hyphenated review flag for bugs', 'b', 1, 1, 1, 1, 20
+WHERE NOT EXISTS (
+    SELECT 1 FROM flagtypes WHERE name = 'bzr-bug-review' AND target_type = 'b'
+);
+
+INSERT INTO flagtypes
+    (name, description, target_type, is_active, is_requestable,
+     is_requesteeble, is_multiplicable, sortkey)
+SELECT 'bzr-attachment-review', 'Functional test hyphenated review flag for attachments', 'a', 1, 1, 1, 1, 20
+WHERE NOT EXISTS (
+    SELECT 1 FROM flagtypes WHERE name = 'bzr-attachment-review' AND target_type = 'a'
+);
+
 INSERT INTO flaginclusions (type_id, product_id, component_id)
 SELECT id, NULL, NULL
 FROM flagtypes
-WHERE name IN ('bzr_bug_review', 'bzr_attachment_review')
+WHERE name IN ('bzr_bug_review', 'bzr_attachment_review', 'bzr-bug-review', 'bzr-attachment-review')
   AND target_type IN ('b', 'a')
   AND NOT EXISTS (
       SELECT 1 FROM flaginclusions WHERE flaginclusions.type_id = flagtypes.id
