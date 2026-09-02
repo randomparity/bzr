@@ -6,7 +6,7 @@ fn canonical_field_list_translates_aliases() {
 
     assert_eq!(
         got.as_deref(),
-        Some("assigned_to,last_change_time,creation_time,creator,rep_platform")
+        Some("assigned_to,last_change_time,creation_time,creator,platform")
     );
 }
 

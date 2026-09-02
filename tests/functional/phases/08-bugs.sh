@@ -9,7 +9,7 @@
 echo "── Phase 8: Bugs ───────────────────────────────────────────"
 
 test_begin "bug-create-bug-one" "bug create (bug one)"
-run_bzr bug create --product FuncTestProd --component Backend --summary "Bug one" --description "Description of bug one" --priority Normal --severity normal --op-sys Linux --rep-platform PC
+run_bzr bug create --product FuncTestProd --component Backend --summary "Bug one" --description "Description of bug one" --priority Normal --severity normal --op-sys Linux --platform PC
 if assert_success && assert_json_exists '.id'; then
     BUG1=$(jq -r '.id' "$BZR_STDOUT")
     test_pass
@@ -18,16 +18,22 @@ fi
 test_begin "bug-create-bug-two" "bug create (bug two)"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Bug two searchable" --description "Description of bug two" \
-    --op-sys All --rep-platform All
+    --op-sys All --platform All
 if assert_success && assert_json_exists '.id'; then
     BUG2=$(jq -r '.id' "$BZR_STDOUT")
     test_pass
 fi
 
+test_begin "bug-create-deprecated-platform-alias" "bug create deprecated --rep-platform alias"
+run_bzr bug create --product FuncTestProd --component Backend \
+    --summary "Deprecated platform alias" --description "Alias transition coverage" \
+    --op-sys All --rep-platform All
+if assert_success && assert_json_exists '.id'; then test_pass; fi
+
 test_begin "bug-create-duplicate-target" "bug create (duplicate target)"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Duplicate target" --description "Duplicate target description" \
-    --op-sys All --rep-platform All
+    --op-sys All --platform All
 if assert_success && assert_json_exists '.id'; then
     BUG_DUP_TARGET=$(jq -r '.id' "$BZR_STDOUT")
     test_pass
@@ -36,7 +42,7 @@ fi
 test_begin "bug-create-duplicate-source" "bug create (duplicate source)"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Duplicate source" --description "Duplicate source description" \
-    --op-sys All --rep-platform All
+    --op-sys All --platform All
 if assert_success && assert_json_exists '.id'; then
     BUG_DUP_SOURCE=$(jq -r '.id' "$BZR_STDOUT")
     test_pass
@@ -62,7 +68,19 @@ else test_skip "no duplicate source/target"; fi
 test_begin "bug-view" "bug view"
 if [[ -n "$BUG1" ]]; then
     run_bzr bug view "$BUG1"
-    if assert_success && assert_json '.summary' "Bug one"; then test_pass; fi
+    if assert_success &&
+        assert_json '.summary' "Bug one" &&
+        assert_json '.platform' "PC" &&
+        assert_json '.rep_platform' "PC"; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "bug-update-platform-round-trip" "bug update --platform round-trip"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug update "$BUG1" --platform All
+    if assert_success; then
+        run_bzr bug view "$BUG1"
+        if assert_success && assert_json '.platform' "All"; then test_pass; fi
+    fi
 else test_skip "no BUG1"; fi
 
 test_begin "credentialless-named-bug-view" "credentialless named bug view"
@@ -143,7 +161,7 @@ else test_skip "no BUG1"; fi
 test_begin "bug-view-groups-round-trip-and-project" "bug update/view groups round-trip and project"
 _READ_FIELDS_BUG=$(make_bug --product FuncTestProd --component Backend \
     --summary "Read fields group round-trip" --description "read fields" \
-    --op-sys All --rep-platform All)
+    --op-sys All --platform All)
 if [[ -n "$_READ_FIELDS_BUG" ]]; then
     run_bzr bug update "$_READ_FIELDS_BUG" --groups-add functest-grp
     if assert_success; then
@@ -362,7 +380,7 @@ if [[ -n "$BUG1" ]] && [[ -n "$BUG2" ]]; then
 else test_skip "no BUG1/BUG2"; fi
 
 test_begin "bug-create-bug-three-clone-source" "bug create (bug three — clone source)"
-run_bzr bug create --product FuncTestProd --component Backend --summary "Clone source bug" --description "Description for cloning" --priority Highest --severity critical --op-sys Linux --rep-platform PC
+run_bzr bug create --product FuncTestProd --component Backend --summary "Clone source bug" --description "Description for cloning" --priority Highest --severity critical --op-sys Linux --platform PC
 if assert_success && assert_json_exists '.id'; then
     # shellcheck disable=SC2034 # consumed by later sourced phases
     BUG3=$(jq -r '.id' "$BZR_STDOUT")
@@ -373,7 +391,7 @@ test_begin "bug-create-bug-four-with-relationships" "bug create (bug four — wi
 if [[ -n "$BUG1" ]] && [[ -n "$BUG2" ]]; then
     run_bzr bug create --product FuncTestProd --component Backend \
         --summary "Bug with relationships" --description "Relationship test description" \
-        --blocks "$BUG1" --depends-on "$BUG2" --op-sys All --rep-platform All
+        --blocks "$BUG1" --depends-on "$BUG2" --op-sys All --platform All
     if assert_success && assert_json_exists '.id'; then
         # shellcheck disable=SC2034 # consumed by later sourced phases
         BUG4=$(jq -r '.id' "$BZR_STDOUT")
@@ -387,7 +405,7 @@ DESC_FILE=$(mktemp /tmp/bzr-func-desc.XXXXXX)
 echo "description from file" >"$DESC_FILE"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "From file" --description-file "$DESC_FILE" \
-    --op-sys All --rep-platform All
+    --op-sys All --platform All
 if assert_success; then test_pass; fi
 rm -f "$DESC_FILE"
 
@@ -396,14 +414,14 @@ DESC_FILE=$(mktemp /tmp/bzr-func-desc.XXXXXX)
 echo "should-not-appear" >"$DESC_FILE"
 run_bzr_raw bug create --product FuncTestProd --component Backend \
     --summary "Conflict test" --description literal \
-    --description-file "$DESC_FILE" --op-sys All --rep-platform All
+    --description-file "$DESC_FILE" --op-sys All --platform All
 if assert_exit_code 2; then test_pass; fi
 rm -f "$DESC_FILE"
 
 test_begin "bug-create-stdin-description-piped" "bug create stdin description (piped)"
 run_bzr bug create \
     --product FuncTestProd --component Backend \
-    --summary "From stdin" --op-sys All --rep-platform All \
+    --summary "From stdin" --op-sys All --platform All \
     <<<"description from stdin"
 if assert_success; then test_pass; fi
 
@@ -413,7 +431,7 @@ echo "from file" >"$DESC_FILE"
 run_bzr bug create \
     --product FuncTestProd --component Backend \
     --summary "Precedence file>stdin" --description-file "$DESC_FILE" \
-    --op-sys All --rep-platform All \
+    --op-sys All --platform All \
     <<<"from stdin"
 if assert_success; then
     BUG_ID=$(jq -r '.id' "$BZR_STDOUT")
@@ -426,13 +444,13 @@ rm -f "$DESC_FILE"
 test_begin "bug-create-description-file-missing-path-exit-7" "bug create --description-file missing path → exit 7"
 run_bzr_raw bug create --product FuncTestProd --component Backend \
     --summary "Missing file" --description-file /nonexistent-bzr-path-xyz-123 \
-    --op-sys All --rep-platform All
+    --op-sys All --platform All
 if assert_exit_code 7; then test_pass; fi
 
 test_begin "bug-create-empty-piped-stdin-without-explicit-description-exit-7" "bug create empty piped stdin without explicit description → exit 7"
 run_bzr_raw bug create \
     --product FuncTestProd --component Backend \
-    --summary "Empty stdin" --op-sys All --rep-platform All \
+    --summary "Empty stdin" --op-sys All --platform All \
     </dev/null
 if assert_exit_code 7; then test_pass; fi
 
@@ -449,7 +467,7 @@ chmod +x "$EDITOR_SCRIPT"
 # expected exit code is 7.
 EDITOR="$EDITOR_SCRIPT" run_bzr_raw bug create \
     --product FuncTestProd --component Backend \
-    --op-sys All --rep-platform All </dev/null
+    --op-sys All --platform All </dev/null
 if assert_exit_code 7; then test_pass; fi
 rm -f "$EDITOR_SCRIPT"
 

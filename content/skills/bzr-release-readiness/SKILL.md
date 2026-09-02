@@ -230,7 +230,7 @@ For displayed Custom Search source-command provenance, never render the input UR
 Omit userinfo and the fragment. Preserve only canonical non-secret filter and Boolean-chart
 parameters. The canonical filter names are `product`, `component`, `bug_status`, `assigned_to`,
 `reporter`, `priority`, `bug_severity`, `status_whiteboard`, `target_milestone`, `version`,
-`op_sys`, `rep_platform`, `resolution`, `qa_contact`, and `bug_file_loc`; Boolean-chart names
+`op_sys`, `platform`, `resolution`, `qa_contact`, and `bug_file_loc`; Boolean-chart names
 match `fN`, `oN`, or `vN` for a positive decimal `N`. A credential-free URL is not necessarily
 safe to publish: retain a value only when the operator's artifact policy says it is non-secret,
 and otherwise drop its parameter. Re-encode retained names and values into the displayed URL.

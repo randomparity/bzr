@@ -31,7 +31,7 @@ pub use search::{
     FIELD_MAPPINGS,
 };
 
-const BUG_BUILT_IN_FIELD_COUNT: usize = 28;
+const BUG_BUILT_IN_FIELD_COUNT: usize = 29;
 
 fn is_custom_field_name(name: &str) -> bool {
     name.starts_with("cf_")
@@ -62,7 +62,7 @@ pub struct Bug {
     pub depends_on: Vec<u64>,
     pub cc: Vec<String>,
     pub op_sys: Option<String>,
-    pub rep_platform: Option<String>,
+    pub platform: Option<String>,
     pub target_milestone: Option<String>,
     pub groups: Vec<String>,
     pub estimated_time: Option<f64>,
@@ -117,7 +117,7 @@ struct BugWire {
     #[serde(default)]
     op_sys: Option<String>,
     #[serde(default)]
-    rep_platform: Option<String>,
+    platform: Option<String>,
     #[serde(default)]
     target_milestone: Option<String>,
     #[serde(default)]
@@ -179,7 +179,7 @@ impl From<BugWire> for Bug {
             depends_on: wire.depends_on,
             cc: wire.cc,
             op_sys: wire.op_sys,
-            rep_platform: wire.rep_platform,
+            platform: wire.platform,
             target_milestone: wire.target_milestone,
             groups: wire.groups,
             estimated_time: wire.estimated_time,
@@ -237,7 +237,8 @@ impl Serialize for Bug {
         map.serialize_entry("depends_on", &self.depends_on)?;
         map.serialize_entry("cc", &self.cc)?;
         map.serialize_entry("op_sys", &self.op_sys)?;
-        map.serialize_entry("rep_platform", &self.rep_platform)?;
+        map.serialize_entry("platform", &self.platform)?;
+        map.serialize_entry("rep_platform", &self.platform)?;
         map.serialize_entry("target_milestone", &self.target_milestone)?;
         map.serialize_entry("groups", &self.groups)?;
         if let Some(estimated_time) = self.estimated_time {

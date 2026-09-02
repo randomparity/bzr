@@ -59,7 +59,7 @@ fn clone_args(id: &str) -> crate::cli::CloneArgs {
         severity: None,
         assignee: None,
         op_sys: None,
-        rep_platform: None,
+        platform: None,
         create_fields: crate::cli::CloneCreateFieldArgs::default(),
         no_comment: false,
         add_depends_on: false,
@@ -88,10 +88,7 @@ async fn bug_clone_copies_fields() {
                 "severity": "major",
                 "assigned_to": "dev@test.com",
                 "op_sys": "Linux",
-                // TODO(#621): the server emits this key as `platform`; this
-                // fixture mirrors the client's own misconception, which is why
-                // the test passes. #621 owns the rename on read and write.
-                "rep_platform": "x86_64",
+                "platform": "x86_64",
                 "cc": ["watcher@test.com"],
                 "keywords": ["regression"]
             }]
@@ -133,7 +130,8 @@ async fn bug_clone_copies_fields() {
     Mock::given(method("POST"))
         .and(path("/rest/bug"))
         .and(body_partial_json(serde_json::json!({
-            "description": "Original description"
+            "description": "Original description",
+            "platform": "x86_64"
         })))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 200})))
         .expect(1)
@@ -332,7 +330,7 @@ async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
                 // TODO(#621): the server emits this key as `platform`; this
                 // fixture mirrors the client's own misconception, which is why
                 // the test passes. #621 owns the rename on read and write.
-                "rep_platform": "x86_64",
+                "platform": "x86_64",
                 "url": "https://example.com/source",
                 "whiteboard": "needs-triage",
                 "target_milestone": "M2",
@@ -386,7 +384,7 @@ async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
     assert_eq!(parsed["changes"]["severity"], "major");
     assert_eq!(parsed["changes"]["assigned_to"], "dev@test.com");
     assert_eq!(parsed["changes"]["op_sys"], "Linux");
-    assert_eq!(parsed["changes"]["rep_platform"], "x86_64");
+    assert_eq!(parsed["changes"]["platform"], "x86_64");
     assert_eq!(parsed["changes"]["url"], "https://example.com/source");
     assert_eq!(parsed["changes"]["whiteboard"], "needs-triage");
     assert_eq!(parsed["changes"]["target_milestone"], "M2");

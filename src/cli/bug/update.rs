@@ -4,7 +4,7 @@ pub const LONG_ABOUT: &str = r#"Update one or more bugs with the same set of cha
 
 Accepts one or more bug IDs as positional args. All field
 changes (`--status`, `--resolution`, `--dupe-of`, `--assignee`,
-`--priority`, `--severity`, `--summary`, `--whiteboard`) are
+`--platform`, `--priority`, `--severity`, `--summary`, `--whiteboard`) are
 applied to every bug in the list. When closing a bug, both
 `--status` and `--resolution` typically need to be set
 together (e.g. `--status RESOLVED --resolution FIXED`).
@@ -123,6 +123,9 @@ pub(crate) struct UpdateArgs {
     /// Reassign
     #[arg(long)]
     pub assignee: Option<String>,
+    /// Set this bug's hardware platform.
+    #[arg(long)]
+    pub platform: Option<String>,
     /// Priority
     #[arg(long)]
     pub priority: Option<String>,

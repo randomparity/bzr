@@ -93,7 +93,12 @@
     "op_sys": {
       "type": ["string", "null"]
     },
+    "platform": {
+      "type": ["string", "null"]
+    },
     "rep_platform": {
+      "deprecated": true,
+      "description": "Deprecated compatibility alias for `platform`; removed at the next major schema version.",
       "type": ["string", "null"]
     },
     "target_milestone": {

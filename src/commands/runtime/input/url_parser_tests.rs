@@ -583,7 +583,7 @@ fn parse_url_with_new_158_field_params() {
         &target_milestone=5.0\
         &version=9.4\
         &op_sys=Linux\
-        &rep_platform=x86_64\
+        &platform=x86_64\
         &resolution=FIXED\
         &qa_contact=qa%40example.com\
         &bug_file_loc=github.com%2Ffoo",

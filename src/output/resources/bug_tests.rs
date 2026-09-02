@@ -43,7 +43,7 @@ fn make_bug(id: u64, summary: &str, status: &str) -> Bug {
         depends_on: vec![100],
         cc: vec!["watcher@example.com".into()],
         op_sys: None,
-        rep_platform: None,
+        platform: None,
         target_milestone: None,
         groups: vec![],
         estimated_time: None,
@@ -242,10 +242,10 @@ fn write_bug_adjacency_json_has_the_closed_result_shape() {
 }
 
 #[test]
-fn write_bug_adjacency_json_uses_schema_version_2_0_1() {
+fn write_bug_adjacency_json_uses_schema_version_2_1_0() {
     let output = capture_bug_adjacency(OutputFormat::Json, sample_adjacency());
     let value: serde_json::Value = serde_json::from_str(&output).unwrap();
-    assert_eq!(value["schema_version"], "2.0.1");
+    assert_eq!(value["schema_version"], "2.1.0");
 }
 
 #[test]
@@ -567,7 +567,7 @@ fn canonical_field_list_translates_aliases() {
     let got = canonical_field_list(Some("assignee,updated,created,reporter,platform"));
     assert_eq!(
         got.as_deref(),
-        Some("assigned_to,last_change_time,creation_time,creator,rep_platform")
+        Some("assigned_to,last_change_time,creation_time,creator,platform")
     );
 }
 
@@ -744,7 +744,7 @@ fn write_bug_detail_table_shows_dupe_of() {
         depends_on: vec![],
         cc: vec![],
         op_sys: None,
-        rep_platform: None,
+        platform: None,
         target_milestone: None,
         groups: vec![],
         estimated_time: None,
@@ -791,7 +791,7 @@ fn write_bug_detail_table_handles_minimal_bug() {
         depends_on: vec![],
         cc: vec![],
         op_sys: None,
-        rep_platform: None,
+        platform: None,
         target_milestone: None,
         groups: vec![],
         estimated_time: None,
@@ -1024,7 +1024,7 @@ fn sample_bug(id: u64, summary: &str) -> Bug {
         depends_on: vec![],
         cc: vec![],
         op_sys: None,
-        rep_platform: None,
+        platform: None,
         target_milestone: None,
         groups: vec![],
         estimated_time: None,
@@ -1181,7 +1181,7 @@ fn validate_table_columns_ok_for_all_blank_include() {
 /// The serde key sequence of `Bug`, in struct-declaration order. Locks the
 /// `preserve_order` decision (Finding 4) and is the reference for the registry
 /// drift guard (Finding 3).
-const BUG_STRUCT_KEY_ORDER: [&str; 26] = [
+const BUG_STRUCT_KEY_ORDER: [&str; 27] = [
     "id",
     "summary",
     "status",
@@ -1204,6 +1204,7 @@ const BUG_STRUCT_KEY_ORDER: [&str; 26] = [
     "depends_on",
     "cc",
     "op_sys",
+    "platform",
     "rep_platform",
     "target_milestone",
     "groups",
@@ -1263,6 +1264,27 @@ fn bug_to_json_exclude_subset_drops_only_those() {
     assert!(!map.contains_key("keywords"));
     assert!(map.contains_key("id"));
     assert_eq!(map.len(), BUG_STRUCT_KEY_ORDER.len() - 2);
+}
+
+#[test]
+fn bug_to_json_excluding_platform_drops_transition_alias_too() {
+    let bug = make_bug(1, "s", "NEW");
+    for exclude in ["platform", "rep_platform"] {
+        let v = bug_to_json(
+            &bug,
+            ColumnSpec {
+                include: None,
+                exclude: Some(exclude),
+            },
+        );
+        let map = v.as_object().unwrap();
+        assert!(!map.contains_key("platform"), "canonical key for {exclude}");
+        assert!(
+            !map.contains_key("rep_platform"),
+            "transition alias for {exclude}"
+        );
+        assert_eq!(map.len(), BUG_STRUCT_KEY_ORDER.len() - 2);
+    }
 }
 
 #[test]
@@ -1401,15 +1423,19 @@ fn columns_registry_is_one_to_one_with_bug_serde_keys() {
     bug.estimated_time = Some(8.0);
     bug.remaining_time = Some(5.0);
     let value = serde_json::to_value(&bug).unwrap();
-    let serde_keys: std::collections::HashSet<String> =
+    let mut serde_keys: std::collections::HashSet<String> =
         value.as_object().unwrap().keys().cloned().collect();
+    assert!(
+        serde_keys.remove("rep_platform"),
+        "the published compatibility alias must remain during the 2.1.x transition"
+    );
     let registry_keys: std::collections::HashSet<String> = BUG_FIELDS
         .iter()
         .map(|field| field.canonical().to_string())
         .collect();
     assert_eq!(
         serde_keys, registry_keys,
-        "BUG_FIELDS canonical names must be 1:1 with Bug's serde keys"
+        "BUG_FIELDS canonical names must be 1:1 with Bug's non-alias serde keys"
     );
     assert_eq!(
         registry_keys.len(),

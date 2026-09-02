@@ -224,7 +224,7 @@ else test_skip "no BUG1 or no ATTACH_ID"; fi
 
 # attachment view (metadata only) and attachment update --file-name. Self-
 # contained: creates its own bug and attachment.
-_AB=$(make_bug --product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d --summary "att view host")
+_AB=$(make_bug --product FuncTestProd --component Backend --op-sys Linux --platform PC --description d --summary "att view host")
 _AF=$(mktemp /tmp/bzr-func-att.XXXXXX)
 printf 'attachment bytes' >"$_AF"
 

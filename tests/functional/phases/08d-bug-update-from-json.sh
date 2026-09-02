@@ -6,7 +6,7 @@
 echo "── Phase 8d: Bug update --from-json ────────────────────────"
 
 _UJ_DIR=$(mktemp -d /tmp/bzr-func-bug-update-json.XXXXXX)
-_UJ_CREATE=(--product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d)
+_UJ_CREATE=(--product FuncTestProd --component Backend --op-sys Linux --platform PC --description d)
 
 test_begin "bug-update-from-json-object-with-positional-id" "bug update --from-json object with positional ID"
 _UJ_ONE=$(make_bug "${_UJ_CREATE[@]}" --summary "update json object")

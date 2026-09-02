@@ -16,7 +16,7 @@ run_bzr config set-server pm-report-public --url "$_PM_PUBLIC_URL" --api rest
 _PM_PROFILE_OK=$BZR_EXIT
 
 _PM_CREATE=(--product FuncTestProd --component Backend --op-sys Linux
-  --rep-platform PC --description "project-manager reporting fixture")
+  --platform PC --description "project-manager reporting fixture")
 _PM_BLOCKER=$(make_bug "${_PM_CREATE[@]}" --summary "Parser rollout" \
   --whiteboard "$_PM_MARKER blocker blocked: owner needed")
 _PM_QA=$(make_bug "${_PM_CREATE[@]}" --summary "QA validation" \

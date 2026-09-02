@@ -99,6 +99,7 @@ pub(crate) fn build_update_params_from_draft(
         reset_assigned_to: draft.reset_assigned_to.unwrap_or(false),
         reset_qa_contact: draft.reset_qa_contact.unwrap_or(false),
         assigned_to: draft.assignee.clone(),
+        platform: draft.platform.clone(),
         priority: draft.priority.clone(),
         severity: draft.severity.clone(),
         summary: draft.summary.clone(),
