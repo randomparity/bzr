@@ -38,4 +38,3 @@ surface and this issue does not authorize a template migration.
   release with a one-release alias for a published-key rename.
 - **Keep the CLI alias indefinitely.** verified: the operator decision recorded for
   issue #621 requires deprecation and removal on the same one-release schedule.
-
