@@ -21,7 +21,8 @@ suite observes API error 32614 and turns the failure into a skip. The checked-in
 
 - `bzr component update ...` is rejected by clap as an unknown component
   subcommand with exit code 2, before configuration or network access.
-- Component help and generated completion expose only `list`, `view`, and `create`.
+- Component help, generated completion, and the canonical embedded `bzr-reference`
+  payload expose only `list`, `view`, and `create`.
 - The `component-update-input` schema is removed from the registry and filesystem;
   requesting that name follows the existing unknown-schema error path.
 - The update command handler, client method, request type, dry-run capability,
@@ -36,8 +37,8 @@ suite observes API error 32614 and turns the failure into a skip. The checked-in
 Removal starts at `ComponentAction`: without an `Update` variant, dispatch and
 capability matching become three-way and cannot reach update code. The now-unreachable
 command module, client method, request type, schema file, and their tests are removed.
-Documentation and functional phases then assert the smaller public surface rather than
-describing or probing the deleted path.
+Documentation, the embedded agent reference, and functional phases then assert the
+smaller public surface rather than describing or probing the deleted path.
 
 There is no runtime fallback or migration flow. Existing invocations fail during clap
 parsing and never read credentials or contact a server.
