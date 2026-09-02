@@ -313,11 +313,13 @@ def shape_attachment_comment_response(method, path, data):
                     comments.extend(bug["comments"])
         observed = 0
         for comment in comments:
-            if isinstance(comment, dict) and isinstance(
-                comment.get("is_private"), bool
-            ):
-                comment["is_private"] = int(comment["is_private"])
-            if isinstance(comment, dict) and type(comment.get("is_private")) is int:
+            if not isinstance(comment, dict):
+                continue
+            privacy = comment.get("is_private")
+            if isinstance(privacy, bool):
+                privacy = int(privacy)
+                comment["is_private"] = privacy
+            if type(privacy) is int:
                 observed += 1
         if observed:
             evidence["comment-privacy"] = observed
