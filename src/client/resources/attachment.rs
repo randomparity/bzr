@@ -1,9 +1,13 @@
+use std::fmt;
+
 use base64::Engine;
-use serde::Deserialize;
+use serde::de::{SeqAccess, Visitor};
+use serde::{Deserialize, Deserializer};
 
 use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
 use crate::types::attachment::{Attachment, UpdateAttachmentParams, UploadAttachmentParams};
+use crate::types::deserialization::u64_from_number_or_string;
 use crate::types::transport::ApiMode;
 
 #[derive(Deserialize)]
@@ -37,7 +41,52 @@ fn single_attachment(data: AttachmentByIdResponse, attachment_id: u64) -> Result
 
 #[derive(Deserialize)]
 struct AttachmentCreateResponse {
+    #[serde(deserialize_with = "deserialize_attachment_ids")]
     ids: Vec<u64>,
+}
+
+fn deserialize_attachment_ids<'de, D>(deserializer: D) -> std::result::Result<Vec<u64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct AttachmentIdsVisitor;
+
+    impl<'de> Visitor<'de> for AttachmentIdsVisitor {
+        type Value = Vec<u64>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("a sequence of attachment IDs")
+        }
+
+        fn visit_seq<A>(self, mut sequence: A) -> std::result::Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            struct AttachmentId(u64);
+
+            impl<'de> Deserialize<'de> for AttachmentId {
+                fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+                where
+                    D: Deserializer<'de>,
+                {
+                    u64_from_number_or_string(
+                        deserializer,
+                        "an attachment ID as a number or string",
+                        "attachment ID must be a non-negative integer or decimal string",
+                    )
+                    .map(Self)
+                }
+            }
+
+            let mut ids = Vec::new();
+            while let Some(AttachmentId(id)) = sequence.next_element()? {
+                ids.push(id);
+            }
+            Ok(ids)
+        }
+    }
+
+    deserializer.deserialize_seq(AttachmentIdsVisitor)
 }
 
 fn extract_bugs_envelope(value: &serde_json::Value) -> Result<Vec<Attachment>> {

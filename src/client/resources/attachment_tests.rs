@@ -434,6 +434,99 @@ async fn upload_attachment_private_sets_is_private_in_body() {
 }
 
 #[tokio::test]
+async fn upload_attachment_accepts_string_id() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/1/attachment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": ["301"]})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let id = client
+        .upload_attachment(&UploadAttachmentParams {
+            bug_id: 1,
+            file_name: "string-id.txt".into(),
+            summary: "string ID".into(),
+            content_type: "text/plain".into(),
+            data: b"content".to_vec(),
+            flags: Vec::new(),
+            is_private: false,
+            comment: None,
+            is_patch: false,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(id, 301);
+}
+
+#[tokio::test]
+async fn upload_attachment_rejects_malformed_id() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/1/attachment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [true]})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client
+        .upload_attachment(&UploadAttachmentParams {
+            bug_id: 1,
+            file_name: "malformed-id.txt".into(),
+            summary: "malformed ID".into(),
+            content_type: "text/plain".into(),
+            data: b"content".to_vec(),
+            flags: Vec::new(),
+            is_private: false,
+            comment: None,
+            is_patch: false,
+        })
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(err, BzrError::Deserialize(_)),
+        "expected deserialize error, got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn upload_attachment_rejects_empty_id_list() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/1/attachment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client
+        .upload_attachment(&UploadAttachmentParams {
+            bug_id: 1,
+            file_name: "empty-id-list.txt".into(),
+            summary: "empty IDs".into(),
+            content_type: "text/plain".into(),
+            data: b"content".to_vec(),
+            flags: Vec::new(),
+            is_private: false,
+            comment: None,
+            is_patch: false,
+        })
+        .await
+        .unwrap_err();
+
+    assert!(
+        matches!(err, BzrError::DataIntegrity(ref message) if message == "no attachment ID returned"),
+        "expected data-integrity error, got {err:?}"
+    );
+}
+
+#[tokio::test]
 async fn upload_attachment_public_omits_is_private_or_sets_false() {
     use wiremock::matchers::body_string_contains;
     let mock = MockServer::start().await;
