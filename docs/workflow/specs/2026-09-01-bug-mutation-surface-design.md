@@ -96,9 +96,11 @@ on each bug's current state and remains the server's responsibility, as for clos
   against the derived baseline and again unchanged against the private wire view so every
   unchanged field name, value, and omission rule remains covered.
 - Preserve and extend default resolve and non-empty create-group coverage.
-- Extend phase 11b with the stock non-default `VERIFIED` status, asserting the created bug reaches
-  `VERIFIED` with its resolution, plus client-side invalid-status rejection. Retain the existing
-  no-flag `RESOLVED` assertion so the phase fails if command assembly ignores the override.
+- Extend phase 11b by first exercising and asserting the no-flag `RESOLVED` transition, then invoke
+  the stock non-default `VERIFIED` status on that resolved bug and assert `VERIFIED` with its
+  resolution. Stock Bugzilla permits `RESOLVED -> VERIFIED` across the supported images, and the
+  second assertion fails if command assembly ignores the override. Add client-side invalid-status
+  rejection separately.
 - Extend the restricted-access phase with a dedicated product whose group control is default (2),
   not mandatory (3). Assert omission applies that group, then create with `groups: []` and assert
   the resulting bug's group list is empty.
