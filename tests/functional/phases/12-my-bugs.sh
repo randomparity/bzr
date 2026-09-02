@@ -43,7 +43,7 @@ if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
 test_begin "bug-my-priority-severity" "bug my --priority --severity"
 _MY_PS_MARK=$(unique_name my-priority)
 _MY_PS_ID=$(make_bug --marker "$_MY_PS_MARK" --product FuncTestProd --component Backend \
-    --op-sys Linux --rep-platform PC --description d --summary "my priority filter" \
+    --op-sys Linux --platform PC --description d --summary "my priority filter" \
     --priority High --severity major)
 run_bzr bug my --all --priority High --severity major --whiteboard "$_MY_PS_MARK"
 if assert_success && assert_stdout_contains "$_MY_PS_ID"; then test_pass; fi
@@ -51,7 +51,7 @@ if assert_success && assert_stdout_contains "$_MY_PS_ID"; then test_pass; fi
 test_begin "bug-my-whiteboard-url" "bug my --whiteboard --url"
 _MY_MARK="my-filter-$$"
 _MY_ID=$(make_bug --marker "$_MY_MARK" --product FuncTestProd --component Backend \
-    --op-sys Linux --rep-platform PC --description d --summary "my filter" \
+    --op-sys Linux --platform PC --description d --summary "my filter" \
     --url "http://example.com/$_MY_MARK")
 run_bzr bug my --all --whiteboard "$_MY_MARK" --url "$_MY_MARK"
 if assert_success && assert_stdout_contains "$_MY_ID"; then test_pass; fi

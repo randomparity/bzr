@@ -7,7 +7,7 @@ pub const LONG_ABOUT: &str = r#"Create a new bug under a product and component.
 `--product` and `--component` are required unless a saved
 template (`--template`) supplies them; CLI flags override
 template values. Some Bugzilla installations also require
-`--op-sys` and `--rep-platform` -- the API call fails with
+`--op-sys` and `--platform` -- the API call fails with
 exit code 4 (Api) when the server demands a field that
 wasn't provided.
 
@@ -76,7 +76,7 @@ pub(crate) struct CreateArgs {
     /// bug per element and returns a partial-failure result (exit 11
     /// if any element fails). Keys match the create flag names
     /// (`product`, `component`, `summary`, `version`, `description`,
-    /// `priority`, `severity`, `assignee`, `op_sys`, `rep_platform`,
+    /// `priority`, `severity`, `assignee`, `op_sys`, `platform`,
     /// `alias`, `url`, `whiteboard`, `target_milestone`, `deadline`,
     /// `blocks`, `depends_on`, `cc`, `keywords`, `groups`, `flags`);
     /// unknown keys are rejected. Explicit CLI flags override the
@@ -90,7 +90,7 @@ pub(crate) struct CreateArgs {
     /// References a named template from `bzr template list`.
     /// When set, fields stored in the template (product,
     /// component, version, priority, severity, assignee,
-    /// op-sys, rep-platform, description) are used as defaults
+    /// op-sys, platform, description) are used as defaults
     /// for this `create` invocation; CLI flags override
     /// template values.
     #[arg(long)]
@@ -139,8 +139,8 @@ pub(crate) struct CreateArgs {
     #[arg(long)]
     pub op_sys: Option<String>,
     /// Hardware platform (required by some Bugzilla installations)
-    #[arg(long)]
-    pub rep_platform: Option<String>,
+    #[arg(long, alias = "rep-platform")]
+    pub platform: Option<String>,
     /// Bug IDs that this bug blocks (comma-separated)
     #[arg(long, value_delimiter = ',')]
     pub blocks: Vec<u64>,

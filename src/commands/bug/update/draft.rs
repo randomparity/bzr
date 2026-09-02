@@ -24,6 +24,7 @@ pub(crate) struct BugUpdateDraft {
     pub(crate) reset_assigned_to: Option<bool>,
     pub(crate) reset_qa_contact: Option<bool>,
     pub(crate) assignee: Option<String>,
+    pub(crate) platform: Option<String>,
     pub(crate) priority: Option<String>,
     pub(crate) severity: Option<String>,
     pub(crate) summary: Option<String>,
@@ -77,6 +78,7 @@ impl BugUpdateDraft {
             reset_assigned_to: args.reset_assigned_to.then_some(true),
             reset_qa_contact: args.reset_qa_contact.then_some(true),
             assignee: args.assignee.clone(),
+            platform: args.platform.clone(),
             priority: args.priority.clone(),
             severity: args.severity.clone(),
             summary: args.summary.clone(),
@@ -115,6 +117,7 @@ impl BugUpdateDraft {
         merge_bool_true(&mut self.reset_assigned_to, args.reset_assigned_to);
         merge_bool_true(&mut self.reset_qa_contact, args.reset_qa_contact);
         merge_set(&mut self.assignee, args.assignee.as_deref());
+        merge_set(&mut self.platform, args.platform.as_deref());
         merge_set(&mut self.priority, args.priority.as_deref());
         merge_set(&mut self.severity, args.severity.as_deref());
         merge_set(&mut self.summary, args.summary.as_deref());

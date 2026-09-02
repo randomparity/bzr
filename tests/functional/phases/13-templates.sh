@@ -22,7 +22,7 @@ if assert_success && assert_json '.product' "FuncTestProd"; then test_pass; fi
 
 test_begin "bug-create-template" "bug create --template"
 run_bzr bug create --template func-tmpl --summary "Bug from template" \
-    --description "Description from template test" --op-sys All --rep-platform All
+    --description "Description from template test" --op-sys All --platform All
 if assert_success && assert_json_exists '.id'; then
     TMPL_BUG=$(jq -r '.id' "$BZR_STDOUT")
     test_pass
@@ -50,7 +50,7 @@ fi
 
 test_begin "bug-create-template-metadata-applies" "bug create --template metadata applies"
 run_bzr bug create --template meta-tmpl --summary "Bug from meta template" \
-    --description "Description from meta template" --op-sys Linux --rep-platform PC
+    --description "Description from meta template" --op-sys Linux --platform PC
 if assert_success && assert_json_exists '.id'; then
     _TMETA_BUG=$(jq -r '.id' "$BZR_STDOUT")
     run_bzr bug view "$_TMETA_BUG"

@@ -170,6 +170,34 @@ fn bug_create_input_schema_examples_parse() {
 }
 
 #[test]
+fn platform_compatibility_alias_rejects_duplicate_input() {
+    let canonical: JsonCreateBug = serde_json::from_value(serde_json::json!({
+        "platform": "x86_64"
+    }))
+    .unwrap();
+    assert_eq!(canonical.platform.as_deref(), Some("x86_64"));
+
+    let legacy: JsonCreateBug = serde_json::from_value(serde_json::json!({
+        "rep_platform": "x86_64"
+    }))
+    .unwrap();
+    assert_eq!(legacy.platform.as_deref(), Some("x86_64"));
+
+    let error = serde_json::from_value::<JsonCreateBug>(serde_json::json!({
+        "platform": "x86_64",
+        "rep_platform": "PC"
+    }))
+    .unwrap_err();
+    assert!(error.to_string().contains("duplicate field `platform`"));
+
+    let schema = schema_value("bug-create-input");
+    assert_eq!(
+        schema["$defs"]["bugCreateInputObject"]["not"]["required"],
+        serde_json::json!(["platform", "rep_platform"])
+    );
+}
+
+#[test]
 fn bug_create_input_schema_documents_array_form() {
     let schema = schema_value("bug-create-input");
     let one_of = schema
@@ -403,7 +431,7 @@ fn from_json_args(path: &str) -> crate::cli::CreateArgs {
         severity: None,
         assignee: None,
         op_sys: None,
-        rep_platform: None,
+        platform: None,
         blocks: vec![],
         depends_on: vec![],
         with_comment: None,

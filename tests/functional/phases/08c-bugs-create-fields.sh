@@ -18,12 +18,13 @@
 # ══════════════════════════════════════════════════════════════════════
 echo "── Phase 8c: Bug create fields / --from-json ───────────────"
 
-_CF=(--product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d)
+_CF=(--product FuncTestProd --component Backend --op-sys Linux --platform PC --description d)
 _FJ=$(mktemp -d /tmp/bzr-func-fromjson.XXXXXX)
-printf '%s' '{"product":"FuncTestProd","component":"Backend","summary":"fj object","op_sys":"Linux","rep_platform":"PC","description":"d","priority":"High"}' >"$_FJ/obj.json"
-printf '%s' '[{"product":"FuncTestProd","component":"Backend","summary":"fj arr a","op_sys":"Linux","rep_platform":"PC","description":"d"},{"product":"FuncTestProd","component":"Backend","summary":"fj arr b","op_sys":"Linux","rep_platform":"PC","description":"d"}]' >"$_FJ/arr.json"
-printf '%s' '{"product":"FuncTestProd","component":"Backend","summary":"x","op_sys":"Linux","rep_platform":"PC","description":"d","boguskey":1}' >"$_FJ/bad.json"
-printf '%s' '{"product":"FuncTestProd","component":"Backend","summary":"json sum","op_sys":"Linux","rep_platform":"PC","description":"d"}' >"$_FJ/override.json"
+printf '%s' '{"product":"FuncTestProd","component":"Backend","summary":"fj object","op_sys":"Linux","platform":"PC","description":"d","priority":"High"}' >"$_FJ/obj.json"
+printf '%s' '[{"product":"FuncTestProd","component":"Backend","summary":"fj arr a","op_sys":"Linux","platform":"PC","description":"d"},{"product":"FuncTestProd","component":"Backend","summary":"fj arr b","op_sys":"Linux","platform":"PC","description":"d"}]' >"$_FJ/arr.json"
+printf '%s' '{"product":"FuncTestProd","component":"Backend","summary":"x","op_sys":"Linux","platform":"PC","description":"d","boguskey":1}' >"$_FJ/bad.json"
+printf '%s' '{"product":"FuncTestProd","component":"Backend","summary":"json sum","op_sys":"Linux","platform":"PC","description":"d"}' >"$_FJ/override.json"
+printf '%s' '{"product":"FuncTestProd","component":"Backend","summary":"legacy platform alias","op_sys":"Linux","rep_platform":"PC","description":"d"}' >"$_FJ/legacy-platform.json"
 
 test_begin "bug-create-metadata-fields-round-trip-url-whiteboard-cc" "bug create metadata fields round-trip (url/whiteboard/cc)"
 _WB="cf$$x${RANDOM}"
@@ -39,6 +40,15 @@ if assert_success; then
     run_bzr bug view "$FID"
     if assert_json '.summary' "fj object" && assert_json '.priority' "High"; then test_pass; fi
 fi
+
+test_begin "bug-create-from-json-deprecated-platform-alias" "bug create --from-json deprecated rep_platform alias"
+run_bzr bug create --from-json "$_FJ/legacy-platform.json"
+if assert_success; then
+    _LEGACY_PLATFORM_ID=$(jq -r '.id' "$BZR_STDOUT")
+    run_bzr bug view "$_LEGACY_PLATFORM_ID"
+    if assert_success && assert_json '.platform' "PC"; then test_pass; fi
+fi
+unset _LEGACY_PLATFORM_ID
 
 test_begin "bug-create-from-json-array-creates-multiple-bugs" "bug create --from-json array creates multiple bugs"
 run_bzr bug create --from-json "$_FJ/arr.json"
@@ -135,7 +145,7 @@ if assert_success && assert_json '.action' "dry-run" &&
     assert_json_exists '.changes.attachments[0].file_name'; then test_pass; fi
 
 test_begin "bug-create-from-json-with-comment-attachments" "bug create --from-json with comment + attachments"
-printf '%s' "{\"product\":\"FuncTestProd\",\"component\":\"Backend\",\"summary\":\"fj compound\",\"op_sys\":\"Linux\",\"rep_platform\":\"PC\",\"description\":\"d\",\"comment\":{\"body\":\"${_CA_MARK} json\"},\"attachments\":[{\"file\":\"$_CA_FILE\",\"description\":\"json trace sum\"}]}" >"$_FJ/compound.json"
+printf '%s' "{\"product\":\"FuncTestProd\",\"component\":\"Backend\",\"summary\":\"fj compound\",\"op_sys\":\"Linux\",\"platform\":\"PC\",\"description\":\"d\",\"comment\":{\"body\":\"${_CA_MARK} json\"},\"attachments\":[{\"file\":\"$_CA_FILE\",\"description\":\"json trace sum\"}]}" >"$_FJ/compound.json"
 run_bzr bug create --from-json "$_FJ/compound.json"
 if assert_success; then
     JCID=$(jq -r '.id' "$BZR_STDOUT")

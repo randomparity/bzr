@@ -4,7 +4,7 @@ use std::collections::HashSet;
 pub(crate) const BUG_SEARCH_DEFAULT_FIELDS: &str =
     "id,summary,status,resolution,dupe_of,product,component,version,\
     assigned_to,priority,severity,creation_time,last_change_time,creator,\
-    url,whiteboard,keywords,blocks,depends_on,cc,op_sys,rep_platform,deadline,\
+    url,whiteboard,keywords,blocks,depends_on,cc,op_sys,platform,deadline,\
     target_milestone,flags";
 
 /// Which fields the caller asked to include / exclude, as the raw
@@ -44,7 +44,7 @@ pub enum BugField {
     Url,
     Whiteboard,
     OpSys,
-    RepPlatform,
+    Platform,
     Deadline,
     Keywords,
     Blocks,
@@ -78,7 +78,7 @@ impl BugField {
             BugField::Url => "url",
             BugField::Whiteboard => "whiteboard",
             BugField::OpSys => "op_sys",
-            BugField::RepPlatform => "rep_platform",
+            BugField::Platform => "platform",
             BugField::Deadline => "deadline",
             BugField::Keywords => "keywords",
             BugField::Blocks => "blocks",
@@ -112,7 +112,7 @@ impl BugField {
             BugField::Url => &["url"],
             BugField::Whiteboard => &["whiteboard"],
             BugField::OpSys => &["op_sys"],
-            BugField::RepPlatform => &["rep_platform", "platform"],
+            BugField::Platform => &["platform", "rep_platform"],
             BugField::Deadline => &["deadline"],
             BugField::Keywords => &["keywords"],
             BugField::Blocks => &["blocks"],
@@ -146,7 +146,7 @@ impl BugField {
             BugField::Url => "URL",
             BugField::Whiteboard => "WHITEBOARD",
             BugField::OpSys => "OP_SYS",
-            BugField::RepPlatform => "PLATFORM",
+            BugField::Platform => "PLATFORM",
             BugField::Deadline => "DEADLINE",
             BugField::Keywords => "KEYWORDS",
             BugField::Blocks => "BLOCKS",
@@ -190,7 +190,7 @@ pub const BUG_FIELDS: &[BugField] = &[
     BugField::Url,
     BugField::Whiteboard,
     BugField::OpSys,
-    BugField::RepPlatform,
+    BugField::Platform,
     BugField::Deadline,
     BugField::Keywords,
     BugField::Blocks,

@@ -36,7 +36,7 @@ RESTRICTED_GROUP=$(unique_name restrict-grp)
 _RESTRICTED_ALIASES_OK=1
 # 08c unsets its own fixture array, so declare the shared create args here.
 _RA=(--product FuncTestProd --component Backend --op-sys Linux
-    --rep-platform PC --description d)
+    --platform PC --description d)
 
 test_begin "fixture-second-credentialed-identity" "fixture: second credentialed identity"
 # Create best-effort: the account survives in a reused container, and
@@ -144,7 +144,7 @@ for _RESTRICTED_MODE in rest xmlrpc; do
         run_bzr_raw --json --server "restricted-$_RESTRICTED_MODE" \
             bug adjacency "$RESTRICTED_BUG"
         if assert_exit_code 0 &&
-            assert_raw_json '.schema_version' '2.0.1' &&
+            assert_raw_json '.schema_version' '2.1.0' &&
             assert_json '. == {
                 requests: [{
                     requested: "'"$RESTRICTED_BUG"'",
@@ -253,7 +253,7 @@ fi
 test_begin "bug-in-a-restricted-product-member-sees-it-anonymous-gets-102" "bug in a restricted product: member sees it, anonymous gets 102"
 RESTRICTED_PROD_BUG=$(make_bug --product "$RESTRICTED_PRODUCT" \
     --component RestrictComp --summary "product-restricted probe" \
-    --version 1.0 --op-sys Linux --rep-platform PC --description d)
+    --version 1.0 --op-sys Linux --platform PC --description d)
 if [[ -n "$RESTRICTED_PROD_BUG" ]]; then
     run_bzr_raw --json --server restricted bug view "$RESTRICTED_PROD_BUG"
     if assert_exit_code 0 && assert_json '.id' "$RESTRICTED_PROD_BUG"; then

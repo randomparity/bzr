@@ -59,7 +59,7 @@ fn parse_clone_field_overrides() {
         "me@example.com",
         "--op-sys",
         "Linux",
-        "--rep-platform",
+        "--platform",
         "x86_64",
     ]);
     assert_eq!(clone.summary.as_deref(), Some("Backport"));
@@ -71,7 +71,13 @@ fn parse_clone_field_overrides() {
     assert_eq!(clone.severity.as_deref(), Some("major"));
     assert_eq!(clone.assignee.as_deref(), Some("me@example.com"));
     assert_eq!(clone.op_sys.as_deref(), Some("Linux"));
-    assert_eq!(clone.rep_platform.as_deref(), Some("x86_64"));
+    assert_eq!(clone.platform.as_deref(), Some("x86_64"));
+}
+
+#[test]
+fn parse_clone_accepts_hidden_legacy_platform_alias() {
+    let clone = clone_args(&["bzr", "bug", "clone", "42", "--rep-platform", "x86_64"]);
+    assert_eq!(clone.platform.as_deref(), Some("x86_64"));
 }
 
 #[test]

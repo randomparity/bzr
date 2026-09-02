@@ -79,6 +79,9 @@ pub fn bug_to_json(bug: &Bug, spec: ColumnSpec<'_>) -> serde_json::Value {
         }
         for canonical in canonical_excludes(spec.exclude) {
             map.remove(canonical);
+            if canonical == "platform" {
+                map.remove("rep_platform");
+            }
         }
     }
     value
@@ -124,7 +127,7 @@ fn render_builtin_field(field: BugField, bug: &Bug) -> String {
         BugField::Url => bug.url.clone().unwrap_or_default(),
         BugField::Whiteboard => bug.whiteboard.clone().unwrap_or_default(),
         BugField::OpSys => bug.op_sys.clone().unwrap_or_default(),
-        BugField::RepPlatform => bug.rep_platform.clone().unwrap_or_default(),
+        BugField::Platform => bug.platform.clone().unwrap_or_default(),
         BugField::Deadline => bug.deadline.clone().unwrap_or_default(),
         BugField::Keywords => bug.keywords.join(", "),
         BugField::Blocks => join_ids(&bug.blocks),

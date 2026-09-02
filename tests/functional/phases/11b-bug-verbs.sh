@@ -15,7 +15,7 @@
 # ══════════════════════════════════════════════════════════════════════
 echo "── Phase 11b: Bug verbs (resolve, dup) ─────────────────────"
 
-_VERB_CREATE=(--product FuncTestProd --component Backend --op-sys Linux --rep-platform PC --description d)
+_VERB_CREATE=(--product FuncTestProd --component Backend --op-sys Linux --platform PC --description d)
 
 test_begin "bug-resolve-default-fixed" "bug resolve (default FIXED)"
 VID=$(make_bug "${_VERB_CREATE[@]}" --summary "verb resolve default")
