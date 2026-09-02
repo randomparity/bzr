@@ -1267,6 +1267,27 @@ fn bug_to_json_exclude_subset_drops_only_those() {
 }
 
 #[test]
+fn bug_to_json_excluding_platform_drops_transition_alias_too() {
+    let bug = make_bug(1, "s", "NEW");
+    for exclude in ["platform", "rep_platform"] {
+        let v = bug_to_json(
+            &bug,
+            ColumnSpec {
+                include: None,
+                exclude: Some(exclude),
+            },
+        );
+        let map = v.as_object().unwrap();
+        assert!(!map.contains_key("platform"), "canonical key for {exclude}");
+        assert!(
+            !map.contains_key("rep_platform"),
+            "transition alias for {exclude}"
+        );
+        assert_eq!(map.len(), BUG_STRUCT_KEY_ORDER.len() - 2);
+    }
+}
+
+#[test]
 fn bug_to_json_no_selection_is_full_object() {
     let bug = make_bug(1, "s", "NEW");
     for spec in [
