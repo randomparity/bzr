@@ -40,7 +40,7 @@ if assert_success && assert_json_array_length '.' 1; then test_pass; fi
 test_begin "bug-list-zero-limit-rejects-nonzero-offset" "bug list rejects --limit 0 with nonzero --offset"
 run_bzr bug list --whiteboard "$_PGMARK" --limit 0 --offset 1
 if assert_exit_code 7 &&
-    assert_stderr_contains "--limit 0 cannot be combined with a nonzero --offset"; then test_pass; fi
+    assert_stderr_contains "limit 0 cannot be combined with a nonzero --offset"; then test_pass; fi
 
 test_begin "bug-list-paginate-returns-every-page" "bug list --paginate returns every page"
 run_bzr bug list --whiteboard "$_PGMARK" --paginate --limit 2
