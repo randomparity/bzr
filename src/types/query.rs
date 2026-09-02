@@ -76,7 +76,7 @@ pub struct SavedQuery {
     /// Filter by Resolution (exact match, repeatable; empty matches open bugs).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resolution: Vec<String>,
-    /// Filter by QA Contact login (exact match, repeatable).
+    /// Filter by QA Contact login substring (repeatable).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub qa_contact: Vec<String>,
     /// Filter by URL field substring (repeatable).
