@@ -4,7 +4,7 @@ use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::client::test_helpers::test_client;
-use crate::types::{CreateComponentParams, UpdateComponentParams};
+use crate::types::CreateComponentParams;
 
 #[tokio::test]
 async fn create_component_returns_id() {
@@ -58,47 +58,5 @@ async fn create_component_forbidden() {
         })
         .await
         .unwrap_err();
-    assert!(err.to_string().contains("not authorized"));
-}
-
-#[tokio::test]
-async fn update_component_sends_put() {
-    let mock = MockServer::start().await;
-    Mock::given(method("PUT"))
-        .and(path("/rest/component/10"))
-        .and(body_json(serde_json::json!({
-            "description": "New desc",
-        })))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "components": [{"id": 10, "changes": {}}]
-        })))
-        .expect(1)
-        .mount(&mock)
-        .await;
-
-    let client = test_client(&mock.uri());
-    let params = UpdateComponentParams {
-        description: Some("New desc".into()),
-        ..Default::default()
-    };
-    client.update_component(10, &params).await.unwrap();
-}
-
-#[tokio::test]
-async fn update_component_forbidden() {
-    let mock = MockServer::start().await;
-    Mock::given(method("PUT"))
-        .and(path("/rest/component/10"))
-        .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
-            "error": true,
-            "code": 51,
-            "message": "You are not authorized."
-        })))
-        .mount(&mock)
-        .await;
-
-    let client = test_client(&mock.uri());
-    let params = UpdateComponentParams::default();
-    let err = client.update_component(10, &params).await.unwrap_err();
     assert!(err.to_string().contains("not authorized"));
 }

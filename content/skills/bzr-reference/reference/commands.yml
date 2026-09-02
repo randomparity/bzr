@@ -11,7 +11,7 @@ group: add-user remove-user list-users view create update
 whoami:
 server: info capabilities
 classification: list view
-component: list view create update
+component: list view create
 template: save list show update delete
 query: save list show update delete run
 completion:

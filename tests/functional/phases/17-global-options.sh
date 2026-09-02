@@ -97,18 +97,6 @@ if assert_success && assert_json '.resource' "product" && assert_json '.action' 
 fi
 unset _DP
 
-test_begin "dry-run-component-update-by-name-resolves-but-does-not-write" "--dry-run component update by name resolves but does not write"
-run_bzr --dry-run component update --product FuncTestProd --component Backend \
-    --description "dry component update"
-if [[ $BZR_EXIT -eq 0 ]]; then
-    run_bzr component view FuncTestProd Backend
-    if assert_stdout_not_contains "dry component update"; then test_pass; fi
-elif grep -q "32614" "$BZR_STDERR" 2>/dev/null; then
-    test_skip "component update REST endpoint not available"
-else
-    assert_success
-fi
-
 test_begin "dry-run-user-update-previews-without-writing" "--dry-run user update previews without writing"
 run_bzr --dry-run user update testuser@test.bzr --disable-login false
 if assert_success && assert_json '.resource' "user" && assert_json '.action' "dry-run"; then

@@ -1,6 +1,6 @@
 ---
 name: bzr-dry-run-confirm
-description: Use when mutating Bugzilla data with bzr — preview every write with global --dry-run, verify the JSON payload with jq, then re-run without the flag to commit. Covers bug create/update/clone/resolve/close/reopen/dup and product/component/user/group create+update, batch previews via --from-json, exit-code triage, and --yes batch-confirm semantics.
+description: Use when mutating Bugzilla data with bzr — preview every write with global --dry-run, verify the JSON payload with jq, then re-run without the flag to commit. Covers bug create/update/clone/resolve/close/reopen/dup, product/user/group create+update, component create, batch previews via --from-json, exit-code triage, and --yes batch-confirm semantics.
 ---
 
 # Dry-run, verify, then commit

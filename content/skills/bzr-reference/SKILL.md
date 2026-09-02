@@ -84,8 +84,8 @@ These work on any command (place them before the subcommand):
 
 - `--json` / `--output ndjson` — JSON, or newline-delimited JSON (one record per
   line) for streaming into `jq -c` or agents.
-- `--dry-run` — preview supported bug mutations and product/component/user/group
-  create/update without writing; prints the would-be payload.
+- `--dry-run` — preview supported bug mutations, product/user/group create/update,
+  and component create without writing; prints the would-be payload.
 - `-y` / `--yes` — skip the confirmation prompt for a batch mutation touching
   more than 10 bugs (interactive terminals only).
 - `--timeout <secs>` / `--retry <n>` — tune per-request timeout and transient

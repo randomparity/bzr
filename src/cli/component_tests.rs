@@ -125,58 +125,9 @@ fn parse_component_create_from_json_relaxes_required_fields() {
 }
 
 #[test]
-fn parse_component_update_binds_id_positional() {
-    match component_action(&[
-        "bzr",
-        "component",
-        "update",
-        "42",
-        "--description",
-        "Updated description",
-    ]) {
-        ComponentAction::Update {
-            id, description, ..
-        } => {
-            assert_eq!(id, Some(42));
-            assert_eq!(description.as_deref(), Some("Updated description"));
-        }
-        _ => panic!("expected Update"),
-    }
-}
-
-#[test]
-fn parse_component_update_binds_name_based_targeting() {
-    match component_action(&[
-        "bzr",
-        "component",
-        "update",
-        "--product",
-        "MyApp",
-        "--component",
-        "Backend",
-        "--name",
-        "Core",
-    ]) {
-        ComponentAction::Update {
-            id,
-            product,
-            component,
-            name,
-            ..
-        } => {
-            assert!(id.is_none());
-            assert_eq!(product.as_deref(), Some("MyApp"));
-            assert_eq!(component.as_deref(), Some("Backend"));
-            assert_eq!(name.as_deref(), Some("Core"));
-        }
-        _ => panic!("expected Update"),
-    }
-}
-
-#[test]
-fn parse_component_update_rejects_non_numeric_id() {
+fn parse_component_update_is_not_a_subcommand() {
     assert_eq!(
-        parse_error_kind(&["bzr", "component", "update", "Backend"]),
-        ErrorKind::ValueValidation
+        parse_error_kind(&["bzr", "component", "update"]),
+        ErrorKind::InvalidSubcommand
     );
 }

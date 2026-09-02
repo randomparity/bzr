@@ -28,17 +28,6 @@ pub struct CreateComponentParams {
     pub default_assignee: String,
 }
 
-#[derive(Debug, Default, Serialize)]
-#[non_exhaustive]
-pub struct UpdateComponentParams {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub default_assignee: Option<String>,
-}
-
 #[cfg(test)]
 #[path = "component_tests.rs"]
 mod tests;

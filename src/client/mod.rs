@@ -67,9 +67,8 @@ enum PreparedAuth {
 /// comments and attachments use XML-RPC first to preserve private-data behavior
 /// that REST responses cannot reliably distinguish.
 ///
-/// Update methods use the identifier type that the Bugzilla REST API accepts:
-/// - `u64` for resources identified only by numeric ID (e.g. `update_component`)
-/// - `&str` for resources that accept name-based addressing (e.g. `update_product`, `update_user`)
+/// Update methods use `&str` identifiers for resources that accept name-based
+/// addressing, such as products and users.
 pub struct BugzillaClient {
     pub(super) http: reqwest::Client,
     pub(super) strict_http: reqwest::Client,

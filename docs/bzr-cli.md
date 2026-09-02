@@ -53,7 +53,7 @@ For installation and quick start, see [README.md](../README.md).
 | `--timeout <SECS>` | Per-request timeout in seconds (default 30). Takes precedence over `BZR_TIMEOUT`. The 10s connect timeout is unaffected. |
 | `--retry <N>` | Retry transient failures up to N times with exponential backoff honoring `Retry-After`. 429 and connect failures are retried for any operation; 5xx and read timeouts only for safe reads (GET/HEAD), never for writes (create, update, comment) where a replay could duplicate the effect. Default 0 (disabled); max 10. Exhausted retries exit 5. |
 | `--progress <FORMAT>` | Emit structured progress events on stderr for long operations. `ndjson` streams newline-delimited JSON (`page`/`batch`/`done`, and `error` on failure) during `bug list`/`search --paginate`, `query run --paginate`, and `bug create`/`update --from-json` array form. stdout is unaffected; absent the flag stderr stays silent (or `-v` logs). Only `ndjson` is supported. Intended for non-verbose runs, since `-v` log lines interleave on the same stream. |
-| `--dry-run` | Preview a supported mutation without writing. Resolves and validates the request, then prints the would-be payload and affected IDs as `{"resource":"bug","action":"dry-run","ids":[...],"changes":{...}}` instead of calling the write API. Exits 0 on a valid request. Supported for `bug create`, `update`, `clone`, `resolve`, `close`, `reopen`, `dup`, and `product`/`component`/`user`/`group` `create` and `update`; on any other command it exits 7. `bug clone` still reads the source bug to build the preview. |
+| `--dry-run` | Preview a supported mutation without writing. Resolves and validates the request, then prints the would-be payload and affected IDs as `{"resource":"bug","action":"dry-run","ids":[...],"changes":{...}}` instead of calling the write API. Exits 0 on a valid request. Supported for `bug create`, `update`, `clone`, `resolve`, `close`, `reopen`, `dup`; `product`, `user`, and `group` `create` and `update`; and `component create`. On any other command it exits 7. `bug clone` still reads the source bug to build the preview. |
 | `-y, --yes` | Skip the confirmation prompt for a large batch mutation. A `bug update`/`resolve`/`close`/`reopen` targeting more than 10 bugs prompts for confirmation at an interactive terminal; `--yes` bypasses it. Non-interactive runs (piped stdin, agents) never prompt, so this is only needed in an interactive session. |
 | `-v, --verbose` | Increase log verbosity (`-v`=info, `-vv`=debug, `-vvv`=trace; `RUST_LOG` overrides) |
 | `-h, --help` | Print help |
@@ -1804,34 +1804,6 @@ bzr --dry-run component create --product Fedora --name "new-component" \
 
 Agent note: this is safer after confirming the product exists with `bzr --json product view <product>` and that the assignee is valid with `bzr --json user search "<email-or-name>"`.
 
-### `bzr component update`
-
-Update an existing component by ID or exact product/component name (requires admin privileges).
-
-```bash
-bzr component update 42 --name "renamed-component"
-bzr component update --product MyApp --component Backend --description "Updated backend"
-bzr component update 42 --default-assignee newdev@example.com
-bzr component update --from-json component-update.json --name "renamed-component"
-bzr --dry-run component update 42 --default-assignee newdev@example.com
-```
-
-| Option | Required | Description |
-|--------|----------|-------------|
-| `<ID>` | Yes unless another target is supplied | Component ID |
-| `--product <P>` | With `--component` for name target | Product containing the component |
-| `--component <C>` | With `--product` for name target | Existing component name, exact match |
-| `--from-json <PATH>` | No | Read component update fields from a JSON object (`-` reads stdin). Schema: `bzr schema component-update-input` |
-| `--name <N>` | No | New name |
-| `--description <D>` | No | New description |
-| `--default-assignee <E>` | No | New default assignee |
-
-Use either `<ID>`, JSON `id`, CLI `--product`/`--component`, or JSON
-`product`/`component` as the target. `--name` is always the new name, not the
-target component name.
-
----
-
 ## `bzr config` -- Configuration Management
 
 Configuration is stored in `~/.config/bzr/config.toml`. Multiple servers can be configured and switched between using aliases.
@@ -2438,7 +2410,7 @@ mutation/result envelopes `action-result`, `batch-result`,
 `config-result`, `search-result`, `dry-run-result`, `error`; and the structured
 input contracts
 `bug-create-input`, `bug-update-input`, `product-create-input`,
-`product-update-input`, `component-create-input`, `component-update-input`,
+`product-update-input`, `component-create-input`,
 `user-create-input`, `user-update-input`, `group-create-input`,
 `group-update-input`.
 

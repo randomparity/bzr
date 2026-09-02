@@ -1,6 +1,6 @@
 //! Shared driver for admin create/update commands.
 //!
-//! The `product`, `component`, `group`, and `user` create/update handlers all
+//! The product, group, and user create/update handlers plus component create all
 //! repeat the same control-flow skeleton: read the output format, branch on
 //! dry-run to emit a [`DryRunResult`], otherwise connect, call one resource API
 //! method, and write an [`ActionResult`]. [`run`] owns that skeleton so each
@@ -9,9 +9,7 @@
 //! Scope: this seam serves the linear, create-shaped / name-keyed flow only.
 //! It hard-codes an empty `ids` slice for the dry-run preview, which is correct
 //! for every caller (all are create-shaped or keyed by name, never by numeric
-//! id). Id-keyed previews — currently only `component update`, which also needs
-//! a pre-call id-resolution round-trip — are deliberately out of scope and stay
-//! bespoke (see ADR-0003).
+//! id).
 
 use std::future::Future;
 

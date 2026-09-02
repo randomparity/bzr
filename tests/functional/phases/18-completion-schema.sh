@@ -45,7 +45,7 @@ if assert_success && assert_json_valid &&
     assert_schema_list_contains "product-create-input" &&
     assert_schema_list_contains "product-update-input" &&
     assert_schema_list_contains "component-create-input" &&
-    assert_schema_list_contains "component-update-input" &&
+    assert_stdout_not_contains "component-update-input" &&
     assert_schema_list_contains "user-create-input" &&
     assert_schema_list_contains "user-update-input" &&
     assert_schema_list_contains "group-create-input" &&
@@ -69,10 +69,9 @@ run_bzr schema product-create-input
 if assert_success && assert_json_valid &&
     assert_json '.["$schema"]' "https://json-schema.org/draft/2020-12/schema"; then test_pass; fi
 
-test_begin "schema-component-update-input" "schema component-update-input"
+test_begin "schema-component-update-input-removed" "removed component update schema"
 run_bzr schema component-update-input
-if assert_success && assert_json_valid &&
-    assert_json '.["$schema"]' "https://json-schema.org/draft/2020-12/schema"; then test_pass; fi
+if assert_exit_code 7 && assert_stderr_contains "unknown schema"; then test_pass; fi
 
 test_begin "schema-user-update-input" "schema user-update-input"
 run_bzr schema user-update-input

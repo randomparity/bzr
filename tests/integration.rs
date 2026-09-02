@@ -1135,26 +1135,6 @@ async fn attachment_update_integration() {
     );
 }
 
-// ── Component update ─────────────────────────────────────────────────
-
-#[tokio::test]
-async fn component_update_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
-
-    Mock::given(method("PUT"))
-        .and(path("/rest/component/10"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 10})))
-        .expect(1)
-        .mount(&mock)
-        .await;
-
-    let result = dispatch_cli(&["bzr", "component", "update", "10", "--name", "Updated"]).await;
-    assert!(
-        result.is_ok(),
-        "component update should succeed: {result:?}"
-    );
-}
-
 // ── Product view ─────────────────────────────────────────────────────
 
 #[tokio::test]

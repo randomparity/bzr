@@ -48,7 +48,7 @@ walkthrough.
 - **Comments & attachments** — list and add comments (with `$EDITOR` integration), tag comments, and download, upload, and update attachments with auto-detected MIME types
 - **Flags** — set, request, and clear flags on bugs and attachments
 - **Templates & saved queries** — save reusable bug field templates and search queries, then run them by name
-- **Admin & metadata** — create and update products, components, users, and groups; view classifications; look up valid values for bug fields
+- **Admin & metadata** — create and update products, users, and groups; create components; view classifications; look up valid values for bug fields
 - **Multi-server** — configure several Bugzilla instances, switch per invocation, and check any server's version and extensions (`whoami`, `server info`)
 - **Works with old and new servers** — REST, XML-RPC, or hybrid API transport, auto-detected per server
 - **Scriptable output** — human-readable tables with colored status, JSON in a versioned envelope, or NDJSON, plus embedded JSON Schemas for every output object
