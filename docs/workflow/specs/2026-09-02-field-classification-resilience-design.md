@@ -22,9 +22,10 @@ This removes the root duplication with a smaller change than introducing a new p
 At the classification command boundary, match only `BzrError::Api { code: 900, .. }` from the
 whole list enumeration. This preserves the client's existing public result type and avoids hiding
 other API failures. ADR 0042 records this command-specific exception to ADR 0015: code 900 means
-the optional feature is disabled, rather than an unrelated request failure. Both error 900 and the successfully fetched lone `Unclassified` sentinel are rendered
-as disabled: raw/table mode prints the existing note on stdout without an empty-table sequel;
-JSON and NDJSON write an empty collection on stdout and the note on stderr.
+the optional feature is disabled, rather than an unrelated request failure. Both error 900 and the
+successfully fetched lone `Unclassified` sentinel are rendered as disabled: raw/table mode prints
+the existing note on stdout without an empty-table sequel; JSON and NDJSON write an empty
+collection on stdout and the note on stderr.
 
 Rejected approaches are duplicating the serde default, collapsing error 900 into an
 indistinguishable client-side empty vector, and emitting human prose into structured stdout.
