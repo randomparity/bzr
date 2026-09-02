@@ -20,8 +20,8 @@ fn comment_update(args: &CommentArgs) -> Result<Option<CommentUpdate>> {
     )
 }
 
-/// Reject locally invalid `close` / `reopen` status values before any dry-run
-/// or server lookup path.
+/// Reject locally invalid status-verb values before any dry-run or server
+/// lookup path.
 fn validate_target_status_value(status: &str) -> Result<()> {
     if status.trim().is_empty() {
         return Err(BzrError::input("--status cannot be empty".into()));
@@ -29,9 +29,9 @@ fn validate_target_status_value(status: &str) -> Result<()> {
     Ok(())
 }
 
-/// Confirm the `close` / `reopen` target status exists on the server before
-/// writing, so an unknown status fails with an actionable client-side error
-/// (exit 7) rather than the server's opaque "no status named X" API error.
+/// Confirm a status-verb target exists on the server before writing, so an
+/// unknown status fails with an actionable client-side error (exit 7) rather
+/// than the server's opaque "no status named X" API error.
 ///
 /// The match is exact and case-sensitive against the names the server returns
 /// (Bugzilla statuses are uppercase). The check proves the status *exists*; the
@@ -60,22 +60,25 @@ pub(super) async fn resolve(
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let comment = comment_update(&args.comment)?;
+    validate_target_status_value(&args.status)?;
     let params = UpdateBugParams {
-        status: Some("RESOLVED".into()),
+        status: Some(args.status.clone()),
         resolution: Some(args.as_resolution.clone()),
-        comment: comment_update(&args.comment)?,
+        comment,
         ..Default::default()
     };
-    super::update::apply_checked(
-        super::update::ApplyRequest {
-            ids: args.ids.clone(),
-            params,
-            expect_unchanged_since: args.expect_unchanged_since.as_deref(),
-        },
-        ctx,
-        w,
-    )
-    .await
+    let request = super::update::ApplyRequest {
+        ids: args.ids.clone(),
+        params,
+        expect_unchanged_since: args.expect_unchanged_since.as_deref(),
+    };
+    if ctx.dry_run() {
+        return super::update::apply_checked(request, ctx, w).await;
+    }
+    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+    validate_target_status(&client, &args.status).await?;
+    super::update::apply_checked_connected(&client, request, ctx, w).await
 }
 
 pub(super) async fn close(

@@ -1105,6 +1105,7 @@ from the supplied value.
 
 ```bash
 bzr bug resolve 12345                       # → update --status RESOLVED --resolution FIXED
+bzr bug resolve 12345 --status CUSTOM_RESOLVED  # install with a custom resolved status
 bzr bug resolve 12345 12346 --as WONTFIX    # batch, custom resolution
 bzr bug close 12345 --comment "Shipped"     # → update --status VERIFIED (resolution preserved)
 bzr bug close 12345 --as INVALID            # close an open bug with a resolution
@@ -1116,19 +1117,20 @@ bzr bug dup 12345 100                        # → update --dupe-of 100
 
 | Verb | Equivalent `update` | Notes |
 |------|---------------------|-------|
-| `resolve <ID...> [--as <R>] [--expect-unchanged-since <T>]` | `--status RESOLVED --resolution <R>` | `--as` defaults to `FIXED` |
+| `resolve <ID...> [--status <S>] [--as <R>] [--expect-unchanged-since <T>]` | `--status <S> --resolution <R>` | `--status` defaults to `RESOLVED`; `--as` defaults to `FIXED` |
 | `close <ID...> [--status <S>] [--as <R>] [--expect-unchanged-since <T>]` | `--status <S> [--resolution <R>]` | `--status` defaults to `VERIFIED`; resolution set only when `--as` is given, otherwise the existing one is preserved |
 | `reopen <ID...> [--status <S>] [--expect-unchanged-since <T>]` | `--status <S>` | `--status` defaults to `CONFIRMED`; Bugzilla clears the resolution automatically |
 | `dup <ID> <TARGET> [--expect-unchanged-since <T>]` | `--dupe-of <TARGET>` | Bugzilla sets RESOLVED/DUPLICATE automatically |
 
-`close` and `reopen` default to the stock Bugzilla 5.x statuses `VERIFIED` and
-`CONFIRMED`. Installs that define custom statuses (e.g. `CLOSED`, `REOPENED`)
-reach them with `--status`. The target status is validated against the server's
-status list before writing; an unknown status exits 7 (input validation) with
-the list of valid statuses, instead of the server's opaque API error. The match
-is exact and case-sensitive. Validation confirms the status exists; an
-otherwise-legal status whose *transition* the workflow forbids still fails with
-the same server error `bug update` would return.
+`resolve`, `close`, and `reopen` default to the stock Bugzilla 5.x statuses
+`RESOLVED`, `VERIFIED`, and `CONFIRMED`. Installs that define custom statuses
+(e.g. `CUSTOM_RESOLVED`, `CLOSED`, `REOPENED`) reach them with `--status`. The
+target status is validated against the server's status list before writing; an
+unknown status exits 7 (input validation) with the list of valid statuses,
+instead of the server's opaque API error. The match is exact and case-sensitive.
+Validation confirms the status exists; an otherwise-legal status whose
+*transition* the workflow forbids still fails with the same server error `bug
+update` would return.
 
 ---
 
