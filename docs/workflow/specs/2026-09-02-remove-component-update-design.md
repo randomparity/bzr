@@ -63,4 +63,3 @@ continues through the existing unknown-schema input error and exits 7.
 This intentionally breaks callers using a non-stock fork that implemented the invented
 endpoint. Reverting the change restores the command and schema; no persisted data or
 server state is migrated.
-
