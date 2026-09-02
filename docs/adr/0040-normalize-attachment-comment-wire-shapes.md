@@ -19,14 +19,15 @@ Normalize these variants only where each wire value enters the REST client:
 
 - deserialize each attachment-create ID through the shared unsigned number-or-decimal-string
   adapter;
-- parse by-ID attachment JSON through the existing envelope selector and select the requested ID
-  from either the keyed map or flat array;
+- inspect the by-ID response's `attachments` container, decode an object as the keyed shape or an
+  array as the flat shape, and select the requested ID inside that recognized container;
 - deserialize `Comment.is_private` through the shared optional bool-or-binary-integer adapter; and
 - add `exclude_fields=data` to REST attachment list requests. Bulk download retains its existing
   per-attachment re-fetch when list metadata has no body.
 
-Malformed values remain errors. By-ID flat arrays that do not contain the requested ID return
-`NotFound`; they never return a different attachment merely because it is first.
+Malformed or unrecognized container values remain deserialize errors. A recognized keyed object
+or flat array that does not contain the requested ID returns `NotFound`; it never returns a
+different attachment merely because it is first.
 
 ## Consequences
 

@@ -41,12 +41,13 @@ CI-coupled.
 `types::deserialization::u64_from_number_or_string` for each element. This reuses ADR 0033's value
 contract without exporting a new public type or weakening unrelated numeric fields.
 
-By-ID REST reads parse one raw JSON value, then call `BugzillaClient::try_envelopes` with two
-extractors. The keyed extractor looks up the decimal requested ID rather than taking an arbitrary
-map value. The flat extractor searches `Attachment.id` for the same ID. Because extractors need the
-requested ID, the selector accepts closures or the by-ID helper performs equivalent ordered
-attempts while preserving `try_envelopes`' first-error diagnostics. Both full and metadata-only
-paths call the same selector; the latter keeps `exclude_fields=data`.
+By-ID REST reads parse one raw JSON value, require an `attachments` member, and dispatch on that
+member's JSON container shape. An object is decoded as the keyed response and looked up by the
+decimal requested ID; an array is decoded as the flat response and searched by `Attachment.id`.
+A recognized object or array without the requested ID returns `NotFound`. A missing member or any
+other container type returns a shape-specific deserialize error. This structural dispatch avoids
+candidate-order error masking because both supported variants use the same top-level key. Both
+full and metadata-only paths call the same selector; the latter keeps `exclude_fields=data`.
 
 `Comment.is_private` adds the same serde attributes as attachment privacy:
 `default` plus `option_bool_from_int_or_bool`.
@@ -78,8 +79,9 @@ credentialless server exercises public attachment metadata without forwarding a 
 
 - Invalid upload IDs return the existing deserialize error; an empty `ids` list returns the
   existing `DataIntegrity` error.
-- Envelope decoding preserves the first relevant decode error when no supported envelope matches.
-  Supported envelopes lacking the requested attachment return `NotFound`.
+- A missing or non-object/non-array `attachments` member returns a shape-specific deserialize
+  error. A recognized keyed object or flat array lacking the requested attachment returns
+  `NotFound`.
 - A list server that ignores `exclude_fields` remains safe: the client may receive `data`, but
   output behavior is unchanged.
 - Proxy backend, malformed JSON, and startup failures use the existing bounded 502/startup paths;
