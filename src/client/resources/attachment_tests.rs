@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used)]
 
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::client::test_helpers::{test_client, test_client_hybrid, test_client_xmlrpc};
@@ -173,6 +173,7 @@ async fn rest_mode_uses_rest_only_for_attachment_list() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/42/attachment"))
+        .and(query_param("exclude_fields", "data"))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(rest_attachments_response_json(&[5])),
         )

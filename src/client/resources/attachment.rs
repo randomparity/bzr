@@ -147,7 +147,10 @@ impl BugzillaClient {
 
     async fn get_attachments_rest(&self, bug_id: u64) -> Result<Vec<Attachment>> {
         let value = self
-            .get_json_value(&format!("bug/{bug_id}/attachment"))
+            .get_json_query(
+                &format!("bug/{bug_id}/attachment"),
+                &[("exclude_fields", "data")],
+            )
             .await?;
         Self::try_envelopes(
             &value,
