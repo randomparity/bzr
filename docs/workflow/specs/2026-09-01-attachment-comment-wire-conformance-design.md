@@ -16,7 +16,8 @@ breaking bulk download.
   null, object, array, non-decimal, and out-of-range values fail decoding.
 - REST `attachment view` and `attachment download <id>` accept either a keyed
   `attachments` object or flat `attachments` array. Selection is by the requested ID. An empty
-  envelope or a flat array lacking that ID returns `NotFound`.
+  recognized object/array container or one lacking that ID returns `NotFound`; a response without
+  an `attachments` member returns `Deserialize`.
 - `Comment.is_private` accepts absent/null, booleans, and integers `0`/`1` through the shared
   adapter. Other values remain decoding errors.
 - REST attachment list requests send `exclude_fields=data`. XML-RPC list behavior is unchanged.
