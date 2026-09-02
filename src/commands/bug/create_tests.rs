@@ -850,6 +850,7 @@ fn build_editor_template_includes_summary_and_field_reminder() {
         target_milestone: None,
         deadline: None,
         groups: vec![],
+        groups_present: false,
         flags: vec![],
     };
     let buf = super::build_editor_template(Some("Pre-filled summary"), None, &params);
@@ -885,6 +886,7 @@ fn build_editor_template_includes_template_description_body() {
         target_milestone: None,
         deadline: None,
         groups: vec![],
+        groups_present: false,
         flags: vec![],
     };
     let buf = super::build_editor_template(None, Some("## Steps\n\n## Expected"), &params);
@@ -1154,6 +1156,33 @@ fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
     let path = tmp.path().join("input.json");
     std::fs::write(&path, json).unwrap();
     path.to_string_lossy().into_owned()
+}
+
+#[tokio::test]
+async fn from_json_explicit_empty_groups_sends_empty_groups() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .and(body_string_contains("\"groups\":[]"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 7})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let json = r#"{"product":"P","component":"C","summary":"S","groups":[]}"#;
+    let action = from_json_action(&write_json_file(&tmp, json));
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(
+        result.is_ok(),
+        "explicit empty groups must be sent: {result:?}"
+    );
 }
 
 #[tokio::test]

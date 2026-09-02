@@ -189,7 +189,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │                   [--see-also-add <URL>] [--see-also-remove <URL>]
 │   │                   [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 │   │                   [--expect-unchanged-since <TIMESTAMP>]
-│   ├── resolve <ID...> [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>]
+│   ├── resolve <ID...> [--status <STATUS>] [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>]
 │   │                   [--comment-private] [--expect-unchanged-since <TIMESTAMP>]
 │   ├── close <ID...> [--status <STATUS>] [--as <RESOLUTION>] [--comment <BODY>]
 │   │                 [--comment-file <PATH>] [--comment-private]
@@ -896,7 +896,7 @@ before the first write, but it is not a reservation.
 - A top-level **object** files one bug and returns the usual `{"resource":"bug","action":"created","id":N}` result.
 - A top-level **array** files one bug per element and returns a partial-failure result `{"resource":"bug","action":"created","created":[...],"failed":[{"index":N,"error":"..."}]}`. If any element fails, the command exits **11** (`BatchPartialFailure`); all input is validated before any bug is created, so a malformed element never half-creates a batch.
 
-Accepted keys match the create flag names: `product`, `component`, `summary`, `version`, `description`, `priority`, `severity`, `assignee`, `op_sys`, `platform`, `alias`, `url`, `whiteboard`, `target_milestone`, `deadline`, `blocks`, `depends_on`, `cc`, `keywords`, `groups`, `flags` (an array of flag-syntax strings). Schema 2.1.x also accepts deprecated `rep_platform`, but not both spellings together. **Unknown keys are rejected** (exit 7) rather than silently ignored, so a typo fails fast. `product`, `component`, and `summary` are required (in the JSON or via a CLI flag).
+Accepted keys match the create flag names: `product`, `component`, `summary`, `version`, `description`, `priority`, `severity`, `assignee`, `op_sys`, `platform`, `alias`, `url`, `whiteboard`, `target_milestone`, `deadline`, `blocks`, `depends_on`, `cc`, `keywords`, `groups`, `flags` (an array of flag-syntax strings). Schema 2.1.x also accepts deprecated `rep_platform`, but not both spellings together. **Unknown keys are rejected** (exit 7) rather than silently ignored, so a typo fails fast. `product`, `component`, and `summary` are required (in the JSON or via a CLI flag). For `groups`, a missing key omits `groups` from the create request, while an explicit empty array sends `"groups":[]`.
 
 **Compound keys** (the JSON equivalent of the `--with-comment` / `--with-attachment` flags, see [Compound create](#compound-create-comment--attachments)):
 
@@ -1105,6 +1105,7 @@ from the supplied value.
 
 ```bash
 bzr bug resolve 12345                       # → update --status RESOLVED --resolution FIXED
+bzr bug resolve 12345 --status CUSTOM_RESOLVED  # install with a custom resolved status
 bzr bug resolve 12345 12346 --as WONTFIX    # batch, custom resolution
 bzr bug close 12345 --comment "Shipped"     # → update --status VERIFIED (resolution preserved)
 bzr bug close 12345 --as INVALID            # close an open bug with a resolution
@@ -1116,19 +1117,20 @@ bzr bug dup 12345 100                        # → update --dupe-of 100
 
 | Verb | Equivalent `update` | Notes |
 |------|---------------------|-------|
-| `resolve <ID...> [--as <R>] [--expect-unchanged-since <T>]` | `--status RESOLVED --resolution <R>` | `--as` defaults to `FIXED` |
+| `resolve <ID...> [--status <S>] [--as <R>] [--expect-unchanged-since <T>]` | `--status <S> --resolution <R>` | `--status` defaults to `RESOLVED`; `--as` defaults to `FIXED` |
 | `close <ID...> [--status <S>] [--as <R>] [--expect-unchanged-since <T>]` | `--status <S> [--resolution <R>]` | `--status` defaults to `VERIFIED`; resolution set only when `--as` is given, otherwise the existing one is preserved |
 | `reopen <ID...> [--status <S>] [--expect-unchanged-since <T>]` | `--status <S>` | `--status` defaults to `CONFIRMED`; Bugzilla clears the resolution automatically |
 | `dup <ID> <TARGET> [--expect-unchanged-since <T>]` | `--dupe-of <TARGET>` | Bugzilla sets RESOLVED/DUPLICATE automatically |
 
-`close` and `reopen` default to the stock Bugzilla 5.x statuses `VERIFIED` and
-`CONFIRMED`. Installs that define custom statuses (e.g. `CLOSED`, `REOPENED`)
-reach them with `--status`. The target status is validated against the server's
-status list before writing; an unknown status exits 7 (input validation) with
-the list of valid statuses, instead of the server's opaque API error. The match
-is exact and case-sensitive. Validation confirms the status exists; an
-otherwise-legal status whose *transition* the workflow forbids still fails with
-the same server error `bug update` would return.
+`resolve`, `close`, and `reopen` default to the stock Bugzilla 5.x statuses
+`RESOLVED`, `VERIFIED`, and `CONFIRMED`. Installs that define custom statuses
+(e.g. `CUSTOM_RESOLVED`, `CLOSED`, `REOPENED`) reach them with `--status`. The
+target status is validated against the server's status list before writing; an
+unknown status exits 7 (input validation) with the list of valid statuses,
+instead of the server's opaque API error. The match is exact and case-sensitive.
+Validation confirms the status exists; an otherwise-legal status whose
+*transition* the workflow forbids still fails with the same server error `bug
+update` would return.
 
 ---
 

@@ -25,6 +25,17 @@ if assert_success; then
     if assert_json '.status' "RESOLVED" && assert_json '.resolution' "FIXED"; then test_pass; fi
 fi
 
+test_begin "bug-resolve-explicit-verified-fixed" "bug resolve --status VERIFIED --as FIXED"
+run_bzr bug resolve "$VID" --status VERIFIED --as FIXED
+if assert_success; then
+    run_bzr bug view "$VID"
+    if assert_json '.status' "VERIFIED" && assert_json '.resolution' "FIXED"; then test_pass; fi
+fi
+
+test_begin "bug-resolve-invalid-status-exits-7" "bug resolve invalid --status exits 7"
+run_bzr bug resolve "$VID" --status CUSTOM_RESOLVED
+if assert_exit_code 7 && assert_stderr_contains "no status named"; then test_pass; fi
+
 test_begin "bug-resolve-as-wontfix" "bug resolve --as WONTFIX"
 VID=$(make_bug "${_VERB_CREATE[@]}" --summary "verb resolve wontfix")
 run_bzr bug resolve "$VID" --as WONTFIX

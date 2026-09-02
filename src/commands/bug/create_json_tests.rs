@@ -279,6 +279,53 @@ fn parse_one_or_many_preserves_object_and_array_shapes() {
     ));
 }
 
+#[test]
+fn json_groups_omitted_preserves_absence() {
+    let input: JsonCreateBug = serde_json::from_value(serde_json::json!({
+        "product": "P", "component": "C", "summary": "S"
+    }))
+    .unwrap();
+
+    let params = input.into_params().unwrap();
+    let json = serde_json::to_value(params).unwrap();
+    assert!(json.get("groups").is_none());
+}
+
+#[test]
+fn json_groups_empty_array_preserves_presence() {
+    let input: JsonCreateBug = serde_json::from_value(serde_json::json!({"groups": []})).unwrap();
+
+    assert_eq!(input.groups.into_option(), Some(vec![]));
+}
+
+#[test]
+fn json_groups_non_empty_array_preserves_values() {
+    let input: JsonCreateBug =
+        serde_json::from_value(serde_json::json!({"groups": ["security"]})).unwrap();
+
+    assert_eq!(input.groups.into_option(), Some(vec!["security".into()]));
+}
+
+#[test]
+fn json_groups_rejects_null() {
+    let err =
+        serde_json::from_value::<JsonCreateBug>(serde_json::json!({"groups": null})).unwrap_err();
+
+    assert!(err.to_string().contains("null"), "error was: {err}");
+}
+
+#[test]
+fn json_groups_non_empty_cli_override_replaces_json_groups() {
+    let json: JsonCreateBug =
+        serde_json::from_value(serde_json::json!({"groups": ["json-group"]})).unwrap();
+    let mut args = from_json_args("input.json");
+    args.create_fields.groups = vec!["cli-group".into()];
+
+    let merged = super::overlay_cli(json, &args).unwrap();
+
+    assert_eq!(merged.groups.into_option(), Some(vec!["cli-group".into()]));
+}
+
 // ── Compound --from-json (comment / attachments) ─────────────────────
 
 #[test]

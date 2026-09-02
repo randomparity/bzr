@@ -22,7 +22,7 @@ fn status_field_body(statuses: &[&str]) -> serde_json::Value {
     serde_json::json!({"fields": [{"values": values}]})
 }
 
-/// Mount the `GET field/bug/bug_status` mock the close/reopen status validator
+/// Mount the `GET field/bug/bug_status` mock the status-verb validator
 /// queries before writing.
 async fn mount_status_field(mock: &wiremock::MockServer, statuses: &[&str]) {
     Mock::given(method("GET"))
@@ -164,6 +164,7 @@ async fn resolve_dry_run_makes_no_write() {
 
     let action = BugAction::Resolve(ResolveArgs {
         ids: vec![5],
+        status: "RESOLVED".into(),
         as_resolution: "FIXED".into(),
         expect_unchanged_since: None,
         comment: CommentArgs::default(),
@@ -190,14 +191,16 @@ async fn resolve_dry_run_makes_no_write() {
 async fn resolve_defaults_to_fixed() {
     let action = BugAction::Resolve(ResolveArgs {
         ids: vec![5],
+        status: "RESOLVED".into(),
         as_resolution: "FIXED".into(),
         expect_unchanged_since: None,
         comment: CommentArgs::default(),
     });
-    run_verb_expecting_body(
+    run_status_verb(
         action,
         5,
         serde_json::json!({"status": "RESOLVED", "resolution": "FIXED"}),
+        DEFAULT_STATUSES,
     )
     .await;
 }
@@ -206,16 +209,71 @@ async fn resolve_defaults_to_fixed() {
 async fn resolve_with_as_override() {
     let action = BugAction::Resolve(ResolveArgs {
         ids: vec![7],
+        status: "RESOLVED".into(),
         as_resolution: "WONTFIX".into(),
         expect_unchanged_since: None,
         comment: CommentArgs::default(),
     });
-    run_verb_expecting_body(
+    run_status_verb(
         action,
         7,
         serde_json::json!({"status": "RESOLVED", "resolution": "WONTFIX"}),
+        DEFAULT_STATUSES,
     )
     .await;
+}
+
+#[tokio::test]
+async fn resolve_with_status_override() {
+    let action = BugAction::Resolve(ResolveArgs {
+        ids: vec![7],
+        status: "CUSTOM_RESOLVED".into(),
+        as_resolution: "FIXED".into(),
+        expect_unchanged_since: None,
+        comment: CommentArgs::default(),
+    });
+    let mut statuses = DEFAULT_STATUSES.to_vec();
+    statuses.push("CUSTOM_RESOLVED");
+    run_status_verb(
+        action,
+        7,
+        serde_json::json!({"status": "CUSTOM_RESOLVED", "resolution": "FIXED"}),
+        &statuses,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn resolve_unknown_status_is_rejected() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_status_field(&mock, DEFAULT_STATUSES).await;
+    Mock::given(method("PUT"))
+        .respond_with(ok_put(7))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::Resolve(ResolveArgs {
+        ids: vec![7],
+        status: "CUSTOM_RESOLVED".into(),
+        as_resolution: "FIXED".into(),
+        expect_unchanged_since: None,
+        comment: CommentArgs::default(),
+    });
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err();
+
+    assert!(
+        matches!(&err, crate::error::BzrError::InputValidation { message: m, .. }
+            if m.contains("no status named") && m.contains("CUSTOM_RESOLVED")),
+        "got {err:?}"
+    );
 }
 
 #[tokio::test]
@@ -225,6 +283,7 @@ async fn bug_verbs_expect_unchanged_since_collision_skips_write() {
     run_verb_collision_expecting_no_write(
         BugAction::Resolve(ResolveArgs {
             ids: vec![5],
+            status: "RESOLVED".into(),
             as_resolution: "FIXED".into(),
             expect_unchanged_since: Some(since.into()),
             comment: CommentArgs::default(),
@@ -272,6 +331,7 @@ async fn bug_verbs_expect_unchanged_since_collision_skips_write() {
 async fn bug_verbs_expect_unchanged_since_match_writes_update() {
     let since = "2026-06-19T12:00:00Z";
     let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_status_field(&mock, DEFAULT_STATUSES).await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/5"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -292,6 +352,7 @@ async fn bug_verbs_expect_unchanged_since_match_writes_update() {
 
     let action = BugAction::Resolve(ResolveArgs {
         ids: vec![5],
+        status: "RESOLVED".into(),
         as_resolution: "FIXED".into(),
         expect_unchanged_since: Some(since.into()),
         comment: CommentArgs::default(),
@@ -548,6 +609,7 @@ async fn dup_sends_dupe_of() {
 async fn resolve_posts_comment_atomically() {
     let action = BugAction::Resolve(ResolveArgs {
         ids: vec![5],
+        status: "RESOLVED".into(),
         as_resolution: "FIXED".into(),
         expect_unchanged_since: None,
         comment: CommentArgs {
@@ -556,7 +618,7 @@ async fn resolve_posts_comment_atomically() {
             comment_private: false,
         },
     });
-    run_verb_expecting_body(
+    run_status_verb(
         action,
         5,
         // is_private is omitted when false (skip_serializing_if).
@@ -565,6 +627,7 @@ async fn resolve_posts_comment_atomically() {
             "resolution": "FIXED",
             "comment": {"body": "done in 9.1"}
         }),
+        DEFAULT_STATUSES,
     )
     .await;
 }
@@ -635,6 +698,7 @@ async fn dup_posts_comment_atomically() {
 #[tokio::test]
 async fn resolve_batch_updates_each_id() {
     let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_status_field(&mock, DEFAULT_STATUSES).await;
     for id in [1_u64, 2] {
         Mock::given(method("PUT"))
             .and(path(format!("/rest/bug/{id}")))
@@ -649,6 +713,7 @@ async fn resolve_batch_updates_each_id() {
 
     let action = BugAction::Resolve(ResolveArgs {
         ids: vec![1, 2],
+        status: "RESOLVED".into(),
         as_resolution: "FIXED".into(),
         expect_unchanged_since: None,
         comment: CommentArgs::default(),

@@ -52,7 +52,7 @@ struct JsonCreateBug {
     #[serde(default)]
     keywords: Vec<String>,
     #[serde(default)]
-    groups: Vec<String>,
+    groups: JsonGroups,
     #[serde(default)]
     flags: Vec<String>,
     /// First comment to post after the bug is created (compound create).
@@ -61,6 +61,30 @@ struct JsonCreateBug {
     /// Attachments to upload after the bug is created (compound create).
     #[serde(default)]
     attachments: Vec<JsonAttachment>,
+}
+
+#[derive(Debug, Default)]
+struct JsonGroups(Option<Vec<String>>);
+
+impl<'de> Deserialize<'de> for JsonGroups {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Vec::<String>::deserialize(deserializer).map(|groups| Self(Some(groups)))
+    }
+}
+
+impl JsonGroups {
+    fn into_option(self) -> Option<Vec<String>> {
+        self.0
+    }
+
+    fn overlay_cli(&mut self, groups: &[String]) {
+        if !groups.is_empty() {
+            self.0 = Some(groups.to_vec());
+        }
+    }
 }
 
 /// A first comment in the compound `--from-json` payload.
@@ -144,7 +168,8 @@ impl JsonCreateBug {
         let flags = crate::commands::runtime::input::flags::parse_flags(&self.flags)?;
         let deadline =
             crate::validation::parse_optional_date_only(self.deadline.as_deref(), "deadline")?;
-        Ok(CreateBugParams {
+        let groups = self.groups.into_option();
+        let mut params = CreateBugParams {
             product: required(self.product, "product")?,
             component: required(self.component, "component")?,
             summary: required(self.summary, "summary")?,
@@ -164,9 +189,14 @@ impl JsonCreateBug {
             depends_on: self.depends_on,
             cc: self.cc,
             keywords: self.keywords,
-            groups: self.groups,
+            groups: Vec::new(),
+            groups_present: false,
             flags,
-        })
+        };
+        if let Some(groups) = groups {
+            params.set_groups_from_structured_input(groups);
+        }
+        Ok(params)
     }
 }
 
@@ -231,7 +261,7 @@ fn overlay_cli(mut json: JsonCreateBug, args: &CreateArgs) -> Result<JsonCreateB
     }
     merge_vec(&mut json.cc, &create_fields.cc);
     merge_vec(&mut json.keywords, &create_fields.keywords);
-    merge_vec(&mut json.groups, &create_fields.groups);
+    json.groups.overlay_cli(&create_fields.groups);
     merge_vec(&mut json.flags, &create_fields.flag);
     // `blocks`/`depends_on` are `Vec<u64>`; `merge_vec` is `Vec<String>`-typed,
     // so keep the equivalent guard inline.

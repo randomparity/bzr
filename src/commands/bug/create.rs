@@ -355,6 +355,7 @@ pub(super) async fn handle(
         cc: merged.cc,
         keywords: merged.keywords,
         groups: merged.groups,
+        groups_present: false,
         flags,
     };
     // Building the plan reads attachment files and validates the comment body

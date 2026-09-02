@@ -313,55 +313,117 @@ fn minimal_create_params() -> CreateBugParams {
 }
 
 #[test]
-fn create_params_omit_unset_parity_fields() {
+fn create_params_minimal_matches_wire_contract() {
     let json = serde_json::to_value(minimal_create_params()).unwrap();
-    let obj = json.as_object().unwrap();
-    for key in [
-        "alias",
-        "url",
-        "whiteboard",
-        "target_milestone",
-        "deadline",
-        "cc",
-        "keywords",
-        "groups",
-        "flags",
-    ] {
-        assert!(
-            !obj.contains_key(key),
-            "unset field '{key}' must be omitted"
-        );
-    }
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "product": "Prod",
+            "component": "Comp",
+            "summary": "Sum",
+            "version": "1.0",
+        })
+    );
 }
 
 #[test]
-fn create_params_serialize_parity_fields() {
+fn create_params_all_fields_match_wire_contract() {
     let params = CreateBugParams {
+        description: Some("full description".into()),
+        priority: Some("high".into()),
+        severity: Some("major".into()),
+        assigned_to: Some("owner@example.com".into()),
+        op_sys: Some("Linux".into()),
+        platform: Some("x86_64".into()),
         alias: Some("my-alias".into()),
         url: Some("https://example.com/repro".into()),
         whiteboard: Some("needs-triage".into()),
         target_milestone: Some("M1".into()),
         deadline: Some("2026-12-31".into()),
+        blocks: vec![12, 13],
+        depends_on: vec![14, 15],
         cc: vec!["a@example.com".into(), "b@example.com".into()],
         keywords: vec!["regression".into()],
         groups: vec!["security".into()],
         flags: vec![FlagUpdate {
             name: "review".into(),
             status: FlagStatus::Grant,
-            requestee: None,
+            requestee: Some("reviewer@example.com".into()),
         }],
         ..minimal_create_params()
     };
     let json = serde_json::to_value(&params).unwrap();
-    assert_eq!(json["alias"], "my-alias");
-    assert_eq!(json["url"], "https://example.com/repro");
-    assert_eq!(json["whiteboard"], "needs-triage");
-    assert_eq!(json["target_milestone"], "M1");
-    assert_eq!(json["deadline"], "2026-12-31");
-    assert_eq!(json["cc"][0], "a@example.com");
-    assert_eq!(json["cc"][1], "b@example.com");
-    assert_eq!(json["keywords"][0], "regression");
-    assert_eq!(json["groups"][0], "security");
-    assert_eq!(json["flags"][0]["name"], "review");
-    assert_eq!(json["flags"][0]["status"], "+");
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "product": "Prod",
+            "component": "Comp",
+            "summary": "Sum",
+            "version": "1.0",
+            "description": "full description",
+            "priority": "high",
+            "severity": "major",
+            "assigned_to": "owner@example.com",
+            "op_sys": "Linux",
+            "platform": "x86_64",
+            "alias": "my-alias",
+            "url": "https://example.com/repro",
+            "whiteboard": "needs-triage",
+            "target_milestone": "M1",
+            "deadline": "2026-12-31",
+            "blocks": [12, 13],
+            "depends_on": [14, 15],
+            "cc": ["a@example.com", "b@example.com"],
+            "keywords": ["regression"],
+            "groups": ["security"],
+            "flags": [{
+                "name": "review",
+                "status": "+",
+                "requestee": "reviewer@example.com",
+            }],
+        })
+    );
+}
+
+#[test]
+fn create_params_ordinary_empty_groups_are_omitted() {
+    let params = minimal_create_params();
+    let json = serde_json::to_value(params).unwrap();
+
+    assert!(
+        json.get("groups").is_none(),
+        "empty public groups must omit"
+    );
+}
+
+#[test]
+fn create_params_ordinary_non_empty_groups_serialize() {
+    let params = CreateBugParams {
+        groups: vec!["security".into()],
+        ..minimal_create_params()
+    };
+    let json = serde_json::to_value(params).unwrap();
+
+    assert_eq!(json["groups"], serde_json::json!(["security"]));
+}
+
+#[test]
+fn create_params_structured_empty_groups_serialize() {
+    let mut params = minimal_create_params();
+    params.set_groups_from_structured_input(vec![]);
+    let json = serde_json::to_value(params).unwrap();
+
+    assert_eq!(json["groups"], serde_json::json!([]));
+}
+
+#[test]
+fn create_params_groups_conflict_serializes_current_values_once() {
+    let mut params = minimal_create_params();
+    params.set_groups_from_structured_input(vec![]);
+    params.groups = vec!["security".into()];
+
+    let raw = serde_json::to_string(&params).unwrap();
+    assert_eq!(raw.match_indices("\"groups\"").count(), 1, "raw: {raw}");
+    let json: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(json["groups"], serde_json::json!(["security"]));
 }
