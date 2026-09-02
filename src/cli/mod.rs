@@ -316,8 +316,8 @@ pub struct Cli {
     /// Resolves and validates the request, then prints the would-be payload
     /// and affected IDs with `"action":"dry-run"` instead of calling the
     /// write API. Exits 0 on a valid request. Supported for bug mutations and
-    /// product/component/user/group `create` and `update`; used on any other
-    /// command it exits 7.
+    /// product/user/group `create` and `update`, and component `create`; used
+    /// on any other command it exits 7.
     #[arg(long, global = true)]
     pub dry_run: bool,
 
@@ -597,24 +597,19 @@ pub(crate) enum Commands {
         action: ClassificationAction,
     },
 
-    /// Create and update components within a Bugzilla product.
+    /// List, view, and create components within a Bugzilla product.
     ///
-    /// Both actions require Bugzilla admin permissions on the target
-    /// product. Components belong to exactly one product; renaming or
-    /// reassigning across products is not supported by the Bugzilla
-    /// REST API. Use `bzr product view <name>` to list a product's
-    /// existing components.
+    /// Creating a component requires Bugzilla admin permissions on the
+    /// target product. Components belong to exactly one product. Use
+    /// `bzr product view <name>` to list a product's existing components.
     ///
     /// Examples:
     ///
     ///   bzr component create --product MyProduct --name Backend \
     ///     --description "Backend services" \
     ///     --default-assignee dev@example.com
-    ///   bzr component update --product MyProduct --component Backend \
-    ///     --description "Updated description"
     ///
-    /// See bzr-component-create(1) and bzr-component-update(1) for
-    /// per-action detail.
+    /// See bzr-component-create(1) for creation details.
     #[command(verbatim_doc_comment)]
     Component {
         #[command(subcommand)]

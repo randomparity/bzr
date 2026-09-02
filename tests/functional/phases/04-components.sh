@@ -11,7 +11,6 @@ echo "── Phase 4: Components ───────────────�
 test_begin "component-create" "component create"
 run_bzr component create --product FuncTestProd --name Backend --description "Backend component" --default-assignee "$ADMIN_EMAIL"
 if [[ $BZR_EXIT -eq 0 ]]; then
-    COMP_ID=$(jq -r '.id' "$BZR_STDOUT" 2>/dev/null || echo "")
     test_pass
 elif grep -q "already" "$BZR_STDERR" 2>/dev/null; then
     test_pass # idempotent
@@ -19,32 +18,10 @@ else
     assert_success
 fi
 
-test_begin "component-update" "component update"
-# Component update REST endpoint is not available on Bugzilla 5.0 or 5.2
-if [[ -n "${COMP_ID:-}" ]] && [[ "$COMP_ID" != "null" ]]; then
-    run_bzr component update "$COMP_ID" --description "Updated backend"
-    if [[ $BZR_EXIT -eq 0 ]]; then
-        test_pass
-    elif grep -q "32614" "$BZR_STDERR" 2>/dev/null; then
-        test_skip "component update REST endpoint not available"
-    else
-        assert_success # report the actual error
-    fi
-else
-    # Component was already created in a prior run; try to look up the ID
-    COMP_ID=$(curl -sf "${BZ_URL}/rest/component?product=FuncTestProd&name=Backend&Bugzilla_api_key=${API_KEY}" 2>/dev/null | jq -r '.components[0].id // empty' 2>/dev/null || echo "")
-    if [[ -n "$COMP_ID" ]] && [[ "$COMP_ID" != "null" ]]; then
-        run_bzr component update "$COMP_ID" --description "Updated backend"
-        if [[ $BZR_EXIT -eq 0 ]]; then
-            test_pass
-        elif grep -q "32614" "$BZR_STDERR" 2>/dev/null; then
-            test_skip "component update REST endpoint not available"
-        else
-            assert_success
-        fi
-    else
-        test_skip "no component ID available"
-    fi
+test_begin "component-update-removed" "component update is not a subcommand"
+run_bzr_raw component update
+if assert_exit_code 2 && assert_stderr_contains "unrecognized subcommand 'update'"; then
+    test_pass
 fi
 
 test_begin "component-list-product" "component list --product"
@@ -70,37 +47,12 @@ _CJSON_DIR=$(mktemp -d /tmp/bzr-func-component-json.XXXXXX)
 _CJ_NAME=$(unique_name compjson)
 write_json_fixture "$_CJSON_DIR/create.json" \
     "{\"product\":\"FuncTestProd\",\"name\":\"$_CJ_NAME\",\"description\":\"component json\",\"default_assignee\":\"$ADMIN_EMAIL\"}"
-write_json_fixture "$_CJSON_DIR/update-by-name.json" \
-    "{\"product\":\"FuncTestProd\",\"component\":\"$_CJ_NAME\",\"description\":\"component json updated\"}"
 
 test_begin "component-create-from-json" "component create --from-json"
 run_bzr component create --from-json "$_CJSON_DIR/create.json"
 if assert_success; then
     run_bzr component view FuncTestProd "$_CJ_NAME"
     if assert_json '.name' "$_CJ_NAME"; then test_pass; fi
-fi
-
-test_begin "component-update-product-component-target" "component update --product --component target"
-run_bzr component update --product FuncTestProd --component "$_CJ_NAME" \
-    --description "component named target updated"
-if [[ $BZR_EXIT -eq 0 ]]; then
-    run_bzr component view FuncTestProd "$_CJ_NAME"
-    if assert_json '.description' "component named target updated"; then test_pass; fi
-elif grep -q "32614" "$BZR_STDERR" 2>/dev/null; then
-    test_skip "component update REST endpoint not available"
-else
-    assert_success
-fi
-
-test_begin "component-update-from-json-named-target" "component update --from-json named target"
-run_bzr component update --from-json "$_CJSON_DIR/update-by-name.json"
-if [[ $BZR_EXIT -eq 0 ]]; then
-    run_bzr component view FuncTestProd "$_CJ_NAME"
-    if assert_json '.description' "component json updated"; then test_pass; fi
-elif grep -q "32614" "$BZR_STDERR" 2>/dev/null; then
-    test_skip "component update REST endpoint not available"
-else
-    assert_success
 fi
 
 rm -r "$_CJSON_DIR"

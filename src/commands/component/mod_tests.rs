@@ -10,18 +10,6 @@ fn create_action() -> ComponentAction {
     }
 }
 
-fn update_action() -> ComponentAction {
-    ComponentAction::Update {
-        from_json: None,
-        id: Some(1),
-        product: None,
-        component: None,
-        name: Some("Renamed".into()),
-        description: None,
-        default_assignee: None,
-    }
-}
-
 #[test]
 fn capabilities_are_anonymous_for_reads() {
     let list = super::capabilities(&ComponentAction::List {
@@ -45,8 +33,4 @@ fn capabilities_allow_dry_run_and_credentials_for_writes() {
     let create = super::capabilities(&create_action());
     assert!(create.supports_dry_run());
     assert_eq!(create.credential_requirement(), Some("component create"));
-
-    let update = super::capabilities(&update_action());
-    assert!(update.supports_dry_run());
-    assert_eq!(update.credential_requirement(), Some("component update"));
 }

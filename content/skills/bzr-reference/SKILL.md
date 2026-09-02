@@ -84,8 +84,8 @@ These work on any command (place them before the subcommand):
 
 - `--json` / `--output ndjson` — JSON, or newline-delimited JSON (one record per
   line) for streaming into `jq -c` or agents.
-- `--dry-run` — preview supported bug mutations and product/component/user/group
-  create/update without writing; prints the would-be payload.
+- `--dry-run` — preview supported bug mutations, product/user/group create/update,
+  and component create without writing; prints the would-be payload.
 - `-y` / `--yes` — skip the confirmation prompt for a batch mutation touching
   more than 10 bugs (interactive terminals only).
 - `--timeout <secs>` / `--retry <n>` — tune per-request timeout and transient
@@ -106,11 +106,11 @@ These work on any command (place them before the subcommand):
 
 ## Structured input
 
-`bug create`, `bug update`, and admin create/update commands for products,
-components, users, and groups accept `--from-json <path|->`. Explicit CLI flags
-override matching JSON fields, and unknown JSON keys exit 7 instead of being
-ignored. Bugs support object and array payloads; admin resources accept one
-object payload. Use `bzr schema <name>` to inspect the contract, e.g.
+`bug create`, `bug update`, admin create/update commands for products, users,
+and groups, and component create accept `--from-json <path|->`. Explicit CLI
+flags override matching JSON fields, and unknown JSON keys exit 7 instead of
+being ignored. Bugs support object and array payloads; admin resources accept
+one object payload. Use `bzr schema <name>` to inspect the contract, e.g.
 `bug-create-input`, `bug-update-input`, `product-update-input`,
 `component-create-input`, or `error`. Output shapes are published too —
 `envelope` (the `{schema_version, data}` wrapper), `history`, `whoami`,

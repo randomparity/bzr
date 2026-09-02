@@ -168,8 +168,7 @@ Operate on bugs.
 ## component
 - `bzr component list --product Fedora [--json]`        # components of a product
 - `bzr component view Fedora kernel [--json]`           # one component's detail
-- `bzr component create ...` / `bzr component update --product Fedora --component kernel ...`
-  (admin only)
+- `bzr component create ...` (admin only)
 - `bzr product view <product>` also lists components inline.
 
 ## template

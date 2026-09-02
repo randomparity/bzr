@@ -4,6 +4,9 @@
 - Date: 2026-06-23
 - Issue: #420
 
+> **Superseded by [0037](0037-remove-unsupported-component-update.md)**
+> (2026-09-02)
+
 ## Context
 
 The admin resource commands (`product`, `component`, `group`, `user`) each

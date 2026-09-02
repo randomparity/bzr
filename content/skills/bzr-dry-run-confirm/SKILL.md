@@ -1,6 +1,6 @@
 ---
 name: bzr-dry-run-confirm
-description: Use when mutating Bugzilla data with bzr — preview every write with global --dry-run, verify the JSON payload with jq, then re-run without the flag to commit. Covers bug create/update/clone/resolve/close/reopen/dup and product/component/user/group create+update, batch previews via --from-json, exit-code triage, and --yes batch-confirm semantics.
+description: Use when mutating Bugzilla data with bzr — preview every write with global --dry-run, verify the JSON payload with jq, then re-run without the flag to commit. Covers bug create/update/clone/resolve/close/reopen/dup, product/user/group create+update, component create, batch previews via --from-json, exit-code triage, and --yes batch-confirm semantics.
 ---
 
 # Dry-run, verify, then commit
@@ -135,7 +135,7 @@ require a TTY, so piped/agent runs proceed directly. Two rules still matter:
 
 Supported by `--dry-run`: `bug create`, `bug update`, `bug clone`,
 `bug resolve`, `bug close`, `bug reopen`, `bug dup`, and `create`/`update`
-for `product`, `component`, `user`, and `group`.
+for `product`, `user`, and `group`, plus `component create`.
 
 Domain-specific guidance lives in its own skill — do not duplicate it here:
 file a well-formed bug with `bzr-file-bug`; single-bug read-before-write
