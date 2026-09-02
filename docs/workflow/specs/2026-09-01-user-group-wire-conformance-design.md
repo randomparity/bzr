@@ -152,7 +152,7 @@ unchanged and are not required to correct representation and parameter conforman
 ## Compatibility and documentation
 
 No CLI flag, response key, schema file, or schema version changes. `SCHEMA_VERSION` remains
-`2.0.0`. The only visible behavior changes are correct group filtering, successful real-name
+`2.0.1`. The only visible behavior changes are correct group filtering, successful real-name
 updates, tolerance for valid alternate response shapes, and corrected version guidance.
 
 ## Verification

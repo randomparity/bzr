@@ -52,7 +52,7 @@ when an email hint is missing: persistent `config set-server --email` and statel
 - `group list-users` continues to hide disabled users, preserving its current visibility behavior.
 - The production-shape proxy remains a small sequence of explicit transformations. Issue #634 may
   later generalize its registry, but this change does not depend on that refactor.
-- No published JSON key or value domain changes, so `SCHEMA_VERSION` stays `2.0.0`.
+- No published JSON key or value domain changes, so `SCHEMA_VERSION` stays `2.0.1`.
 - Version guidance changes are wording-only but include the README and embedded setup skill because
   both are shipped operator entry points for the same `whoami` fallback contract.
 
