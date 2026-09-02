@@ -19,9 +19,10 @@ resource as the sole internal `FieldDefinition`, defaulting optional endpoint me
 `get_field_values` and server-capability custom-field assembly deserialize that same type.
 This removes the root duplication with a smaller change than introducing a new public type.
 
-At the classification command boundary, match only `BzrError::Api { code: 900, .. }` from list
-enumeration. This preserves the client's existing public result type and avoids hiding other API
-failures. Both error 900 and the successfully fetched lone `Unclassified` sentinel are rendered
+At the classification command boundary, match only `BzrError::Api { code: 900, .. }` from the
+whole list enumeration. This preserves the client's existing public result type and avoids hiding
+other API failures. ADR 0042 records this command-specific exception to ADR 0015: code 900 means
+the optional feature is disabled, rather than an unrelated request failure. Both error 900 and the successfully fetched lone `Unclassified` sentinel are rendered
 as disabled: raw/table mode prints the existing note on stdout without an empty-table sequel;
 JSON and NDJSON write an empty collection on stdout and the note on stderr.
 
@@ -49,7 +50,7 @@ indistinguishable client-side empty vector, and emitting human prose into struct
   `No values for field '<requested-name>'.` followed by a newline; JSON-family output remains an
   empty collection.
 - An empty `fields` array remains `BzrError::NotFound`.
-- A classification detail response with API code 900 is the only error that degrades. Raw/table
+- API code 900 anywhere in classification enumeration is the only error that degrades. Raw/table
   stdout is exactly the existing disabled note plus a newline and stderr is empty. JSON-family
   stdout is an empty valid collection and stderr contains that note.
 - Other classification errors remain errors with their existing exit codes.
@@ -82,8 +83,9 @@ Tests must be observed failing against the pre-fix implementation before product
 - Field resource tests cover omitted `values`, encoded names, unchanged alias resolution, and
   not-found behavior. A recorded all-fields response containing select and non-select rows proves
   the one shared model serves server capabilities.
-- Classification command tests cover code 900 in table and JSON modes, exact stream placement,
-  lone-`Unclassified` compatibility, and unrelated-error propagation.
+- Classification command tests cover code 900 in table, JSON, and NDJSON modes, exact stream
+  placement, lone-`Unclassified` compatibility, and unrelated-error propagation. Empty NDJSON
+  output is zero records.
 - Functional phase 05 covers `short_desc`, a date field, and an integer field, plus credentialless
   `classification list` on default `useclassification=0`, asserting exit 0 and exact raw stdout.
 - `make lint`, `make test`, and `make functional-test-all` must pass.
@@ -96,4 +98,3 @@ Tests must be observed failing against the pre-fix implementation before product
 - Guardrails: focused `make test-one T=<substring>`, `make lint`, `make test`, and
   `make functional-test-all`. The ADR index is not individually hard-gated and remains
   campaign-owned.
-

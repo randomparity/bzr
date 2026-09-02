@@ -24,10 +24,16 @@ the server-capabilities defaults. Percent-encode the resolved field name before 
 request path.
 
 Keep API error 900 distinguishable at the command boundary. `classification list` treats that
-specific response as a disabled-classification state: table output prints the existing note on
+code anywhere in its enumeration request sequence as a disabled-classification state: table
+output prints the existing note on
 stdout and stops, while JSON-family output writes an empty collection and sends the note to
 stderr so structured stdout stays parseable. Other API errors propagate unchanged. A lone fetched
 `Unclassified` row uses the same presentation policy.
+
+This is a bounded exception to ADR 0015's default that a server-only error is surfaced: Bugzilla
+code 900 means the optional classification feature is disabled, and issue #629 explicitly requires
+that state to become successful output for an unprivileged caller. The match remains numeric and
+command-specific; no shared response parser swallows the error.
 
 Keep `Classification.sort_key` unsigned. ADR 0028 intentionally excludes unrelated sort keys,
 and issue #629 permits explicitly deferring the separate major-schema retype.
@@ -49,10 +55,12 @@ negative-value limitation recorded by issue #629.
 - **Return an empty classification list from the client for error 900.** judgment: it erases the
   distinction between a genuinely empty enabled server and a permission-gated disabled server,
   leaving presentation policy to inference.
+- **Preserve which enumeration endpoint produced error 900.** judgment: Bugzilla assigns the code
+  the same feature-disabled meaning, while endpoint provenance would add an internal result type
+  solely to preserve a distinction the required behavior does not use.
 - **Print the disabled note on stdout for every format.** verified: `tests/functional/lib.sh`
   invokes commands with `--json` and parses stdout with `jq`; prose on that stream invalidates the
   documented envelope.
 - **Retype `Classification.sort_key` in this change.** verified: ADR 0028 classifies the analogous
   published payload-domain retype as a major schema change and explicitly leaves unrelated sort
   keys unchanged; issue #629 permits deferral instead of carrying that cascade.
-
