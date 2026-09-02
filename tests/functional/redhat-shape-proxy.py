@@ -5,6 +5,7 @@ import http.client
 import http.server
 import json
 import os
+import re
 import signal
 import socket
 import sys
@@ -235,9 +236,105 @@ def shape_server_capabilities_response(path, data, *, enabled):
     return json.dumps(value, separators=(",", ":")).encode(), evidence
 
 
+def shape_attachment_comment_response(method, path, data):
+    """Return opt-in attachment/comment shapes and credential-free evidence."""
+    parsed = urllib.parse.urlsplit(path)
+    route = parsed.path
+    is_upload = method == "POST" and re.fullmatch(
+        r"/rest/bug/[0-9]+/attachment", route
+    )
+    is_by_id = method == "GET" and re.fullmatch(
+        r"/rest/bug/attachment/[0-9]+", route
+    )
+    is_list = method == "GET" and re.fullmatch(
+        r"/rest/bug/[0-9]+/attachment", route
+    )
+    is_comments = method == "GET" and re.fullmatch(
+        r"/rest/bug/[0-9]+/comment", route
+    )
+    if not any((is_upload, is_by_id, is_list, is_comments)):
+        return data, {}
+
+    value = json.loads(data)
+    evidence = {}
+
+    if is_upload:
+        ids = value.get("ids") if isinstance(value, dict) else None
+        if isinstance(ids, list):
+            for index, attachment_id in enumerate(ids):
+                if isinstance(attachment_id, int) and not isinstance(
+                    attachment_id, bool
+                ):
+                    ids[index] = str(attachment_id)
+            observed = sum(isinstance(attachment_id, str) for attachment_id in ids)
+            if observed:
+                evidence["attachment-upload"] = observed
+
+    elif is_by_id:
+        attachments = value.get("attachments") if isinstance(value, dict) else None
+        if isinstance(attachments, dict):
+            value["attachments"] = list(attachments.values())
+            attachments = value["attachments"]
+        if isinstance(attachments, list):
+            exclusion = urllib.parse.parse_qs(parsed.query).get("exclude_fields")
+            evidence[
+                "attachment-by-id-metadata"
+                if exclusion == ["data"]
+                else "attachment-by-id-body"
+            ] = len(attachments)
+
+    elif is_list:
+        exclusion = urllib.parse.parse_qs(parsed.query).get("exclude_fields")
+        if exclusion == ["data"]:
+            attachment_lists = []
+            bugs = value.get("bugs") if isinstance(value, dict) else None
+            if isinstance(bugs, dict):
+                attachment_lists.extend(
+                    attachments for attachments in bugs.values()
+                    if isinstance(attachments, list)
+                )
+            attachments = value.get("attachments") if isinstance(value, dict) else None
+            if isinstance(attachments, list):
+                attachment_lists.append(attachments)
+            for attachments in attachment_lists:
+                for attachment in attachments:
+                    if isinstance(attachment, dict):
+                        attachment.pop("data", None)
+            evidence["attachment-list-excludes-body"] = 1
+
+    else:
+        comments = []
+        if isinstance(value, dict) and isinstance(value.get("comments"), list):
+            comments.extend(value["comments"])
+        bugs = value.get("bugs") if isinstance(value, dict) else None
+        if isinstance(bugs, dict):
+            for bug in bugs.values():
+                if isinstance(bug, dict) and isinstance(bug.get("comments"), list):
+                    comments.extend(bug["comments"])
+        observed = 0
+        for comment in comments:
+            if not isinstance(comment, dict):
+                continue
+            privacy = comment.get("is_private")
+            if isinstance(privacy, bool):
+                privacy = int(privacy)
+                comment["is_private"] = privacy
+            if type(privacy) is int:
+                observed += 1
+        if observed:
+            evidence["comment-privacy"] = observed
+
+    if not evidence:
+        return data, {}
+    return json.dumps(value, separators=(",", ":")).encode(), evidence
+
+
 def make_handler(backend_port):
     server_capability_mode = os.environ.get("BZR_FUNC_REDHAT_MODE") == (
         "server-capabilities"
+    )
+    attachment_comment_mode = os.environ.get("BZR_FUNC_REDHAT_MODE") == (
+        "attachment-comment"
     )
 
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -265,6 +362,12 @@ def make_handler(backend_port):
 
         def do_POST(self):
             self._forward("POST")
+
+        def do_PUT(self):
+            if attachment_comment_mode:
+                self._forward("PUT")
+            else:
+                self.send_error(501, "Unsupported method ('PUT')")
 
         def _forward(self, method):
             headers = {key: value for key, value in self.headers.items()
@@ -327,6 +430,21 @@ def make_handler(backend_port):
                 if evidence:
                     sys.stderr.flush()
 
+            if 200 <= status < 300 and attachment_comment_mode:
+                try:
+                    body, evidence = shape_attachment_comment_response(
+                        method, self.path, body
+                    )
+                except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                    self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
+                    return
+                for route, count in evidence.items():
+                    sys.stderr.write(
+                        f"attachment-comment shaped route={route} count={count}\n"
+                    )
+                if evidence:
+                    sys.stderr.flush()
+
             if 200 <= status < 300:
                 try:
                     body, changed = shape_metadata_sort_keys_response(self.path, body)
@@ -370,6 +488,151 @@ def make_handler(backend_port):
 
 
 class ShapeTests(unittest.TestCase):
+    def test_shapes_attachment_upload_ids_as_strings(self):
+        body, evidence = shape_attachment_comment_response(
+            "POST", "/rest/bug/42/attachment", b'{"ids":[123]}'
+        )
+        self.assertEqual(json.loads(body), {"ids": ["123"]})
+        self.assertEqual(evidence, {"attachment-upload": 1})
+
+    def test_observes_native_attachment_upload_string_ids(self):
+        body, evidence = shape_attachment_comment_response(
+            "POST", "/rest/bug/42/attachment", b'{"ids":["123"]}'
+        )
+        self.assertEqual(json.loads(body), {"ids": ["123"]})
+        self.assertEqual(evidence, {"attachment-upload": 1})
+
+    def test_shapes_attachment_by_id_envelopes_as_flat_arrays(self):
+        payload = b'{"attachments":{"123":{"id":123,"data":"Ynl0ZXM="}}}'
+        for path, expected_evidence in [
+            ("/rest/bug/attachment/123", {"attachment-by-id-body": 1}),
+            (
+                "/rest/bug/attachment/123?exclude_fields=data",
+                {"attachment-by-id-metadata": 1},
+            ),
+        ]:
+            body, evidence = shape_attachment_comment_response("GET", path, payload)
+            self.assertEqual(
+                json.loads(body),
+                {"attachments": [{"id": 123, "data": "Ynl0ZXM="}]},
+            )
+            self.assertEqual(evidence, expected_evidence)
+
+    def test_observes_native_attachment_by_id_flat_arrays(self):
+        payload = b'{"attachments":[{"id":123,"data":"Ynl0ZXM="}]}'
+        body, evidence = shape_attachment_comment_response(
+            "GET", "/rest/bug/attachment/123", payload
+        )
+        self.assertEqual(json.loads(body), json.loads(payload))
+        self.assertEqual(evidence, {"attachment-by-id-body": 1})
+
+    def test_shapes_comment_privacy_as_binary_integers(self):
+        payload = json.dumps({"bugs": {"42": {"comments": [
+            {"id": 1, "is_private": False},
+            {"id": 2, "is_private": True},
+            {"id": 3, "is_private": None},
+        ]}}}).encode()
+        body, evidence = shape_attachment_comment_response(
+            "GET", "/rest/bug/42/comment", payload
+        )
+        comments = json.loads(body)["bugs"]["42"]["comments"]
+        self.assertEqual(
+            [comment["is_private"] for comment in comments], [0, 1, None]
+        )
+        self.assertEqual(evidence, {"comment-privacy": 2})
+
+    def test_observes_native_comment_privacy_integers(self):
+        payload = b'{"comments":[{"id":1,"is_private":1}]}'
+        body, evidence = shape_attachment_comment_response(
+            "GET", "/rest/bug/42/comment", payload
+        )
+        self.assertEqual(json.loads(body), json.loads(payload))
+        self.assertEqual(evidence, {"comment-privacy": 1})
+
+    def test_observes_exact_attachment_list_body_exclusion_without_query_values(self):
+        payload = b'{"bugs":{"42":[{"id":123,"data":"Ynl0ZXM="}]}}'
+        body, evidence = shape_attachment_comment_response(
+            "GET",
+            "/rest/bug/42/attachment?exclude_fields=data&Bugzilla_api_key=secret",
+            payload,
+        )
+        self.assertEqual(json.loads(body), {"bugs": {"42": [{"id": 123}]}})
+        self.assertEqual(evidence, {"attachment-list-excludes-body": 1})
+
+        _, evidence = shape_attachment_comment_response(
+            "GET", "/rest/bug/42/attachment?exclude_fields=id,data", payload
+        )
+        self.assertEqual(evidence, {})
+
+    def test_put_is_rejected_outside_attachment_comment_mode(self):
+        previous_mode = os.environ.pop("BZR_FUNC_REDHAT_MODE", None)
+        blocker = socket.socket()
+        blocker.bind(("127.0.0.1", 0))
+        unavailable_port = blocker.getsockname()[1]
+        blocker.close()
+        server, thread = self._start_server(unavailable_port)
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.server_port}/rest/bug/attachment/123",
+                data=b"{}",
+                method="PUT",
+            )
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(request, timeout=2)
+            self.assertEqual(error.exception.code, 501)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+            if previous_mode is not None:
+                os.environ["BZR_FUNC_REDHAT_MODE"] = previous_mode
+
+    def test_put_is_forwarded_in_attachment_comment_mode(self):
+        previous_mode = os.environ.get("BZR_FUNC_REDHAT_MODE")
+        os.environ["BZR_FUNC_REDHAT_MODE"] = "attachment-comment"
+        blocker = socket.socket()
+        blocker.bind(("127.0.0.1", 0))
+        unavailable_port = blocker.getsockname()[1]
+        blocker.close()
+        server, thread = self._start_server(unavailable_port)
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.server_port}/rest/bug/attachment/123",
+                data=b"{}",
+                method="PUT",
+            )
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(request, timeout=2)
+            self.assertEqual(error.exception.code, 502)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+            if previous_mode is None:
+                os.environ.pop("BZR_FUNC_REDHAT_MODE", None)
+            else:
+                os.environ["BZR_FUNC_REDHAT_MODE"] = previous_mode
+
+    def test_attachment_comment_shape_leaves_unrelated_routes_untouched(self):
+        payload = b"not json"
+        for method, path in [
+            ("GET", "/rest/bug/42"),
+            ("POST", "/rest/bug/42/comment"),
+            ("GET", "/rest/product"),
+        ]:
+            body, evidence = shape_attachment_comment_response(method, path, payload)
+            self.assertEqual(body, payload)
+            self.assertEqual(evidence, {})
+
+    def test_attachment_comment_shape_rejects_malformed_matching_json(self):
+        for method, path in [
+            ("POST", "/rest/bug/42/attachment"),
+            ("GET", "/rest/bug/attachment/123"),
+            ("GET", "/rest/bug/42/comment"),
+        ]:
+            with self.assertRaises(json.JSONDecodeError):
+                shape_attachment_comment_response(method, path, b"not json")
+
     def test_server_capability_shapes_are_opt_in(self):
         payload = b'{"version":"5.0.6"}'
         body, evidence = shape_server_capabilities_response(

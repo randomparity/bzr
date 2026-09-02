@@ -42,6 +42,44 @@ fn comment_deserializes_full() {
 }
 
 #[test]
+fn comment_is_private_accepts_integer() {
+    for (json, expected) in [
+        (r#"{"id": 5, "is_private": 0}"#, Some(false)),
+        (r#"{"id": 5, "is_private": 1}"#, Some(true)),
+    ] {
+        let comment: Comment = serde_json::from_str(json).unwrap();
+        assert_eq!(comment.is_private, expected, "{json}");
+    }
+}
+
+#[test]
+fn comment_is_private_accepts_bool_null_and_absence() {
+    for (json, expected) in [
+        (r#"{"id": 5, "is_private": false}"#, Some(false)),
+        (r#"{"id": 5, "is_private": true}"#, Some(true)),
+        (r#"{"id": 5, "is_private": null}"#, None),
+        (r#"{"id": 5}"#, None),
+    ] {
+        let comment: Comment = serde_json::from_str(json).unwrap();
+        assert_eq!(comment.is_private, expected, "{json}");
+    }
+}
+
+#[test]
+fn comment_is_private_rejects_unchartered_values() {
+    for json in [
+        r#"{"id": 5, "is_private": 2}"#,
+        r#"{"id": 5, "is_private": -1}"#,
+        r#"{"id": 5, "is_private": "1"}"#,
+    ] {
+        assert!(
+            serde_json::from_str::<Comment>(json).is_err(),
+            "is_private must reject {json}"
+        );
+    }
+}
+
+#[test]
 fn comment_deserializes_with_attachment_id() {
     let json = r#"{"id": 7, "bug_id": 10, "attachment_id": 99}"#;
     let comment: Comment = serde_json::from_str(json).unwrap();

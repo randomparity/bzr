@@ -804,7 +804,7 @@ async fn attachment_download_batch_data_missing_falls_back_via_get() {
 
     // Listing returns the attachment metadata WITHOUT data.
     let mut att = one_att(9876, 12345, "patch.diff", b"x");
-    att["data"] = serde_json::Value::Null;
+    att.as_object_mut().unwrap().remove("data");
     Mock::given(method("GET"))
         .and(path("/rest/bug/12345/attachment"))
         .respond_with(
