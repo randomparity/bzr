@@ -4,6 +4,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::client::test_helpers::{test_client, test_client_anon};
+use tracing::instrument::WithSubscriber as _;
 
 /// Mock `/rest/version` returning the given version string.
 async fn mount_version(mock: &MockServer, version: &str) {
@@ -163,7 +164,11 @@ async fn server_capabilities_logs_response_shape_attachment_failure() {
         .await;
 
     let client = test_client(&mock.uri());
-    let caps = client.server_capabilities().await.unwrap();
+    let caps = client
+        .server_capabilities()
+        .with_current_subscriber()
+        .await
+        .unwrap();
     let output = capture.output();
 
     assert_eq!(caps.max_attachment_size, None);
@@ -189,7 +194,11 @@ async fn server_capabilities_nulls_attachment_size_on_parameters_error() {
         .await;
 
     let client = test_client(&mock.uri());
-    let caps = client.server_capabilities().await.unwrap();
+    let caps = client
+        .server_capabilities()
+        .with_current_subscriber()
+        .await
+        .unwrap();
     let output = capture.output();
 
     assert_eq!(caps.max_attachment_size, None);
