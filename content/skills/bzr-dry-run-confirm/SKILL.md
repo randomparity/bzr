@@ -135,7 +135,7 @@ require a TTY, so piped/agent runs proceed directly. Two rules still matter:
 
 Supported by `--dry-run`: `bug create`, `bug update`, `bug clone`,
 `bug resolve`, `bug close`, `bug reopen`, `bug dup`, and `create`/`update`
-for `product`, `component`, `user`, and `group`.
+for `product`, `user`, and `group`, plus `component create`.
 
 Domain-specific guidance lives in its own skill — do not duplicate it here:
 file a well-formed bug with `bzr-file-bug`; single-bug read-before-write
