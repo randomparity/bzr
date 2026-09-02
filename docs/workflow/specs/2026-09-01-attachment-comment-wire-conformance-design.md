@@ -1,6 +1,6 @@
 # Attachment and comment wire-conformance design
 
-Issue: #627  
+Issue: #627
 ADR: [0040](../../adr/0040-normalize-attachment-comment-wire-shapes.md)
 
 ## Outcome
