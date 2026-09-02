@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::deserialization::option_bool_from_int_or_bool;
+
 #[derive(Debug, Default, Serialize)]
 #[non_exhaustive]
 pub struct UpdateCommentTagsParams {
@@ -33,7 +35,7 @@ pub struct Comment {
     pub creation_time: Option<String>,
     #[serde(default)]
     pub count: Option<u64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "option_bool_from_int_or_bool")]
     pub is_private: Option<bool>,
     /// Set when the comment was created alongside an attachment via
     /// `Bug.add_attachment`. Used by `attachment upload --comment-private`
