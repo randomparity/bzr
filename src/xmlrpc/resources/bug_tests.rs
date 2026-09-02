@@ -220,6 +220,46 @@ async fn search_bugs_negation_sends_boolean_chart() {
 }
 
 #[tokio::test]
+async fn search_bugs_xmlrpc_role_negations_use_nowordssubstr() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<string>assigned_to</string>"))
+        .and(body_string_contains("<string>reporter</string>"))
+        .and(body_string_contains("<string>qa_contact</string>"))
+        .and(body_string_contains("<string>nowordssubstr</string>"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(2, "Role bug")),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
+    let params = SearchParams {
+        assigned_to: vec!["!alice".into()],
+        creator: vec!["!bob".into()],
+        qa_contact: vec!["!carol".into()],
+        ..Default::default()
+    };
+    client.search_bugs(&params).await.unwrap();
+}
+
+#[tokio::test]
+async fn search_bugs_xmlrpc_rejects_zero_word_role_negation_before_request() {
+    let mock = MockServer::start().await;
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
+    let params = SearchParams {
+        assigned_to: vec!["! , \t".into()],
+        ..Default::default()
+    };
+
+    let err = client.search_bugs(&params).await.unwrap_err();
+    assert!(matches!(err, BzrError::InputValidation { .. }));
+    assert!(mock.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn search_bugs_fields_and_ids_use_xmlrpc_arrays() {
     let mock = MockServer::start().await;
     Mock::given(method("POST"))

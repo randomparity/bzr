@@ -24,6 +24,18 @@ if assert_success && assert_json_exists '.id'; then
     test_pass
 fi
 
+test_begin "bug-list-assignee-substring-positive" "bug list assignee substring includes its match"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug list --id "$BUG1" --assignee admin
+    if assert_success && assert_json "[.[] | select(.id == $BUG1)] | length" "1"; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "bug-list-assignee-substring-negated-complement" "bug list negated assignee substring excludes its match"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug list --id "$BUG1" --assignee '!admin'
+    if assert_success && assert_json "[.[] | select(.id == $BUG1)] | length" "0"; then test_pass; fi
+else test_skip "no BUG1"; fi
+
 test_begin "bug-create-deprecated-platform-alias" "bug create deprecated --rep-platform alias"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Deprecated platform alias" --description "Alias transition coverage" \

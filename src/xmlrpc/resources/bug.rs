@@ -13,6 +13,7 @@ use crate::xmlrpc::resources::mappers::{
 
 impl XmlRpcClient {
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
+        validate_role_negations(params)?;
         let mut rpc_params = BTreeMap::new();
 
         // Multi-value Vec fields: positive values sent as XML-RPC arrays,
@@ -76,6 +77,15 @@ impl XmlRpcClient {
         }
         Ok(bugs.swap_remove(0))
     }
+}
+
+fn validate_role_negations(params: &SearchParams) -> Result<()> {
+    let Some((flag, value)) = params.invalid_role_negation() else {
+        return Ok(());
+    };
+    Err(BzrError::input(format!(
+        "{flag} negation '{value}' must contain a role substring after '!'"
+    )))
 }
 
 fn add_vec_filters(rpc_params: &mut BTreeMap<String, Value>, params: &SearchParams) {

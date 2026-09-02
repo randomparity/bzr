@@ -1035,6 +1035,59 @@ async fn search_bugs_negation_resolution_uses_notequals() {
 }
 
 #[tokio::test]
+async fn search_bugs_role_negations_use_nowordssubstr() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("f1", "assigned_to"))
+        .and(query_param("o1", "nowordssubstr"))
+        .and(query_param("v1", "alice"))
+        .and(query_param("f2", "reporter"))
+        .and(query_param("o2", "nowordssubstr"))
+        .and(query_param("v2", "bob"))
+        .and(query_param("f3", "qa_contact"))
+        .and(query_param("o3", "nowordssubstr"))
+        .and(query_param("v3", "carol"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        assigned_to: vec!["!alice".into()],
+        creator: vec!["!bob".into()],
+        qa_contact: vec!["!carol".into()],
+        ..Default::default()
+    };
+    client.search_bugs(&params).await.unwrap();
+}
+
+#[tokio::test]
+async fn search_bugs_rejects_zero_word_role_negations_before_rest_request() {
+    for params in [
+        SearchParams {
+            assigned_to: vec!["!".into()],
+            ..Default::default()
+        },
+        SearchParams {
+            creator: vec!["! , \t".into()],
+            ..Default::default()
+        },
+        SearchParams {
+            qa_contact: vec!["! ,,".into()],
+            ..Default::default()
+        },
+    ] {
+        let mock = MockServer::start().await;
+        let client = test_client(&mock.uri());
+        let err = client.search_bugs(&params).await.unwrap_err();
+        assert!(matches!(err, BzrError::InputValidation { .. }));
+        assert!(mock.received_requests().await.unwrap().is_empty());
+    }
+}
+
+#[tokio::test]
 async fn search_bugs_negation_whiteboard_uses_notsubstring() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
