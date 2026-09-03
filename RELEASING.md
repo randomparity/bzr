@@ -56,9 +56,9 @@ purely additional traceability and breaks no automation, since
 
 ## Security assessment
 
-While preparing the dated `CHANGELOG.md` section, review the canonical
+Before pushing the tag, review the canonical
 [GitHub Security Advisories](https://github.com/randomparity/bzr/security/advisories)
-inventory. Every release section must carry exactly one of the following
+inventory. The generated release section carries exactly one of the following
 whole-line markers, which are validated before publication. A dependency update
 belongs under a separate dependency heading or explicitly says it is
 dependency-only; it never replaces the project-vulnerability assessment.
@@ -92,7 +92,7 @@ review but before GitHub Release creation is a residual publication race: the
 structural validator cannot make the external advisory inventory atomic with
 publication. Update the published release notes promptly if this occurs.
 
-The release extractor intentionally accepts a bounded Markdown subset in the
+The release validator intentionally accepts a bounded Markdown subset in the
 candidate release body. Do not use literal angle brackets, square brackets,
 ampersands, backslashes, or backticks there, and do not use fenced-code marker lines made
 from three or more backticks or tildes. Historical release sections remain outside this
@@ -107,22 +107,21 @@ vulnerabilities, or users cannot practically update the software themselves.
 release that fixes no qualifying vulnerability uses the exact no-vulnerability
 marker above, never `N/A`.
 
-Immediately before pushing the tag, refresh the advisory inventory and validate
-the exact candidate release body. Replace `X.Y.Z` with the candidate version,
-whose heading must already be `## [X.Y.Z] - YYYY-MM-DD`; the trap removes the
-temporary file when the subshell completes, without replacing the caller's EXIT
-trap. Extraction requires exactly one literal candidate heading and rejects a
-missing or duplicate heading. For the current development section only, set
-`VERSION=Unreleased`; its heading must be exactly `## [Unreleased]` and is the
-only accepted undated form.
+After creating the annotated tag locally but immediately before pushing it, refresh
+the advisory inventory and validate the exact candidate release body. Replace
+`X.Y.Z` with the candidate version. The trap removes the temporary file when the
+subshell completes, without replacing the caller's EXIT trap.
 
 ```bash
 (
   set -euo pipefail
-  VERSION=X.Y.Z
+  TAG=vX.Y.Z
+  PREV=$(git describe --tags --abbrev=0)
+  section_file=$(mktemp)
   notes_file=$(mktemp)
-  trap 'rm -f "$notes_file"' EXIT
-  bash tools/extract-release-notes.sh CHANGELOG.md "$VERSION" >"$notes_file"
+  trap 'rm -f "$section_file" "$notes_file"' EXIT
+  bash tools/generate-changelog-section.sh "$TAG" "$PREV" >"$section_file"
+  tail -n +2 "$section_file" >"$notes_file"
   test -s "$notes_file"
   bash tools/check-release-security-notes.sh "$notes_file"
 )
@@ -150,12 +149,10 @@ published the original version.
    Run `cargo build` (or `cargo check`) after the bump so `Cargo.lock` regenerates with the new version.
 
 2. If `rust-version` changed, update the MSRV badge in `README.md` and the "Requires Rust X+" line in the "From source" install section.
-3. Add a matching dated entry to `CHANGELOG.md`. Entries must use
-   `## [X.Y.Z] - YYYY-MM-DD` exactly. The shared extractor stops publication when it cannot select
-   that exact dated heading. For prereleases, use the full prerelease version
-   (`## [0.2.0-rc5] - 2026-05-04`).
-4. Verify installation docs still match the published crate name.
-5. Run the release checks locally:
+3. Verify installation docs still match the published crate name. The release workflow
+   generates the dated `CHANGELOG.md` section and GitHub release notes from conventional
+   commits after the tag is pushed.
+4. Run the release checks locally:
 
 ```bash
 cargo fmt
@@ -165,36 +162,42 @@ cargo build --release
 cargo publish --dry-run
 ```
 
-6. Commit the release changes on a `release/vX.Y.Z-prep` branch:
+5. Commit the release changes on a `release/vX.Y.Z-prep` branch:
 
 ```bash
 git checkout -b release/vX.Y.Z-prep
-git add Cargo.toml Cargo.lock CHANGELOG.md
+git add Cargo.toml Cargo.lock agent-skills content
 git commit -m "chore: bump version to X.Y.Z"
-# If the CHANGELOG date is a separate commit, that's fine:
-git commit -m "chore: date CHANGELOG entry for vX.Y.Z"
 git push -u origin release/vX.Y.Z-prep
 ```
 
 The project blocks direct pushes to `main` (a pre-commit-style guardrail mirrored by the `Never push directly to main` rule). Release prep follows the same PR-based flow as feature work — see the v0.2.0 lineage (`git log --first-parent v0.2.0` shows the tag landed on `Merge pull request #131 from randomparity/release/v0.2.0-prep`).
 
-7. Open a `release: prep vX.Y.Z` PR against `main`. Wait for CI to go green,
+6. Open a `release: prep vX.Y.Z` PR against `main`. Wait for CI to go green,
    then merge it. The resulting merge commit on `main` is what you tag.
 
-8. Run the `Functional Tests` GitHub Actions workflow on `main` and wait for
+7. Run the `Functional Tests` GitHub Actions workflow on `main` and wait for
    success before tagging. It executes `tests/functional/run-all-versions.sh`
    against the real Bugzilla bz50, bz52, and bz53 containers.
 
-9. Immediately before pushing the tag, perform the final advisory refresh and
-   run the security-assessment extraction and validation command above. Resolve
-   any result before continuing.
+8. Refresh the advisory inventory immediately before creating the local tag.
 
-10. Tag the merge commit and push the tag:
+9. Tag the merge commit locally:
 
 ```bash
 git checkout main
 git pull --ff-only origin main
 git tag -a vX.Y.Z -m "bzr vX.Y.Z"
+```
+
+10. Run the generated-note and security-assessment validation command above.
+    Resolve any result before continuing. If correcting the release-preparation
+    changes moves the release commit, delete the unpublished local tag and create
+    it again on the corrected merge commit.
+
+11. Push the validated tag:
+
+```bash
 git push origin vX.Y.Z
 ```
 
@@ -289,7 +292,7 @@ cargo install bzr --version X.Y.Z --locked
 bzr --version
 ```
 
-7. The `post-release-bump` job in `release.yml` will automatically
+8. The `post-release-bump` job in `release.yml` will automatically
    open a `chore/bump-to-vX.Y.Z'-dev` PR after the `release` and
    `installer-smoke` jobs succeed (stable releases only — pre-release
    tags skip this step). The auto-PR:
@@ -299,8 +302,8 @@ bzr --version
      release is a minor or major bump (e.g. `0.4.0` → `0.5.0-dev`),
      edit the version on the PR before merging.
    - Refreshes `Cargo.lock` via `cargo update -p bzr`.
-   - Prepends an empty `## [Unreleased]` section to `CHANGELOG.md`,
-     ready for subsequent feature/fix PRs to extend.
+   - Generates the dated release section from conventional commits and inserts it at
+     the top of `CHANGELOG.md`.
 
    **CI on the auto-PR.** Pull requests opened by `GITHUB_TOKEN` do
    not trigger downstream `pull_request` workflows (the same
