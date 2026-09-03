@@ -6,8 +6,9 @@ Issue #666 adds a functional comparison suite that runs bzr and python-bugzilla 
 same existing Bugzilla containers. It changes test, developer, and CI infrastructure only; it does
 not change compiled bzr behavior or claim parity beyond the shipped product-list smoke test.
 
-The design follows [ADR 0044](../../adr/0044-python-bugzilla-comparison-sidecar.md). It preserves
-ADR 0029's `<phase>/<slug>` semantic test IDs and ADR 0030's checkout-scoped Bugzilla lifecycle.
+The design follows [ADR 0044](../../adr/0044-python-bugzilla-comparison-sidecar.md). It extends ADR
+0029's semantic test IDs with a comparison-tree prefix and preserves ADR 0030's checkout-scoped
+Bugzilla lifecycle.
 
 ## Architecture
 
@@ -17,11 +18,12 @@ comparison result counter, expected-gap transition, python-bugzilla command capt
 helpers. The first phase runs both clients, normalizes their product names, and compares the sorted
 sets.
 
-The sidecar image is built from Python's slim image and pins `python-bugzilla==3.3.0`. The runtime
-joins the already-running Bugzilla container's network namespace. A checkout/version-derived name
-prevents sibling worktrees from colliding, while a named home volume preserves python-bugzilla cache
-state. The comparison runner bind-mounts its mode-private config directory at `/work` for captured
-output and generated configuration.
+The sidecar image uses the current stable `python:3.14.7-slim-bookworm` image and pins
+`python-bugzilla==3.3.0`. The runtime joins the already-running Bugzilla container's network
+namespace. Checkout-derived image identity and checkout/version-derived container names prevent
+sibling worktrees from racing or colliding, while a named home volume preserves python-bugzilla
+cache state. The comparison runner bind-mounts its mode-private config directory at `/work` for
+captured output and generated configuration.
 
 ## Contracts
 
@@ -33,6 +35,9 @@ output and generated configuration.
   `tests/functional/compare/*.sh` phase with `CURRENT_TEST_GROUP` set, and removes the sidecar and
   temporary files through an EXIT trap.
 - The initial phase list contains `00-products`; future files must be explicitly added to the list.
+- It sets `TEST_ID_PREFIX=compare`, producing IDs in the exact
+  `compare/<phase>/<slug>` namespace while the ordinary runner's empty prefix preserves its
+  existing `<phase>/<slug>` IDs.
 - The runner exits non-zero when ordinary failures or stale expected gaps exist. Expected gaps alone
   are green.
 - The summary prints separate PASS, FAIL, SKIP, and EXPECTED GAP counts. `GITHUB_STEP_SUMMARY`, when
@@ -40,12 +45,17 @@ output and generated configuration.
 
 ### Sidecar and command contract
 
-- `tests/functional/pybz/Containerfile` installs exactly python-bugzilla 3.3.0 without a shell
-  heredoc and leaves a literal long-lived process as its default command.
+- `tests/functional/pybz/Containerfile` uses `python:3.14.7-slim-bookworm`, installs exactly
+  python-bugzilla 3.3.0 without a shell heredoc, and leaves a literal long-lived process as its
+  default command.
 - Sidecar names and cache volumes are derived from `bugzilla_checkout_id` and `BZ_VERSION`; user
   input is never evaluated as shell source.
-- `run_pybz <args...>` executes `bugzilla` in the running sidecar and records `PYBZ_STDOUT`,
-  `PYBZ_STDERR`, and `PYBZ_EXIT`. It always returns zero so phase assertions decide the result.
+- The built image tag includes `bugzilla_checkout_id`, preventing another worktree's concurrent
+  build from changing the image used at sidecar creation.
+- `run_pybz <args...>` executes `bugzilla` in the running sidecar and records
+  `BZR_STDOUT`, `BZR_STDOUT_RAW`, `BZR_STDERR`, and `BZR_EXIT`. It always returns zero so existing
+  phase assertions decide the result unchanged. A phase copies the first client's capture to a
+  file under `FUNC_CONFIG_DIR` before invoking the second.
 - Sidecar startup builds the pinned image, removes a stopped same-name sidecar if present, and
   refuses to replace a running same-name sidecar.
 
@@ -64,9 +74,10 @@ output and generated configuration.
 
 `tools/check-functional-test-ids.sh` accepts optional `runner` and `phase directory` paths after the
 repository root. Defaults preserve the existing suite. It validates that the runner's canonical
-phase loop points at the supplied directory basename, so the same guard covers `run-tests.sh` /
-`phases` and `run-compare.sh` / `compare`. Fixture tests prove defaults, alternate paths, missing
-paths, mismatched source paths, malformed IDs, and duplicate IDs.
+phase loop points at the supplied directory basename and derives an empty namespace for `phases`
+or that basename (`compare`) for another tree. Runtime `test_begin` composes the matching prefix.
+Fixture tests prove defaults, alternate paths, missing paths, mismatched source paths, exact
+qualified output, malformed IDs, duplicate IDs, and cross-tree distinction.
 
 ### Make and CI contract
 
@@ -89,7 +100,8 @@ and result reporting on a real Bugzilla instance.
 
 `docs/dev/python-bugzilla-parity.md` identifies python-bugzilla 3.3.0 and contains the columns
 Capability, bzr equivalent, Status, and Evidence test ID. The first row records product listing as
-covered by `00-products/list-products`; future entries can use covered, gap, or not compared.
+covered by `compare/00-products/list-products`; future entries can use covered, gap, or not
+compared.
 
 ## Error handling and cleanup
 
@@ -131,7 +143,10 @@ new public service and uses no production credentials.
 ## Verification
 
 - Guard fixtures prove both default and parameterized semantic-ID validation.
+- Result fixtures drive the summary path and prove an expected-gap-only result exits zero, all four
+  terminal/GitHub counters are present, and a stale gap makes the aggregate exit non-zero.
 - `make lint` proves formatting, shell syntax/static analysis, and both test-ID trees.
 - `make test` proves the Rust suite remains green.
-- `make functional-compare-all` proves the smoke comparison on bz50, bz52, and bz53.
+- `make functional-compare-all` proves the smoke comparison on bz50, bz52, and bz53 in Ubuntu CI
+  and on local hosts providing Bash, Make, jq, rg, and Docker/Podman.
 - `make functional-test-all` proves the existing real-container suite remains green.
