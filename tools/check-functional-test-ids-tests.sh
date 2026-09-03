@@ -37,7 +37,8 @@ new_fixture() {
 expect_allowed() {
   local name=$1
   local root=$2
-  if ! bash "$CHECKER" "$root" >"$FIXTURES/$name.stdout" 2>"$FIXTURES/$name.stderr"; then
+  shift 2
+  if ! bash "$CHECKER" "$root" "$@" >"$FIXTURES/$name.stdout" 2>"$FIXTURES/$name.stderr"; then
     printf 'expected semantic-ID checker to allow %s\n' "$name" >&2
     cat "$FIXTURES/$name.stderr" >&2
     return 1
@@ -48,7 +49,8 @@ expect_rejected() {
   local name=$1
   local root=$2
   local diagnostic=$3
-  if bash "$CHECKER" "$root" >"$FIXTURES/$name.stdout" 2>"$FIXTURES/$name.stderr"; then
+  shift 3
+  if bash "$CHECKER" "$root" "$@" >"$FIXTURES/$name.stdout" 2>"$FIXTURES/$name.stderr"; then
     printf 'expected semantic-ID checker to reject %s\n' "$name" >&2
     return 1
   fi
@@ -62,6 +64,7 @@ expect_rejected() {
 run_runtime_tests() (
   source "$SCRIPT_DIR/../tests/functional/lib.sh"
   GREEN='' RED='' YELLOW='' CYAN='' RESET=''
+  TEST_ID_PREFIX=''
 
   runtime_output="$FIXTURES/runtime.stdout"
   runtime_error="$FIXTURES/runtime.stderr"
@@ -105,6 +108,15 @@ run_runtime_tests() (
     fail_runtime 'first valid ID was not recorded'
   [[ $SEEN_TEST_IDS == *$'\n08-bugs/create-second-bug\n'* ]] ||
     fail_runtime 'second valid ID was not recorded'
+
+  TEST_ID_PREFIX=compare
+  CURRENT_TEST_GROUP=08-bugs
+  test_begin create-first-bug 'comparison bug create' >"$runtime_output"
+  [[ $(<"$runtime_output") == '  TEST  [compare/08-bugs/create-first-bug] comparison bug create ... ' ]] ||
+    fail_runtime 'comparison ID output differs from the semantic reference contract'
+  [[ $SEEN_TEST_IDS == *$'\ncompare/08-bugs/create-first-bug\n'* ]] ||
+    fail_runtime 'comparison ID was not recorded independently of the default tree'
+  TEST_ID_PREFIX=''
 
   expect_runtime_rejected missing-group "invalid functional test group ''" '' \
     retry-after-missing-group 'retry after missing group'
@@ -171,6 +183,37 @@ fi
 
 valid=$(new_fixture valid)
 expect_allowed valid "$valid"
+
+new_compare_fixture() {
+  local name=$1
+  local root="$FIXTURES/$name"
+  mkdir -p "$root/tests/functional/compare"
+  {
+    printf 'SCRIPT_DIR=/fixture/tests/functional\n'
+    printf 'TEST_ID_PREFIX=compare\n'
+    printf 'for _phase in \\\n'
+    printf '  01-config 08-bugs; do\n'
+    printf '  CURRENT_TEST_GROUP="$_phase"\n'
+    printf '  source "$SCRIPT_DIR/compare/${_phase}.sh"\n'
+    printf 'done\n'
+  } >"$root/tests/functional/run-compare.sh"
+  printf 'test_begin "show-config" "comparison config show"\n' \
+    >"$root/tests/functional/compare/01-config.sh"
+  printf 'test_begin "create-bug" "comparison bug create"\n' \
+    >"$root/tests/functional/compare/08-bugs.sh"
+  printf '%s\n' "$root"
+}
+
+valid_compare=$(new_compare_fixture valid-compare)
+expect_allowed valid-compare "$valid_compare" tests/functional/run-compare.sh tests/functional/compare
+
+mismatched_compare_source=$(new_compare_fixture mismatched-compare-source)
+sed -i.bak 's|/compare/|/phases/|' \
+  "$mismatched_compare_source/tests/functional/run-compare.sh"
+rm "$mismatched_compare_source/tests/functional/run-compare.sh.bak"
+expect_rejected mismatched-compare-source "$mismatched_compare_source" \
+  "canonical adjacent assignment/source pair" \
+  tests/functional/run-compare.sh tests/functional/compare
 
 valid_branches=$(new_fixture valid-branches)
 printf '%s\n' \
