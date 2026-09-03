@@ -41,3 +41,4 @@ rejected.
 | [0032](0032-operation-scoped-search-transport.md) | Resolve search transport once per operation | Accepted |
 | [0033](0033-share-lenient-deserialization-adapters.md) | Share lenient deserialization adapters by wire contract | Accepted |
 | [0043](0043-stabilize-test-tracing-callsite-interest.md) | Keep a sentinel tracing dispatch alive in tests | Accepted |
+| [0044](0044-python-bugzilla-comparison-sidecar.md) | Run python-bugzilla as a network-namespace sidecar | Accepted |
