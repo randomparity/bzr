@@ -103,8 +103,8 @@ and result reporting on a real Bugzilla instance.
 
 `docs/dev/python-bugzilla-parity.md` identifies python-bugzilla 3.3.0 and contains the columns
 Capability, bzr equivalent, Status, and Evidence test ID. The first row records product listing as
-covered by `compare/00-products/list-products`; future entries can use covered, gap, or not
-compared.
+`parity` only after `compare/00-products/list-products` passes. Later report entries and their
+terminal classification remain owned by the follow-on comparison and report issues.
 
 ## Error handling and cleanup
 
