@@ -1,6 +1,6 @@
 # Bug search role-negation and paging design
 
-Issue: #628  
+Issue: #628
 Decision: [ADR 0041](../../adr/0041-role-negation-and-zero-limit-paging.md)
 
 ## Goal
