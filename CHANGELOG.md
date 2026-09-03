@@ -5,6 +5,140 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] - 2026-09-03
+
+### Security
+
+Security assessment: No publicly identified runtime vulnerabilities in bzr were fixed in this release.
+
+### Added
+
+- Prompt before adding bzr to PATH
+- Add weekly status workflow
+- Collect bounded dependency evidence
+- Analyze dependency graph evidence
+- Render safe dependency reports
+- Add release readiness contract
+- Add project manager reporting workflow
+- Define adjacency result types
+- Collect strict bug adjacency outcomes
+- Verify adjacency access failures
+- Add bounded adjacency command
+- Add side-effect-free container lookup helpers
+- Resolve Bugzilla container port and name dynamically
+- Add dependency presentation reports
+
+### Changed
+
+- Publish release readiness cast only
+- Avoid cloning adjacency results
+- Clarify relationship ID decoder
+- Source container-env.sh from lib.sh
+- Source container-env.sh directly in setup-bugzilla.sh
+- Remove duplicate BZ_VERSION default
+- Collapse duplicated container run invocation
+- Share lenient deserialization adapters
+- Consolidate lenient response coercions
+- Omit bodies from metadata lists
+- Remove platform compatibility aliases
+
+### Fixed
+
+- Harden weekly snapshot comparisons
+- Complete weekly report workflow
+- Verify weekly report publication
+- Enforce dependency collection boundaries
+- Enforce dependency analysis bounds
+- Accept exact graph cap boundary
+- Harden dependency report validation
+- Harden dependency report boundaries
+- Bound dependency analysis at legal limits
+- Bound dependency collection trust signals
+- Close dependency collection review gaps
+- Honor dependency traversal policy
+- Preserve dependency frontier evidence
+- Enforce collector trust boundaries
+- Decode child output as UTF-8
+- Align weekly snapshot contracts
+- Secure weekly report publication
+- Strip URL userinfo from saved queries
+- Continue through server-clamped pages
+- Exclude complete readiness bugs
+- Preserve release report server provenance
+- Define release readiness policy contracts
+- Preserve unknown readiness evidence
+- Reconcile partial readiness evidence
+- Reconcile dependency snapshots
+- Sanitize Custom Search provenance
+- Ship safe PM reporting demo payload
+- Bind PM demo report to live fixture
+- Verify PM report facts exactly
+- Preserve readable Markdown punctuation
+- Normalize adjacency arrays
+- Reject inconclusive credential proofs
+- Accept Bugzilla assignee detail companion
+- Enforce adjacency scalar wire types
+- Accept Bugzilla default assignee key
+- Normalize multi-valued bug fields
+- Decode object-valued duplicate links
+- Honor clone field overrides
+- Version multi-valued bug schema
+- Avoid unnecessary early return in prompt_tofu and prompt_rotation
+- Accept string product IDs from Bugzilla
+- Scope dependency preflight searches
+- Honor inline server for imported search URLs
+- Accept signed metadata sort keys
+- Publish consecutive weekly status runs
+- Detect raced weekly status pointers
+- Report temporary weekly status pointer failures
+- Keep weekly status tests portable
+- Derive record-demo.sh's default BZ_URL dynamically
+- Stub BZ_URL in release-readiness recorder test
+- Abort checkout-id derivation on cd failure
+- Isolate attachment temp files per test run
+- Resolve symlinks in checkout id, stop honoring ambient BZ_VERSION
+- Isolate remaining private-attachment temp files
+- Resolve lib.sh's ambient SCRIPT_DIR hazard, gate container-env.sh
+- Warn once for raw-parameter pagination
+- Correct product help text drift from shipped behavior
+- Preserve unknown dependency resolution
+- Canonicalize weekly-status fixture root
+- Remove undeclared contract test dependency
+- Normalize timestamps and preserve attachment flags
+- Normalize unzoned ISO timestamps
+- Normalize user and group wire contracts
+- Prove user and group production shapes
+- Correct whoami guidance and proof
+- Make email recovery actionable
+- Parse hyphenated flag names
+- Normalize server capability wire values
+- Parse bare Bugzilla version suffixes
+- Expose group and time fields in bug views
+- Request read fields by default
+- Confine and validate read fields
+- Keep search fields transport-neutral
+- Accept string upload IDs
+- Accept attachment and comment wire variants
+- Validate response variants end to end
+- Validate keyed response identity
+- Avoid cloning response arrays
+- Standardize platform across bug contracts
+- Exclude both platform transition keys
+- Keep template platform flag accurate
+- Remove unsupported update command
+- Validate bug resolve status overrides
+- Preserve explicit empty bug groups
+- Stop advertising component update
+- Complement role filter negation
+- Reject incoherent zero-limit windows
+- Publish role and paging contracts
+- Canonicalize raw paging parameters
+- Accept omitted values through one response model
+- Degrade disabled list for public users
+- Align disabled help output
+- Preserve lone sentinel output
+- Reject normalized dot segments
+- Reject empty field routes
 ## [0.8.2] - 2026-08-23
 
 ### Security

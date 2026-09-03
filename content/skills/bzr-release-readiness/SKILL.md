@@ -10,7 +10,7 @@ Custom Search URL, target milestone, version, or product. It produces a
 PM-facing report from visible Bugzilla evidence; it neither changes Bugzilla nor
 declares a universal release policy.
 
-This skill is authored against **bzr 0.9.0**.
+This skill is authored against **bzr 0.9.1-dev**.
 
 ## Start with scope and policy
 
