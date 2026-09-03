@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Bugzilla proxy that reproduces observed production response and policy variants."""
+"""Proxy observed Bugzilla response variants for functional conformance tests.
+
+Add a rewrite to ``REWRITE_HOOKS`` as a ``(matcher, transformer)`` pair. A
+matcher receives ``method, path, enabled_modes``; its transformer receives the
+same request metadata and response bytes and returns ``(bytes, evidence)``.
+Evidence is emitted after all matching hooks, preserving registry order.
+"""
 
 import http.client
 import http.server
@@ -329,6 +335,120 @@ def shape_attachment_comment_response(method, path, data):
     return json.dumps(value, separators=(",", ":")).encode(), evidence
 
 
+def _hook_matches(prefixes=(), *, method=None, mode=None):
+    def matches(request_method, path, enabled_modes):
+        route = urllib.parse.urlsplit(path).path
+        return (
+            (method is None or request_method == method)
+            and (not prefixes or route.startswith(prefixes))
+            and (mode is None or mode in enabled_modes)
+        )
+
+    return matches
+
+
+def _run_bug_hook(_method, _path, body):
+    return shape_bug_response(body), []
+
+
+def _run_product_ids_hook(_method, _path, body):
+    return shape_product_ids_response(body), []
+
+
+def _run_server_hook(_method, path, body):
+    shaped, evidence = shape_server_capabilities_response(
+        path, body, enabled=True
+    )
+    return shaped, [
+        ("server-capability", route, count) for route, count in evidence.items()
+    ]
+
+
+def _run_attachment_hook(method, path, body):
+    shaped, evidence = shape_attachment_comment_response(method, path, body)
+    return shaped, [
+        ("attachment-comment", route, count) for route, count in evidence.items()
+    ]
+
+
+def _attachment_hook_matches(method, path, enabled_modes):
+    if "attachment-comment" not in enabled_modes:
+        return False
+    route = urllib.parse.urlsplit(path).path
+    return (
+        (method == "POST" and re.fullmatch(
+            r"/rest/bug/[0-9]+/attachment", route
+        ))
+        or (method == "GET" and re.fullmatch(
+            r"/rest/bug/attachment/[0-9]+", route
+        ))
+        or (method == "GET" and re.fullmatch(
+            r"/rest/bug/[0-9]+/attachment", route
+        ))
+        or (method == "GET" and re.fullmatch(
+            r"/rest/bug/[0-9]+/comment", route
+        ))
+    )
+
+
+def _run_metadata_hook(_method, path, body):
+    shaped, changed = shape_metadata_sort_keys_response(path, body)
+    if not changed:
+        return shaped, []
+    route = (
+        "field"
+        if urllib.parse.urlsplit(path).path.startswith("/rest/field/bug")
+        else "product"
+    )
+    return shaped, [("metadata-sort-keys", route, changed)]
+
+
+def _run_user_group_hook(method, path, body):
+    shaped, route, changed = shape_user_group_response(method, path, body)
+    return shaped, [("user-group-shaped", route, changed)] if changed else []
+
+
+# Each entry has one matcher and one transformer. Transformers return
+# (body, evidence), so adding a production shape never edits the forwarding loop.
+REWRITE_HOOKS = (
+    (_hook_matches(("/rest/bug",)), _run_bug_hook),
+    (
+        _hook_matches((
+            "/rest/product_accessible",
+            "/rest/product_selectable",
+            "/rest/product_enterable",
+        )),
+        _run_product_ids_hook,
+    ),
+    (_hook_matches(mode="server-capabilities"), _run_server_hook),
+    (_attachment_hook_matches, _run_attachment_hook),
+    (_hook_matches(), _run_metadata_hook),
+    (_hook_matches(), _run_user_group_hook),
+)
+
+
+def apply_rewrite_hooks(method, path, body, enabled_modes):
+    """Apply every matching hook in registry order and return body plus evidence."""
+    evidence = []
+    for matches, transform in REWRITE_HOOKS:
+        if matches(method, path, enabled_modes):
+            body, hook_evidence = transform(method, path, body)
+            evidence.extend(hook_evidence)
+    return body, evidence
+
+
+def emit_rewrite_evidence(evidence):
+    for marker, route, count in evidence:
+        if marker == "metadata-sort-keys":
+            sys.stderr.write(f"metadata-sort-keys shaped route={route} count={count}\n")
+        elif marker == "user-group-shaped":
+            sys.stderr.write(f"user-group-shaped route={route} count={count}\n")
+        else:
+            sys.stderr.write(f"{marker} shaped route={route} count={count}\n")
+    if evidence:
+        sys.stderr.flush()
+
+
 def make_handler(backend_port):
     server_capability_mode = os.environ.get("BZR_FUNC_REDHAT_MODE") == (
         "server-capabilities"
@@ -398,80 +518,21 @@ def make_handler(backend_port):
             finally:
                 conn.close()
 
-            if 200 <= status < 300 and self.path.startswith("/rest/bug"):
-                try:
-                    body = shape_bug_response(body)
-                except (UnicodeDecodeError, json.JSONDecodeError) as error:
-                    self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
-                    return
-
-            if 200 <= status < 300 and self.path.startswith(
-                ("/rest/product_accessible", "/rest/product_selectable",
-                 "/rest/product_enterable")
-            ):
-                try:
-                    body = shape_product_ids_response(body)
-                except (UnicodeDecodeError, json.JSONDecodeError) as error:
-                    self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
-                    return
-
             if 200 <= status < 300:
                 try:
-                    body, evidence = shape_server_capabilities_response(
-                        self.path, body, enabled=server_capability_mode
+                    body, evidence = apply_rewrite_hooks(
+                        method,
+                        self.path,
+                        body,
+                        {mode for mode, enabled in (
+                            ("server-capabilities", server_capability_mode),
+                            ("attachment-comment", attachment_comment_mode),
+                        ) if enabled},
                     )
                 except (UnicodeDecodeError, json.JSONDecodeError) as error:
                     self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
                     return
-                for route, count in evidence.items():
-                    sys.stderr.write(
-                        f"server-capability shaped route={route} count={count}\n"
-                    )
-                if evidence:
-                    sys.stderr.flush()
-
-            if 200 <= status < 300 and attachment_comment_mode:
-                try:
-                    body, evidence = shape_attachment_comment_response(
-                        method, self.path, body
-                    )
-                except (UnicodeDecodeError, json.JSONDecodeError) as error:
-                    self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
-                    return
-                for route, count in evidence.items():
-                    sys.stderr.write(
-                        f"attachment-comment shaped route={route} count={count}\n"
-                    )
-                if evidence:
-                    sys.stderr.flush()
-
-            if 200 <= status < 300:
-                try:
-                    body, changed = shape_metadata_sort_keys_response(self.path, body)
-                except (UnicodeDecodeError, json.JSONDecodeError) as error:
-                    self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
-                    return
-                if changed:
-                    route = "field" if urllib.parse.urlsplit(self.path).path.startswith(
-                        "/rest/field/bug"
-                    ) else "product"
-                    sys.stderr.write(
-                        f"metadata-sort-keys shaped route={route} count={changed}\n"
-                    )
-                    sys.stderr.flush()
-
-                try:
-                    body, route, changed = shape_user_group_response(
-                        method, self.path, body
-                    )
-                except (UnicodeDecodeError, json.JSONDecodeError) as error:
-                    self.send_error(502, f"Bugzilla returned malformed JSON: {error}")
-                    return
-                if changed:
-                    sys.stderr.write(
-                        f"user-group-shaped route={route} count={changed}\n"
-                    )
-                    sys.stderr.flush()
+                emit_rewrite_evidence(evidence)
 
             self.send_response(status)
             for key, value in response_headers:
@@ -488,6 +549,30 @@ def make_handler(backend_port):
 
 
 class ShapeTests(unittest.TestCase):
+    def test_rewrite_hook_registry_has_uniform_entries(self):
+        self.assertGreaterEqual(len(REWRITE_HOOKS), 6)
+        for matches, transform in REWRITE_HOOKS:
+            self.assertTrue(callable(matches))
+            self.assertTrue(callable(transform))
+
+    def test_dispatcher_applies_matching_hooks_in_registry_order(self):
+        payload = json.dumps({
+            "bugs": [{"component": "Backend", "version": "rawhide"}]
+        }).encode()
+        body, evidence = apply_rewrite_hooks("GET", "/rest/bug", payload, set())
+        self.assertEqual(json.loads(body)["bugs"][0]["component"], [
+            "Backend", "Backend-redhat-secondary"
+        ])
+        self.assertEqual(evidence, [])
+
+    def test_dispatcher_keeps_mode_hooks_disabled_by_default(self):
+        payload = b'{"version":"5.0.6"}'
+        body, evidence = apply_rewrite_hooks(
+            "GET", "/rest/version", payload, set()
+        )
+        self.assertEqual(body, payload)
+        self.assertEqual(evidence, [])
+
     def test_shapes_attachment_upload_ids_as_strings(self):
         body, evidence = shape_attachment_comment_response(
             "POST", "/rest/bug/42/attachment", b'{"ids":[123]}'
