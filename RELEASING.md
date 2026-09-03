@@ -71,10 +71,12 @@ Security assessment: No publicly identified runtime vulnerabilities in bzr were 
 ```
 
 The current generated flow supports only the no-vulnerability outcome. If one or
-more publicly identified runtime vulnerabilities in `bzr` were fixed, do not tag:
-`tools/generate-changelog-section.sh` deliberately stops rather than guessing a
-disclosure. First land a reviewed release-workflow change that supplies the same
-positive assessment to local validation, GitHub Release creation, and the
+more publicly identified runtime vulnerabilities in `bzr` were fixed, the operator
+must stop based on the advisory review and not tag. The generator also stops when
+the range contains recognizable security commit subjects (`fix(security)`,
+`feat(security)`, `RUSTSEC-`, or `CVE-`), but that check does not replace the
+advisory review. First land a reviewed release-workflow change that supplies the
+same positive assessment to local validation, GitHub Release creation, and the
 post-release `CHANGELOG.md` update. That assessment must list every qualifying
 vulnerability that has a public identifier when the GitHub Release is created; a
 CVE, GHSA, RUSTSEC identifier, or comparable public identifier qualifies, using
