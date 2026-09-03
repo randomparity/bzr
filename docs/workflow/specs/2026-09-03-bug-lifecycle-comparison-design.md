@@ -19,10 +19,13 @@ auto-detected backend. Unique summaries distinguish the records without making t
 part of parity.
 
 After each operation, the phase reads both bugs from the server and reduces them to the same
-canonical JSON projection. It compares persisted fields, never CLI presentation. The projection
-contains product, component, version, summary stem, description, operating system, platform,
+canonical JSON projection. It compares persisted fields, never CLI presentation. The bug-read
+projection contains product, component, version, summary stem, operating system, platform,
 severity, priority, status, resolution, URL, whiteboard, and sorted CC/keyword values when present.
-Generated IDs, timestamps, reporter identity, and backend-specific aliases are excluded.
+Because Bugzilla stores the creation description as the first comment rather than a bug field, the
+create test also reads both comment lists through the same forced-REST bzr observer and compares
+their normalized first-comment bodies. Generated IDs, timestamps, reporter identity, and
+backend-specific aliases are excluded.
 
 The lifecycle runs in this order:
 
@@ -45,14 +48,18 @@ REST selection and invokes the helper inside the existing sidecar.
 
 `tests/functional/compare/bug-lifecycle.py` is a narrow adapter around python-bugzilla 3.3.0. It
 accepts one operation plus JSON input/output paths under `/work`, connects to
-`http://127.0.0.1` with the test API key, and emits JSON containing both the operation result and
-the detected backend name. It supports only create, query, update, view, and history; malformed
-input or an unsupported operation exits non-zero with no fallback.
+`http://127.0.0.1` with the test API key read from the private input JSON, and emits JSON containing
+both the operation result and the detected backend name. It supports only create, query, update,
+view, and history; malformed input or an unsupported operation exits non-zero with no fallback.
+Before sidecar startup, the runner copies the repository helper to
+`$COMPARE_EXCHANGE_DIR/bug-lifecycle.py`; sidecar commands invoke only that `/work/compare` copy.
+Missing or unreadable staging stops the runner before any lifecycle operation.
 
 `tests/functional/run-compare.sh` supplies the existing functional administrator identity and API
-key to the phase, exports the key only for the lifetime of the comparison process, and adds the
-phase to its explicit ordered list. The sidecar receives the key only as command input, not in its
-image or cache volume.
+key to the phase, exports the key only for the lifetime of the comparison process, stages the
+helper in the private exchange directory, and adds the phase to its explicit ordered list. The
+sidecar reads the key from each mode-private request file; it is absent from command argv, the
+image, the home cache volume, and error messages.
 
 `docs/dev/python-bugzilla-parity.md` gains one row for each of the five exercised capabilities.
 Each row cites the stable `compare/01-bug-lifecycle/<slug>` test ID and reports parity only after
@@ -78,21 +85,23 @@ The existing ADR 0044 boundaries remain. This phase additionally passes the repo
 disposable-test API key into the sidecar and parses JSON produced by both clients. Only the local
 operator or CI job can invoke the harness; the disposable Bugzilla controls responses.
 
-Controls are: pass arguments as quoted argv, place JSON and credentials only under the runner's
-private exchange directory, never evaluate response text, constrain helper operations to a fixed
-dispatch table, validate IDs as positive integers before reuse, and normalize with fixed field
-selectors. Error output must not print the API key. Production credentials, repository contents,
-and the container runtime socket remain outside the sidecar.
+Controls are: pass only operation names and private exchange-file paths as quoted argv, set umask
+077 before writing request files, place JSON and credentials only under the runner's private
+exchange directory, never evaluate response text, constrain helper operations to a fixed dispatch
+table, validate IDs as positive integers before reuse, and normalize with fixed field selectors.
+The staged helper is the only repository-derived file mounted into the sidecar. Error output names
+the input path, never its API key content. Production credentials, the rest of the repository, and
+the container runtime socket remain outside the sidecar.
 
 Out of scope are protecting the disposable server from other host processes, changing the mutable
 upstream image/dependency exposure accepted by ADR 0044, and proving dependent feature gaps.
 
 ## Verification
 
-- A controlled fixture run substitutes deterministic helper outputs and proves all five stable test
-  IDs, transport records, normalization, and mismatch failure behavior before live execution.
+- Controlled fixtures prove helper staging failure, adapter dispatch/output, all five stable test
+  IDs, transport records, first-comment description comparison, normalization, and mismatch
+  failure behavior before live execution.
 - `make lint` validates semantic IDs, Bash syntax, ShellCheck, formatting, and Rust lints.
 - `make test` proves the Rust suite remains green.
 - `make functional-compare-all` proves the lifecycle against bz50, bz52, and bz53.
 - `make functional-test-all` proves the established real-container suite remains green.
-
