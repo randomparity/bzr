@@ -22,8 +22,8 @@ The sidecar image uses the current stable `python:3.14.7-slim-bookworm` image an
 `python-bugzilla==3.3.0`. The runtime joins the already-running Bugzilla container's network
 namespace. Checkout-derived image identity and checkout/version-derived container names prevent
 sibling worktrees from racing or colliding, while a named home volume preserves python-bugzilla
-cache state. The comparison runner bind-mounts its mode-private config directory at `/work` for
-captured output and generated configuration.
+cache state. The comparison runner bind-mounts its mode-private config directory at `/work` with a
+private SELinux relabel (`:Z`) for captured output and generated configuration.
 
 ## Contracts
 
@@ -52,6 +52,8 @@ captured output and generated configuration.
   input is never evaluated as shell source.
 - The built image tag includes `bugzilla_checkout_id`, preventing another worktree's concurrent
   build from changing the image used at sidecar creation.
+- The `/work` bind mount uses `:Z`, and the container fixture proves container-to-host write-through
+  so enforcing SELinux hosts do not silently lose the exchange path.
 - `run_pybz <args...>` executes `bugzilla` in the running sidecar and records
   `BZR_STDOUT`, `BZR_STDOUT_RAW`, `BZR_STDERR`, and `BZR_EXIT`. It always returns zero so existing
   phase assertions decide the result unchanged. A phase copies the first client's capture to a
@@ -90,7 +92,8 @@ qualified output, malformed IDs, duplicate IDs, and cross-tree distinction.
 
 ## Smoke comparison
 
-`compare/00-products.sh` invokes `bzr --json product list` and
+`compare/00-products.sh` invokes `bzr --json --server-url "$BZ_URL" product list` from the fresh,
+empty config and
 `bugzilla --bugzilla http://127.0.0.1 info --products`. Each output is reduced to a sorted unique
 list of non-empty product names. The test passes only when both commands succeed and the normalized
 lists are byte-identical. This proves the sidecar, shared server, command capture, normalization,

@@ -55,7 +55,8 @@ The Makefile invokes it once with defaults and once with `tests/functional/run-c
    expected source directory basename/namespace, and make the canonical-loop parser require the
    matching source path and runtime prefix.
 4. Run the fixture script; expect exit 0 with both runtime and ID checker pass lines.
-5. Wire both checker invocations into `check-functional-test-ids` and commit.
+5. Keep the Make target on its existing default invocation until Task 3 creates the comparison
+   runner and phase tree, then commit the checker and fixture changes.
 
 **Acceptance:** Existing default calls behave unchanged; custom runner/tree validation is strict and
 covered by fixtures.
@@ -84,6 +85,9 @@ covered by fixtures.
 - Mode: focused-test — sidecar image contains python-bugzilla 3.3.0 and its CLI; container smoke test
   builds the image and checks `python -c` package metadata plus `bugzilla --version`; red is a missing
   image; green command is `bash tests/functional/pybz/container-tests.sh`, expected exit 0.
+- Mode: focused-test — SELinux-compatible exchange mount; the container fixture writes through the
+  `/work:Z` bind and verifies the bytes from the host; red is a permission error or missing host
+  file; green is the same container fixture with exit 0.
 
 **Steps**
 
@@ -109,7 +113,7 @@ are captured; expected gaps fail when stale; cleanup targets only this checkout/
 
 **Interfaces:** The runner sets `TEST_ID_PREFIX=compare` and publishes `BZ_URL`, `BZR_BIN`, shared
 BZR capture globals, and test lifecycle globals to sourced phases. `00-products.sh` snapshots the
-first capture, calls `run_bzr product list` and
+first capture, calls `run_bzr --server-url "$BZ_URL" product list` from a fresh empty config and
 `run_pybz --bugzilla http://127.0.0.1 info --products`, then compares normalized product-name files.
 The all-version script invokes setup, comparison, and cleanup for bz50/bz52/bz53.
 
@@ -130,7 +134,8 @@ The all-version script invokes setup, comparison, and cleanup for bz50/bz52/bz53
    summary, GitHub summary append, and cleanup trap.
 3. Implement the sequential all-version driver, continuing after a failed version and preserving a
    non-zero aggregate result.
-4. Add Make targets that build release bzr and start the selected server before comparison.
+4. Add Make targets that build release bzr and start the selected server before comparison, then
+   add the second semantic-ID checker invocation now that its runner and phase tree exist.
 5. Run `make functional-compare`; inspect both captured clients on failure and correct only verified
    protocol/format mismatches.
 6. Run `make functional-compare-all`; expect all three versions green, then commit.
