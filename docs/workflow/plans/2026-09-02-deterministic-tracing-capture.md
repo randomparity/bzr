@@ -1,15 +1,8 @@
 # Implement deterministic tracing capture
 
-Issue: [#651](https://github.com/randomparity/bzr/issues/651)
-
-Spec: [Deterministic tracing capture design](../specs/2026-09-02-deterministic-tracing-capture-design.md)
-
-Decision: [ADR 0043](../../adr/0043-stabilize-test-tracing-callsite-interest.md)
-
-## Goal
-
-Prevent an uncaptured test thread from poisoning global callsite interest while another thread
-owns the sole tracing capture.
+Issue [#651](https://github.com/randomparity/bzr/issues/651); governed by the
+[spec](../specs/2026-09-02-deterministic-tracing-capture-design.md) and
+[ADR 0043](../../adr/0043-stabilize-test-tracing-callsite-interest.md).
 
 Expected implementation size: 25–45 changed lines.
 
@@ -24,8 +17,7 @@ In `src/test_helpers.rs`, retain a process-lifetime no-op `tracing::Dispatch` wi
 initialized before capture construction. Re-run the regression repeatedly plus the existing
 cross-thread propagation and server-capability redaction tests without changing their assertions.
 
-## Task 3: Verify and ship
+## Task 3: Index, verify, and ship
 
-Run `make lint`, `make test`, and `make functional-test-all`. Review the complete branch under the
-frozen issue charter, simplify without changing behavior, then deliver a green mergeable PR and
-stop without merging.
+Add ADR 0043's Accepted row to `docs/adr/README.md` and verify its link. Run the spec's full
+verification, review the branch, simplify, and deliver a green mergeable PR without merging.

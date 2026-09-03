@@ -47,7 +47,8 @@ marker while API-key material is removed from captured diagnostics.
 ## Verification
 
 - controlled-fault regression test on Rust 1.89 before the sentinel
-- repeated `make test-one T=tracing_capture` on Rust 1.89
+- 50 isolated runs of
+  `CARGO='rustup run 1.89.0 cargo' make test-one T=tracing_capture` on Rust 1.89
 - repeated `make test-one T=server_capabilities_nulls_attachment_size_on_parameters_error`
 - `make lint`
 - `make test`
