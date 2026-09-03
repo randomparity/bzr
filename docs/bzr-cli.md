@@ -443,8 +443,8 @@ bzr bug list --version 9.4 --version 9.5 --op-sys Linux
 ```
 
 `platform` is the canonical Bugzilla hardware-field name for search, bug
-objects, create, update, and clone. Schema 2.1.x also emits the deprecated
-Schema 3.0.0 publishes and accepts only the canonical `platform` spelling.
+objects, create, update, and clone. Schema 3.0.0 publishes and accepts only the
+canonical `platform` spelling.
 
 ### `bzr bug view`
 
