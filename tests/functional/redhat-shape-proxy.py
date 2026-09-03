@@ -60,6 +60,43 @@ def shape_bug_response(data):
     return json.dumps(value, separators=(",", ":")).encode()
 
 
+def shape_cc_objects_response(data):
+    """Return JSON bytes with bug `cc` list members rewritten to user objects.
+
+    bugzilla.redhat.com serves the `cc` list to authenticated REST clients as
+    the same user objects documented under ``cc_detail`` ({name, email,
+    real_name, id, ...}) instead of the login-name strings upstream Bugzilla
+    sends. This rewrites each string ``cc`` member to such an object so the
+    client is exercised against the live Red Hat wire shape. Returns
+    (body, changed_count).
+    """
+    value = json.loads(data)
+    bugs = value.get("bugs") if isinstance(value, dict) else None
+    changed = 0
+    if isinstance(bugs, list):
+        for bug in bugs:
+            if not isinstance(bug, dict):
+                continue
+            cc = bug.get("cc")
+            if not isinstance(cc, list):
+                continue
+            shaped = []
+            for index, member in enumerate(cc, start=1):
+                if isinstance(member, str):
+                    shaped.append({
+                        "id": index,
+                        "name": member,
+                        "email": member,
+                        "real_name": member,
+                    })
+                    changed += 1
+                else:
+                    shaped.append(member)
+            if changed:
+                bug["cc"] = shaped
+    return json.dumps(value, separators=(",", ":")).encode(), changed
+
+
 def shape_product_ids_response(data):
     """Return JSON bytes with product IDs represented as decimal strings.
 
@@ -403,6 +440,14 @@ def _run_metadata_hook(_method, path, body):
     return shaped, [("metadata-sort-keys", route, changed)]
 
 
+def _run_cc_objects_hook(_method, path, body):
+    shaped, changed = shape_cc_objects_response(body)
+    if not changed:
+        return shaped, []
+    route = urllib.parse.urlsplit(path).path
+    return shaped, [("cc-objects", route, changed)]
+
+
 def _run_user_group_hook(method, path, body):
     shaped, route, changed = shape_user_group_response(method, path, body)
     return shaped, [("user-group-shaped", route, changed)] if changed else []
@@ -422,12 +467,14 @@ REWRITE_HOOKS = (
     ),
     (_hook_matches(mode="server-capabilities"), _run_server_hook),
     (_attachment_hook_matches, _run_attachment_hook),
+    (_hook_matches(("/rest/bug",), method="GET", mode="cc-objects"), _run_cc_objects_hook),
     (_hook_matches(), _run_metadata_hook),
     (_hook_matches(), _run_user_group_hook),
 )
 
 
 def apply_rewrite_hooks(method, path, body, enabled_modes):
+
     """Apply every matching hook in registry order and return body plus evidence."""
     evidence = []
     for matches, transform in REWRITE_HOOKS:
@@ -456,6 +503,7 @@ def make_handler(backend_port):
     attachment_comment_mode = os.environ.get("BZR_FUNC_REDHAT_MODE") == (
         "attachment-comment"
     )
+    cc_objects_mode = os.environ.get("BZR_FUNC_REDHAT_MODE") == "cc-objects"
 
     class Handler(http.server.BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -527,6 +575,7 @@ def make_handler(backend_port):
                         {mode for mode, enabled in (
                             ("server-capabilities", server_capability_mode),
                             ("attachment-comment", attachment_comment_mode),
+                            ("cc-objects", cc_objects_mode),
                         ) if enabled},
                     )
                 except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -571,6 +620,27 @@ class ShapeTests(unittest.TestCase):
             "GET", "/rest/version", payload, set()
         )
         self.assertEqual(body, payload)
+        self.assertEqual(evidence, [])
+
+    def test_shapes_cc_strings_as_user_objects(self):
+        payload = json.dumps({
+            "bugs": [{"id": 42, "cc": ["airlied", "josef"]}]
+        }).encode()
+        body, evidence = apply_rewrite_hooks(
+            "GET", "/rest/bug/42", payload, {"cc-objects"}
+        )
+        cc = json.loads(body)["bugs"][0]["cc"]
+        self.assertEqual(cc[0], {
+            "id": 1, "name": "airlied", "email": "airlied", "real_name": "airlied"
+        })
+        self.assertEqual(evidence, [("cc-objects", "/rest/bug/42", 2)])
+
+    def test_cc_objects_hook_disabled_by_default(self):
+        payload = b'{"bugs":[{"id":42,"cc":["airlied"]}]}'
+        body, evidence = apply_rewrite_hooks(
+            "GET", "/rest/bug/42", payload, set()
+        )
+        self.assertEqual(json.loads(body)["bugs"][0]["cc"], ["airlied"])
         self.assertEqual(evidence, [])
 
     def test_shapes_attachment_upload_ids_as_strings(self):

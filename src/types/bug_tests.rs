@@ -335,3 +335,74 @@ fn bug_defaults_missing_dupe_of_to_none() {
 
     assert_eq!(bug.dupe_of, None);
 }
+
+#[test]
+fn bug_deserializes_string_cc_list() {
+    let bug: Bug =
+        serde_json::from_str(r#"{"id": 1, "cc": ["watcher@example.com", "alice@example.com"]}"#)
+            .unwrap();
+    assert_eq!(
+        bug.cc,
+        vec![
+            "watcher@example.com".to_string(),
+            "alice@example.com".to_string()
+        ]
+    );
+
+    let serialized = serde_json::to_value(&bug).unwrap();
+    assert_eq!(serialized["cc"][0], "watcher@example.com");
+}
+
+#[test]
+fn bug_deserializes_cc_objects_extracting_login_name() {
+    // bugzilla.redhat.com serves the user objects (the same data as
+    // `cc_detail`) in the `cc` position for authenticated requests.
+    let bug: Bug = serde_json::from_value(serde_json::json!({
+        "id": 1,
+        "cc": [
+            {"id": 42, "name": "hdegoede", "email": "hdegoede", "real_name": "Hans de Goede"},
+            {"id": 43, "name": "josef", "email": "josef", "real_name": "Josef Bacik"}
+        ]
+    }))
+    .unwrap();
+    assert_eq!(bug.cc, vec!["hdegoede".to_string(), "josef".to_string()]);
+
+    let serialized = serde_json::to_value(&bug).unwrap();
+    assert_eq!(serialized["cc"], serde_json::json!(["hdegoede", "josef"]));
+}
+
+#[test]
+fn bug_deserializes_cc_objects_falling_back_to_email() {
+    // Objects without a `name` still carry the login in `email` on Red Hat.
+    let bug: Bug = serde_json::from_value(serde_json::json!({
+        "id": 1,
+        "cc": [{"id": 44, "email": "suraj.ghimire7", "real_name": ""}]
+    }))
+    .unwrap();
+    assert_eq!(bug.cc, vec!["suraj.ghimire7".to_string()]);
+}
+
+#[test]
+fn bug_deserializes_mixed_string_and_object_cc_list() {
+    let bug: Bug = serde_json::from_value(serde_json::json!({
+        "id": 1,
+        "cc": ["watcher@example.com", {"name": "hdegoede", "email": "hdegoede"}]
+    }))
+    .unwrap();
+    assert_eq!(
+        bug.cc,
+        vec!["watcher@example.com".to_string(), "hdegoede".to_string()]
+    );
+}
+
+#[test]
+fn bug_rejects_cc_object_without_name_or_email() {
+    let result: Result<Bug, _> = serde_json::from_value(serde_json::json!({
+        "id": 1,
+        "cc": [{"id": 44, "real_name": "No Login"}]
+    }));
+    assert!(
+        result.is_err(),
+        "cc member object with neither name nor email must fail"
+    );
+}

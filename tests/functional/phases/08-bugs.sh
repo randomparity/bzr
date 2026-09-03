@@ -189,6 +189,49 @@ if [[ -n "$_READ_FIELDS_BUG" ]]; then
 else test_skip "group round-trip bug was not created"; fi
 unset _READ_FIELDS_BUG
 
+# Exercise the Red Hat `cc` wire shape through the public REST command path.
+# bugzilla.redhat.com serves the `cc` list to authenticated REST clients as
+# user objects (the same data as `cc_detail`) instead of login-name strings.
+# The proxy mode is opt-in so the default functional consumers continue to
+# see the container's native response.
+_CC_SHAPE_BUG=$(make_bug --product FuncTestProd --component Backend \
+    --summary "cc shape proxy bug" --description "cc objects conformance" \
+    --op-sys Linux --platform PC --cc "$ADMIN_EMAIL")
+if [[ -n "$_CC_SHAPE_BUG" ]]; then
+    test_begin "redhat-shaped-cc-objects" "Red Hat shaped cc objects deserialize"
+    export BZR_FUNC_REDHAT_MODE=cc-objects
+    if redhat_shape_start "$BZ_PORT"; then
+        unset BZR_FUNC_REDHAT_MODE
+        trap 'cleanup; redhat_shape_stop' EXIT
+        export BZR_FUNC_INLINE_KEY="$API_KEY"
+        run_bzr --api rest \
+            --server-url "http://127.0.0.1:${REDHAT_SHAPE_PORT}" \
+            --server-api-key-env BZR_FUNC_INLINE_KEY --server-email "$ADMIN_EMAIL" \
+            bug view "$_CC_SHAPE_BUG"
+        _CC_SHAPE_OK=1
+        if ! assert_success ||
+            ! assert_json '.cc | index("admin@test.bzr") != null' "true" ||
+            ! grep -Fq "cc-objects shaped route=" \
+                "$REDHAT_SHAPE_LOG"; then
+            _CC_SHAPE_OK=0
+        fi
+        redhat_shape_stop || _CC_SHAPE_OK=0
+        trap cleanup EXIT
+        unset BZR_FUNC_INLINE_KEY
+        if [[ $_CC_SHAPE_OK -eq 1 ]]; then
+            test_pass
+        else
+            test_fail "Red Hat cc shape proof failed; proxy log: $REDHAT_SHAPE_LOG"
+        fi
+    else
+        unset BZR_FUNC_REDHAT_MODE
+        test_fail "cc-objects response-shape proxy did not become ready: $REDHAT_SHAPE_LOG"
+    fi
+    unset _CC_SHAPE_BUG _CC_SHAPE_OK
+else
+    test_skip "cc shape bug was not created"
+fi
+
 test_begin "bug-list-product" "bug list --product"
 run_bzr bug list --product FuncTestProd
 if assert_success && assert_json_array_min_length '.' 2; then test_pass; fi

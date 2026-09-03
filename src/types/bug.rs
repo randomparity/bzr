@@ -112,7 +112,7 @@ struct BugWire {
     blocks: Vec<u64>,
     #[serde(default)]
     depends_on: Vec<u64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_cc_string_list")]
     cc: Vec<String>,
     #[serde(default)]
     op_sys: Option<String>,
@@ -152,6 +152,48 @@ where
             StringOrList::List(values) => values,
         })
     })
+}
+
+/// One `cc` list member as served by Bugzilla REST. Upstream servers send
+/// login-name strings; bugzilla.redhat.com sends the `cc_detail` user objects
+/// (`{name, email, real_name, id, ...}`) to authenticated clients. Accept both
+/// wire shapes so `bug view` deserializes against either server.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum CcEntry {
+    String(String),
+    Object {
+        name: Option<String>,
+        email: Option<String>,
+    },
+}
+
+impl CcEntry {
+    fn into_string(self) -> Option<String> {
+        match self {
+            Self::String(value) => Some(value),
+            // `name` is the Bugzilla login; `email` is Red Hat's documented
+            // cc_detail equivalent ("currently the same as the login name").
+            Self::Object { name, email } => name.or(email),
+        }
+    }
+}
+
+fn deserialize_cc_string_list<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let entries = Vec::<CcEntry>::deserialize(deserializer)?;
+    entries
+        .into_iter()
+        .map(|entry| {
+            entry.into_string().ok_or_else(|| {
+                <D::Error as serde::de::Error>::custom(
+                    "cc member object has neither `name` nor `email`",
+                )
+            })
+        })
+        .collect()
 }
 
 impl From<BugWire> for Bug {

@@ -104,6 +104,48 @@ async fn bug_view_integration() {
     assert_eq!(parsed["summary"], "Test bug");
 }
 
+/// Red Hat Bugzilla serves `cc` as user objects (same shape as `cc_detail`)
+/// to authenticated REST clients. bug view must deserialize that shape into
+/// the string `cc` list instead of failing with exit 8.
+#[tokio::test]
+async fn bug_view_integration_cc_objects() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{
+                "id": 42,
+                "summary": "RH-shaped view",
+                "status": "NEW",
+                "cc": [
+                    {"id": 215_372, "name": "airlied", "email": "airlied", "real_name": "Dave Airlie"},
+                    {"id": 41342, "name": "bugproxy", "email": "bugproxy", "real_name": "IBM Bug Proxy"}
+                ],
+                "cc_detail": [
+                    {"id": 215_372, "name": "airlied", "email": "airlied", "real_name": "Dave Airlie"},
+                    {"id": 41342, "name": "bugproxy", "email": "bugproxy", "real_name": "IBM Bug Proxy"}
+                ]
+            }]
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let (result, output) = dispatch_cli_with_output(&["bzr", "bug", "view", "42"]).await;
+    assert!(
+        result.is_ok(),
+        "RH-shaped bug view should succeed: {result:?}"
+    );
+    let parsed = bzr::test_helpers::json_envelope_data(&output);
+    assert_eq!(parsed["id"], 42);
+    assert_eq!(
+        parsed["cc"],
+        serde_json::json!(["airlied", "bugproxy"]),
+        "cc objects must collapse to login names"
+    );
+}
+
 #[tokio::test]
 async fn bug_search_integration() {
     let (_lock, mock, _tmp) = setup_test_env().await;
