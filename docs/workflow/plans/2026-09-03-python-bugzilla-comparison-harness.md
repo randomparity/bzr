@@ -150,7 +150,7 @@ all four result classes are represented by the harness contract; cleanup runs on
 
 **Interfaces:** The workflow comparison job invokes `make functional-compare-all` with the already
 built release binary and uploads counts through `GITHUB_STEP_SUMMARY`. The parity report references
-the stable ID `compare/00-products/list-products`.
+the stable ID `compare/00-products/list-products` and marks only that proven row as `parity`.
 
 **Verification**
 
@@ -166,7 +166,8 @@ the stable ID `compare/00-products/list-products`.
    bounded timeout, and always-run targeted cleanup.
 2. Extend `check-shell` to cover the runner, all-version driver, comparison phases, and pybz test
    scripts; extend `check-functional-test-ids` to validate the comparison tree.
-3. Create the parity report skeleton and product-list row.
+3. Create the parity report skeleton and product-list `parity` row; leave later rows and their
+   terminal classifications to their owning follow-on issues.
 4. Run `make -n functional-compare-all`, then `make lint`, `make test`,
    `make functional-compare-all`, and `make functional-test-all`; expect exit 0 for each.
 5. Commit documentation and integration wiring.
