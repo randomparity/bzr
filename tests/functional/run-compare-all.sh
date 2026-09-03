@@ -1,7 +1,8 @@
 #!/bin/bash
 # Run the comparison harness against every supported Bugzilla version.
-# SC2329: cleanup_all is invoked through the EXIT trap.
-# shellcheck disable=SC2329
+# SC2317/SC2329: cleanup_all is invoked through the EXIT trap; the diagnostic code differs between
+# supported ShellCheck versions.
+# shellcheck disable=SC2317,SC2329
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
