@@ -6,7 +6,7 @@ RUST_MIN_VERSION := 1.89.0
         check-no-spawn check-release-security-notes check-shell clean help man \
         skills-test \
         mutants mutants-fast mutants-list audit-mutant-skips \
-        functional-build functional-start functional-test functional-stop \
+        functional-build functional-start functional-test functional-stop functional-compare functional-compare-all \
         functional-test-bz50 functional-test-bz52 functional-test-bz53 functional-test-all functional-stop-all \
         functional-test-keyring
 
@@ -130,6 +130,7 @@ check-functional-test-ids: ## Validate stable semantic references in functional 
 	@command -v rg >/dev/null || { echo "ERROR: ripgrep (rg) is required for this guard"; exit 1; }
 	bash tools/check-functional-test-ids-tests.sh
 	bash tools/check-functional-test-ids.sh .
+	bash tools/check-functional-test-ids.sh . tests/functional/run-compare.sh tests/functional/compare
 
 check-no-spawn: ## Guard the single-threaded-runtime assumption (CONC-3)
 	@command -v rg >/dev/null || { echo "ERROR: ripgrep (rg) is required for this guard"; exit 1; }
@@ -144,8 +145,8 @@ check-shell: ## Lint shell scripts (shellcheck + shfmt, POSIX and bash)
 	@command -v shfmt >/dev/null || { echo "ERROR: shfmt is required for this guard"; echo "  Install: brew install shfmt  |  https://github.com/mvdan/sh/releases"; exit 1; }
 	shellcheck -s sh install.sh tests/installer/smoke.sh
 	shellcheck -s bash tools/*.sh
-	shellcheck -s bash tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/container-env.sh tests/functional/phases/*.sh
-	bash -n tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/phases/*.sh
+	shellcheck -s bash tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/run-compare.sh tests/functional/run-compare-all.sh tests/functional/container-env.sh tests/functional/phases/*.sh tests/functional/compare/*.sh
+	bash -n tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/run-compare.sh tests/functional/run-compare-all.sh tests/functional/phases/*.sh tests/functional/compare/*.sh
 	shfmt -d -ln posix -i 2 install.sh tests/installer/smoke.sh
 	shfmt -d -ln bash -i 2 tools/*.sh
 
@@ -195,6 +196,9 @@ functional-start: ## Start the Bugzilla container
 functional-test: functional-start ## Run functional tests against real Bugzilla
 	tests/functional/run-tests.sh
 
+functional-compare: release functional-start ## Compare bzr and python-bugzilla
+	BZR_COMPARE_BIN="$(CURDIR)/target/release/bzr" tests/functional/run-compare.sh
+
 functional-stop: ## Stop and remove the Bugzilla container
 	tests/functional/setup-bugzilla.sh stop
 
@@ -216,6 +220,9 @@ functional-test-bz53: ## Run functional tests against Bugzilla 5.3 (master)
 
 functional-test-all: ## Run functional tests against all Bugzilla versions
 	tests/functional/run-all-versions.sh
+
+functional-compare-all: release ## Compare bzr and python-bugzilla on all versions
+	BZR_COMPARE_BIN="$(CURDIR)/target/release/bzr" tests/functional/run-compare-all.sh
 
 functional-stop-all: ## Stop all Bugzilla test containers
 	BZR_BZ_VERSION=bz50 tests/functional/setup-bugzilla.sh stop

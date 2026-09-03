@@ -154,7 +154,7 @@ if ! awk -v expected_source="source \"\$SCRIPT_DIR/$phase_dir_basename/\${_phase
 fi
 
 set +e
-rg -n --no-heading -F 'CURRENT_TEST_GROUP' "${phase_files[@]}" >"$group_references"
+rg -n --with-filename --no-heading -F 'CURRENT_TEST_GROUP' "${phase_files[@]}" >"$group_references"
 group_status=$?
 set -e
 case $group_status in
@@ -170,7 +170,7 @@ case $group_status in
 esac
 
 set +e
-rg -n --no-heading -F 'test_begin' "${phase_files[@]}" >"$occurrences"
+rg -n --with-filename --no-heading -F 'test_begin' "${phase_files[@]}" >"$occurrences"
 occurrence_status=$?
 set -e
 case $occurrence_status in
