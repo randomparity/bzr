@@ -45,7 +45,7 @@ CURRENT_TEST_GROUP=""
 _compare_runtime="${_compare_runtime:-}"
 
 cleanup() {
-    if [[ -n "$_compare_runtime" ]]; then
+    if [[ -n "$PYBZ_RUNTIME" ]]; then
         pybz_sidecar_stop "$_compare_runtime" || true
     fi
     rm -rf "$FUNC_CONFIG_DIR"
@@ -70,6 +70,7 @@ for _phase in \
     00-products; do
     CURRENT_TEST_GROUP="$_phase"
     source "$SCRIPT_DIR/compare/${_phase}.sh"
+    _render_test_result
 done
 
 echo "── Comparison cleanup (${BZ_VERSION}) ───────────────────────────"

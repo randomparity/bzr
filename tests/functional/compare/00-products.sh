@@ -13,7 +13,7 @@ else
     printf '%s\n' "$BZR_EXIT" >"$COMPARE_EXCHANGE_DIR/bzr-products.exit"
 
     if ! jq -r '.[].name' "$COMPARE_EXCHANGE_DIR/bzr-products.json" |
-        LC_ALL=C sort >"$COMPARE_EXCHANGE_DIR/bzr-product-names"; then
+        awk 'NF' | LC_ALL=C sort -u >"$COMPARE_EXCHANGE_DIR/bzr-product-names"; then
         test_fail "could not normalize bzr product names"
     else
         run_pybz --bugzilla http://127.0.0.1 info --products
@@ -24,7 +24,7 @@ else
             cp "$BZR_STDERR" "$COMPARE_EXCHANGE_DIR/pybz-products.stderr"
             printf '%s\n' "$BZR_EXIT" >"$COMPARE_EXCHANGE_DIR/pybz-products.exit"
 
-            if LC_ALL=C sort "$COMPARE_EXCHANGE_DIR/pybz-products.txt" \
+            if awk 'NF' "$COMPARE_EXCHANGE_DIR/pybz-products.txt" | LC_ALL=C sort -u \
                 >"$COMPARE_EXCHANGE_DIR/pybz-product-names" &&
                 diff -u "$COMPARE_EXCHANGE_DIR/bzr-product-names" \
                     "$COMPARE_EXCHANGE_DIR/pybz-product-names"; then

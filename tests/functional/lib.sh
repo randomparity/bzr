@@ -35,6 +35,10 @@ FAIL_COUNT=0
 SKIP_COUNT=0
 GAP_COUNT=0
 LAST_TEST_RESULT=""
+LAST_TEST_REASON=""
+LAST_GAP_ISSUE=""
+LAST_TEST_SHOW_CAPTURE=0
+TEST_RESULT_PENDING=0
 GAP_APPLIED=0
 CURRENT_TEST=""
 CURRENT_TEST_GROUP=""
@@ -52,6 +56,45 @@ else
 fi
 
 # ── Test lifecycle ───────────────────────────────────────────────────
+
+_render_test_result() {
+    if [[ $TEST_RESULT_PENDING -eq 0 ]]; then
+        return 0
+    fi
+
+    case "$LAST_TEST_RESULT" in
+    PASS)
+        printf '%bPASS%b\n' "$GREEN" "$RESET"
+        ;;
+    FAIL)
+        printf '%bFAIL%b' "$RED" "$RESET"
+        if [[ -n "$LAST_TEST_REASON" ]]; then
+            printf '  (%s)' "$LAST_TEST_REASON"
+        fi
+        printf '\n'
+        if [[ $LAST_TEST_SHOW_CAPTURE -eq 1 ]]; then
+            if [[ -f "$BZR_STDOUT" ]]; then
+                echo "    stdout: $(head -5 "$BZR_STDOUT")"
+            fi
+            if [[ -f "$BZR_STDERR" ]]; then
+                echo "    stderr: $(head -5 "$BZR_STDERR")"
+            fi
+        fi
+        ;;
+    GAP)
+        printf '%bGAP%b (#%s)\n' "$YELLOW" "$RESET" "$LAST_GAP_ISSUE"
+        ;;
+    SKIP)
+        printf '%bSKIP%b' "$YELLOW" "$RESET"
+        if [[ -n "$LAST_TEST_REASON" ]]; then
+            printf '  (%s)' "$LAST_TEST_REASON"
+        fi
+        printf '\n'
+        ;;
+    esac
+    TEST_RESULT_PENDING=0
+    return 0
+}
 
 test_begin() {
     if [[ $# -ne 2 ]]; then
@@ -82,9 +125,14 @@ test_begin() {
         ;;
     esac
 
+    _render_test_result
     SEEN_TEST_IDS="${SEEN_TEST_IDS}${test_id}"$'\n'
     CURRENT_TEST="$description"
     LAST_TEST_RESULT=""
+    LAST_TEST_REASON=""
+    LAST_GAP_ISSUE=""
+    LAST_TEST_SHOW_CAPTURE=0
+    TEST_RESULT_PENDING=0
     GAP_APPLIED=0
     printf "  ${CYAN}TEST${RESET}  [%s] %s ... " "$test_id" "$CURRENT_TEST"
     return 0
@@ -93,7 +141,12 @@ test_begin() {
 test_pass() {
     PASS_COUNT=$((PASS_COUNT + 1))
     LAST_TEST_RESULT="PASS"
-    printf '%bPASS%b\n' "$GREEN" "$RESET"
+    LAST_TEST_REASON=""
+    LAST_TEST_SHOW_CAPTURE=0
+    TEST_RESULT_PENDING=1
+    if [[ ${TEST_ID_PREFIX:-} != compare ]]; then
+        _render_test_result
+    fi
     return 0
 }
 
@@ -101,17 +154,11 @@ test_fail() {
     local reason="${1:-}"
     FAIL_COUNT=$((FAIL_COUNT + 1))
     LAST_TEST_RESULT="FAIL"
-    printf '%bFAIL%b' "$RED" "$RESET"
-    if [[ -n "$reason" ]]; then
-        printf "  (%s)" "$reason"
-    fi
-    printf "\n"
-    # Print captured stdout/stderr for debugging
-    if [[ -f "$BZR_STDOUT" ]]; then
-        echo "    stdout: $(head -5 "$BZR_STDOUT")"
-    fi
-    if [[ -f "$BZR_STDERR" ]]; then
-        echo "    stderr: $(head -5 "$BZR_STDERR")"
+    LAST_TEST_REASON="$reason"
+    LAST_TEST_SHOW_CAPTURE=1
+    TEST_RESULT_PENDING=1
+    if [[ ${TEST_ID_PREFIX:-} != compare ]]; then
+        _render_test_result
     fi
     return 0
 }
@@ -120,15 +167,15 @@ test_skip() {
     local reason="${1:-}"
     SKIP_COUNT=$((SKIP_COUNT + 1))
     LAST_TEST_RESULT="SKIP"
-    printf '%bSKIP%b' "$YELLOW" "$RESET"
-    if [[ -n "$reason" ]]; then
-        printf "  (%s)" "$reason"
-    fi
-    printf "\n"
+    LAST_TEST_REASON="$reason"
+    LAST_TEST_SHOW_CAPTURE=0
+    TEST_RESULT_PENDING=1
+    _render_test_result
     return 0
 }
 
 test_summary() {
+    _render_test_result
     echo ""
     echo "════════════════════════════════════════════════════════════"
     printf "  ${GREEN}PASSED: %d${RESET}  " "$PASS_COUNT"
@@ -139,15 +186,25 @@ test_summary() {
     echo "════════════════════════════════════════════════════════════"
 
     if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then
-        {
-            printf '## bzr functional test summary\n\n'
-            printf '| Result | Count |\n'
-            printf '| --- | ---: |\n'
-            printf '| Passed | %d |\n' "$PASS_COUNT"
-            printf '| Failed | %d |\n' "$FAIL_COUNT"
-            printf '| Skipped | %d |\n' "$SKIP_COUNT"
-            printf '| Gaps | %d |\n\n' "$GAP_COUNT"
-        } >>"$GITHUB_STEP_SUMMARY"
+        if [[ ${TEST_ID_PREFIX:-} == compare ]]; then
+            {
+                printf '## bzr/python-bugzilla comparison summary\n\n'
+                printf '| Bugzilla | Passed | Failed | Skipped | Expected gaps |\n'
+                printf '| --- | ---: | ---: | ---: | ---: |\n'
+                printf '| %s | %d | %d | %d | %d |\n\n' \
+                    "$BZ_VERSION" "$PASS_COUNT" "$FAIL_COUNT" "$SKIP_COUNT" "$GAP_COUNT"
+            } >>"$GITHUB_STEP_SUMMARY"
+        else
+            {
+                printf '## bzr functional test summary\n\n'
+                printf '| Result | Count |\n'
+                printf '| --- | ---: |\n'
+                printf '| Passed | %d |\n' "$PASS_COUNT"
+                printf '| Failed | %d |\n' "$FAIL_COUNT"
+                printf '| Skipped | %d |\n' "$SKIP_COUNT"
+                printf '| Gaps | %d |\n\n' "$GAP_COUNT"
+            } >>"$GITHUB_STEP_SUMMARY"
+        fi
     fi
 
     if [[ $FAIL_COUNT -gt 0 ]]; then
@@ -167,21 +224,30 @@ expect_gap() {
         printf 'expect_gap: an expected gap was already applied to this test\n' >&2
         return 2
     fi
+    if [[ $TEST_RESULT_PENDING -ne 1 ]]; then
+        printf 'expect_gap: the current test has no pass or fail outcome\n' >&2
+        return 2
+    fi
 
     case "$LAST_TEST_RESULT" in
     FAIL)
         FAIL_COUNT=$((FAIL_COUNT - 1))
         GAP_COUNT=$((GAP_COUNT + 1))
         LAST_TEST_RESULT="GAP"
+        LAST_TEST_REASON=""
+        LAST_GAP_ISSUE="$issue"
+        LAST_TEST_SHOW_CAPTURE=0
         GAP_APPLIED=1
-        printf '    expected gap: issue #%s\n' "$issue"
+        _render_test_result
         ;;
     PASS)
         PASS_COUNT=$((PASS_COUNT - 1))
         FAIL_COUNT=$((FAIL_COUNT + 1))
         LAST_TEST_RESULT="FAIL"
+        LAST_TEST_REASON="expected gap issue #$issue appears resolved"
+        LAST_TEST_SHOW_CAPTURE=0
         GAP_APPLIED=1
-        printf '    stale expected gap: issue #%s\n' "$issue"
+        _render_test_result
         ;;
     *)
         printf 'expect_gap: the current test has no pass or fail outcome\n' >&2
@@ -292,7 +358,12 @@ pybz_sidecar_start() {
         "$runtime" build -t "$image" -f "$SCRIPT_DIR/pybz/Containerfile" "$SCRIPT_DIR/pybz"
     fi
     if "$runtime" container inspect "$sidecar" >/dev/null 2>&1; then
-        "$runtime" rm -f "$sidecar" >/dev/null
+        if [[ $("$runtime" container inspect --format '{{.State.Running}}' "$sidecar") == true ]]; then
+            printf 'pybz_sidecar_start: sidecar is already running: %s; stop the active comparison first\n' \
+                "$sidecar" >&2
+            return 1
+        fi
+        "$runtime" rm "$sidecar" >/dev/null
     fi
 
     "$runtime" run -d \
