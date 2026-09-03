@@ -62,7 +62,7 @@ disk_phases="$temporary/disk-phases"
 runner_sorted="$temporary/runner-sorted"
 disk_sorted="$temporary/disk-sorted"
 occurrences="$temporary/test-begin-occurrences"
-group_references="$temporary/group-references"
+runner_state_references="$temporary/runner-state-references"
 
 phase_files=()
 for phase_file in "$phases_dir"/*.sh; do
@@ -159,21 +159,24 @@ if ! awk -v expected_source="source \"\$SCRIPT_DIR/$phase_dir_basename/\${_phase
   error 'runner must contain exactly one canonical adjacent assignment/source pair'
 fi
 
-set +e
-rg -n --with-filename --no-heading -F 'CURRENT_TEST_GROUP' "${phase_files[@]}" >"$group_references"
-group_status=$?
-set -e
-case $group_status in
-0)
-  while IFS=: read -r file line content; do
-    error "$file:$line must not reference CURRENT_TEST_GROUP: $content"
-  done <"$group_references"
-  ;;
-1) ;;
-*)
-  error "rg failed while checking phase ownership of CURRENT_TEST_GROUP (exit $group_status)"
-  ;;
-esac
+for runner_variable in CURRENT_TEST_GROUP TEST_ID_PREFIX; do
+  set +e
+  rg -n --with-filename --no-heading -F "$runner_variable" \
+    "${phase_files[@]}" >"$runner_state_references"
+  reference_status=$?
+  set -e
+  case $reference_status in
+  0)
+    while IFS=: read -r file line content; do
+      error "$file:$line must not reference $runner_variable: $content"
+    done <"$runner_state_references"
+    ;;
+  1) ;;
+  *)
+    error "rg failed while checking phase ownership of $runner_variable (exit $reference_status)"
+    ;;
+  esac
+done
 
 set +e
 rg -n --with-filename --no-heading -F 'test_begin' "${phase_files[@]}" >"$occurrences"

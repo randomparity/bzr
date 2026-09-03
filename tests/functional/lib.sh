@@ -379,7 +379,10 @@ pybz_sidecar_stop() {
 
     sidecar=$(pybz_sidecar_name) || return 1
     if "$runtime" container inspect "$sidecar" >/dev/null 2>&1; then
-        "$runtime" rm -f "$sidecar" >/dev/null
+        if ! "$runtime" rm -f "$sidecar" >/dev/null; then
+            printf 'pybz_sidecar_stop: could not remove sidecar: %s\n' "$sidecar" >&2
+            return 1
+        fi
     fi
     PYBZ_RUNTIME=""
     return 0

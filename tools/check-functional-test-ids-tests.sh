@@ -224,6 +224,14 @@ new_compare_fixture() {
 valid_compare=$(new_compare_fixture valid-compare)
 expect_allowed valid-compare "$valid_compare" tests/functional/run-compare.sh tests/functional/compare
 
+mutable_compare_prefix=$(new_compare_fixture mutable-compare-prefix)
+sed -i.bak '1i\
+TEST_ID_PREFIX=' "$mutable_compare_prefix/tests/functional/compare/01-config.sh"
+rm "$mutable_compare_prefix/tests/functional/compare/01-config.sh.bak"
+expect_rejected mutable-compare-prefix "$mutable_compare_prefix" \
+  "must not reference TEST_ID_PREFIX" \
+  tests/functional/run-compare.sh tests/functional/compare
+
 mismatched_compare_source=$(new_compare_fixture mismatched-compare-source)
 sed -i.bak 's|/compare/|/phases/|' \
   "$mismatched_compare_source/tests/functional/run-compare.sh"
