@@ -1,0 +1,5 @@
+FROM python:3.14.7-slim-bookworm
+
+RUN pip install --no-cache-dir python-bugzilla==3.3.0
+
+CMD ["sleep", "infinity"]
