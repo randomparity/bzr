@@ -1,5 +1,6 @@
 CARGO ?= cargo
 RUST_MIN_VERSION := 1.89.0
+BZR_COMPARE_BIN ?= $(CURDIR)/target/release/bzr
 
 .PHONY: setup check-rust ensure-components ensure-coverage-prereqs ensure-mutants-prereq install-hooks \
         build release test test-verbose test-fast test-one coverage fmt clippy lint check-build-script check-test-layout check-functional-test-ids \
@@ -145,8 +146,8 @@ check-shell: ## Lint shell scripts (shellcheck + shfmt, POSIX and bash)
 	@command -v shfmt >/dev/null || { echo "ERROR: shfmt is required for this guard"; echo "  Install: brew install shfmt  |  https://github.com/mvdan/sh/releases"; exit 1; }
 	shellcheck -s sh install.sh tests/installer/smoke.sh
 	shellcheck -s bash tools/*.sh
-	shellcheck -s bash tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/run-compare.sh tests/functional/run-compare-all.sh tests/functional/container-env.sh tests/functional/phases/*.sh tests/functional/compare/*.sh
-	bash -n tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/run-compare.sh tests/functional/run-compare-all.sh tests/functional/phases/*.sh tests/functional/compare/*.sh
+	shellcheck -s bash tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/run-compare.sh tests/functional/run-compare-all.sh tests/functional/container-env.sh tests/functional/phases/*.sh tests/functional/compare/*.sh tests/functional/pybz/*.sh
+	bash -n tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/run-compare.sh tests/functional/run-compare-all.sh tests/functional/phases/*.sh tests/functional/compare/*.sh tests/functional/pybz/*.sh
 	shfmt -d -ln posix -i 2 install.sh tests/installer/smoke.sh
 	shfmt -d -ln bash -i 2 tools/*.sh
 
@@ -197,7 +198,7 @@ functional-test: functional-start ## Run functional tests against real Bugzilla
 	tests/functional/run-tests.sh
 
 functional-compare: release functional-start ## Compare bzr and python-bugzilla
-	BZR_COMPARE_BIN="$(CURDIR)/target/release/bzr" tests/functional/run-compare.sh
+	BZR_COMPARE_BIN="$(BZR_COMPARE_BIN)" tests/functional/run-compare.sh
 
 functional-stop: ## Stop and remove the Bugzilla container
 	tests/functional/setup-bugzilla.sh stop
@@ -222,7 +223,7 @@ functional-test-all: ## Run functional tests against all Bugzilla versions
 	tests/functional/run-all-versions.sh
 
 functional-compare-all: release ## Compare bzr and python-bugzilla on all versions
-	BZR_COMPARE_BIN="$(CURDIR)/target/release/bzr" tests/functional/run-compare-all.sh
+	BZR_COMPARE_BIN="$(BZR_COMPARE_BIN)" tests/functional/run-compare-all.sh
 
 functional-stop-all: ## Stop all Bugzilla test containers
 	BZR_BZ_VERSION=bz50 tests/functional/setup-bugzilla.sh stop
