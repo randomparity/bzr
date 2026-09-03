@@ -24,20 +24,22 @@ use crate::types::output::{OutputFormat, ProgressFormat};
 /// otherwise return a full page forever. Far above any real result set.
 const MAX_PAGES: u32 = 10_000;
 
-/// Resolve the effective `offset` for a search. A `--from-url` (or a saved
-/// query imported from one) may carry its own `offset=` as an unrecognized
-/// param living in `raw_params`; fold it into the struct field — the single
-/// source of truth the client appends and the `--paginate` loop steps — strip
-/// the raw copy so a request never sends two conflicting `offset` params, then
-/// let an explicit CLI `--offset` override. Mirrors how a URL's `limit` is
-/// folded into the structured field.
-pub(crate) fn resolve_offset(params: &mut SearchParams, cli_offset: Option<u32>) {
+/// Resolve structured paging fields and remove duplicate raw copies.
+pub(crate) fn resolve_page_window(params: &mut SearchParams, cli_offset: Option<u32>) {
+    let raw_limit = params
+        .raw_params
+        .iter()
+        .find(|(key, _)| key == "limit")
+        .and_then(|(_, value)| value.parse::<u32>().ok());
     let url_offset = params
         .raw_params
         .iter()
-        .find(|(k, _)| k == "offset")
-        .and_then(|(_, v)| v.parse::<u32>().ok());
-    params.raw_params.retain(|(k, _)| k != "offset");
+        .find(|(key, _)| key == "offset")
+        .and_then(|(_, value)| value.parse::<u32>().ok());
+    params
+        .raw_params
+        .retain(|(key, _)| key != "limit" && key != "offset");
+    params.limit = params.limit.or(raw_limit);
     params.offset = cli_offset.or(url_offset);
 }
 
