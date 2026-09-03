@@ -34,7 +34,7 @@ fn bug_deserializes_full() {
 }
 
 #[test]
-fn bug_platform_uses_canonical_input_and_publishes_transition_alias() {
+fn bug_platform_uses_canonical_input_without_compatibility_alias() {
     let bug: Bug = serde_json::from_value(serde_json::json!({
         "id": 42,
         "platform": "x86_64"
@@ -44,7 +44,7 @@ fn bug_platform_uses_canonical_input_and_publishes_transition_alias() {
 
     let serialized = serde_json::to_value(bug).unwrap();
     assert_eq!(serialized["platform"], "x86_64");
-    assert_eq!(serialized["rep_platform"], "x86_64");
+    assert!(!serialized.as_object().unwrap().contains_key("rep_platform"));
 
     let legacy: Bug = serde_json::from_value(serde_json::json!({
         "id": 43,

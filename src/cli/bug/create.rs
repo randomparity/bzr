@@ -139,7 +139,7 @@ pub(crate) struct CreateArgs {
     #[arg(long)]
     pub op_sys: Option<String>,
     /// Hardware platform (required by some Bugzilla installations)
-    #[arg(long, alias = "rep-platform")]
+    #[arg(long)]
     pub platform: Option<String>,
     /// Bug IDs that this bug blocks (comma-separated)
     #[arg(long, value_delimiter = ',')]

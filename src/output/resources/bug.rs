@@ -79,9 +79,6 @@ pub fn bug_to_json(bug: &Bug, spec: ColumnSpec<'_>) -> serde_json::Value {
         }
         for canonical in canonical_excludes(spec.exclude) {
             map.remove(canonical);
-            if canonical == "platform" {
-                map.remove("rep_platform");
-            }
         }
     }
     value

@@ -112,7 +112,7 @@ impl BugField {
             BugField::Url => &["url"],
             BugField::Whiteboard => &["whiteboard"],
             BugField::OpSys => &["op_sys"],
-            BugField::Platform => &["platform", "rep_platform"],
+            BugField::Platform => &["platform"],
             BugField::Deadline => &["deadline"],
             BugField::Keywords => &["keywords"],
             BugField::Blocks => &["blocks"],

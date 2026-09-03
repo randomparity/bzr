@@ -26,7 +26,7 @@ def main():
         sys.stderr.write(
             json.dumps(
                 {
-                    "schema_version": "2.1.0",
+                    "schema_version": "3.0.0",
                     "error": {
                         "type": "input",
                         "message": "fixture has no response for command",

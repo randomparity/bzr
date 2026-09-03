@@ -36,7 +36,6 @@ struct JsonCreateBug {
     severity: Option<String>,
     assignee: Option<String>,
     op_sys: Option<String>,
-    #[serde(alias = "rep_platform")]
     platform: Option<String>,
     alias: Option<String>,
     url: Option<String>,
