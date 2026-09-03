@@ -441,6 +441,8 @@ def emit_rewrite_evidence(evidence):
     for marker, route, count in evidence:
         if marker == "metadata-sort-keys":
             sys.stderr.write(f"metadata-sort-keys shaped route={route} count={count}\n")
+        elif marker == "user-group-shaped":
+            sys.stderr.write(f"user-group-shaped route={route} count={count}\n")
         else:
             sys.stderr.write(f"{marker} shaped route={route} count={count}\n")
     if evidence:
