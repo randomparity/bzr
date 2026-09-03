@@ -71,7 +71,8 @@ pub struct SearchParams {
     /// Filter by Resolution (repeatable). Exact match. Empty
     /// resolution matches open bugs.
     pub resolution: Vec<String>,
-    /// Filter by QA Contact login (repeatable). Exact match.
+    /// Filter by QA Contact login substring (repeatable). Negated values
+    /// use the role-substring complement.
     pub qa_contact: Vec<String>,
     /// Filter by URL field substring (repeatable). Negated values
     /// use `notsubstring`.
