@@ -10,7 +10,7 @@ rebalance ownership, publish a digest, then close the milestone out. No new
 commands — this composes `bzr bug list`, `bzr bug history`, and `bzr bug
 update`.
 
-This reference is authored against **bzr 0.9.0**.
+This reference is authored against **bzr 0.9.1-dev**.
 
 ## 1. Enumerate the milestone
 
