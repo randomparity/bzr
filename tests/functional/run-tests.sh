@@ -18,6 +18,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # ── Source helpers ───────────────────────────────────────────────────
 source "$SCRIPT_DIR/lib.sh"
+TEST_ID_PREFIX=
 
 # ── Constants ────────────────────────────────────────────────────────
 BZ_PORT="${BZR_FUNC_PORT:-}"

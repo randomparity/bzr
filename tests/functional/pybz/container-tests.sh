@@ -83,6 +83,7 @@ run_expected_gap_fixture() {
 
 run_summary_fixture() {
     local summary
+    local ordinary_output
     summary=$(mktemp)
     trap 'rm -f "$summary"' RETURN
     export GITHUB_STEP_SUMMARY="$summary"
@@ -93,9 +94,10 @@ run_summary_fixture() {
     GAP_COUNT=3
     TEST_ID_PREFIX=''
     BZ_VERSION=bz50
-    test_summary >/dev/null
-    assert_equals $'## bzr functional test summary\n\n| Result | Count |\n| --- | ---: |\n| Passed | 1 |\n| Failed | 0 |\n| Skipped | 2 |\n| Gaps | 3 |' \
-        "$(<"$summary")" "ordinary GitHub summary"
+    ordinary_output=$(test_summary)
+    assert_equals $'\n════════════════════════════════════════════════════════════\n  PASSED: 1  FAILED: 0  SKIPPED: 2\n  TOTAL:  3\n════════════════════════════════════════════════════════════' \
+        "$ordinary_output" "ordinary terminal summary"
+    assert_equals '' "$(<"$summary")" "ordinary GitHub summary"
 
     : >"$summary"
     TEST_ID_PREFIX=compare

@@ -152,10 +152,7 @@ if ! awk -v expected_source="source \"\$SCRIPT_DIR/$phase_dir_basename/\${_phase
   inside && /^done[[:space:]]*$/ { inside = 0 }
   { previous_assignment = 0 }
   END {
-    prefix_error = (expected_prefix == "" &&
-      prefix_assignments != matching_prefixes) ||
-      (expected_prefix != "" &&
-        (prefix_assignments != 1 || matching_prefixes != 1))
+    prefix_error = (prefix_assignments != 1 || matching_prefixes != 1)
     if (assignments != 1 || sources != 1 || pairs != 1 || prefix_error) exit 1
   }
 ' "$runner"; then
