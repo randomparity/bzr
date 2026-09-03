@@ -8,7 +8,9 @@ Filter flags (`--product`, `--component`, `--status`,
 `--assignee`, `--creator`, `--priority`, `--severity`) are
 repeatable for OR semantics within a category and AND across
 categories. Prefix any filter value with `!` to invert it
-(e.g. `--status '!CLOSED'`).
+(e.g. `--status '!CLOSED'`). Assignee and creator are login
+substring matches; their negation excludes every substring match,
+and a bare `!` is invalid.
 
 `--summary` matches a substring against the bug's Summary field
 across all bug states (open and closed). It is the structured
@@ -17,7 +19,9 @@ quicksearch syntax and defaults to open bugs only.
 
 `--limit` defaults to 50; raise it for broader scans, but very
 large values may exceed the server's max-results setting and
-return a truncated list. `--fields` and `--exclude-fields` control
+return a truncated list. `--limit 0` means an unbounded search and
+cannot be combined with a nonzero `--offset`. `--fields` and
+`--exclude-fields` control
 which fields are requested from the server; in table output they
 select and remove columns (in the given order). Under `--json` the
 output object is trimmed to the selected fields (gh-style):
@@ -39,7 +43,9 @@ Eight additional field filters from bzl-parity issue #158:
 repeatable for OR within a field; AND across fields. Prefix
 with `!` to invert. `--whiteboard` and `--url` are substring
 matches (negation uses `notsubstring`); the other six are
-exact match (negation uses `notequals`).
+split between five exact matches (negation uses `notequals`) and
+`--qa-contact`, which is a login substring match whose negation
+excludes every substring match. A bare `!` is invalid for QA contact.
 
 Examples:
 

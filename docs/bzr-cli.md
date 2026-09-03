@@ -327,7 +327,7 @@ one-element arrays; Red Hat-style empty, single, and multi-value arrays are
 preserved in server order. Missing values remain `null`. Table and detail
 output joins multiple values with `, `.
 
-Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`, `--priority`, `--severity`) are repeatable for OR semantics and support a `!` prefix for negation (NOT).
+Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`, `--priority`, `--severity`) are repeatable for OR semantics and support a `!` prefix for negation (NOT). Assignee and creator values match login substrings; negation excludes every matching substring, and a bare `!` is rejected.
 
 `--summary` is the structured counterpart to [`bzr bug search`](#bzr-bug-search): it does a substring match against the bug's Summary field across all states (open and closed), whereas `bzr bug search` uses Bugzilla's quicksearch and defaults to open bugs only.
 
@@ -336,15 +336,15 @@ Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`,
 | `--product <P>` | No | | Filter by product name (repeatable; `!` prefix to exclude) |
 | `--component <C>` | No | | Filter by component name (repeatable; `!` prefix to exclude) |
 | `--status <S>` | No | | Filter by status (repeatable; `!` prefix to exclude) |
-| `--assignee <A>` | No | | Filter by assignee email (repeatable; `!` prefix to exclude) |
-| `--creator <C>` | No | | Filter by bug creator (repeatable; `!` prefix to exclude) |
+| `--assignee <A>` | No | | Filter by assignee login substring (repeatable; `!` prefix excludes substring matches; bare `!` is invalid) |
+| `--creator <C>` | No | | Filter by creator login substring (repeatable; `!` prefix excludes substring matches; bare `!` is invalid) |
 | `--priority <P>` | No | | Filter by priority (repeatable; `!` prefix to exclude) |
 | `--severity <S>` | No | | Filter by severity (repeatable; `!` prefix to exclude) |
 | `--id <ID>` | No | | Filter by bug ID (repeatable; `!` negation not supported) |
 | `--alias <A>` | No | | Filter by bug alias |
 | `--summary <S>` | No | | Substring match on the Summary field (matches all bug states) |
 | `--limit <N>` | No | 50 | Max results |
-| `--offset <N>` | No | | Skip the first N matches (manual paging past `--limit`). Mutually exclusive with `--paginate`; cannot be combined with `--count`. |
+| `--offset <N>` | No | | Skip the first N matches (manual paging past `--limit`). Mutually exclusive with `--paginate`; cannot be combined with `--count` or with `--limit 0` when N is nonzero. |
 | `--paginate` | No | | Retrieve every matching page, looping internally past `--limit` (which becomes the per-request page size). For "process all matching bugs" workflows. Cannot be combined with `--count`. |
 | `--count` | No | | Print only the count of matching bugs — an integer (table) or `{"count": N}` (JSON). Fetches ids only and lifts the row limit, so the count reflects all matches (bounded by the server's max-results setting). Ignores `--fields`, `--limit`, and `--sort`. |
 | `--fields <F>` | No | | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). A selection that resolves to no known fields is rejected with exit code 7 rather than emitting an empty object. |
@@ -370,6 +370,9 @@ persists an order into the saved query.
 
 `--limit` caps a single result window. `--offset <N>` and `--paginate` apply to
 `bug list`, `bug search`, `bug my`, and `query run` and let you go past it:
+
+`--limit 0` means an unbounded search. Combining it with a nonzero `--offset`
+is rejected with exit code 7 instead of sending an ambiguous window to Bugzilla.
 
 - **`--offset <N>`** skips the first `N` matches, so a window beyond the first
   `--limit` is retrievable. Page through a large set by repeating with
@@ -428,7 +431,7 @@ within a field, AND across fields, with `!`-prefix to invert:
 | `--op-sys` | exact | `notequals` |
 | `--platform` | exact | `notequals` |
 | `--resolution` | exact (empty matches open) | `notequals` |
-| `--qa-contact` | exact | `notequals` |
+| `--qa-contact` | login substring | `nowordssubstr` |
 | `--url` | substring | `notsubstring` |
 
 Examples:
@@ -529,7 +532,7 @@ bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?known_name=m
 | `--from-url <URL>` | No* | | Execute a search from a Bugzilla buglist.cgi URL. Recognized parameters (product, component, status, etc.) are mapped to structured fields; unrecognized parameters (boolean charts, field-change filters) are passed through to the REST API verbatim. |
 | `--save-as [NAME]` | No | | Save this URL query for future reuse. If `NAME` is omitted, uses the URL's `known_name` parameter as the query name. Requires `--from-url`. |
 | `--limit <N>` | No | 50 | Max results. When `--from-url` is used, the URL's own limit parameter takes precedence unless overridden here. |
-| `--offset <N>` | No | | Skip the first N matches (manual paging past `--limit`). Mutually exclusive with `--paginate`; cannot be combined with `--count`. |
+| `--offset <N>` | No | | Skip the first N matches (manual paging past `--limit`). Mutually exclusive with `--paginate`; cannot be combined with `--count` or with `--limit 0` when N is nonzero. |
 | `--paginate` | No | | Retrieve every matching page, looping internally past `--limit`. Cannot be combined with `--count`. |
 | `--count` | No | | Print only the count of matching bugs — an integer (table) or `{"count": N}` (JSON). Counts all matches (bounded by the server's max-results setting). |
 | `--fields <F>` | No | | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). A selection that resolves to no known fields is rejected with exit code 7 rather than emitting an empty object. |
@@ -733,10 +736,10 @@ bzr bug my --status NEW --status '!RESOLVED'  # mixed positive and negated
 | `--op-sys <OS>` | No | | Filter by operating system (repeatable; `!` prefix to exclude) |
 | `--platform <P>` | No | | Filter by platform/hardware (repeatable; `!` prefix to exclude) |
 | `--resolution <R>` | No | | Filter by resolution (repeatable; `!` prefix to exclude; empty matches open bugs) |
-| `--qa-contact <Q>` | No | | Filter by QA contact login (repeatable; `!` prefix to exclude) |
+| `--qa-contact <Q>` | No | | Filter by QA contact login substring (repeatable; `!` prefix excludes substring matches; bare `!` is invalid) |
 | `--url <U>` | No | | Filter by URL field substring (repeatable; `!` prefix to exclude) |
 | `--limit <N>` | No | 50 | Max results per category. With `--all`, each of the three categories (assigned, created, CC'd) is queried separately up to this limit; duplicates across categories are removed. |
-| `--offset <N>` | No | | Skip the first N matches in each category. Mutually exclusive with `--paginate`; cannot be combined with `--count`. |
+| `--offset <N>` | No | | Skip the first N matches in each category. Mutually exclusive with `--paginate`; cannot be combined with `--count` or with `--limit 0` when N is nonzero. |
 | `--paginate` | No | | Retrieve every matching page of each category, looping internally past `--limit`, then de-duplicate. Cannot be combined with `--count`. |
 | `--count` | No | | Print only the count of distinct matching bugs (deduped across the active categories) — an integer (table) or `{"count": N}` (JSON). |
 | `--fields <F>` | No | | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). A selection that resolves to no known fields is rejected with exit code 7 rather than emitting an empty object. |
@@ -2161,8 +2164,8 @@ bzr query save recent-firefox --product Firefox --changed-since 2026-04-01
 | `--product <P>` | No* | Filter by product name (repeatable; prefix with `!` to exclude) |
 | `--component <C>` | No* | Filter by component name (repeatable; prefix with `!` to exclude) |
 | `--status <S>` | No* | Filter by status (repeatable; prefix with `!` to exclude) |
-| `--assignee <A>` | No* | Filter by assignee email (repeatable; prefix with `!` to exclude) |
-| `--creator <C>` | No* | Filter by bug creator email (repeatable; prefix with `!` to exclude) |
+| `--assignee <A>` | No* | Filter by assignee login substring (repeatable; `!` prefix excludes substring matches; bare `!` is invalid) |
+| `--creator <C>` | No* | Filter by creator login substring (repeatable; `!` prefix excludes substring matches; bare `!` is invalid) |
 | `--priority <P>` | No* | Filter by priority (repeatable; prefix with `!` to exclude) |
 | `--severity <S>` | No* | Filter by severity (repeatable; prefix with `!` to exclude) |
 | `--search <Q>` | No* | Free-text search query |
@@ -2284,7 +2287,7 @@ bzr query run recent-firefox --changed-since 2026-05-01
 |--------|----------|-------------|
 | `<NAME>` | Yes | Query name |
 | `--limit <N>` | No | Override the saved limit |
-| `--offset <N>` | No | Skip the first N matches (manual paging past `--limit`). Mutually exclusive with `--paginate`; cannot be combined with `--count`. |
+| `--offset <N>` | No | Skip the first N matches (manual paging past `--limit`). Mutually exclusive with `--paginate`; cannot be combined with `--count` or with an effective `--limit 0` when N is nonzero. |
 | `--paginate` | No | Retrieve every matching page, looping internally past `--limit`. Cannot be combined with `--count`. |
 | `--count` | No | Print only the count of matching bugs — an integer (table) or `{"count": N}` (JSON). Fetches ids only and lifts the row limit, so the count reflects all matches (bounded by the server's max-results setting). Ignores saved and per-run `--fields` and `--limit`; sort settings do not affect the count output. |
 | `--fields <F>` | No | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). |

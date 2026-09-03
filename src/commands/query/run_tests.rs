@@ -351,6 +351,47 @@ async fn query_run_count_rejects_offset_and_paginate() {
 }
 
 #[tokio::test]
+async fn query_run_rejects_saved_zero_limit_with_url_offset_before_search() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    update_config(|config| {
+        config.queries.insert(
+            "invalid-window-test".into(),
+            crate::types::SavedQuery {
+                product: vec!["TestProduct".into()],
+                limit: Some(0),
+                raw_params: vec![("offset".into(), "4".into())],
+                ..crate::types::SavedQuery::default()
+            },
+        );
+        Ok(())
+    })
+    .unwrap();
+
+    let action = run_action("invalid-window-test");
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::query::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(
+        matches!(result, Err(crate::error::BzrError::InputValidation { ref message, .. })
+            if message.contains("--limit 0") && message.contains("nonzero --offset")),
+        "expected saved-query paging validation, got {result:?}"
+    );
+    let search_requests = mock
+        .received_requests()
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|request| request.url.path() == "/rest/bug")
+        .count();
+    assert_eq!(search_requests, 0, "validation must precede Bug.search");
+}
+
+#[tokio::test]
 async fn query_run_count_ignores_saved_url_offset() {
     let (_lock, mock, _tmp) = setup_test_env().await;
 

@@ -55,7 +55,8 @@ pub(crate) struct PageArgs {
     ///
     /// Page through a large result set by repeating with increasing offsets;
     /// an empty/short page means there are no more matches. Mutually exclusive
-    /// with `--paginate`.
+    /// with `--paginate`. A nonzero offset cannot be combined with `--limit 0`,
+    /// because zero means an unbounded search.
     #[arg(long, value_name = "N", conflicts_with = "paginate")]
     pub offset: Option<u32>,
     /// Retrieve every matching page, looping internally past `--limit`.
@@ -218,7 +219,8 @@ pub(crate) struct BugFilterArgs {
     /// Filter by Resolution (repeatable for OR; prefix with ! to exclude); empty matches open bugs
     #[arg(long)]
     pub resolution: Vec<String>,
-    /// Filter by QA Contact login (repeatable for OR; prefix with ! to exclude)
+    /// Filter by QA Contact login substring (repeatable for OR).
+    /// Prefix with ! to exclude substring matches; ! alone is invalid.
     #[arg(long)]
     pub qa_contact: Vec<String>,
     /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude)
@@ -262,10 +264,12 @@ impl BugFilterArgs {
 /// Bug actor filters shared by `bug list` and saved-query commands.
 #[derive(Args, Debug, Clone, Default)]
 pub(crate) struct BugActorFilterArgs {
-    /// Filter by assignee (repeatable for OR; prefix with ! to exclude)
+    /// Filter by assignee login substring (repeatable for OR).
+    /// Prefix with ! to exclude substring matches; ! alone is invalid.
     #[arg(long)]
     pub assignee: Vec<String>,
-    /// Filter by creator (repeatable for OR; prefix with ! to exclude)
+    /// Filter by creator login substring (repeatable for OR).
+    /// Prefix with ! to exclude substring matches; ! alone is invalid.
     #[arg(long)]
     pub creator: Vec<String>,
 }

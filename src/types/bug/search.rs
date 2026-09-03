@@ -71,7 +71,8 @@ pub struct SearchParams {
     /// Filter by Resolution (repeatable). Exact match. Empty
     /// resolution matches open bugs.
     pub resolution: Vec<String>,
-    /// Filter by QA Contact login (repeatable). Exact match.
+    /// Filter by QA Contact login substring (repeatable). Negated values
+    /// use the role-substring complement.
     pub qa_contact: Vec<String>,
     /// Filter by URL field substring (repeatable). Negated values
     /// use `notsubstring`.
@@ -232,6 +233,27 @@ impl SearchParams {
             || self.creation_time.is_some()
             || self.last_change_time.is_some()
     }
+
+    /// Return the first negated role filter whose remainder contains no
+    /// Bugzilla search word. Bugzilla's role complement operator requires at
+    /// least one whitespace/comma-delimited word.
+    pub(crate) fn invalid_role_negation(&self) -> Option<(&'static str, &str)> {
+        [
+            ("--assignee", self.assigned_to.as_slice()),
+            ("--creator", self.creator.as_slice()),
+            ("--qa-contact", self.qa_contact.as_slice()),
+        ]
+        .into_iter()
+        .find_map(|(flag, values)| {
+            values.iter().find_map(|value| {
+                let remainder = value.strip_prefix('!')?;
+                let has_word = remainder
+                    .split(|c: char| c.is_whitespace() || c == ',')
+                    .any(|word| !word.is_empty());
+                (!has_word).then_some((flag, value.as_str()))
+            })
+        })
+    }
 }
 
 /// Splits filter values into (positive, negated) groups.
@@ -258,6 +280,8 @@ pub enum NegationOp {
     NotEquals,
     /// For substring-match fields (the inverse of `substring`).
     NotSubstring,
+    /// For Bugzilla role fields (the inverse of `anywordssubstr`).
+    NoWordsSubstring,
 }
 
 impl NegationOp {
@@ -267,6 +291,7 @@ impl NegationOp {
         match self {
             Self::NotEquals => "notequals",
             Self::NotSubstring => "notsubstring",
+            Self::NoWordsSubstring => "nowordssubstr",
         }
     }
 }
@@ -315,14 +340,14 @@ pub const FIELD_MAPPINGS: &[FieldMapping] = &[
         struct_field: "assigned_to",
         url_param: "assigned_to",
         internal_name: "assigned_to",
-        negation_operator: NegationOp::NotEquals,
+        negation_operator: NegationOp::NoWordsSubstring,
     },
     FieldMapping {
         field: FilterField::Creator,
         struct_field: "creator",
         url_param: "reporter",
         internal_name: "reporter",
-        negation_operator: NegationOp::NotEquals,
+        negation_operator: NegationOp::NoWordsSubstring,
     },
     FieldMapping {
         field: FilterField::Priority,
@@ -385,7 +410,7 @@ pub const FIELD_MAPPINGS: &[FieldMapping] = &[
         struct_field: "qa_contact",
         url_param: "qa_contact",
         internal_name: "qa_contact",
-        negation_operator: NegationOp::NotEquals,
+        negation_operator: NegationOp::NoWordsSubstring,
     },
     FieldMapping {
         field: FilterField::Url,

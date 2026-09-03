@@ -5,7 +5,7 @@ use crate::cli::bug::BugAction;
 use crate::cli::{Cli, Commands};
 use crate::types::output::SortDirection;
 use clap::error::ErrorKind;
-use clap::Parser as _;
+use clap::{CommandFactory as _, Parser as _};
 
 fn list_args(args: &[&str]) -> ListArgs {
     match Cli::try_parse_from(args).unwrap().command {
@@ -21,6 +21,24 @@ fn list_args(args: &[&str]) -> ListArgs {
 /// failure (which would mask argv drift in the test itself).
 fn parse_error_kind(args: &[&str]) -> ErrorKind {
     Cli::try_parse_from(args).err().unwrap().kind()
+}
+
+#[test]
+fn list_help_describes_role_complements_and_zero_limit_window() {
+    let mut command = Cli::command();
+    let list = command
+        .find_subcommand_mut("bug")
+        .unwrap()
+        .find_subcommand_mut("list")
+        .unwrap();
+    let help = list.render_long_help().to_string();
+
+    assert!(help.contains("assignee login substring"), "{help}");
+    assert!(help.contains("creator login substring"), "{help}");
+    assert!(help.contains("QA Contact login substring"), "{help}");
+    assert!(help.contains("! alone is invalid"), "{help}");
+    assert!(help.contains("--limit 0"), "{help}");
+    assert!(help.contains("nonzero `--offset`"), "{help}");
 }
 
 #[test]

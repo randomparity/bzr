@@ -12,6 +12,10 @@ test_begin "bug-my-assigned" "bug my (assigned)"
 run_bzr bug my
 if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
 
+test_begin "bug-my-zero-offset" "bug my preserves a valid zero-offset window"
+run_bzr bug my --limit 1 --offset 0
+if assert_success && assert_json_array_length '.' 1; then test_pass; fi
+
 test_begin "bug-my-created" "bug my --created"
 run_bzr bug my --created
 if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi

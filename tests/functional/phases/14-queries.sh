@@ -52,6 +52,22 @@ test_begin "query-run-with-limit-override" "query run with limit override"
 run_bzr query run prod-bugs --limit 1
 if assert_success && assert_json_array_length '.' 1; then test_pass; fi
 
+test_begin "query-run-nonzero-offset" "query run honors a nonzero offset"
+run_bzr query run prod-bugs --limit 1 --offset 0
+if assert_success && assert_json_array_length '.' 1; then
+    _Q_FIRST_ID=$(jq -r '.[0].id' "$BZR_STDOUT")
+    run_bzr query run prod-bugs --limit 1 --offset 1
+    if assert_success && assert_json_array_length '.' 1; then
+        _Q_OFFSET_ID=$(jq -r '.[0].id' "$BZR_STDOUT")
+        if [[ "$_Q_OFFSET_ID" != "$_Q_FIRST_ID" ]]; then
+            test_pass
+        else
+            test_fail "nonzero offset returned the first query result again"
+        fi
+    fi
+fi
+unset _Q_FIRST_ID _Q_OFFSET_ID
+
 test_begin "query-run-with-fields-override" "query run with fields override"
 run_bzr query run prod-bugs --fields id,summary,status
 if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi

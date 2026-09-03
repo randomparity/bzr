@@ -292,8 +292,18 @@ impl BugzillaClient {
     }
 }
 
+fn validate_role_negations(params: &SearchParams) -> Result<()> {
+    let Some((flag, value)) = params.invalid_role_negation() else {
+        return Ok(());
+    };
+    Err(BzrError::input(format!(
+        "{flag} negation '{value}' must contain a role substring after '!'"
+    )))
+}
+
 impl BugSearch<'_> {
     pub(crate) async fn execute(&mut self, params: &SearchParams) -> Result<Vec<Bug>> {
+        validate_role_negations(params)?;
         tracing::debug!(?params, %self.client.api_mode, "search parameters");
         // Guarantee `id` is fetched so the non-defaulted `Bug.id` deserializes,
         // even when the caller passed an id-less `--fields`. Only clone when

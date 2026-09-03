@@ -24,6 +24,18 @@ if assert_success && assert_json_exists '.id'; then
     test_pass
 fi
 
+test_begin "bug-list-assignee-substring-positive" "bug list assignee substring includes its match"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug list --id "$BUG1" --assignee admin
+    if assert_success && assert_json "[.[] | select(.id == $BUG1)] | length" "1"; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "bug-list-assignee-substring-negated-complement" "bug list negated assignee substring excludes its match"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug list --id "$BUG1" --assignee '!admin'
+    if assert_success && assert_json "[.[] | select(.id == $BUG1)] | length" "0"; then test_pass; fi
+else test_skip "no BUG1"; fi
+
 test_begin "bug-create-deprecated-platform-alias" "bug create deprecated --rep-platform alias"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Deprecated platform alias" --description "Alias transition coverage" \
@@ -194,6 +206,10 @@ else test_skip "no BUG1/BUG2"; fi
 test_begin "bug-search" "bug search"
 run_bzr bug search "Bug two searchable"
 if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
+
+test_begin "bug-search-zero-offset" "bug search preserves a valid zero-offset window"
+run_bzr bug search "Bug two searchable" --limit 1 --offset 0
+if assert_success && assert_json_array_length '.' 1; then test_pass; fi
 
 test_begin "bug-list-status-multiple-or" "bug list --status multiple (OR)"
 run_bzr bug list --product FuncTestProd --status NEW --status CONFIRMED

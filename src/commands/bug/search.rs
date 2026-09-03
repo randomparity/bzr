@@ -131,7 +131,7 @@ pub(super) async fn handle(
     ensure_no_paging_with_count(args.count, offset, args.page_args.paginate)?;
 
     let (client, mut params, save_info) = resolve_client_and_params(args, ctx).await?;
-    crate::commands::runtime::search::paging::resolve_offset(&mut params, offset);
+    crate::commands::runtime::search::paging::resolve_page_window(&mut params, offset);
     let columns = SearchColumns::from_params(&params);
     let field_preflight = if args.from_url.is_some() {
         FieldPreflight::Validate

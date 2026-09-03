@@ -3,7 +3,9 @@
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use super::{fetch_all_pages_with_cap, fetch_page, resolve_offset, write_truncation_note, Page};
+use super::{
+    fetch_all_pages_with_cap, fetch_page, resolve_page_window, write_truncation_note, Page,
+};
 use crate::client::test_helpers::{test_client, test_client_hybrid};
 use crate::types::{Bug, OutputFormat, SearchParams};
 
@@ -108,6 +110,66 @@ async fn fetch_page_raw_params_rejects_limit_that_cannot_overfetch() {
             .contains("query contains raw URL parameters that require REST API"),
         "overflow validation should happen before the fallback warning"
     );
+}
+
+#[tokio::test]
+async fn fetch_page_rejects_zero_limit_with_nonzero_offset_before_search() {
+    let mock = MockServer::start().await;
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        limit: Some(0),
+        offset: Some(1),
+        ..Default::default()
+    };
+
+    let result = fetch_page(
+        &client,
+        &params,
+        false,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await;
+    let Err(err) = result else {
+        panic!("expected zero-limit paging validation");
+    };
+
+    assert!(
+        matches!(&err, crate::error::BzrError::InputValidation { message, .. }
+        if message.contains("--limit 0") && message.contains("nonzero --offset"))
+    );
+    assert!(mock.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn fetch_page_allows_zero_limit_with_zero_offset() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("limit", "0"))
+        .and(query_param("offset", "0"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(bugs_body(1)))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        limit: Some(0),
+        offset: Some(0),
+        ..Default::default()
+    };
+
+    let page = fetch_page(
+        &client,
+        &params,
+        false,
+        None,
+        &mut crate::test_helpers::CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(page.bugs.len(), 1);
 }
 
 #[tokio::test]
@@ -374,9 +436,9 @@ fn truncation_note_noop_when_not_truncated() {
 }
 
 #[test]
-fn resolve_offset_folds_url_offset_into_field() {
+fn resolve_page_window_folds_url_offset_into_field() {
     // A `--from-url` import (or a saved query from one) leaves `offset=` sitting
-    // in `raw_params`. `resolve_offset` must match that *specific* key, fold its
+    // in `raw_params`. The resolver must match that *specific* key, fold its
     // value into the struct field, and strip the raw copy so the request never
     // sends two conflicting `offset` params. Matching "any param except offset"
     // (the `k != "offset"` mutant) would leave the field unset.
@@ -385,7 +447,7 @@ fn resolve_offset_folds_url_offset_into_field() {
         ..Default::default()
     };
 
-    resolve_offset(&mut params, None);
+    resolve_page_window(&mut params, None);
 
     assert_eq!(
         params.offset,
@@ -399,19 +461,40 @@ fn resolve_offset_folds_url_offset_into_field() {
 }
 
 #[test]
-fn resolve_offset_cli_overrides_url() {
+fn resolve_page_window_cli_overrides_url() {
     // An explicit `--offset` on the command line wins over a url-carried offset.
     let mut params = SearchParams {
         raw_params: vec![("offset".to_string(), "5".to_string())],
         ..Default::default()
     };
 
-    resolve_offset(&mut params, Some(9));
+    resolve_page_window(&mut params, Some(9));
 
     assert_eq!(
         params.offset,
         Some(9),
         "explicit --offset 9 overrides url offset=5"
+    );
+}
+
+#[test]
+fn resolve_page_window_removes_raw_limit_without_overriding_typed_limit() {
+    let mut params = SearchParams {
+        limit: Some(1),
+        raw_params: vec![("limit".into(), "0".into()), ("offset".into(), "4".into())],
+        ..Default::default()
+    };
+
+    resolve_page_window(&mut params, None);
+
+    assert_eq!(params.limit, Some(1));
+    assert_eq!(params.offset, Some(4));
+    assert!(
+        params
+            .raw_params
+            .iter()
+            .all(|(key, _)| key != "limit" && key != "offset"),
+        "resolved paging keys must not remain as duplicate raw params"
     );
 }
 

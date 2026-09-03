@@ -65,12 +65,17 @@ fn field_mappings_negation_operators_match_field_kind() {
         NegationOp::NotSubstring
     );
     assert_eq!(by_struct("url").negation_operator, NegationOp::NotSubstring);
+    for f in ["assigned_to", "creator", "qa_contact"] {
+        assert_eq!(
+            by_struct(f).negation_operator,
+            NegationOp::NoWordsSubstring,
+            "role field {f} should use NoWordsSubstring"
+        );
+    }
     for f in [
         "product",
         "component",
         "status",
-        "assigned_to",
-        "creator",
         "priority",
         "severity",
         "target_milestone",
@@ -78,7 +83,6 @@ fn field_mappings_negation_operators_match_field_kind() {
         "op_sys",
         "platform",
         "resolution",
-        "qa_contact",
     ] {
         assert_eq!(
             by_struct(f).negation_operator,
@@ -92,6 +96,44 @@ fn field_mappings_negation_operators_match_field_kind() {
 fn negation_op_as_str_matches_bugzilla_wire_form() {
     assert_eq!(NegationOp::NotEquals.as_str(), "notequals");
     assert_eq!(NegationOp::NotSubstring.as_str(), "notsubstring");
+    assert_eq!(NegationOp::NoWordsSubstring.as_str(), "nowordssubstr");
+}
+
+#[test]
+fn invalid_role_negation_rejects_only_zero_word_negative_values() {
+    for params in [
+        SearchParams {
+            assigned_to: vec!["!".into()],
+            ..Default::default()
+        },
+        SearchParams {
+            creator: vec!["! , \t".into()],
+            ..Default::default()
+        },
+        SearchParams {
+            qa_contact: vec!["!,,".into()],
+            ..Default::default()
+        },
+    ] {
+        assert!(params.invalid_role_negation().is_some());
+    }
+
+    for params in [
+        SearchParams {
+            assigned_to: vec!["!alice".into()],
+            ..Default::default()
+        },
+        SearchParams {
+            creator: vec!["! alice, bob ".into()],
+            ..Default::default()
+        },
+        SearchParams {
+            qa_contact: vec![String::new()],
+            ..Default::default()
+        },
+    ] {
+        assert!(params.invalid_role_negation().is_none());
+    }
 }
 
 #[test]

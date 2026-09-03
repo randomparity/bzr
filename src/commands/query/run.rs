@@ -58,9 +58,9 @@ pub(super) async fn handle(
     params.apply_overrides(overrides);
     params.include_fields = canonical_field_list(params.include_fields.as_deref());
     params.exclude_fields = canonical_field_list(params.exclude_fields.as_deref());
-    // Fold any saved-query/URL `offset` into the struct field and let `--offset`
-    // override, so a saved-from-URL query never sends two `offset` params.
-    crate::commands::runtime::search::paging::resolve_offset(&mut params, *offset);
+    // Canonicalize saved-query/URL paging keys, then let CLI/typed values win,
+    // so requests never carry duplicate limit or offset parameters.
+    crate::commands::runtime::search::paging::resolve_page_window(&mut params, *offset);
     // Result ordering: an explicit `--sort` overrides the saved order; absent
     // both, default to a stable `bug_id` so runs are deterministic, unless the
     // saved query (e.g. from a URL) already carries an `order` raw param.
