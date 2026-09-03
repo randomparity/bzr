@@ -58,8 +58,8 @@ purely additional traceability and breaks no automation, since
 
 Before pushing the tag, review the canonical
 [GitHub Security Advisories](https://github.com/randomparity/bzr/security/advisories)
-inventory. The generated release section carries exactly one of the following
-whole-line markers, which are validated before publication. A dependency update
+inventory. The generated release section carries the following whole-line marker,
+which is validated before publication. A dependency update
 belongs under a separate dependency heading or explicitly says it is
 dependency-only; it never replaces the project-vulnerability assessment.
 
@@ -70,10 +70,15 @@ was fixed:
 Security assessment: No publicly identified runtime vulnerabilities in bzr were fixed in this release.
 ```
 
-Use this template when one or more publicly identified runtime vulnerabilities
-in `bzr` were fixed. List every qualifying vulnerability that has a public
-identifier when the GitHub Release is created; a CVE, GHSA, RUSTSEC identifier,
-or comparable public identifier qualifies.
+The current generated flow supports only the no-vulnerability outcome. If one or
+more publicly identified runtime vulnerabilities in `bzr` were fixed, do not tag:
+`tools/generate-changelog-section.sh` deliberately stops rather than guessing a
+disclosure. First land a reviewed release-workflow change that supplies the same
+positive assessment to local validation, GitHub Release creation, and the
+post-release `CHANGELOG.md` update. That assessment must list every qualifying
+vulnerability that has a public identifier when the GitHub Release is created; a
+CVE, GHSA, RUSTSEC identifier, or comparable public identifier qualifies, using
+this required shape:
 
 ```text
 Security assessment: Publicly identified runtime vulnerabilities in bzr were fixed in this release.
