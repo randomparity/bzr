@@ -25,10 +25,11 @@ five-test shell phase, runner wiring, deterministic fixture coverage, and five r
 
 - Create `tests/functional/compare/bug-lifecycle.py`: python-bugzilla JSON adapter.
 - Create `tests/functional/compare/01-bug-lifecycle.sh`: lifecycle orchestration and comparisons.
+- Modify `tests/functional/lib.sh`: shared private sidecar command capture boundary and thin fixed
+  CLI/adapter wrappers.
 - Modify `tests/functional/run-compare.sh`: credentials, private helper staging, phase order.
 - Modify `tests/functional/pybz/container-tests.sh`: deterministic lifecycle fixture and failure
   controls.
-- Modify `Makefile`: compile-check the Python helper without producing bytecode.
 - Modify `docs/dev/python-bugzilla-parity.md`: five evidence rows.
 
 ## Task 1: Add the python-bugzilla lifecycle adapter
@@ -46,14 +47,16 @@ five-test shell phase, runner wiring, deterministic fixture coverage, and five r
 
 ### Verification
 
-- Adapter dispatch and output schema — Mode: focused-test. Add the deterministic fixture in
-  `tests/functional/pybz/container-tests.sh`; first observe failure because the adapter is absent,
-  then expect `bash tests/functional/pybz/container-tests.sh` to exit 0.
+- Adapter syntax, dispatch, and output schema — Mode: focused-test. Add the deterministic fixture
+  in `tests/functional/pybz/container-tests.sh` and run it inside the pinned comparison image;
+  first observe failure because the adapter is absent, then expect
+  `bash tests/functional/pybz/container-tests.sh` to exit 0 without requiring host Python.
 
 ### Steps
 
-1. Add fixture cases that invoke the adapter with a fake in-process `bugzilla` module and assert
-   each operation's JSON result plus a non-empty transport.
+1. Add fixture cases that invoke the adapter inside the pinned comparison image with a fake
+   in-process `bugzilla` module and assert syntax loading, each operation's JSON result, and a
+   non-empty transport.
 2. Run `bash tests/functional/pybz/container-tests.sh`; expect non-zero with the adapter missing.
 3. Implement strict argument parsing, fixed operation dispatch, API-key loading without printing
    secret content, positive ID validation, JSON serialization, and backend-class transport
@@ -65,19 +68,28 @@ five-test shell phase, runner wiring, deterministic fixture coverage, and five r
 
 ### Interfaces
 
-- Consumes: Task 1's adapter, existing `run_bzr`, `run_pybz`, `test_begin`, `test_pass`,
-  `test_fail`, `expect_gap`, exchange directory, and bzr's `--api rest` inline-server flags.
+- Consumes: Task 1's adapter, existing `run_bzr`, new fixed `run_pybz_adapter`, `test_begin`,
+  `test_pass`, `test_fail`, `expect_gap`, exchange directory, and bzr's `--api rest` inline-server
+  flags. `_run_pybz_command COMMAND [ARG ...]` is private; `run_pybz` passes fixed `bugzilla`, and
+  `run_pybz_adapter` passes fixed `python /work/compare/bug-lifecycle.py` before caller arguments.
 - Provides: stable IDs `compare/01-bug-lifecycle/create`, `/query`, `/update`, `/view`, and
   `/history`, plus transport evidence files for both clients. Create description parity is read
   through `bzr comment list` with explicit REST selection for both generated IDs.
 
 ### Verification
 
-- Five lifecycle results, first-comment description reads, and semantic normalization — Mode: focused-test. Extend
-  `tests/functional/pybz/container-tests.sh` with a controlled sidecar/runtime and bzr fixture;
-  first observe missing phase IDs, then expect the fixture command to exit 0 with all five passes.
-- Mismatch detection — Mode: focused-test. Perturb one normalized persisted field in the controlled
-  fixture, expect the fixture command to exit non-zero and name the affected stable ID.
+- Sidecar capture compatibility — Mode: focused-test. Extend
+  `tests/functional/pybz/container-tests.sh` with a fake runtime that asserts both thin wrappers
+  select their fixed commands and preserve stdout, raw stdout, stderr, and exit status; first
+  observe failure because the adapter wrapper is absent, then expect the fixture command to exit 0.
+- Five lifecycle results, first-comment description reads, and semantic normalization — Mode:
+  focused-test. Extend `tests/functional/pybz/container-tests.sh` with a controlled
+  sidecar/runtime and bzr fixture; require history normalization to rewrite only an old `summary`
+  value exactly equal to either controlled client summary while preserving other values and
+  ordering. First observe missing phase IDs, then expect the fixture command to exit 0 with all
+  five passes.
+- Mismatch detection — Mode: focused-test. Perturb one normalized persisted field in the
+  controlled fixture, expect the fixture command to exit non-zero and name the affected stable ID.
 
 ### Steps
 
@@ -86,9 +98,13 @@ five-test shell phase, runner wiring, deterministic fixture coverage, and five r
 2. Add runner constants for the disposable administrator identity/key, set umask 077, copy the
    adapter to `$COMPARE_EXCHANGE_DIR/bug-lifecycle.py` before sidecar startup, fail on missing or
    unreadable staging, and export only what the sourced phase requires.
-3. Implement phase-local helpers for mode-private JSON request files, bzr REST invocation, sidecar adapter
-   invocation, positive-ID extraction, canonical state projection, history projection, transport
-   recording, and diff-based equality.
+3. Extract the existing sidecar execution and capture logic into private
+   `_run_pybz_command COMMAND [ARG ...]`; make thin `run_pybz` and `run_pybz_adapter` wrappers call
+   it with their fixed commands. Implement phase-local helpers for mode-private JSON request
+   files, bzr REST invocation, positive-ID extraction, canonical state projection, history
+   projection, transport recording, and diff-based equality. Define each initial summary as a
+   shared run-specific stem plus exact ` [bzr]` or ` [pybz]` suffix; history projection maps only
+   exact matches for those two old summary values to the stem and otherwise preserves the record.
 4. Implement create, query, update, view, and history tests in order. The create test reads each
    bug's first comment with the same forced-REST bzr observer before comparing descriptions. Each
    test fails immediately on a client or normalization error and uses no speculative `expect_gap`.
@@ -118,7 +134,7 @@ five-test shell phase, runner wiring, deterministic fixture coverage, and five r
 1. Add five parity rows for create, query, update, view, and history, each marked `parity` and tied
    to its exact stable test ID.
 2. Run the focused fixture; expect exit 0 with exact row coverage.
-3. Add a no-bytecode Python compile check to `make lint`, then run `make lint`; expect exit 0.
+3. Run `make lint`; expect exit 0 without a host-Python prerequisite.
 4. Run `make test`; expect exit 0.
 5. Run `make functional-compare-all`; expect all supported versions to pass.
 6. Run `make functional-test-all`; expect all established functional phases to pass.

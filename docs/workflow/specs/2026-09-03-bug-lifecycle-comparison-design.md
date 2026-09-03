@@ -15,8 +15,8 @@ those decisions for one resource.
 
 One shell phase creates two bugs with the same canonical initial fields: bzr creates one through
 its forced REST path, and a small python-bugzilla helper creates the other through the library's
-auto-detected backend. Unique summaries distinguish the records without making their generated IDs
-part of parity.
+auto-detected backend. Each summary is a shared run-specific stem plus one exact client suffix,
+` [bzr]` or ` [pybz]`, so queries select one record without making generated IDs part of parity.
 
 After each operation, the phase reads both bugs from the server and reduces them to the same
 canonical JSON projection. It compares persisted fields, never CLI presentation. The bug-read
@@ -34,7 +34,10 @@ The lifecycle runs in this order:
 3. apply the same summary, URL, whiteboard, severity, and priority update to both records, then
    compare fresh server reads;
 4. fetch each record individually and compare the canonical view;
-5. fetch history and compare normalized field transitions for the fields changed in step 3.
+5. fetch history and compare normalized field transitions for the fields changed in step 3. For
+   the `summary` transition only, map an old value exactly equal to either controlled initial
+   summary to the shared stem before comparison. Preserve every other field name, old value, new
+   value, and transition order without normalization.
 
 Any command failure is an ordinary comparison failure. An `expect_gap` marker is permitted only
 after a demonstrated mismatch and only for the dependent issue that owns the missing capability.
@@ -44,7 +47,13 @@ This baseline uses no speculative gap markers.
 
 `tests/functional/compare/01-bug-lifecycle.sh` owns test IDs, client invocation order, capture
 files, normalization, semantic comparisons, and result reporting. It invokes bzr with explicit
-REST selection and invokes the helper inside the existing sidecar.
+REST selection and invokes the helper inside the existing sidecar through `run_pybz_adapter`.
+
+`tests/functional/lib.sh` keeps one private `_run_pybz_command COMMAND [ARG ...]` boundary that
+executes the named command in the current sidecar and preserves the existing `BZR_STDOUT`,
+`BZR_STDOUT_RAW`, `BZR_STDERR`, and `BZR_EXIT` capture semantics. Thin `run_pybz` and
+`run_pybz_adapter` wrappers select respectively the fixed `bugzilla` CLI and the fixed
+`python /work/compare/bug-lifecycle.py` command. Comparison phases cannot supply the executable.
 
 `tests/functional/compare/bug-lifecycle.py` is a narrow adapter around python-bugzilla 3.3.0. It
 accepts one operation plus JSON input/output paths under `/work`, connects to
@@ -98,10 +107,13 @@ upstream image/dependency exposure accepted by ADR 0044, and proving dependent f
 
 ## Verification
 
-- Controlled fixtures prove helper staging failure, adapter dispatch/output, all five stable test
-  IDs, transport records, first-comment description comparison, normalization, and mismatch
-  failure behavior before live execution.
-- `make lint` validates semantic IDs, Bash syntax, ShellCheck, formatting, and Rust lints.
+- Controlled fixtures inside the pinned comparison image prove helper syntax and adapter
+  dispatch/output. Harness fixtures also prove helper staging failure, capture-compatible thin
+  wrappers, all five stable test IDs, transport records, first-comment description comparison,
+  exact initial-summary history normalization, strict preservation of other history values and
+  ordering, and mismatch failure behavior before live execution.
+- `make lint` validates semantic IDs, Bash syntax, ShellCheck, formatting, and Rust lints; it does
+  not require host Python.
 - `make test` proves the Rust suite remains green.
 - `make functional-compare-all` proves the lifecycle against bz50, bz52, and bz53.
 - `make functional-test-all` proves the established real-container suite remains green.
