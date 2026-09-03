@@ -40,3 +40,4 @@ rejected.
 | [0031](0031-compose-dependency-presentation-artifacts.md) | Compose dependency presentation artifacts through active capabilities | Accepted |
 | [0032](0032-operation-scoped-search-transport.md) | Resolve search transport once per operation | Accepted |
 | [0033](0033-share-lenient-deserialization-adapters.md) | Share lenient deserialization adapters by wire contract | Accepted |
+| [0043](0043-stabilize-test-tracing-callsite-interest.md) | Keep a sentinel tracing dispatch alive in tests | Accepted |
