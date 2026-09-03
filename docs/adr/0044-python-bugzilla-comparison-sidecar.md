@@ -44,8 +44,8 @@ names the stale issue marker, forcing the parity report and test to be updated w
 
 - Developers and CI need only the existing Docker/Podman runtime; no host Python installation is
   required.
-- The python-bugzilla dependency is immutable at 3.3.0 in the image and cached independently of
-  Bugzilla server versions.
+- The top-level python-bugzilla package is fixed at 3.3.0. The image fixture detects an incompatible
+  base-image or transitive-dependency rebuild; the dependency closure is not immutable.
 - Namespace sharing ties sidecar lifetime to the server container. Startup validates the server and
   creates a fresh sidecar; cleanup removes only the checkout/version-scoped sidecar and leaves its
   cache volume for reuse.
