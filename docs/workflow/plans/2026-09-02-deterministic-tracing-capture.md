@@ -11,7 +11,7 @@ Decision: [ADR 0043](../../adr/0043-stabilize-test-tracing-callsite-interest.md)
 Prevent an uncaptured test thread from poisoning global callsite interest while another thread
 owns the sole tracing capture.
 
-Expected implementation size: 25–40 changed lines.
+Expected implementation size: 25–45 changed lines.
 
 ## Task 1: Prove the callsite-registration failure
 
