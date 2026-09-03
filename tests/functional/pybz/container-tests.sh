@@ -160,7 +160,7 @@ run_sidecar_stop_failure_fixture() (
     PYBZ_RUNTIME=fake_runtime
 
     # Invoked indirectly through pybz_sidecar_stop's runtime argument.
-    # shellcheck disable=SC2329
+    # shellcheck disable=SC2317,SC2329
     fake_runtime() {
         if [[ $1 == container && $2 == inspect ]]; then
             return 0
