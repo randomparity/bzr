@@ -4,8 +4,11 @@
 
 Issue #667 extends the comparison harness from ADR 0044 to the bug lifecycle. The change is test
 infrastructure only. It covers create/new, query, modify/update, info/view, and history against the
-same live Bugzilla instance, and does not implement or claim the capabilities owned by issues
-#670–#672, #679–#680, or the final report work in #683.
+same live Bugzilla instance. It also establishes one fail-closed comparison baseline for each
+confirmed python-bugzilla-only capability owned by #670, #671, #672, #679, and #680. Those probes
+exercise python-bugzilla live, demonstrate bzr's current gap, and attach the exact owning issue with
+`expect_gap`; they do not implement or claim the dependent capabilities or the final report work in
+#683.
 
 No new architecture decision is required. ADR 0044 already fixes the python-bugzilla sidecar,
 semantic comparison, transport recording, and `expect_gap` contracts. This design instantiates
@@ -40,14 +43,34 @@ The lifecycle runs in this order:
    value, and transition order without normalization.
 
 Any command failure is an ordinary comparison failure. An `expect_gap` marker is permitted only
-after a demonstrated mismatch and only for the dependent issue that owns the missing capability.
-This baseline uses no speculative gap markers.
+after python-bugzilla has completed the named operation against the live server, the observable
+result has been validated, and the bzr attempt has failed or produced a different persisted result.
+Each marker is bound to the issue that owns that exact capability:
+
+- `saved-search`: run the administrator's `My Bugs` server-side saved search, validate a JSON
+  result set, then probe `bug search --saved-search "My Bugs"`; owner #670.
+- `arbitrary-fields`: create and update a bug through generic field maps, validate both persisted
+  values, then probe equivalent repeatable `--field` create and update invocations; owner #671.
+- `update-options`: post an update with `minor_update` and a tagged comment, validate the comment
+  tag, then probe `bug update --minor-update --comment-tag`; owner #672.
+- `query-match-types`: query a controlled whiteboard value with an exact match-type modifier,
+  recover only the controlled bug, then probe `bug list --status-whiteboard-type equals`; owner
+  #679.
+- `bug-tags`: add a personal bug tag, retrieve the controlled bug through the tag filter, then
+  probe `bug tag` followed by `bug list --tag`; owner #680.
+
+The bzr probe is part of the semantic test, not merely a help-text or parser check. A dependent
+implementation that makes its command exit successfully but stores or returns the wrong state still
+remains a gap. Conversely, `expect_gap` converts a fully passing comparison into a failure, so a
+landed dependent capability makes its stale marker fail closed until that issue flips the row and
+removes the marker.
 
 ## Components and interfaces
 
-`tests/functional/compare/01-bug-lifecycle.sh` owns test IDs, client invocation order, capture
-files, normalization, semantic comparisons, and result reporting. It invokes bzr with explicit
-REST selection and invokes the helper inside the existing sidecar through `run_pybz_adapter`.
+`tests/functional/compare/01-bug-lifecycle.sh` owns the five parity IDs and five gap-baseline IDs,
+client invocation order, capture files, normalization, semantic comparisons, exact gap ownership,
+and result reporting. It invokes bzr with explicit REST selection and invokes the helper inside the
+existing sidecar through `run_pybz_adapter`.
 
 `tests/functional/lib.sh` keeps one private `_run_pybz_command COMMAND [ARG ...]` boundary that
 executes the named command in the current sidecar and preserves the existing `BZR_STDOUT`,
@@ -58,8 +81,10 @@ executes the named command in the current sidecar and preserves the existing `BZ
 `tests/functional/compare/bug-lifecycle.py` is a narrow adapter around python-bugzilla 3.3.0. It
 accepts one operation plus JSON input/output paths under `/work`, connects to
 `http://127.0.0.1` with the test API key read from the private input JSON, and emits JSON containing
-both the operation result and the detected backend name. It supports only create, query, update,
-view, and history; malformed input or an unsupported operation exits non-zero with no fallback.
+both the operation result and the detected backend name. Its fixed dispatch table supports create,
+query, update, view, history, saved-search query, generic-field create/update, update options,
+match-type query, and personal bug-tag update/query operations; malformed input or an unsupported
+operation exits non-zero with no fallback.
 Before sidecar startup, the runner copies the repository helper to
 `$COMPARE_EXCHANGE_DIR/bug-lifecycle.py`; sidecar commands invoke only that `/work/compare` copy.
 Missing or unreadable staging stops the runner before any lifecycle operation.
@@ -70,9 +95,10 @@ helper in the private exchange directory, and adds the phase to its explicit ord
 sidecar reads the key from each mode-private request file; it is absent from command argv, the
 image, the home cache volume, and error messages.
 
-`docs/dev/python-bugzilla-parity.md` gains one row for each of the five exercised capabilities.
-Each row cites the stable `compare/01-bug-lifecycle/<slug>` test ID and reports parity only after
-the live comparison passes.
+`docs/dev/python-bugzilla-parity.md` gains five parity rows for the common lifecycle and five
+expected-gap rows for the dependent capabilities. Every row cites one stable
+`compare/01-bug-lifecycle/<slug>` test ID. Gap rows name exactly one owning issue and cannot report
+parity while their test still calls `expect_gap`.
 
 ## Transport evidence
 
@@ -83,10 +109,12 @@ row's test therefore proves both the semantic result and the transports used to 
 
 ## Failure handling and cleanup
 
-The phase stops a test at the first failed client operation, malformed JSON result, missing ID, or
-semantic mismatch and reports the captured command output through the existing harness. Unique
-bug summaries make repeated runs independent. The comparison runner's existing EXIT trap removes
-the sidecar and exchange directory, including API-key-bearing input files.
+The phase stops an ordinary parity test at the first failed client operation, malformed JSON
+result, missing ID, or semantic mismatch and reports the captured command output through the
+existing harness. A gap test first validates its live python-bugzilla result, then reports the bzr
+failure or mismatch and immediately applies its one exact `expect_gap` marker. Unique bug summaries
+and run-specific values make repeated runs independent. The comparison runner's existing EXIT trap
+removes the sidecar and exchange directory, including API-key-bearing input files.
 
 ## Threat model
 
@@ -103,17 +131,21 @@ the input path, never its API key content. Production credentials, the rest of t
 the container runtime socket remain outside the sidecar.
 
 Out of scope are protecting the disposable server from other host processes, changing the mutable
-upstream image/dependency exposure accepted by ADR 0044, and proving dependent feature gaps.
+upstream image/dependency exposure accepted by ADR 0044, and implementing any capability owned by
+#670, #671, #672, #679, or #680.
 
 ## Verification
 
 - Controlled fixtures inside the pinned comparison image prove helper syntax and adapter
   dispatch/output. Harness fixtures also prove helper staging failure, capture-compatible thin
-  wrappers, all five stable test IDs, transport records, first-comment description comparison,
+  wrappers, all ten stable test IDs, transport records, first-comment description comparison,
   exact initial-summary history normalization, strict preservation of other history values and
-  ordering, and mismatch failure behavior before live execution.
+  ordering, and mismatch failure behavior before live execution. The fixture asserts the complete
+  mapping from the five gap IDs to #670, #671, #672, #679, and #680, and injects a passing bzr
+  result to prove each stale `expect_gap` becomes a test failure.
 - `make lint` validates semantic IDs, Bash syntax, ShellCheck, formatting, and Rust lints; it does
   not require host Python.
 - `make test` proves the Rust suite remains green.
-- `make functional-compare-all` proves the lifecycle against bz50, bz52, and bz53.
+- `make functional-compare-all` proves the common lifecycle and all five live expected gaps against
+  bz50, bz52, and bz53.
 - `make functional-test-all` proves the established real-container suite remains green.
