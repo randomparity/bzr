@@ -381,7 +381,7 @@ jobs:
       - name: Install git-cliff
         uses: taiki-e/install-action@82cd3e7658a6f96c86c0234aeeda1748937cb0a1  # v2.85.13
         with:
-          tool: git-cliff
+          tool: git-cliff@2.14.1
 
       - name: Generate release notes from conventional commits
         id: notes
@@ -762,7 +762,7 @@ jobs:
       - name: Install git-cliff
         uses: taiki-e/install-action@82cd3e7658a6f96c86c0234aeeda1748937cb0a1  # v2.85.13
         with:
-          tool: git-cliff
+          tool: git-cliff@2.14.1
 
       - name: Compute next dev version
         id: ver
