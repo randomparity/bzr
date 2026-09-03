@@ -45,12 +45,17 @@ CURRENT_TEST_GROUP=""
 _compare_runtime="${_compare_runtime:-}"
 
 cleanup() {
+    local status=$?
+
     if [[ -n "$PYBZ_RUNTIME" ]]; then
-        pybz_sidecar_stop "$_compare_runtime" || true
+        if ! pybz_sidecar_stop "$_compare_runtime"; then
+            [[ $status -ne 0 ]] || status=1
+        fi
     fi
-    rm -rf "$FUNC_CONFIG_DIR"
-    _cleanup_tmpfiles
-    return 0
+    rm -rf "$FUNC_CONFIG_DIR" || true
+    _cleanup_tmpfiles || true
+    trap - EXIT
+    exit "$status"
 }
 trap cleanup EXIT
 

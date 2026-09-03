@@ -152,6 +152,36 @@ run_product_normalization_fixture() (
         "normalized python-bugzilla product names"
 )
 
+run_sidecar_stop_failure_fixture() (
+    local error_output
+    error_output=$(mktemp)
+    trap 'rm -f "$error_output"' EXIT
+    BZ_VERSION=bz50
+    PYBZ_RUNTIME=fake_runtime
+
+    # Invoked indirectly through pybz_sidecar_stop's runtime argument.
+    # shellcheck disable=SC2329
+    fake_runtime() {
+        if [[ $1 == container && $2 == inspect ]]; then
+            return 0
+        fi
+        if [[ $1 == rm && $2 == -f ]]; then
+            return 1
+        fi
+        return 2
+    }
+
+    if pybz_sidecar_stop fake_runtime 2>"$error_output"; then
+        printf 'sidecar removal failure was ignored\n' >&2
+        return 1
+    fi
+    if ! grep -Fq 'pybz_sidecar_stop: could not remove sidecar:' "$error_output"; then
+        printf 'sidecar removal failure omitted its diagnostic\n' >&2
+        return 1
+    fi
+    assert_equals fake_runtime "$PYBZ_RUNTIME" "failed sidecar ownership"
+)
+
 cleanup_container_fixture() {
     local runtime="$1"
     local donor="$2"
@@ -248,4 +278,5 @@ run_container_fixture() {
 run_expected_gap_fixture
 run_summary_fixture
 run_product_normalization_fixture
+run_sidecar_stop_failure_fixture
 run_container_fixture
