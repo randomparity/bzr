@@ -51,3 +51,46 @@ jobs:
           for version in bz50 bz52 bz53; do
             BZR_BZ_VERSION="$version" tests/functional/setup-bugzilla.sh stop || true
           done
+
+  python-bugzilla-comparison:
+    name: Python-bugzilla comparison bz50/bz52/bz53
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install native dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config python3 openssl
+
+      - uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6  # stable
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6  # v2
+        with:
+          key: python-bugzilla-comparison
+
+      - name: Build bzr once
+        run: cargo build --release --locked
+
+      - name: Compare with python-bugzilla
+        env:
+          BZR_COMPARE_BIN: ${{ github.workspace }}/target/release/bzr
+        run: make functional-compare-all
+
+      - name: Stop comparison containers
+        if: always()
+        run: |
+          set -euo pipefail
+          for version in bz50 bz52 bz53; do
+            BZR_BZ_VERSION="$version" bash -c '
+              source tests/functional/lib.sh
+              if runtime=$(container_runtime); then
+                pybz_sidecar_stop "$runtime" || true
+              fi
+            '
+            BZR_BZ_VERSION="$version" tests/functional/setup-bugzilla.sh stop || true
+          done
