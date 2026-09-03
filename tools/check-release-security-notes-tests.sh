@@ -598,3 +598,27 @@ if [[ $phony_output != *'bash tools/check-release-security-notes-tests.sh'* ]]; 
   echo "expected check-release-security-notes Make target to remain runnable when a same-name file exists" >&2
   exit 1
 fi
+
+fake_bin="$FIXTURES/bin"
+mkdir "$fake_bin"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "git-cliff 2.13.1"' >"$fake_bin/git-cliff"
+chmod +x "$fake_bin/git-cliff"
+generator_stderr="$FIXTURES/generator-version.stderr"
+if PATH="$fake_bin:$PATH" bash "$SCRIPT_DIR/generate-changelog-section.sh" \
+  HEAD HEAD >/dev/null 2>"$generator_stderr"; then
+  echo "expected changelog generator to reject an unpinned git-cliff version" >&2
+  exit 1
+fi
+if ! grep -Fqx \
+  'ERROR: git-cliff 2.14.1 is required; found git-cliff 2.13.1.' \
+  "$generator_stderr"; then
+  echo "expected changelog generator to name required and actual git-cliff versions" >&2
+  exit 1
+fi
+
+release_workflow="$SCRIPT_DIR/../.github/workflows/release.yml"
+pinned_install_count=$(grep -Fc 'tool: git-cliff@2.14.1' "$release_workflow")
+if [[ $pinned_install_count -ne 2 ]]; then
+  echo "expected both release workflow git-cliff installs to pin version 2.14.1" >&2
+  exit 1
+fi

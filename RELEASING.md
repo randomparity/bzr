@@ -117,7 +117,9 @@ marker above, never `N/A`.
 After creating the annotated tag locally but immediately before pushing it, refresh
 the advisory inventory and validate the exact candidate release body. Replace
 `X.Y.Z` with the candidate version. The trap removes the temporary file when the
-subshell completes, without replacing the caller's EXIT trap.
+subshell completes, without replacing the caller's EXIT trap. Install the pinned
+generator with `cargo install git-cliff --version 2.14.1 --locked`; the script
+refuses any other version so local and tag-triggered generation cannot drift.
 
 ```bash
 (

@@ -14,6 +14,7 @@ set -euo pipefail
 export LC_ALL=C
 
 readonly NO_VULNERABILITIES='Security assessment: No publicly identified runtime vulnerabilities in bzr were fixed in this release.'
+readonly GIT_CLIFF_VERSION='2.14.1'
 
 if (($# != 2)); then
   echo "ERROR: usage: generate-changelog-section.sh TAG PREV_TAG" >&2
@@ -29,6 +30,12 @@ for tool in git-cliff awk grep; do
     exit 1
   fi
 done
+
+actual_git_cliff_version=$(git-cliff --version)
+if [[ $actual_git_cliff_version != "git-cliff $GIT_CLIFF_VERSION" ]]; then
+  echo "ERROR: git-cliff $GIT_CLIFF_VERSION is required; found $actual_git_cliff_version." >&2
+  exit 1
+fi
 
 range="${prev_tag}..${tag}"
 
