@@ -71,7 +71,7 @@ test_begin() {
         return 2
     fi
 
-    test_id="$CURRENT_TEST_GROUP/$slug"
+    test_id="${TEST_ID_PREFIX:+$TEST_ID_PREFIX/}$CURRENT_TEST_GROUP/$slug"
     case $SEEN_TEST_IDS in
     *$'\n'"$test_id"$'\n'*)
         printf "test_begin: duplicate functional test ID '%s'\n" "$test_id" >&2

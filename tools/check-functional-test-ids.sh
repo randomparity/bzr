@@ -3,9 +3,31 @@ set -euo pipefail
 
 export LC_ALL=C
 
-repo_root=${1:-.}
-runner="$repo_root/tests/functional/run-tests.sh"
-phases_dir="$repo_root/tests/functional/phases"
+if [[ $# -ne 1 && $# -ne 3 ]]; then
+  printf 'usage: %s <repo-root> [runner-relative-path phase-dir-relative-path]\n' "$0" >&2
+  exit 1
+fi
+
+repo_root=$1
+runner_relative_path=tests/functional/run-tests.sh
+phase_dir_relative_path=tests/functional/phases
+test_id_prefix=''
+if [[ $# -eq 3 ]]; then
+  runner_relative_path=$2
+  phase_dir_relative_path=$3
+  test_id_prefix=$(basename "$phase_dir_relative_path")
+fi
+
+if [[ $runner_relative_path == /* || $phase_dir_relative_path == /* ||
+  $runner_relative_path == .. || $runner_relative_path == ../* ||
+  $phase_dir_relative_path == .. || $phase_dir_relative_path == ../* ]]; then
+  printf 'ERROR: runner and phase paths must be relative to the repository root\n' >&2
+  exit 1
+fi
+
+runner="$repo_root/$runner_relative_path"
+phases_dir="$repo_root/$phase_dir_relative_path"
+phase_dir_basename=$(basename "$phase_dir_relative_path")
 phase_re='^[0-9]{2}[a-z]?-[a-z0-9]+(-[a-z0-9]+)*$'
 call_re='^[[:space:]]*test_begin[[:space:]]+"([a-z0-9]+(-[a-z0-9]+)*)"[[:space:]]+"[^"]*"[[:space:]]*$'
 errors=0
@@ -98,23 +120,34 @@ if ! cmp -s "$runner_sorted" "$disk_sorted"; then
   done < <(comm -13 "$runner_sorted" "$disk_sorted")
 fi
 
-if ! awk '
-  /^for _phase in \\$/ { inside = 1 }
+if ! awk -v expected_source="source \"\$SCRIPT_DIR/$phase_dir_basename/\${_phase}.sh\"" \
+  -v expected_prefix="$test_id_prefix" '
+  !loop_seen && $0 == "TEST_ID_PREFIX=" expected_prefix { prefixes++ }
+  /^for _phase in \\$/ {
+    loop_seen = 1
+    inside = 1
+  }
   inside && /^[[:space:]]*CURRENT_TEST_GROUP="\$_phase"[[:space:]]*$/ {
     assignments++
     previous_assignment = 1
     next
   }
-  inside && /^[[:space:]]*source "\$SCRIPT_DIR\/phases\/\$\{_phase\}\.sh"[[:space:]]*$/ {
-    sources++
-    if (previous_assignment) pairs++
-    previous_assignment = 0
-    next
+  inside {
+    line = $0
+    sub(/^[[:space:]]+/, "", line)
+    sub(/[[:space:]]+$/, "", line)
+    if (line == expected_source) {
+      sources++
+      if (previous_assignment) pairs++
+      previous_assignment = 0
+      next
+    }
   }
   inside && /^done[[:space:]]*$/ { inside = 0 }
   { previous_assignment = 0 }
   END {
-    if (assignments != 1 || sources != 1 || pairs != 1) exit 1
+    if (assignments != 1 || sources != 1 || pairs != 1 ||
+      (expected_prefix != "" && prefixes != 1)) exit 1
   }
 ' "$runner"; then
   error 'runner must contain exactly one canonical adjacent assignment/source pair'
@@ -157,7 +190,7 @@ while IFS=: read -r file line content; do
   fi
   slug=${BASH_REMATCH[1]}
   phase=$(basename "$file" .sh)
-  full_id="$phase/$slug"
+  full_id="${test_id_prefix:+$test_id_prefix/}$phase/$slug"
   case $seen_ids in
   *$'\n'"$full_id"$'\n'*)
     error "duplicate functional test ID: $full_id ($file:$line)"
