@@ -15,10 +15,10 @@ test_id_prefix=''
 if [[ $# -eq 3 ]]; then
   runner_relative_path=$2
   phase_dir_relative_path=$3
-  phase_dir_basename=$(basename "$phase_dir_relative_path")
-  if [[ $phase_dir_basename != phases ]]; then
-    test_id_prefix=$phase_dir_basename
-  fi
+fi
+phase_dir_basename=$(basename "$phase_dir_relative_path")
+if [[ $phase_dir_basename != phases ]]; then
+  test_id_prefix=$phase_dir_basename
 fi
 
 if [[ $runner_relative_path == /* || $phase_dir_relative_path == /* ||
@@ -30,7 +30,6 @@ fi
 
 runner="$repo_root/$runner_relative_path"
 phases_dir="$repo_root/$phase_dir_relative_path"
-phase_dir_basename=$(basename "$phase_dir_relative_path")
 phase_re='^[0-9]{2}[a-z]?-[a-z0-9]+(-[a-z0-9]+)*$'
 call_re='^[[:space:]]*test_begin[[:space:]]+"([a-z0-9]+(-[a-z0-9]+)*)"[[:space:]]+"[^"]*"[[:space:]]*$'
 errors=0
