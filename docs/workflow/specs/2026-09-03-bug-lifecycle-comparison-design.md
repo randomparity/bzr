@@ -47,17 +47,32 @@ after python-bugzilla has completed the named operation against the live server,
 result has been validated, and the bzr attempt has failed or produced a different persisted result.
 Each marker is bound to the issue that owns that exact capability:
 
-- `saved-search`: run the administrator's `My Bugs` server-side saved search, validate a JSON
-  result set, then probe `bug search --saved-search "My Bugs"`; owner #670.
+- `saved-search`: after the two controlled lifecycle bugs exist, seed a run-specific server-side
+  saved search for the administrator whose canonical query selects exactly those two IDs. Run it
+  through python-bugzilla, require the sorted result to equal those two IDs, then probe
+  `bug search --saved-search <run-specific-name>` and require the same exact set; owner #670. The
+  seed helper uses Bugzilla's application database handle and the `namedqueries(userid, name,
+  query)` contract present in every supported bz50, bz52, and bz53 image; it parameterizes the
+  administrator ID, name, and query and verifies the stored row before the probe.
 - `arbitrary-fields`: create and update a bug through generic field maps, validate both persisted
   values, then probe equivalent repeatable `--field` create and update invocations; owner #671.
-- `update-options`: post an update with `minor_update` and a tagged comment, validate the comment
-  tag, then probe `bug update --minor-update --comment-tag`; owner #672.
-- `query-match-types`: query a controlled whiteboard value with an exact match-type modifier,
-  recover only the controlled bug, then probe `bug list --status-whiteboard-type equals`; owner
-  #679.
+- `update-options`: keep two independently falsifiable evidence arms under owner #672. The live
+  arm posts and reads back a tagged comment. The request-shape arm uses the pinned image's fake
+  backend to require python-bugzilla to send `minor_update: true`; the live server must also accept
+  that update. The equivalent bzr probe must both persist the comment tag and emit
+  `minor_update: true` in the controlled request capture before the shared marker can flip. No mail
+  delivery or notification infrastructure is introduced.
+- `query-match-types`: seed one bug with an exact run-specific whiteboard value and a second decoy
+  with that value plus a suffix. First prove the ordinary substring query returns both IDs, then
+  run python-bugzilla with `status_whiteboard_type=equals` and require only the exact ID. Probe
+  `bug list --status-whiteboard-type equals` against the same pair and require the same exact
+  result; owner #679.
 - `bug-tags`: add a personal bug tag, retrieve the controlled bug through the tag filter, then
-  probe `bug tag` followed by `bug list --tag`; owner #680.
+  probe `bug tag` followed by `bug list --tag`; owner #680. This probe records transport per
+  operation instead of inheriting the phase's REST default: python-bugzilla must report its
+  XML-RPC backend, while both bzr operations use explicit XML-RPC selection and must record
+  `XML-RPC`. A future implementation that still runs this XML-RPC-only mutation through forced
+  REST cannot flip the marker.
 
 The bzr probe is part of the semantic test, not merely a help-text or parser check. A dependent
 implementation that makes its command exit successfully but stores or returns the wrong state still
@@ -69,8 +84,9 @@ removes the marker.
 
 `tests/functional/compare/01-bug-lifecycle.sh` owns the five parity IDs and five gap-baseline IDs,
 client invocation order, capture files, normalization, semantic comparisons, exact gap ownership,
-and result reporting. It invokes bzr with explicit REST selection and invokes the helper inside the
-existing sidecar through `run_pybz_adapter`.
+and result reporting. It invokes bzr with explicit REST selection by default, selects XML-RPC only
+for #680's update and tag-filter operations, and invokes the helper inside the existing sidecar
+through `run_pybz_adapter`.
 
 `tests/functional/lib.sh` keeps one private `_run_pybz_command COMMAND [ARG ...]` boundary that
 executes the named command in the current sidecar and preserves the existing `BZR_STDOUT`,
@@ -95,6 +111,18 @@ helper in the private exchange directory, and adds the phase to its explicit ord
 sidecar reads the key from each mode-private request file; it is absent from command argv, the
 image, the home cache volume, and error messages.
 
+For the saved-search fixture, the runner also exposes
+`seed_server_saved_search LOGIN NAME BUG_ID BUG_ID`. It validates both IDs as positive decimal
+integers and NAME as a non-empty value no longer than Bugzilla's 64-character column, constructs
+the canonical `bug_id=<id>,<id>&bug_id_type=anyexact` query, and sends the repository-owned Perl
+script to `perl -I. -` over standard input in the primary Bugzilla application container. LOGIN,
+NAME, and the query are non-secret arguments; no credential is forwarded. The script loads
+Bugzilla's configured database handle, resolves the disposable administrator, and inserts or
+updates only the run-specific `namedqueries` row with bound parameters. It reads the row back and
+fails before either client query if the name, owner, or query differs. The same path runs in bz50,
+bz52, and bz53; there is no assumed built-in saved-search name or ambient server state, and no seed
+script or query file remains in the application container.
+
 `docs/dev/python-bugzilla-parity.md` gains five parity rows for the common lifecycle and five
 expected-gap rows for the dependent capabilities. Every row cites one stable
 `compare/01-bug-lifecycle/<slug>` test ID. Gap rows name exactly one owning issue and cannot report
@@ -102,10 +130,12 @@ parity while their test still calls `expect_gap`.
 
 ## Transport evidence
 
-Each test writes a transport evidence record in the exchange directory. The bzr record is `REST`,
-matching the explicit `--api rest` invocation. The python-bugzilla helper reports the concrete
-backend class selected after connecting; the phase rejects an empty or unknown value. Each parity
-row's test therefore proves both the semantic result and the transports used to obtain it.
+Each test writes a transport evidence record in the exchange directory. Common bzr operations and
+the first four gap probes record `REST`, matching their explicit `--api rest` invocation. The
+#680 bug-tag probe instead records `XML-RPC` for its explicit `--api xmlrpc` mutation and query.
+The python-bugzilla helper reports the concrete backend class selected after connecting; the phase
+rejects an empty or unknown value and requires the XML-RPC backend for #680. Each report row's test
+therefore proves both the semantic result and the transports used to obtain it.
 
 ## Failure handling and cleanup
 
@@ -122,13 +152,16 @@ The existing ADR 0044 boundaries remain. This phase additionally passes the repo
 disposable-test API key into the sidecar and parses JSON produced by both clients. Only the local
 operator or CI job can invoke the harness; the disposable Bugzilla controls responses.
 
-Controls are: pass only operation names and private exchange-file paths as quoted argv, set umask
-077 before writing request files, place JSON and credentials only under the runner's private
+Controls are: pass only operation names and private exchange-file paths as quoted sidecar argv, set
+umask 077 before writing request files, place JSON and credentials only under the runner's private
 exchange directory, never evaluate response text, constrain helper operations to a fixed dispatch
 table, validate IDs as positive integers before reuse, and normalize with fixed field selectors.
-The staged helper is the only repository-derived file mounted into the sidecar. Error output names
-the input path, never its API key content. Production credentials, the rest of the repository, and
-the container runtime socket remain outside the sidecar.
+The saved-search seed separately validates its bounded non-secret arguments, sends a fixed script
+over standard input, uses database placeholders for every value, and verifies the one owned row;
+neither query text nor server output is evaluated as shell input. The staged helper is the only
+repository-derived file mounted into the sidecar. Error output names the input path, never its API
+key content. Production credentials, the rest of the repository, and the container runtime socket
+remain outside the sidecar.
 
 Out of scope are protecting the disposable server from other host processes, changing the mutable
 upstream image/dependency exposure accepted by ADR 0044, and implementing any capability owned by
@@ -142,7 +175,11 @@ upstream image/dependency exposure accepted by ADR 0044, and implementing any ca
   exact initial-summary history normalization, strict preservation of other history values and
   ordering, and mismatch failure behavior before live execution. The fixture asserts the complete
   mapping from the five gap IDs to #670, #671, #672, #679, and #680, and injects a passing bzr
-  result to prove each stale `expect_gap` becomes a test failure.
+  result to prove each stale `expect_gap` becomes a test failure. The fixtures additionally prove
+  the saved-search row selects exactly the two controlled IDs on bz50, bz52, and bz53; #679's
+  substring control returns the near-match decoy while its exact-match query excludes it; #672's
+  tagged-comment live result and `minor_update: true` request shape fail independently; and #680
+  rejects inherited REST or a missing XML-RPC transport record.
 - `make lint` validates semantic IDs, Bash syntax, ShellCheck, formatting, and Rust lints; it does
   not require host Python.
 - `make test` proves the Rust suite remains green.

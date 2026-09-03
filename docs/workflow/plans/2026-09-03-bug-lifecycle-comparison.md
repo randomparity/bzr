@@ -7,9 +7,9 @@ exposes python-bugzilla's library operations as JSON.
 
 Tech stack: Bash, jq, Python 3.14, python-bugzilla 3.3.0, Docker/Podman, Make.
 
-Expected implementation size: 380–600 changed lines (M) — derived from one Python adapter, one
-ten-test shell phase, runner wiring, deterministic parity and stale-gap fixtures, and ten report
-rows.
+Expected implementation size: 450–700 changed lines (M) — derived from one Python adapter, one
+ten-test shell phase, runner and saved-search-fixture wiring, deterministic parity and stale-gap
+fixtures, request-shape and transport controls, and ten report rows.
 
 ## Global constraints
 
@@ -33,6 +33,8 @@ rows.
 - Modify `tests/functional/lib.sh`: shared private sidecar command capture boundary and thin fixed
   CLI/adapter wrappers.
 - Modify `tests/functional/run-compare.sh`: credentials, private helper staging, phase order.
+- Create `tests/functional/compare/seed-saved-search.pl`: fixed, parameterized Bugzilla-container
+  fixture for one run-specific administrator saved search on bz50, bz52, and bz53.
 - Modify `tests/functional/pybz/container-tests.sh`: deterministic lifecycle, gap ownership,
   stale-gap, and failure controls.
 - Modify `docs/dev/python-bugzilla-parity.md`: five parity rows and five expected-gap rows.
@@ -132,6 +134,15 @@ rows.
 - Provides: stable IDs `compare/01-bug-lifecycle/saved-search`, `/arbitrary-fields`,
   `/update-options`, `/query-match-types`, and `/bug-tags`, mapped respectively and exclusively to
   #670, #671, #672, #679, and #680.
+- Transport contract: use explicit REST for all bzr operations except #680's bug-tag mutation and
+  filter, which use explicit XML-RPC. Record and assert the chosen transport per operation; require
+  python-bugzilla's XML-RPC backend for #680.
+- Saved-search fixture contract: Task 3 adds
+  `seed_server_saved_search LOGIN NAME BUG_ID BUG_ID` to `tests/functional/run-compare.sh`. It
+  validates the name and IDs, constructs `bug_id=<id>,<id>&bug_id_type=anyexact`, and invokes
+  `seed-saved-search.pl LOGIN NAME QUERY` through the primary application container's
+  `perl -I. -` standard input. The Perl helper resolves LOGIN through `Bugzilla::User`, writes only
+  that user's NAME row with database placeholders, and verifies the exact stored owner/name/query.
 
 ### Verification
 
@@ -143,29 +154,47 @@ rows.
   complete ID-to-issue mapping and rerun each path with a passing, semantically equivalent bzr
   result; first observe the missing mapping assertions fail, then expect every stale marker to make
   the fixture exit non-zero and name its exact owning issue.
+- Discriminating preconditions — Mode: focused-test and live-functional. Seed a run-specific
+  saved search whose stored query selects exactly two controlled positive bug IDs and verify it in
+  each supported Bugzilla image. Require #679's substring control to return both the exact and
+  near-match decoy IDs while `equals` returns only the exact ID. Require #672's live comment-tag
+  readback and controlled `minor_update: true` request shape independently. Require #680's
+  XML-RPC transport records and fail the fixture when the probe inherits REST.
 
 ### Steps
 
 1. Add fixture cases for the five stable IDs, their complete issue mapping, successful live-client
    precondition, and a control that changes each bzr result from gap to semantic parity; run the
    fixture and observe non-zero because the phase IDs are absent.
-2. Add the saved-search probe: run the administrator's `My Bugs` server-side saved search through
-   python-bugzilla, validate its JSON result set, attempt `bzr bug search --saved-search "My Bugs"`,
-   compare results when the command succeeds, then apply `expect_gap 670` to the current failure.
+2. Add `seed_server_saved_search LOGIN NAME BUG_ID BUG_ID` and the Perl seed helper, then add the
+   saved-search probe. After both lifecycle bugs exist, derive a non-empty run-specific name of at
+   most 64 characters and call the function with the disposable administrator and the two positive
+   IDs. It constructs `bug_id=<id>,<id>&bug_id_type=anyexact`, streams the fixed script to
+   `perl -I. -` in the primary application container, resolves the administrator through Bugzilla,
+   inserts or updates one `namedqueries` row using placeholders, and reads back the exact owner,
+   name, and query before proceeding. Run that name through python-bugzilla and require the sorted
+   IDs to equal the controlled pair, attempt `bzr bug search --saved-search <name>`, compare the
+   same exact set when the command succeeds, then apply `expect_gap 670`. Exercise setup and
+   readback on bz50, bz52, and bz53 rather than assuming an image-provided search. Standard-input
+   execution leaves no helper or query file in the application container.
 3. Add the arbitrary-fields probe: use python-bugzilla's generic field map to create and update a
    controlled bug, verify both persisted values, attempt equivalent repeatable `--field` bzr create
    and update operations, compare persisted values when they succeed, then apply `expect_gap 671`.
-4. Add the update-options probe: update a controlled bug with `minor_update` and a tagged comment
-   through python-bugzilla, read back the comment tag, attempt equivalent bzr
-   `--minor-update --comment-tag` behavior, compare the tag when it succeeds, then apply
-   `expect_gap 672`.
-5. Add the query-match-types probe: seed a unique whiteboard value, query it through
-   python-bugzilla with the exact-match modifier, assert only the controlled ID is returned, attempt
-   `bzr bug list --status-whiteboard-type equals`, compare IDs when it succeeds, then apply
-   `expect_gap 679`.
+4. Add #672's two evidence arms under the single `update-options` ID. In the live arm, post an
+   update with a tagged comment through python-bugzilla and read the tag back. In the pinned-image
+   controlled backend, separately require the outgoing update to contain `minor_update: true`, and
+   require the live server to accept that same option. The bzr stale-gap substitute passes only
+   when its controlled request also contains `minor_update: true` and its live comment tag matches;
+   then apply `expect_gap 672`. Add no mail or notification fixture.
+5. Add the query-match-types probe: seed an exact run-specific whiteboard value and a second bug
+   whose value appends a suffix. Prove the ordinary substring query returns both IDs, then query
+   through python-bugzilla with `status_whiteboard_type=equals` and require only the exact ID.
+   Attempt `bzr bug list --status-whiteboard-type equals`, require the same singleton on success,
+   then apply `expect_gap 679`.
 6. Add the bug-tags probe: add a run-specific personal tag and query it through python-bugzilla,
-   assert the controlled ID is returned, attempt equivalent `bzr bug tag` and `bug list --tag`
-   operations, compare tags and IDs when they succeed, then apply `expect_gap 680`.
+   require its reported backend to be XML-RPC, and assert the controlled ID is returned. Attempt
+   equivalent `bzr --api xmlrpc bug tag` and `bzr --api xmlrpc bug list --tag` operations, require
+   XML-RPC transport evidence plus matching tags and IDs on success, then apply `expect_gap 680`.
 7. Run the focused fixture; expect exit 0 with five GAP outcomes and exact issue ownership. Enable
    the stale-gap control; expect non-zero results naming #670, #671, #672, #679, and #680, then
    remove the control and observe green again.
