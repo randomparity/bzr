@@ -180,9 +180,7 @@ The project blocks direct pushes to `main` (a pre-commit-style guardrail mirrore
    success before tagging. It executes `tests/functional/run-all-versions.sh`
    against the real Bugzilla bz50, bz52, and bz53 containers.
 
-8. Refresh the advisory inventory immediately before creating the local tag.
-
-9. Tag the merge commit locally:
+8. Tag the merge commit locally:
 
 ```bash
 git checkout main
@@ -190,12 +188,13 @@ git pull --ff-only origin main
 git tag -a vX.Y.Z -m "bzr vX.Y.Z"
 ```
 
-10. Run the generated-note and security-assessment validation command above.
+9. Refresh the advisory inventory, then run the generated-note and
+    security-assessment validation command above.
     Resolve any result before continuing. If correcting the release-preparation
     changes moves the release commit, delete the unpublished local tag and create
     it again on the corrected merge commit.
 
-11. Push the validated tag:
+10. Push the validated tag:
 
 ```bash
 git push origin vX.Y.Z
