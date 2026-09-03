@@ -33,6 +33,9 @@ require_version() {
 PASS_COUNT=0
 FAIL_COUNT=0
 SKIP_COUNT=0
+GAP_COUNT=0
+LAST_TEST_RESULT=""
+GAP_APPLIED=0
 CURRENT_TEST=""
 CURRENT_TEST_GROUP=""
 SEEN_TEST_IDS=$'\n'
@@ -81,12 +84,15 @@ test_begin() {
 
     SEEN_TEST_IDS="${SEEN_TEST_IDS}${test_id}"$'\n'
     CURRENT_TEST="$description"
+    LAST_TEST_RESULT=""
+    GAP_APPLIED=0
     printf "  ${CYAN}TEST${RESET}  [%s] %s ... " "$test_id" "$CURRENT_TEST"
     return 0
 }
 
 test_pass() {
     PASS_COUNT=$((PASS_COUNT + 1))
+    LAST_TEST_RESULT="PASS"
     printf '%bPASS%b\n' "$GREEN" "$RESET"
     return 0
 }
@@ -94,6 +100,7 @@ test_pass() {
 test_fail() {
     local reason="${1:-}"
     FAIL_COUNT=$((FAIL_COUNT + 1))
+    LAST_TEST_RESULT="FAIL"
     printf '%bFAIL%b' "$RED" "$RESET"
     if [[ -n "$reason" ]]; then
         printf "  (%s)" "$reason"
@@ -112,6 +119,7 @@ test_fail() {
 test_skip() {
     local reason="${1:-}"
     SKIP_COUNT=$((SKIP_COUNT + 1))
+    LAST_TEST_RESULT="SKIP"
     printf '%bSKIP%b' "$YELLOW" "$RESET"
     if [[ -n "$reason" ]]; then
         printf "  (%s)" "$reason"
@@ -125,13 +133,61 @@ test_summary() {
     echo "════════════════════════════════════════════════════════════"
     printf "  ${GREEN}PASSED: %d${RESET}  " "$PASS_COUNT"
     printf "${RED}FAILED: %d${RESET}  " "$FAIL_COUNT"
-    printf "${YELLOW}SKIPPED: %d${RESET}\n" "$SKIP_COUNT"
-    echo "  TOTAL:  $((PASS_COUNT + FAIL_COUNT + SKIP_COUNT))"
+    printf "${YELLOW}SKIPPED: %d${RESET}  " "$SKIP_COUNT"
+    printf "${YELLOW}GAPS: %d${RESET}\n" "$GAP_COUNT"
+    echo "  TOTAL:  $((PASS_COUNT + FAIL_COUNT + SKIP_COUNT + GAP_COUNT))"
     echo "════════════════════════════════════════════════════════════"
+
+    if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then
+        {
+            printf '## bzr functional test summary\n\n'
+            printf '| Result | Count |\n'
+            printf '| --- | ---: |\n'
+            printf '| Passed | %d |\n' "$PASS_COUNT"
+            printf '| Failed | %d |\n' "$FAIL_COUNT"
+            printf '| Skipped | %d |\n' "$SKIP_COUNT"
+            printf '| Gaps | %d |\n\n' "$GAP_COUNT"
+        } >>"$GITHUB_STEP_SUMMARY"
+    fi
 
     if [[ $FAIL_COUNT -gt 0 ]]; then
         return 1
     fi
+    return 0
+}
+
+expect_gap() {
+    local issue="${1:-}"
+
+    if [[ $# -ne 1 || ! $issue =~ ^[1-9][0-9]*$ ]]; then
+        printf 'expect_gap: expected one positive decimal issue number\n' >&2
+        return 2
+    fi
+    if [[ $GAP_APPLIED -ne 0 ]]; then
+        printf 'expect_gap: an expected gap was already applied to this test\n' >&2
+        return 2
+    fi
+
+    case "$LAST_TEST_RESULT" in
+    FAIL)
+        FAIL_COUNT=$((FAIL_COUNT - 1))
+        GAP_COUNT=$((GAP_COUNT + 1))
+        LAST_TEST_RESULT="GAP"
+        GAP_APPLIED=1
+        printf '    expected gap: issue #%s\n' "$issue"
+        ;;
+    PASS)
+        PASS_COUNT=$((PASS_COUNT - 1))
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+        LAST_TEST_RESULT="FAIL"
+        GAP_APPLIED=1
+        printf '    stale expected gap: issue #%s\n' "$issue"
+        ;;
+    *)
+        printf 'expect_gap: the current test has no pass or fail outcome\n' >&2
+        return 2
+        ;;
+    esac
     return 0
 }
 
@@ -144,6 +200,7 @@ BZR_STDOUT=$(mktemp /tmp/bzr-func-stdout.XXXXXX)
 BZR_STDOUT_RAW=$(mktemp /tmp/bzr-func-stdout-raw.XXXXXX)
 BZR_STDERR=$(mktemp /tmp/bzr-func-stderr.XXXXXX)
 BZR_EXIT=0
+PYBZ_RUNTIME=""
 
 _cleanup_tmpfiles() {
     rm -f "$BZR_STDOUT" "$BZR_STDOUT_RAW" "$BZR_STDERR"
@@ -178,6 +235,104 @@ run_bzr() {
 run_bzr_raw() {
     set +e
     "$BZR_BIN" "$@" >"$BZR_STDOUT_RAW" 2>"$BZR_STDERR"
+    BZR_EXIT=$?
+    set -e
+    _project_envelope
+    return 0
+}
+
+pybz_image_name() {
+    local checkout_id
+
+    checkout_id=$(bugzilla_checkout_id) || return 1
+    printf 'localhost/bzr-pybz-%s:3.3.0' "$checkout_id"
+    return 0
+}
+
+pybz_sidecar_name() {
+    local checkout_id
+
+    checkout_id=$(bugzilla_checkout_id) || return 1
+    printf 'bzr-pybz-%s-%s' "$BZ_VERSION" "$checkout_id"
+    return 0
+}
+
+pybz_home_volume_name() {
+    local checkout_id
+
+    checkout_id=$(bugzilla_checkout_id) || return 1
+    printf 'bzr-pybz-home-%s-%s' "$BZ_VERSION" "$checkout_id"
+    return 0
+}
+
+pybz_sidecar_start() {
+    if [[ $# -ne 2 ]]; then
+        printf 'pybz_sidecar_start: expected runtime and Bugzilla container\n' >&2
+        return 2
+    fi
+    if [[ ! -d ${FUNC_CONFIG_DIR:-} ]]; then
+        printf 'pybz_sidecar_start: FUNC_CONFIG_DIR must name a directory\n' >&2
+        return 2
+    fi
+
+    local runtime="$1"
+    local bugzilla_container="$2"
+    local image
+    local sidecar
+    local home_volume
+
+    image=$(pybz_image_name) || return 1
+    sidecar=$(pybz_sidecar_name) || return 1
+    home_volume=$(pybz_home_volume_name) || return 1
+    if ! "$runtime" container inspect "$bugzilla_container" >/dev/null 2>&1; then
+        printf 'pybz_sidecar_start: Bugzilla container not found: %s\n' "$bugzilla_container" >&2
+        return 1
+    fi
+    if ! "$runtime" image inspect "$image" >/dev/null 2>&1; then
+        "$runtime" build -t "$image" -f "$SCRIPT_DIR/pybz/Containerfile" "$SCRIPT_DIR/pybz"
+    fi
+    if "$runtime" container inspect "$sidecar" >/dev/null 2>&1; then
+        "$runtime" rm -f "$sidecar" >/dev/null
+    fi
+
+    "$runtime" run -d \
+        --name "$sidecar" \
+        --network "container:${bugzilla_container}" \
+        --volume "${FUNC_CONFIG_DIR}:/work:Z" \
+        --volume "${home_volume}:/home/pybz" \
+        --env HOME=/home/pybz \
+        "$image" >/dev/null
+    PYBZ_RUNTIME="$runtime"
+    return 0
+}
+
+pybz_sidecar_stop() {
+    if [[ $# -ne 1 ]]; then
+        printf 'pybz_sidecar_stop: expected runtime\n' >&2
+        return 2
+    fi
+
+    local runtime="$1"
+    local sidecar
+
+    sidecar=$(pybz_sidecar_name) || return 1
+    if "$runtime" container inspect "$sidecar" >/dev/null 2>&1; then
+        "$runtime" rm -f "$sidecar" >/dev/null
+    fi
+    PYBZ_RUNTIME=""
+    return 0
+}
+
+run_pybz() {
+    local sidecar
+
+    if [[ -z $PYBZ_RUNTIME ]]; then
+        printf 'run_pybz: sidecar has not been started\n' >&2
+        return 2
+    fi
+    sidecar=$(pybz_sidecar_name) || return 1
+    set +e
+    "$PYBZ_RUNTIME" exec "$sidecar" bugzilla "$@" >"$BZR_STDOUT_RAW" 2>"$BZR_STDERR"
     BZR_EXIT=$?
     set -e
     _project_envelope
