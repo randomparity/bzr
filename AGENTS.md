@@ -201,6 +201,11 @@ output.
   `wiremock` fixtures cannot — fixtures only prove "given this shape, we
   parse it right", never that the shape matches a live server. Two rules,
   no exceptions:
+
+  - **Runtime estimate** — `make functional-test` takes approximately 10
+    minutes on a warm local Docker/Podman setup. Allow additional time for
+    container image pulls or slower hosts. `make functional-test-all` runs
+    every supported Bugzilla version and takes longer accordingly.
   - **Any user-facing change** — a new or changed command, subcommand, flag,
     output shape, exit code, or published schema — **must add or extend a phase
     script** under `tests/functional/phases/` exercising it against a real
