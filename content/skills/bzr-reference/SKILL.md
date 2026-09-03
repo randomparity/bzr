@@ -171,6 +171,6 @@ Three traps worth knowing:
   `bzr-triage-bug` skill walks this through.
 - **Keep writes explicit and minimal.** Change only the fields you intend to.
 
-This reference is authored against **bzr 0.9.0**. If `bzr --version` is much
+This reference is authored against **bzr 0.9.1-dev**. If `bzr --version` is much
 newer and a command here is rejected, the surface may have moved; check
 `bzr <group> --help`.
