@@ -182,6 +182,186 @@ run_sidecar_stop_failure_fixture() (
     assert_equals fake_runtime "$PYBZ_RUNTIME" "failed sidecar ownership"
 )
 
+write_fake_bugzilla_module() {
+    local fixture_dir="$1"
+
+    mkdir -p "$fixture_dir/bugzilla"
+    cat >"$fixture_dir/bugzilla/__init__.py" <<'PY'
+class _FixtureBackend:
+    pass
+
+
+class _FixtureBug:
+    def __init__(self, data):
+        self._data = data
+
+    def get_raw_data(self):
+        return self._data
+
+
+class Bugzilla:
+    def __init__(self, url, api_key=None, use_creds=True):
+        if url != "http://127.0.0.1" or api_key != "fixture-secret" or use_creds:
+            raise RuntimeError("unexpected constructor arguments")
+        self._backend = _FixtureBackend()
+
+    def build_createbug(self, **params):
+        return {"builder": "create", **params}
+
+    def createbug(self, params):
+        return _FixtureBug({"id": 101, "request": params})
+
+    def build_query(self, **params):
+        return {"builder": "query", **params}
+
+    def query(self, query):
+        return [_FixtureBug({"id": 201, "request": query})]
+
+    def build_update(self, **params):
+        if "comment" in params:
+            params["comment"] = {"comment": params["comment"]}
+        return {"builder": "update", **params}
+
+    def update_bugs(self, ids, update):
+        return {"ids": ids, "update": update}
+
+    def getbug(self, bug_id):
+        return _FixtureBug({"id": bug_id, "source": "view"})
+
+    def bugs_history_raw(self, bug_ids):
+        return {
+            "bugs": [
+                {
+                    "id": bug_ids[0],
+                    "history": [
+                        {
+                            "when": "fixture",
+                            "changes": [
+                                {
+                                    "field_name": "summary",
+                                    "removed": "old",
+                                    "added": "new",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+
+    def update_tags(self, ids, tags_add=None, tags_remove=None):
+        return {"ids": ids, "add": tags_add, "remove": tags_remove}
+PY
+}
+
+assert_adapter_case() {
+    local runtime="$1"
+    local sidecar="$2"
+    local config_dir="$3"
+    local name="$4"
+    local operation="$5"
+    local request="$6"
+    local expected="$7"
+    local input="$config_dir/${name}.input.json"
+    local output="$config_dir/${name}.output.json"
+    local actual
+
+    printf '%s\n' "$request" >"$input"
+    chmod 600 "$input"
+    "$runtime" exec -e PYTHONPATH=/work/adapter-fixture "$sidecar" \
+        python /work/bug-lifecycle.py "$operation" "/work/${name}.input.json" \
+        "/work/${name}.output.json"
+    if ! jq -e '.transport | type == "string" and length > 0' "$output" >/dev/null; then
+        printf 'adapter case %s omitted transport\n' "$name" >&2
+        return 1
+    fi
+    actual=$(jq -cS . "$output")
+    assert_equals "$expected" "$actual" "adapter $name result"
+}
+
+run_adapter_fixture() {
+    local runtime="$1"
+    local sidecar="$2"
+    local config_dir="$3"
+    local adapter="$PYBZ_DIR/../compare/bug-lifecycle.py"
+    local error_output="$config_dir/adapter-error.stderr"
+    local invalid_input="$config_dir/invalid-id.input.json"
+    local invalid_status
+
+    if [[ ! -r $adapter ]]; then
+        printf 'python-bugzilla lifecycle adapter is missing: %s\n' "$adapter" >&2
+        return 1
+    fi
+    cp "$adapter" "$config_dir/bug-lifecycle.py"
+    chmod 600 "$config_dir/bug-lifecycle.py"
+    write_fake_bugzilla_module "$config_dir/adapter-fixture"
+
+    "$runtime" exec "$sidecar" python -m py_compile /work/bug-lifecycle.py
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" create create \
+        '{"api_key":"fixture-secret","params":{"product":"Widget","summary":"create"}}' \
+        '{"result":{"id":101,"request":{"builder":"create","product":"Widget","summary":"create"}},"transport":"_FixtureBackend"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" query query \
+        '{"api_key":"fixture-secret","params":{"short_desc":"needle"}}' \
+        '{"result":[{"id":201,"request":{"builder":"query","short_desc":"needle"}}],"transport":"_FixtureBackend"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" update update \
+        '{"api_key":"fixture-secret","bug_id":31,"params":{"summary":"updated"}}' \
+        '{"result":{"ids":[31],"update":{"builder":"update","summary":"updated"}},"transport":"_FixtureBackend"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" view view \
+        '{"api_key":"fixture-secret","bug_id":32}' \
+        '{"result":{"id":32,"source":"view"},"transport":"_FixtureBackend"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" history history \
+        '{"api_key":"fixture-secret","bug_id":33}' \
+        '{"result":{"bugs":[{"history":[{"changes":[{"added":"new","field_name":"summary","removed":"old"}],"when":"fixture"}],"id":33}]},"transport":"_FixtureBackend"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" saved-search saved_search \
+        '{"api_key":"fixture-secret","name":"owned-search"}' \
+        '{"result":[{"id":201,"request":{"builder":"query","savedsearch":"owned-search"}}],"transport":"_FixtureBackend"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" generic-create generic_fields \
+        '{"api_key":"fixture-secret","action":"create","params":{"product":"Widget","summary":"generic"},"fields":{"cf_probe":"initial"}}' \
+        '{"result":{"id":101,"request":{"builder":"create","cf_probe":"initial","product":"Widget","summary":"generic"}},"transport":"_FixtureBackend"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" generic-update generic_fields \
+        '{"api_key":"fixture-secret","action":"update","bug_id":34,"params":{"summary":"generic-updated"},"fields":{"cf_probe":"changed"}}' \
+        '{"result":{"ids":[34],"update":{"builder":"update","cf_probe":"changed","summary":"generic-updated"}},"transport":"_FixtureBackend"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" update-options update_options \
+        '{"api_key":"fixture-secret","bug_id":35,"comment":"tagged comment","comment_tags":["probe"],"minor_update":true}' \
+        '{"result":{"ids":[35],"update":{"builder":"update","comment":{"comment":"tagged comment"},"comment_tags":["probe"],"minor_update":true}},"transport":"_FixtureBackend"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" match-type match_type \
+        '{"api_key":"fixture-secret","value":"needle","match_type":"equals"}' \
+        '{"result":[{"id":201,"request":{"builder":"query","status_whiteboard":"needle","status_whiteboard_type":"equals"}}],"transport":"_FixtureBackend"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" bug-tags bug_tags \
+        '{"api_key":"fixture-secret","bug_id":36,"tag":"probe"}' \
+        '{"result":{"bugs":[{"id":201,"request":{"builder":"query","tags":["probe"]}}],"update":{"add":["probe"],"ids":[36],"remove":null}},"transport":"_FixtureBackend"}'
+
+    printf '%s\n' '{"api_key":"fixture-secret","bug_id":0}' >"$invalid_input"
+    chmod 600 "$invalid_input"
+    set +e
+    "$runtime" exec -e PYTHONPATH=/work/adapter-fixture "$sidecar" \
+        python /work/bug-lifecycle.py view /work/invalid-id.input.json \
+        /work/invalid-id.output.json 2>"$error_output"
+    invalid_status=$?
+    set -e
+    assert_equals 1 "$invalid_status" "invalid adapter ID status"
+    if grep -Fq fixture-secret "$error_output"; then
+        printf 'adapter error leaked the API key\n' >&2
+        return 1
+    fi
+    if ! grep -Fq '/work/invalid-id.input.json' "$error_output"; then
+        printf 'adapter error omitted the input path\n' >&2
+        return 1
+    fi
+    if "$runtime" exec -e PYTHONPATH=/work/adapter-fixture "$sidecar" \
+        python /work/bug-lifecycle.py unsupported /work/invalid-id.input.json \
+        /work/unsupported.output.json 2>"$error_output"; then
+        printf 'adapter accepted an unsupported operation\n' >&2
+        return 1
+    fi
+    if "$runtime" exec -e PYTHONPATH=/work/adapter-fixture "$sidecar" \
+        python /work/bug-lifecycle.py view /work/invalid-id.input.json \
+        2>"$error_output"; then
+        printf 'adapter accepted an incomplete argument list\n' >&2
+        return 1
+    fi
+}
+
 cleanup_container_fixture() {
     local runtime="$1"
     local donor="$2"
@@ -272,6 +452,7 @@ run_container_fixture() {
 
     "$runtime" exec "$sidecar" sh -c "printf '%s' exchange-proof > /work/proof"
     assert_equals exchange-proof "$(<"$config_dir/proof")" "bind-mount bytes"
+    run_adapter_fixture "$runtime" "$sidecar" "$config_dir"
     return 0
 }
 
