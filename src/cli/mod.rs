@@ -581,9 +581,12 @@ pub(crate) enum Commands {
     ///
     /// Classifications are an optional Bugzilla feature that groups
     /// related products under a shared umbrella (e.g. "Components",
-    /// "Services"). Visibility depends on server configuration --
-    /// installations with classifications disabled return a single
-    /// "Unclassified" entry.
+    /// "Services"). Disabled installations either return a single
+    /// "Unclassified" entry or API error 900 to unprivileged users. For error
+    /// 900, table output writes the note to stdout. JSON writes an empty
+    /// collection and NDJSON emits no stdout records; both put the note on
+    /// stderr. A fetched "Unclassified" row is preserved and accompanied by
+    /// the note on stderr.
     ///
     /// Examples:
     ///

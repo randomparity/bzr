@@ -16,7 +16,7 @@ fn list_with(name: &str, projection: ProjectionArgs) -> FieldAction {
 
 async fn mount_status_values(mock: &wiremock::MockServer) {
     Mock::given(method("GET"))
-        .and(path("/rest/field/bug/bug_status"))
+        .and(path("/rest/field/bug/bug%5Fstatus"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "fields": [{
                 "name": "bug_status",
@@ -35,7 +35,7 @@ async fn field_list_returns_values() {
     let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
-        .and(path("/rest/field/bug/bug_status"))
+        .and(path("/rest/field/bug/bug%5Fstatus"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "fields": [{
                 "name": "bug_status",
@@ -93,7 +93,7 @@ async fn field_aliases_succeeds_without_server() {
 async fn field_list_table_format_with_empty_values_prints_no_values_message() {
     let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
-        .and(path("/rest/field/bug/bug_status"))
+        .and(path("/rest/field/bug/bug%5Fstatus"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "fields": [{"name": "bug_status", "values": []}]
         })))
@@ -123,7 +123,7 @@ async fn field_list_table_format_with_empty_values_prints_no_values_message() {
 async fn field_list_json_format_with_empty_values_emits_empty_array() {
     let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
-        .and(path("/rest/field/bug/bug_status"))
+        .and(path("/rest/field/bug/bug%5Fstatus"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "fields": [{"name": "bug_status", "values": []}]
         })))
@@ -157,7 +157,7 @@ async fn field_list_http_500_returns_error() {
     let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
-        .and(path("/rest/field/bug/bug_status"))
+        .and(path("/rest/field/bug/bug%5Fstatus"))
         .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
         .mount(&mock)
         .await;
