@@ -18,7 +18,7 @@ functional runner's isolated exchange directory.
 
 ## Decision
 
-Build a small, pinned python-bugzilla 3.3.0 image and start one long-lived client sidecar for each
+Build a small python-bugzilla 3.3.0 image and start one long-lived client sidecar for each
 active Bugzilla container. Join the Bugzilla container's network namespace with
 `--network container:<bugzilla-container>` so python-bugzilla reaches the server as
 `http://127.0.0.1`. Bind-mount the runner's private `FUNC_CONFIG_DIR` at `/work`, set the sidecar's
@@ -44,8 +44,9 @@ names the stale issue marker, forcing the parity report and test to be updated w
 
 - Developers and CI need only the existing Docker/Podman runtime; no host Python installation is
   required.
-- The top-level python-bugzilla package is fixed at 3.3.0. The image fixture detects an incompatible
-  base-image or transitive-dependency rebuild; the dependency closure is not immutable.
+- The top-level python-bugzilla package and Python base tag are version-fixed. Their artifacts,
+  image digest, and transitive dependency closure are not immutable. The image fixture detects an
+  incompatible rebuild, but not a malicious rebuild that preserves the tested behavior.
 - Namespace sharing ties sidecar lifetime to the server container. Startup validates the server and
   creates a fresh sidecar; cleanup removes only the checkout/version-scoped sidecar and leaves its
   cache volume for reuse.

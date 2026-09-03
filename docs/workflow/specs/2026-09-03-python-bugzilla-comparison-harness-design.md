@@ -18,12 +18,12 @@ comparison result counter, expected-gap transition, python-bugzilla command capt
 helpers. The first phase runs both clients, normalizes their product names, and compares the sorted
 sets.
 
-The sidecar image uses the current stable `python:3.14.7-slim-bookworm` image and pins
-`python-bugzilla==3.3.0`. The runtime joins the already-running Bugzilla container's network
-namespace. Checkout-derived image identity and checkout/version-derived container names prevent
-sibling worktrees from racing or colliding, while a named home volume preserves python-bugzilla
-cache state. The comparison runner bind-mounts its mode-private config directory at `/work` with a
-private SELinux relabel (`:Z`) for captured output and generated configuration.
+The sidecar image selects the versioned `python:3.14.7-slim-bookworm` tag and fixes the top-level
+package at `python-bugzilla==3.3.0`. The runtime joins the already-running Bugzilla container's
+network namespace. Checkout-derived image identity and checkout/version-derived container names
+prevent sibling worktrees from racing or colliding, while a named home volume preserves
+python-bugzilla cache state. The comparison runner bind-mounts its mode-private config directory at
+`/work` with a private SELinux relabel (`:Z`) for captured output and generated configuration.
 
 ## Contracts
 
@@ -58,7 +58,7 @@ private SELinux relabel (`:Z`) for captured output and generated configuration.
   `BZR_STDOUT`, `BZR_STDOUT_RAW`, `BZR_STDERR`, and `BZR_EXIT`. It always returns zero so existing
   phase assertions decide the result unchanged. A phase copies the first client's capture to a
   file under `FUNC_CONFIG_DIR` before invoking the second.
-- Sidecar startup builds the pinned image, removes a stopped same-name sidecar if present, and
+- Sidecar startup builds the configured image, removes a stopped same-name sidecar if present, and
   refuses to replace a running same-name sidecar.
 
 ### Result contract
@@ -118,8 +118,9 @@ continues across versions, reports each result, and exits non-zero if any versio
 
 - The local operator or CI job controls environment overrides and invokes the container runtime.
 - The real test Bugzilla controls HTTP responses consumed by both CLIs.
-- The python-bugzilla image build consumes a pinned package from PyPI and the pinned Python base
-  image selected in the Containerfile.
+- The python-bugzilla image build consumes a version-fixed top-level package from PyPI and a
+  versioned Python base tag. Their artifacts, base-image digest, and transitive dependency closure
+  remain mutable upstream.
 - GitHub Actions controls `GITHUB_STEP_SUMMARY`; the runner appends only fixed labels and numeric
   counters.
 
@@ -133,15 +134,16 @@ continues across versions, reports each result, and exits non-zero if any versio
   commands or paths.
 - Cleanup targets only names computed for this checkout and version. It does not enumerate or prune
   unrelated containers or volumes.
-- The dependency is version-pinned and the repository's scheduled workflow is the first supported
-  execution environment. This change does not widen workflow token permissions.
+- The top-level dependency version is fixed and the repository's scheduled workflow is the first
+  supported execution environment. This change does not widen workflow token permissions.
 
 ### Out of scope
 
 The harness does not secure the disposable local Bugzilla service against other processes on the
-host, verify PyPI package signatures, or provide tenant isolation. Those risks belong to the
-existing functional-test/container and dependency supply-chain environments; this change exposes no
-new public service and uses no production credentials.
+host, pin the base-image digest or complete Python dependency closure, verify PyPI package
+signatures, or provide tenant isolation. A compromised upstream could execute inside the disposable
+sidecar and falsify comparison evidence, but receives no repository mount, runtime socket,
+production credentials, or writable workflow token. This change exposes no new public service.
 
 ## Verification
 
