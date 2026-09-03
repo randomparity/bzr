@@ -48,3 +48,25 @@ fn tracing_capture_follows_an_async_future_across_threads() {
 
     assert!(capture.output().contains("cross-thread tracing marker"));
 }
+
+fn emit_callsite_registration_marker() {
+    tracing::debug!("callsite registration marker");
+}
+
+#[test]
+fn tracing_capture_survives_callsite_registration_on_another_thread() {
+    let (capture, _guard) = TracingCapture::install(tracing::Level::DEBUG);
+
+    std::thread::spawn(emit_callsite_registration_marker)
+        .join()
+        .unwrap();
+    emit_callsite_registration_marker();
+
+    assert_eq!(
+        capture
+            .output()
+            .matches("callsite registration marker")
+            .count(),
+        1
+    );
+}

@@ -4,7 +4,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
+
+static TRACING_REGISTRATION_SENTINEL: OnceLock<tracing::Dispatch> = OnceLock::new();
 
 /// Captures formatted tracing events emitted by the current thread.
 pub struct TracingCapture {
@@ -30,6 +32,10 @@ impl Write for CaptureWriter {
 impl TracingCapture {
     /// Install a thread-local tracing subscriber and return its capture handle.
     pub fn install(level: tracing::Level) -> (Self, tracing::dispatcher::DefaultGuard) {
+        // Keep tracing-core out of its single-dispatch callsite fast path: a callsite first
+        // reached on another test thread could otherwise cache `never` for this capture.
+        TRACING_REGISTRATION_SENTINEL
+            .get_or_init(|| tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default()));
         let bytes = Arc::new(Mutex::new(Vec::new()));
         let writer_bytes = Arc::clone(&bytes);
         let subscriber = tracing_subscriber::fmt()
