@@ -23,11 +23,18 @@ active Bugzilla container. Join the Bugzilla container's network namespace with
 `--network container:<bugzilla-container>` so python-bugzilla reaches the server as
 `http://127.0.0.1`. Bind-mount the runner's private `FUNC_CONFIG_DIR` at `/work`, set the sidecar's
 home to a named volume, and keep it alive with a literal command until the comparison runner's EXIT
-trap removes it.
+trap removes it. The image tag includes `bugzilla_checkout_id`, so simultaneous builds from
+different worktrees cannot retag the image another comparison run is about to start.
 
 `run_pybz` executes the `bugzilla` CLI inside that sidecar, capturing stdout, stderr, and exit status
-in runner-owned files just as `run_bzr` does. Comparison phases normalize each client's output
-before comparing capability-level facts. They do not compare presentation bytes.
+in the same `BZR_STDOUT`, `BZR_STDOUT_RAW`, `BZR_STDERR`, and `BZR_EXIT` globals as `run_bzr`.
+Comparison phases snapshot the first client's capture before invoking the second, then normalize
+both snapshots before comparing capability-level facts. They do not compare presentation bytes.
+
+Comparison-run IDs add the phase-tree namespace to ADR 0029's existing identity:
+`compare/<phase>/<slug>`. The ordinary functional runner keeps its established `<phase>/<slug>`
+identity. Both static and runtime checks include that namespace, so the same phase and slug in the
+two trees remain distinct evidence references.
 
 `expect_gap <issue>` is an explicit result transition for the current test. It records an expected
 gap only when the preceding comparison failed. If the comparison passed, it records a failure that
@@ -43,6 +50,8 @@ names the stale issue marker, forcing the parity report and test to be updated w
   creates a fresh sidecar; cleanup removes only the checkout/version-scoped sidecar and leaves its
   cache volume for reuse.
 - Comparison tests assert semantic parity and can distinguish pass, fail, skip, and known gaps.
+- Comparison images, containers, and cache volumes are checkout-scoped; Bugzilla version also
+  scopes containers and volumes where their lifecycle differs.
 - The sidecar deliberately uses the test server's unauthenticated product-list endpoint for the
   initial smoke comparison; future authenticated comparisons must add credentials deliberately.
 

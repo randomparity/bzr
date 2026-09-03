@@ -7,18 +7,18 @@ semantic comparison outcomes.
 container's network namespace. A dedicated runner reuses the functional test library, sources a
 separate comparison phase tree, and reports pass/fail/skip/expected-gap counts.
 
-**Tech stack:** Bash 3-compatible scripts, Docker/Podman CLI, Make, GitHub Actions, Python slim
-container with `python-bugzilla==3.3.0`, jq, rg, shellcheck.
+**Tech stack:** Bash scripts, Docker/Podman CLI, Make, GitHub Actions, official
+`python:3.14.7-slim-bookworm` container with `python-bugzilla==3.3.0`, jq, rg, shellcheck.
 
 **Expected implementation size: 420–700 changed lines (L) — derived from four shell/runtime
 contracts, guard fixtures, Make/CI wiring, one phase, and one report.**
 
 ## Global constraints
 
-- Support Bugzilla versions bz50, bz52, and bz53 and host architectures declared by the repository:
-  x86_64/aarch64/powerpc64le/s390x Linux, aarch64 macOS, and x86_64/aarch64 Windows.
-- Preserve Bash 3 compatibility and BSD/GNU userland portability; use existing Docker/Podman
-  detection and checkout-scoped identity helpers.
+- Support Bugzilla versions bz50, bz52, and bz53 in the existing Ubuntu scheduled workflow and on
+  local environments providing Bash, Make, jq, rg, and Docker/Podman.
+- Preserve the existing functional scripts' Bash and BSD/GNU userland portability; use existing
+  Docker/Podman detection and checkout-scoped identity helpers.
 - Pin python-bugzilla exactly to 3.3.0; add no host Python dependency and no Rust dependency.
 - Never mount the repository root, host home, credentials, or runtime socket into the sidecar.
 - Keep ADR 0029 semantic IDs and ADR 0030 checkout/version isolation intact.
@@ -33,11 +33,14 @@ contracts, guard fixtures, Make/CI wiring, one phase, and one report.**
 
 **Interfaces:** The checker consumes `<repo-root> [runner-relative-path phase-dir-relative-path]`.
 The Makefile invokes it once with defaults and once with `tests/functional/run-compare.sh` plus
-`tests/functional/compare`. Task 3 supplies that runner and directory.
+`tests/functional/compare`. It derives the `compare` namespace from the custom phase directory;
+`test_begin` consumes `TEST_ID_PREFIX` and emits
+`${TEST_ID_PREFIX:+$TEST_ID_PREFIX/}<phase>/<slug>`. Task 3 supplies that runner and directory.
 
 **Verification**
 
-- Mode: focused-test — alternate runner/phase parameters and source-directory validation;
+- Mode: focused-test — alternate runner/phase parameters, source-directory validation, exact
+  `compare/<phase>/<slug>` runtime/static identity, and cross-tree phase/slug distinction;
   `tools/check-functional-test-ids-tests.sh`; red result is rejection of a valid alternate tree or
   acceptance of a mismatched source; green command is
   `bash tools/check-functional-test-ids-tests.sh`, expected exit 0 and its pass summaries.
@@ -48,9 +51,9 @@ The Makefile invokes it once with defaults and once with `tests/functional/run-c
    paths pass and a mismatched source directory fails.
 2. Run `bash tools/check-functional-test-ids-tests.sh`; expect the new valid fixture to fail because
    the checker treats the second argument as unsupported or ignores it.
-3. Parse optional runner and phase-directory paths relative to the repository root, validate they
-   remain distinct inputs, and derive the expected source directory basename for the canonical-loop
-   parser.
+3. Parse optional runner and phase-directory paths relative to the repository root, derive the
+   expected source directory basename/namespace, and make the canonical-loop parser require the
+   matching source path and runtime prefix.
 4. Run the fixture script; expect exit 0 with both runtime and ID checker pass lines.
 5. Wire both checker invocations into `check-functional-test-ids` and commit.
 
@@ -62,7 +65,8 @@ covered by fixtures.
 **Files:** modify `tests/functional/lib.sh`; create
 `tests/functional/pybz/Containerfile` and `tests/functional/pybz/container-tests.sh`.
 
-**Interfaces:** Define `PYBZ_STDOUT`, `PYBZ_STDERR`, `PYBZ_EXIT`, `GAP_COUNT`,
+**Interfaces:** Reuse `BZR_STDOUT`, `BZR_STDOUT_RAW`, `BZR_STDERR`, and `BZR_EXIT`; define
+`GAP_COUNT`, `LAST_TEST_RESULT`,
 `run_pybz <args...>`, `pybz_sidecar_start <runtime> <bugzilla-container>`,
 `pybz_sidecar_stop <runtime>`, and `expect_gap <issue>`. The runner in Task 3 sets
 `FUNC_CONFIG_DIR`, `CURRENT_TEST_GROUP`, and the active Bugzilla version before calling them.
@@ -70,8 +74,13 @@ covered by fixtures.
 **Verification**
 
 - Mode: focused-test — expected-gap state transitions; add a shell fixture that sources the library,
-  simulates the pass and fail outcomes, and asserts counter changes and stale-gap failure; red is a
-  missing `expect_gap`; green command is the new fixture script with exit 0.
+  simulates pass and fail outcomes, drives the actual terminal and GitHub summary path, and asserts
+  an expected-gap-only result exits zero with all four counters while a stale gap exits non-zero;
+  red is a missing `expect_gap`; green command is the new fixture script with exit 0.
+- Mode: focused-test — existing assertion reuse after `run_pybz`; a container-backed fixture runs a
+  successful and failing CLI call then invokes `assert_success`/`assert_failure` against the shared
+  BZR capture globals; red is assertions reading stale bzr output; green is the sidecar container
+  fixture with exit 0.
 - Mode: focused-test — sidecar image contains python-bugzilla 3.3.0 and its CLI; container smoke test
   builds the image and checks `python -c` package metadata plus `bugzilla --version`; red is a missing
   image; green command is `bash tests/functional/pybz/container-tests.sh`, expected exit 0.
@@ -81,12 +90,12 @@ covered by fixtures.
 1. Add the expected-gap fixture and observe its missing-function failure.
 2. Add GAP state tracking and `expect_gap`, including decimal issue validation, one-use enforcement,
    PASS→FAIL stale-marker behavior, and FAIL→GAP behavior; rerun the fixture to green.
-3. Add the Containerfile with a pinned Python base and `python-bugzilla==3.3.0`, using no RUN
-   heredoc, plus a literal long-lived command.
+3. Add the Containerfile with pinned `python:3.14.7-slim-bookworm` and
+   `python-bugzilla==3.3.0`, using no RUN heredoc, plus a literal long-lived command.
 4. Add the container smoke fixture, build it with the detected runtime, and verify package/CLI
    versions.
-5. Implement sidecar naming, image build, network-namespace join, `/work` bind mount, persistent
-   home volume, command capture, and targeted cleanup.
+5. Implement checkout-scoped image naming, sidecar naming, image build, network-namespace join,
+   `/work` bind mount, persistent home volume, shared BZR capture, and targeted cleanup.
 6. Run shellcheck and Bash syntax checks for the changed scripts, then commit.
 
 **Acceptance:** The client is pinned and callable only inside the sidecar; output and outcome state
@@ -98,15 +107,16 @@ are captured; expected gaps fail when stale; cleanup targets only this checkout/
 `tests/functional/run-compare-all.sh`, and `tests/functional/compare/00-products.sh`; modify
 `tests/functional/lib.sh` only for integration defects found by the real run.
 
-**Interfaces:** The runner publishes `BZ_URL`, `BZR_BIN`, `PYBZ_*`, and test lifecycle globals to
-sourced phases. `00-products.sh` calls `run_bzr product list` and
+**Interfaces:** The runner sets `TEST_ID_PREFIX=compare` and publishes `BZ_URL`, `BZR_BIN`, shared
+BZR capture globals, and test lifecycle globals to sourced phases. `00-products.sh` snapshots the
+first capture, calls `run_bzr product list` and
 `run_pybz --bugzilla http://127.0.0.1 info --products`, then compares normalized product-name files.
 The all-version script invokes setup, comparison, and cleanup for bz50/bz52/bz53.
 
 **Verification**
 
 - Mode: focused-test — real product-list parity through both clients;
-  `compare/00-products.sh` test ID `00-products/list-products`; red is sidecar/client startup or
+  `compare/00-products.sh` test ID `compare/00-products/list-products`; red is sidecar/client startup or
   normalized-list mismatch; green command is `make functional-compare`, expected one PASS, zero
   failures, and exit 0.
 - Mode: focused-test — all supported Bugzilla versions; green command is
@@ -135,7 +145,7 @@ all four result classes are represented by the harness contract; cleanup runs on
 
 **Interfaces:** The workflow comparison job invokes `make functional-compare-all` with the already
 built release binary and uploads counts through `GITHUB_STEP_SUMMARY`. The parity report references
-the stable ID `00-products/list-products`.
+the stable ID `compare/00-products/list-products`.
 
 **Verification**
 
