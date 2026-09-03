@@ -149,7 +149,7 @@ unset _CB _CBF
 # through the public REST command path. The proxy mode is opt-in so the default
 # functional consumers continue to see the container's native response.
 _AC_COMMENT_BUG=$(make_bug --product FuncTestProd --component Backend \
-    --op-sys Linux --rep-platform PC --description d \
+    --op-sys Linux --platform PC --description d \
     --summary "attachment-comment proxy comment host")
 run_bzr comment add "$_AC_COMMENT_BUG" --body "proxy private comment" --private
 

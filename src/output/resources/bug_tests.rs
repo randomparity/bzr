@@ -242,10 +242,10 @@ fn write_bug_adjacency_json_has_the_closed_result_shape() {
 }
 
 #[test]
-fn write_bug_adjacency_json_uses_schema_version_2_1_0() {
+fn write_bug_adjacency_json_uses_schema_version_3_0_0() {
     let output = capture_bug_adjacency(OutputFormat::Json, sample_adjacency());
     let value: serde_json::Value = serde_json::from_str(&output).unwrap();
-    assert_eq!(value["schema_version"], "2.1.0");
+    assert_eq!(value["schema_version"], "3.0.0");
 }
 
 #[test]
@@ -1181,7 +1181,7 @@ fn validate_table_columns_ok_for_all_blank_include() {
 /// The serde key sequence of `Bug`, in struct-declaration order. Locks the
 /// `preserve_order` decision (Finding 4) and is the reference for the registry
 /// drift guard (Finding 3).
-const BUG_STRUCT_KEY_ORDER: [&str; 27] = [
+const BUG_STRUCT_KEY_ORDER: [&str; 26] = [
     "id",
     "summary",
     "status",
@@ -1205,7 +1205,6 @@ const BUG_STRUCT_KEY_ORDER: [&str; 27] = [
     "cc",
     "op_sys",
     "platform",
-    "rep_platform",
     "target_milestone",
     "groups",
     "flags",
@@ -1267,24 +1266,19 @@ fn bug_to_json_exclude_subset_drops_only_those() {
 }
 
 #[test]
-fn bug_to_json_excluding_platform_drops_transition_alias_too() {
+fn bug_to_json_excluding_platform_drops_canonical_key() {
     let bug = make_bug(1, "s", "NEW");
-    for exclude in ["platform", "rep_platform"] {
-        let v = bug_to_json(
-            &bug,
-            ColumnSpec {
-                include: None,
-                exclude: Some(exclude),
-            },
-        );
-        let map = v.as_object().unwrap();
-        assert!(!map.contains_key("platform"), "canonical key for {exclude}");
-        assert!(
-            !map.contains_key("rep_platform"),
-            "transition alias for {exclude}"
-        );
-        assert_eq!(map.len(), BUG_STRUCT_KEY_ORDER.len() - 2);
-    }
+    let exclude = "platform";
+    let v = bug_to_json(
+        &bug,
+        ColumnSpec {
+            include: None,
+            exclude: Some(exclude),
+        },
+    );
+    let map = v.as_object().unwrap();
+    assert!(!map.contains_key("platform"), "canonical key for {exclude}");
+    assert_eq!(map.len(), BUG_STRUCT_KEY_ORDER.len() - 1);
 }
 
 #[test]
@@ -1423,12 +1417,8 @@ fn columns_registry_is_one_to_one_with_bug_serde_keys() {
     bug.estimated_time = Some(8.0);
     bug.remaining_time = Some(5.0);
     let value = serde_json::to_value(&bug).unwrap();
-    let mut serde_keys: std::collections::HashSet<String> =
+    let serde_keys: std::collections::HashSet<String> =
         value.as_object().unwrap().keys().cloned().collect();
-    assert!(
-        serde_keys.remove("rep_platform"),
-        "the published compatibility alias must remain during the 2.1.x transition"
-    );
     let registry_keys: std::collections::HashSet<String> = BUG_FIELDS
         .iter()
         .map(|field| field.canonical().to_string())

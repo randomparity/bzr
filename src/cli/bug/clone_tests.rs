@@ -76,8 +76,10 @@ fn parse_clone_field_overrides() {
 
 #[test]
 fn parse_clone_accepts_hidden_legacy_platform_alias() {
-    let clone = clone_args(&["bzr", "bug", "clone", "42", "--rep-platform", "x86_64"]);
-    assert_eq!(clone.platform.as_deref(), Some("x86_64"));
+    assert_eq!(
+        parse_error_kind(&["bzr", "bug", "clone", "42", "--rep-platform", "x86_64"]),
+        ErrorKind::UnknownArgument
+    );
 }
 
 #[test]

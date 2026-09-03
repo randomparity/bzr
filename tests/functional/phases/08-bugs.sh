@@ -36,10 +36,10 @@ if [[ -n "$BUG1" ]]; then
     if assert_success && assert_json "[.[] | select(.id == $BUG1)] | length" "0"; then test_pass; fi
 else test_skip "no BUG1"; fi
 
-test_begin "bug-create-deprecated-platform-alias" "bug create deprecated --rep-platform alias"
+test_begin "bug-create-platform" "bug create canonical --platform"
 run_bzr bug create --product FuncTestProd --component Backend \
     --summary "Deprecated platform alias" --description "Alias transition coverage" \
-    --op-sys All --rep-platform All
+    --op-sys All --platform All
 if assert_success && assert_json_exists '.id'; then test_pass; fi
 
 test_begin "bug-create-duplicate-target" "bug create (duplicate target)"
@@ -83,7 +83,7 @@ if [[ -n "$BUG1" ]]; then
     if assert_success &&
         assert_json '.summary' "Bug one" &&
         assert_json '.platform' "PC" &&
-        assert_json '.rep_platform' "PC"; then test_pass; fi
+        assert_json '.rep_platform' "null"; then test_pass; fi
 else test_skip "no BUG1"; fi
 
 test_begin "bug-update-platform-round-trip" "bug update --platform round-trip"

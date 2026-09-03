@@ -64,7 +64,7 @@ pub(crate) struct CloneArgs {
     #[arg(long)]
     pub op_sys: Option<String>,
     /// Override hardware platform
-    #[arg(long, alias = "rep-platform")]
+    #[arg(long)]
     pub platform: Option<String>,
     #[command(flatten)]
     pub create_fields: CloneCreateFieldArgs,

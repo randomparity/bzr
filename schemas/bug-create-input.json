@@ -63,12 +63,6 @@
           "type": ["string", "null"],
           "examples": ["x86_64"]
         },
-        "rep_platform": {
-          "deprecated": true,
-          "description": "Deprecated compatibility alias for `platform`; removed at the next major schema version.",
-          "type": ["string", "null"],
-          "examples": ["x86_64"]
-        },
         "alias": {
           "type": ["string", "null"],
           "examples": ["suspend-crash"]
@@ -178,9 +172,6 @@
         }
       },
       "required": [],
-      "not": {
-        "required": ["platform", "rep_platform"]
-      },
       "additionalProperties": false
     }
   }

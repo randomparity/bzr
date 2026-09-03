@@ -443,9 +443,8 @@ bzr bug list --version 9.4 --version 9.5 --op-sys Linux
 ```
 
 `platform` is the canonical Bugzilla hardware-field name for search, bug
-objects, create, update, and clone. Schema 2.1.x also emits the deprecated
-`rep_platform` output alias and accepts it in create JSON; the hidden
-`--rep-platform` CLI alias follows the same one-release transition.
+objects, create, update, and clone. Schema 3.0.0 publishes and accepts only the
+canonical `platform` spelling.
 
 ### `bzr bug view`
 
@@ -659,11 +658,11 @@ table always includes the fixed fields `ID`, `SUMMARY`, `STATUS`, `RESOLUTION`,
 `BLOCKS`, and `DEPENDS ON`; the two adjacency columns are complete,
 comma-separated ID lists.
 
-Under `--json`, the usual `2.1.0` envelope contains a closed result object:
+Under `--json`, the usual `3.0.0` envelope contains a closed result object:
 
 ```json
 {
-  "schema_version": "2.1.0",
+  "schema_version": "3.0.0",
   "data": {
     "requests": [
       {"requested": "00123", "bug_id": 123},
@@ -897,7 +896,7 @@ before the first write, but it is not a reservation.
 - A top-level **object** files one bug and returns the usual `{"resource":"bug","action":"created","id":N}` result.
 - A top-level **array** files one bug per element and returns a partial-failure result `{"resource":"bug","action":"created","created":[...],"failed":[{"index":N,"error":"..."}]}`. If any element fails, the command exits **11** (`BatchPartialFailure`); all input is validated before any bug is created, so a malformed element never half-creates a batch.
 
-Accepted keys match the create flag names: `product`, `component`, `summary`, `version`, `description`, `priority`, `severity`, `assignee`, `op_sys`, `platform`, `alias`, `url`, `whiteboard`, `target_milestone`, `deadline`, `blocks`, `depends_on`, `cc`, `keywords`, `groups`, `flags` (an array of flag-syntax strings). Schema 2.1.x also accepts deprecated `rep_platform`, but not both spellings together. **Unknown keys are rejected** (exit 7) rather than silently ignored, so a typo fails fast. `product`, `component`, and `summary` are required (in the JSON or via a CLI flag). For `groups`, a missing key omits `groups` from the create request, while an explicit empty array sends `"groups":[]`.
+Accepted keys match the create flag names: `product`, `component`, `summary`, `version`, `description`, `priority`, `severity`, `assignee`, `op_sys`, `platform`, `alias`, `url`, `whiteboard`, `target_milestone`, `deadline`, `blocks`, `depends_on`, `cc`, `keywords`, `groups`, `flags` (an array of flag-syntax strings). **Unknown keys are rejected** (exit 7) rather than silently ignored, so a typo fails fast. `product`, `component`, and `summary` are required (in the JSON or via a CLI flag). For `groups`, a missing key omits `groups` from the create request, while an explicit empty array sends `"groups":[]`.
 
 **Compound keys** (the JSON equivalent of the `--with-comment` / `--with-attachment` flags, see [Compound create](#compound-create-comment--attachments)):
 
@@ -2447,7 +2446,7 @@ Every pretty `--json` response is wrapped in a stable envelope:
 
 ```json
 {
-  "schema_version": "2.1.0",
+  "schema_version": "3.0.0",
   "data": <the command's payload>
 }
 ```
@@ -2462,7 +2461,7 @@ bzr --json schema | jq -r '.schema_version'   # the contract version itself
 ```
 
 `--json` error output carries the version too, beside an `error` object:
-`{"schema_version":"2.1.0","error":{"type":...,"message":...,"exit_code":...}}`.
+`{"schema_version":"3.0.0","error":{"type":...,"message":...,"exit_code":...}}`.
 
 Two outputs are deliberately **not** enveloped:
 

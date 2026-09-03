@@ -340,7 +340,7 @@ unset _AB _AF _AID _XP_LIST _XP_VIEW
 # self-contained fixture covers create, metadata reads, body reads, list body
 # exclusion, bulk re-fetch, and a named credentialless metadata read.
 _AC_ATTACH_BUG=$(make_bug --product FuncTestProd --component Backend \
-    --op-sys Linux --rep-platform PC --description d \
+    --op-sys Linux --platform PC --description d \
     --summary "attachment-comment proxy attachment host")
 _AC_ATTACH_FILE=$(mktemp "$FUNC_CONFIG_DIR/ac-attachment.XXXXXX")
 _AC_ATTACH_DOWNLOAD=$(mktemp "$FUNC_CONFIG_DIR/ac-download.XXXXXX")

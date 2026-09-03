@@ -41,14 +41,9 @@ if assert_success; then
     if assert_json '.summary' "fj object" && assert_json '.priority' "High"; then test_pass; fi
 fi
 
-test_begin "bug-create-from-json-deprecated-platform-alias" "bug create --from-json deprecated rep_platform alias"
+test_begin "bug-create-from-json-rejects-removed-platform-alias" "bug create --from-json rejects removed rep_platform alias"
 run_bzr bug create --from-json "$_FJ/legacy-platform.json"
-if assert_success; then
-    _LEGACY_PLATFORM_ID=$(jq -r '.id' "$BZR_STDOUT")
-    run_bzr bug view "$_LEGACY_PLATFORM_ID"
-    if assert_success && assert_json '.platform' "PC"; then test_pass; fi
-fi
-unset _LEGACY_PLATFORM_ID
+if assert_failure; then test_pass; fi
 
 test_begin "bug-create-from-json-array-creates-multiple-bugs" "bug create --from-json array creates multiple bugs"
 run_bzr bug create --from-json "$_FJ/arr.json"

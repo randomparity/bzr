@@ -238,7 +238,6 @@ impl Serialize for Bug {
         map.serialize_entry("cc", &self.cc)?;
         map.serialize_entry("op_sys", &self.op_sys)?;
         map.serialize_entry("platform", &self.platform)?;
-        map.serialize_entry("rep_platform", &self.platform)?;
         map.serialize_entry("target_milestone", &self.target_milestone)?;
         map.serialize_entry("groups", &self.groups)?;
         if let Some(estimated_time) = self.estimated_time {

@@ -64,21 +64,23 @@ fn parse_create_core_fields() {
 }
 
 #[test]
-fn parse_create_accepts_hidden_legacy_platform_alias() {
-    let create = create_args(&[
-        "bzr",
-        "bug",
-        "create",
-        "--product",
-        "P",
-        "--component",
-        "C",
-        "--summary",
-        "S",
-        "--rep-platform",
-        "x86_64",
-    ]);
-    assert_eq!(create.platform.as_deref(), Some("x86_64"));
+fn parse_create_rejects_removed_platform_alias() {
+    assert_eq!(
+        parse_error_kind(&[
+            "bzr",
+            "bug",
+            "create",
+            "--product",
+            "P",
+            "--component",
+            "C",
+            "--summary",
+            "S",
+            "--rep-platform",
+            "x86_64",
+        ]),
+        ErrorKind::UnknownArgument
+    );
 }
 
 #[test]
