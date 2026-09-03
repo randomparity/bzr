@@ -15,7 +15,10 @@ test_id_prefix=''
 if [[ $# -eq 3 ]]; then
   runner_relative_path=$2
   phase_dir_relative_path=$3
-  test_id_prefix=$(basename "$phase_dir_relative_path")
+  phase_dir_basename=$(basename "$phase_dir_relative_path")
+  if [[ $phase_dir_basename != phases ]]; then
+    test_id_prefix=$phase_dir_basename
+  fi
 fi
 
 if [[ $runner_relative_path == /* || $phase_dir_relative_path == /* ||
@@ -122,7 +125,10 @@ fi
 
 if ! awk -v expected_source="source \"\$SCRIPT_DIR/$phase_dir_basename/\${_phase}.sh\"" \
   -v expected_prefix="$test_id_prefix" '
-  !loop_seen && $0 == "TEST_ID_PREFIX=" expected_prefix { prefixes++ }
+  !loop_seen && /^TEST_ID_PREFIX=/ {
+    prefix_assignments++
+    if ($0 == "TEST_ID_PREFIX=" expected_prefix) matching_prefixes++
+  }
   /^for _phase in \\$/ {
     loop_seen = 1
     inside = 1
@@ -146,8 +152,11 @@ if ! awk -v expected_source="source \"\$SCRIPT_DIR/$phase_dir_basename/\${_phase
   inside && /^done[[:space:]]*$/ { inside = 0 }
   { previous_assignment = 0 }
   END {
-    if (assignments != 1 || sources != 1 || pairs != 1 ||
-      (expected_prefix != "" && prefixes != 1)) exit 1
+    prefix_error = (expected_prefix == "" &&
+      prefix_assignments != matching_prefixes) ||
+      (expected_prefix != "" &&
+        (prefix_assignments != 1 || matching_prefixes != 1))
+    if (assignments != 1 || sources != 1 || pairs != 1 || prefix_error) exit 1
   }
 ' "$runner"; then
   error 'runner must contain exactly one canonical adjacent assignment/source pair'
