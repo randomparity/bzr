@@ -180,31 +180,24 @@ test_summary() {
     echo "════════════════════════════════════════════════════════════"
     printf "  ${GREEN}PASSED: %d${RESET}  " "$PASS_COUNT"
     printf "${RED}FAILED: %d${RESET}  " "$FAIL_COUNT"
-    printf "${YELLOW}SKIPPED: %d${RESET}  " "$SKIP_COUNT"
-    printf "${YELLOW}GAPS: %d${RESET}\n" "$GAP_COUNT"
-    echo "  TOTAL:  $((PASS_COUNT + FAIL_COUNT + SKIP_COUNT + GAP_COUNT))"
+    if [[ ${TEST_ID_PREFIX:-} == compare ]]; then
+        printf "${YELLOW}SKIPPED: %d${RESET}  " "$SKIP_COUNT"
+        printf "${YELLOW}GAPS: %d${RESET}\n" "$GAP_COUNT"
+        echo "  TOTAL:  $((PASS_COUNT + FAIL_COUNT + SKIP_COUNT + GAP_COUNT))"
+    else
+        printf "${YELLOW}SKIPPED: %d${RESET}\n" "$SKIP_COUNT"
+        echo "  TOTAL:  $((PASS_COUNT + FAIL_COUNT + SKIP_COUNT))"
+    fi
     echo "════════════════════════════════════════════════════════════"
 
-    if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then
-        if [[ ${TEST_ID_PREFIX:-} == compare ]]; then
-            {
-                printf '## bzr/python-bugzilla comparison summary\n\n'
-                printf '| Bugzilla | Passed | Failed | Skipped | Expected gaps |\n'
-                printf '| --- | ---: | ---: | ---: | ---: |\n'
-                printf '| %s | %d | %d | %d | %d |\n\n' \
-                    "$BZ_VERSION" "$PASS_COUNT" "$FAIL_COUNT" "$SKIP_COUNT" "$GAP_COUNT"
-            } >>"$GITHUB_STEP_SUMMARY"
-        else
-            {
-                printf '## bzr functional test summary\n\n'
-                printf '| Result | Count |\n'
-                printf '| --- | ---: |\n'
-                printf '| Passed | %d |\n' "$PASS_COUNT"
-                printf '| Failed | %d |\n' "$FAIL_COUNT"
-                printf '| Skipped | %d |\n' "$SKIP_COUNT"
-                printf '| Gaps | %d |\n\n' "$GAP_COUNT"
-            } >>"$GITHUB_STEP_SUMMARY"
-        fi
+    if [[ ${TEST_ID_PREFIX:-} == compare && -n ${GITHUB_STEP_SUMMARY:-} ]]; then
+        {
+            printf '## bzr/python-bugzilla comparison summary\n\n'
+            printf '| Bugzilla | Passed | Failed | Skipped | Expected gaps |\n'
+            printf '| --- | ---: | ---: | ---: | ---: |\n'
+            printf '| %s | %d | %d | %d | %d |\n\n' \
+                "$BZ_VERSION" "$PASS_COUNT" "$FAIL_COUNT" "$SKIP_COUNT" "$GAP_COUNT"
+        } >>"$GITHUB_STEP_SUMMARY"
     fi
 
     if [[ $FAIL_COUNT -gt 0 ]]; then
@@ -354,9 +347,7 @@ pybz_sidecar_start() {
         printf 'pybz_sidecar_start: Bugzilla container not found: %s\n' "$bugzilla_container" >&2
         return 1
     fi
-    if ! "$runtime" image inspect "$image" >/dev/null 2>&1; then
-        "$runtime" build -t "$image" -f "$SCRIPT_DIR/pybz/Containerfile" "$SCRIPT_DIR/pybz"
-    fi
+    "$runtime" build -t "$image" -f "$SCRIPT_DIR/pybz/Containerfile" "$SCRIPT_DIR/pybz"
     if "$runtime" container inspect "$sidecar" >/dev/null 2>&1; then
         if [[ $("$runtime" container inspect --format '{{.State.Running}}' "$sidecar") == true ]]; then
             printf 'pybz_sidecar_start: sidecar is already running: %s; stop the active comparison first\n' \

@@ -15,6 +15,7 @@ write_runner() {
   mkdir -p "$root/tests/functional/phases"
   {
     printf 'SCRIPT_DIR=/fixture/tests/functional\n'
+    printf 'TEST_ID_PREFIX=\n'
     printf 'for _phase in \\\n'
     printf '  %s; do\n' "$*"
     printf '  CURRENT_TEST_GROUP="$_phase"\n'
@@ -184,13 +185,17 @@ fi
 valid=$(new_fixture valid)
 expect_allowed valid "$valid"
 
-explicit_default=$(new_fixture explicit-default)
-expect_allowed explicit-default "$explicit_default" \
+missing_default_prefix=$(new_fixture missing-default-prefix)
+sed -i.bak '/^TEST_ID_PREFIX=$/d' \
+  "$missing_default_prefix/tests/functional/run-tests.sh"
+rm "$missing_default_prefix/tests/functional/run-tests.sh.bak"
+expect_rejected missing-default-prefix "$missing_default_prefix" \
+  "canonical adjacent assignment/source pair" \
   tests/functional/run-tests.sh tests/functional/phases
 
 wrong_default_prefix=$(new_fixture wrong-default-prefix)
-sed -i.bak '2i\
-TEST_ID_PREFIX=phases' "$wrong_default_prefix/tests/functional/run-tests.sh"
+sed -i.bak 's/^TEST_ID_PREFIX=$/TEST_ID_PREFIX=phases/' \
+  "$wrong_default_prefix/tests/functional/run-tests.sh"
 rm "$wrong_default_prefix/tests/functional/run-tests.sh.bak"
 expect_rejected wrong-default-prefix "$wrong_default_prefix" \
   "canonical adjacent assignment/source pair" \

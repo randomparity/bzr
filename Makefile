@@ -223,6 +223,7 @@ functional-test-all: ## Run functional tests against all Bugzilla versions
 	tests/functional/run-all-versions.sh
 
 functional-compare-all: release ## Compare bzr and python-bugzilla on all versions
+	bash tests/functional/pybz/container-tests.sh
 	BZR_COMPARE_BIN="$(BZR_COMPARE_BIN)" tests/functional/run-compare-all.sh
 
 functional-stop-all: ## Stop all Bugzilla test containers
