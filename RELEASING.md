@@ -35,8 +35,8 @@ If `bzr` is already taken, rename the package before publishing. The install com
 Between releases, `Cargo.toml` carries a `-dev` SemVer pre-release suffix
 marking the next planned release. By default this is the next **patch**
 version — directly after `v0.4.4` ships the project lives at
-`version = "0.4.5-dev"` (the `post-release-bump` job in step 7 of the
-checklist applies this automatically). The suffix is only a placeholder:
+`version = "0.4.5-dev"` (the `post-release-bump` job applies this
+automatically). The suffix is only a placeholder:
 the actual release version is chosen at tag time per SemVer based on what
 landed, so when breaking changes or new features have accumulated the
 release-prep PR bumps to the next minor instead — this is how `0.4.5-dev`
@@ -116,7 +116,7 @@ subshell completes, without replacing the caller's EXIT trap.
 (
   set -euo pipefail
   TAG=vX.Y.Z
-  PREV=$(git describe --tags --abbrev=0)
+  PREV=$(git describe --tags --abbrev=0 "${TAG}^")
   section_file=$(mktemp)
   notes_file=$(mktemp)
   trap 'rm -f "$section_file" "$notes_file"' EXIT
@@ -282,17 +282,19 @@ Create the token from crates.io and store it in GitHub Actions secrets as:
 1. Open and merge the `release/vX.Y.Z-prep` PR to `main`
 2. Run the `Functional Tests` workflow on `main` and wait for success
 3. Pull `main` locally and tag the merge commit (`git tag -a vX.Y.Z -m "bzr vX.Y.Z"`)
-4. Push the tag (`git push origin vX.Y.Z`)
-5. Confirm `release.yml` succeeds (preflight → manpages → build → release → installer-smoke → homebrew)
-6. Confirm `publish-crates.yml` succeeds (stable tags only)
-7. Verify installation from crates.io:
+4. Refresh the advisory inventory and run the generated-note and security-assessment
+   validation command above.
+5. Push the validated tag (`git push origin vX.Y.Z`)
+6. Confirm `release.yml` succeeds (preflight → manpages → build → release → installer-smoke → homebrew)
+7. Confirm `publish-crates.yml` succeeds (stable tags only)
+8. Verify installation from crates.io:
 
 ```bash
 cargo install bzr --version X.Y.Z --locked
 bzr --version
 ```
 
-8. The `post-release-bump` job in `release.yml` will automatically
+9. The `post-release-bump` job in `release.yml` will automatically
    open a `chore/bump-to-vX.Y.Z'-dev` PR after the `release` and
    `installer-smoke` jobs succeed (stable releases only — pre-release
    tags skip this step). The auto-PR:
