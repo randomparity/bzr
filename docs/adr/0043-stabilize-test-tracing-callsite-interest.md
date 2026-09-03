@@ -30,6 +30,8 @@ future is polled. Neither substitutes for the other.
 
 Tests retain one no-op dispatch and may dynamically check callsites observed during capture.
 Capture API, filters, redaction checks, production logging, dependencies, and MSRV stay unchanged.
+The spec and transient plan repeat the required proof so design and execution remain independently
+checkable; this bounded documentation overhead is accepted for the concurrency fix.
 
 ## Considered & rejected
 

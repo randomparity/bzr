@@ -13,9 +13,10 @@ uncaptured thread, then on the capture thread. Require the marker and record the
 
 ## Task 2: Stabilize shared capture registration
 
-In `src/test_helpers.rs`, retain a process-lifetime no-op `tracing::Dispatch` with `OnceLock`,
-initialized before capture construction. Re-run the regression repeatedly plus the existing
-cross-thread propagation and server-capability redaction tests without changing their assertions.
+In `src/test_helpers.rs`, retain a process-lifetime registered no-op dispatch with `OnceLock`,
+constructed as `tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default())` before the
+capture. Do not use unregistered `Dispatch::none()`. Run the spec's focused proof without changing
+the existing cross-thread propagation or server-capability redaction assertions.
 
 ## Task 3: Index, verify, and ship
 
