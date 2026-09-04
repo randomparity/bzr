@@ -28,6 +28,8 @@ lifecycle_capture_bzr() {
 
 lifecycle_bzr() {
     local name="$1"
+    # shellcheck disable=SC2034 # The controlled run_bzr fixture reads this dynamic-scope value.
+    local LIFECYCLE_BZR_CALL_NAME="$name"
     shift
 
     run_bzr --server-url "$BZ_URL" --server-api-key-env BZR_COMPARE_API_KEY \
@@ -118,9 +120,11 @@ lifecycle_state() {
     local expected_id="${3:-}"
 
     if [[ -n $expected_id ]] &&
-        ! jq -e --argjson expected "$expected_id" \
-            'type == "array" and length == 1 and .[0].id == $expected' "$source" >/dev/null; then
-        test_fail "query did not return exactly generated bug $expected_id"
+        ! jq -e --argjson expected "$expected_id" '
+            (type == "array" and length == 1 and .[0].id == $expected) or
+            (type == "object" and .id == $expected)
+        ' "$source" >/dev/null; then
+        test_fail "result did not identify exactly requested bug $expected_id"
         return 1
     fi
 
@@ -140,11 +144,18 @@ lifecycle_history() {
     local client="$1"
     local source="$2"
     local destination="$3"
+    local expected_id="$4"
     local records
 
     if [[ $client == bzr ]]; then
         records='[.[] | {field, old_value, new_value}]'
     else
+        if ! jq -e --argjson expected "$expected_id" \
+            '.bugs | type == "array" and length == 1 and .[0].id == $expected' \
+            "$source" >/dev/null; then
+            test_fail "history did not return exactly requested bug $expected_id"
+            return 1
+        fi
         records='[.bugs[0].history[].changes[] |
             {field:.field_name, old_value:.removed, new_value:.added}]'
     fi
@@ -169,10 +180,13 @@ lifecycle_equal() {
 }
 
 lifecycle_updated_state_is_persisted() {
-    if ! jq -e --arg severity "$LIFECYCLE_UPDATED_SEVERITY" \
-        --arg priority "$LIFECYCLE_UPDATED_PRIORITY" \
-        '.severity == $severity and .priority == $priority' "$1" >/dev/null; then
-        test_fail "updated severity or priority was not persisted"
+    if ! jq -e --arg summary "$LIFECYCLE_UPDATED_SUMMARY" --arg url "$LIFECYCLE_URL" \
+        --arg whiteboard "$LIFECYCLE_WHITEBOARD" --arg severity "$LIFECYCLE_UPDATED_SEVERITY" \
+        --arg priority "$LIFECYCLE_UPDATED_PRIORITY" '
+        .summary == $summary and .url == $url and .whiteboard == $whiteboard and
+        .severity == $severity and .priority == $priority
+    ' "$1" >/dev/null; then
+        test_fail "updated fields were not persisted exactly"
         return 1
     fi
 }
@@ -187,12 +201,17 @@ lifecycle_update_field() {
 }
 
 lifecycle_updated_fields_are_in_history() {
-    if ! jq -e --arg severity "$LIFECYCLE_UPDATED_SEVERITY" \
-        --arg priority "$LIFECYCLE_UPDATED_PRIORITY" '
-        any(.[]; .field == "severity" and .old_value == "normal" and .new_value == $severity) and
-        any(.[]; .field == "priority" and .old_value == "Normal" and .new_value == $priority)
+    if ! jq -e --arg stem "$LIFECYCLE_STEM" --arg summary "$LIFECYCLE_UPDATED_SUMMARY" \
+        --arg url "$LIFECYCLE_URL" --arg whiteboard "$LIFECYCLE_WHITEBOARD" \
+        --arg severity "$LIFECYCLE_UPDATED_SEVERITY" --arg priority "$LIFECYCLE_UPDATED_PRIORITY" '
+        [{field:"summary",old_value:$stem,new_value:$summary},
+         {field:"url",old_value:"",new_value:$url},
+         {field:"whiteboard",old_value:"",new_value:$whiteboard},
+         {field:"severity",old_value:"normal",new_value:$severity},
+         {field:"priority",old_value:"Normal",new_value:$priority}] as $expected |
+        [.[] | select(. as $actual | any($expected[]; . == $actual))] == $expected
     ' "$1" >/dev/null; then
-        test_fail "severity or priority transition was absent from history"
+        test_fail "exact ordered update transitions were absent from history"
         return 1
     fi
 }
@@ -228,9 +247,9 @@ if lifecycle_bzr create bug create --product TestProduct --component TestCompone
         lifecycle_bzr create-bzr-view bug view "$LIFECYCLE_BZR_ID" &&
         lifecycle_bzr create-pybz-view bug view "$LIFECYCLE_PYBZ_ID" &&
         lifecycle_state "$COMPARE_EXCHANGE_DIR/create-bzr-view.bzr.stdout.json" \
-            "$COMPARE_EXCHANGE_DIR/create.bzr.normalized.json" &&
+            "$COMPARE_EXCHANGE_DIR/create.bzr.normalized.json" "$LIFECYCLE_BZR_ID" &&
         lifecycle_state "$COMPARE_EXCHANGE_DIR/create-pybz-view.bzr.stdout.json" \
-            "$COMPARE_EXCHANGE_DIR/create.pybz.normalized.json" &&
+            "$COMPARE_EXCHANGE_DIR/create.pybz.normalized.json" "$LIFECYCLE_PYBZ_ID" &&
         lifecycle_equal "create persisted state" "$COMPARE_EXCHANGE_DIR/create.bzr.normalized.json" \
             "$COMPARE_EXCHANGE_DIR/create.pybz.normalized.json" &&
         lifecycle_equal "create first description" "$COMPARE_EXCHANGE_DIR/create.bzr.description" \
@@ -268,9 +287,9 @@ if [[ -n $LIFECYCLE_BZR_ID && -n $LIFECYCLE_PYBZ_ID ]] &&
     lifecycle_bzr update-bzr-view bug view "$LIFECYCLE_BZR_ID" &&
     lifecycle_bzr update-pybz-view bug view "$LIFECYCLE_PYBZ_ID" &&
     lifecycle_state "$COMPARE_EXCHANGE_DIR/update-bzr-view.bzr.stdout.json" \
-        "$COMPARE_EXCHANGE_DIR/update.bzr.normalized.json" &&
+        "$COMPARE_EXCHANGE_DIR/update.bzr.normalized.json" "$LIFECYCLE_BZR_ID" &&
     lifecycle_state "$COMPARE_EXCHANGE_DIR/update-pybz-view.bzr.stdout.json" \
-        "$COMPARE_EXCHANGE_DIR/update.pybz.normalized.json" &&
+        "$COMPARE_EXCHANGE_DIR/update.pybz.normalized.json" "$LIFECYCLE_PYBZ_ID" &&
     lifecycle_updated_state_is_persisted "$COMPARE_EXCHANGE_DIR/update.bzr.normalized.json" &&
     lifecycle_updated_state_is_persisted "$COMPARE_EXCHANGE_DIR/update.pybz.normalized.json" &&
     lifecycle_equal "update persisted state" "$COMPARE_EXCHANGE_DIR/update.bzr.normalized.json" \
@@ -285,9 +304,9 @@ if [[ -n $LIFECYCLE_BZR_ID && -n $LIFECYCLE_PYBZ_ID ]] &&
     lifecycle_bzr view-bzr bug view "$LIFECYCLE_BZR_ID" &&
     lifecycle_pybz view view "$(jq -cn --argjson id "$LIFECYCLE_PYBZ_ID" '{bug_id:$id}')" &&
     lifecycle_state "$COMPARE_EXCHANGE_DIR/view-bzr.bzr.stdout.json" \
-        "$COMPARE_EXCHANGE_DIR/view.bzr.normalized.json" &&
+        "$COMPARE_EXCHANGE_DIR/view.bzr.normalized.json" "$LIFECYCLE_BZR_ID" &&
     lifecycle_state "$COMPARE_EXCHANGE_DIR/view.pybz.result.json" \
-        "$COMPARE_EXCHANGE_DIR/view.pybz.normalized.json" &&
+        "$COMPARE_EXCHANGE_DIR/view.pybz.normalized.json" "$LIFECYCLE_PYBZ_ID" &&
     lifecycle_equal "view persisted state" "$COMPARE_EXCHANGE_DIR/view.bzr.normalized.json" \
         "$COMPARE_EXCHANGE_DIR/view.pybz.normalized.json"; then
     test_pass
@@ -300,9 +319,9 @@ if [[ -n $LIFECYCLE_BZR_ID && -n $LIFECYCLE_PYBZ_ID ]] &&
     lifecycle_bzr history-bzr bug history "$LIFECYCLE_BZR_ID" &&
     lifecycle_pybz history history "$(jq -cn --argjson id "$LIFECYCLE_PYBZ_ID" '{bug_id:$id}')" &&
     lifecycle_history bzr "$COMPARE_EXCHANGE_DIR/history-bzr.bzr.stdout.json" \
-        "$COMPARE_EXCHANGE_DIR/history.bzr.normalized.json" &&
+        "$COMPARE_EXCHANGE_DIR/history.bzr.normalized.json" "$LIFECYCLE_BZR_ID" &&
     lifecycle_history pybz "$COMPARE_EXCHANGE_DIR/history.pybz.result.json" \
-        "$COMPARE_EXCHANGE_DIR/history.pybz.normalized.json" &&
+        "$COMPARE_EXCHANGE_DIR/history.pybz.normalized.json" "$LIFECYCLE_PYBZ_ID" &&
     lifecycle_updated_fields_are_in_history "$COMPARE_EXCHANGE_DIR/history.bzr.normalized.json" &&
     lifecycle_updated_fields_are_in_history "$COMPARE_EXCHANGE_DIR/history.pybz.normalized.json" &&
     lifecycle_equal history "$COMPARE_EXCHANGE_DIR/history.bzr.normalized.json" \
@@ -370,6 +389,9 @@ if lifecycle_pybz arbitrary-fields-create generic_fields "$(jq -cn \
         --platform PC --field "whiteboard=$LIFECYCLE_FIELD_INITIAL" &&
         LIFECYCLE_GENERIC_BZR_ID=$(lifecycle_positive_id \
             "$COMPARE_EXCHANGE_DIR/arbitrary-fields-create.bzr.stdout.json") &&
+        lifecycle_bzr arbitrary-fields-create-view-bzr bug view "$LIFECYCLE_GENERIC_BZR_ID" &&
+        jq -e --arg value "$LIFECYCLE_FIELD_INITIAL" '.whiteboard == $value' \
+            "$COMPARE_EXCHANGE_DIR/arbitrary-fields-create-view-bzr.bzr.stdout.json" >/dev/null &&
         lifecycle_bzr arbitrary-fields-update bug update "$LIFECYCLE_GENERIC_BZR_ID" \
             --field "whiteboard=$LIFECYCLE_FIELD_UPDATED" &&
         lifecycle_bzr arbitrary-fields-view bug view "$LIFECYCLE_GENERIC_BZR_ID" &&
@@ -396,7 +418,14 @@ if [[ -n $LIFECYCLE_PYBZ_ID ]] &&
         lifecycle_bzr update-options-bzr-comment comment list "$LIFECYCLE_PYBZ_ID" &&
         jq -e --arg comment "$LIFECYCLE_BZR_COMMENT" --arg tag "$LIFECYCLE_BZR_COMMENT_TAG" \
             'any(.[]; .text == $comment and (.tags | index($tag)))' \
-            "$COMPARE_EXCHANGE_DIR/update-options-bzr-comment.bzr.stdout.json" >/dev/null; then
+            "$COMPARE_EXCHANGE_DIR/update-options-bzr-comment.bzr.stdout.json" >/dev/null &&
+        lifecycle_bzr update-options-bzr-request --dry-run bug update "$LIFECYCLE_PYBZ_ID" \
+            --comment "$LIFECYCLE_BZR_COMMENT" --comment-tag "$LIFECYCLE_BZR_COMMENT_TAG" \
+            --minor-update &&
+        jq '.changes' "$COMPARE_EXCHANGE_DIR/update-options-bzr-request.bzr.stdout.json" \
+            >"$COMPARE_EXCHANGE_DIR/update-options-bzr.request.json" &&
+        jq -e '.minor_update == true' \
+            "$COMPARE_EXCHANGE_DIR/update-options-bzr.request.json" >/dev/null; then
         test_pass
     elif [[ $LAST_TEST_RESULT != FAIL ]]; then
         test_fail "bzr update-options result differed"
