@@ -43,9 +43,13 @@ The lifecycle runs in this order:
    summary to the shared stem before comparison. Preserve every other field name, old value, new
    value, and transition order without normalization.
 
-Any command failure is an ordinary comparison failure. An `expect_gap` marker is permitted only
-after python-bugzilla has completed the named operation against the live server, the observable
-result has been validated, and the bzr attempt has failed or produced a different persisted result.
+Any command failure is an ordinary comparison failure unless the gap probe positively recognizes
+its exact unsupported CLI surface: exit 2 plus a clap diagnostic naming the option or subcommand
+that probe exercised. An `expect_gap` marker is permitted only after python-bugzilla has completed
+the named operation against the live server, the observable result has been validated, and the bzr
+attempt has either produced that recognized parser rejection or a validated semantic mismatch.
+Connection, timeout, TLS, authentication, server, malformed-output, and harness failures are never
+gap-eligible.
 Each marker is bound to the issue that owns that exact capability:
 
 - `saved-search`: after the two controlled lifecycle bugs exist, seed a run-specific server-side
@@ -131,19 +135,24 @@ parity while their test still calls `expect_gap`.
 
 ## Transport evidence
 
-Each successful client operation writes a normalized `REST` or `XMLRPC` transport record in the
-exchange directory. A shared harness helper runs bzr with `bzr=debug` tracing and classifies the
-captured request-boundary events: `API response` is REST and `XML-RPC call` is XML-RPC. Repeated
+Each successful invocation expected to exercise a client operation writes a normalized `REST` or
+`XMLRPC` transport record in the exchange directory. A shared harness helper runs bzr with
+`bzr=debug` tracing and classifies the captured request-boundary events: `API response` is REST and
+`XML-RPC call` is XML-RPC. Repeated
 observations of one class, such as retries, retain that class; no recognized event or events from
 both classes are ambiguous and fail closed. The lifecycle phase copies only this observed value.
 It never receives an expected transport argument and never derives evidence from `--api`.
 
 A bzr command rejected by argument parsing before client dispatch exercised no client operation
-and writes no transport record. That rejection may establish an expected capability gap, but it
-makes no transport claim. Once a bzr command succeeds, missing or ambiguous observation sets a
-distinct evidence-failure state; the phase leaves the test failed and does not let `expect_gap`
-convert that infrastructure defect into GAP. A successful operation whose observed transport is a
-valid but unexpected class remains a transport-specific capability gap and may become GAP.
+and writes no transport record. It establishes an expected capability gap only when exit 2 and
+the captured clap diagnostic name the exact unsupported option or subcommand expected by that
+probe. A dedicated `lifecycle_bzr_no_dispatch` wrapper owns only the successful #672 `--dry-run`
+request-shape control; it asserts success and copies request output without writing transport
+evidence. Every invocation through the ordinary REST or XML-RPC wrappers is a claimed client
+operation, so success without exactly one observed class sets a distinct evidence-failure state.
+Neither that defect nor any unrecognized non-zero outcome can pass through `expect_gap`. A
+successful operation whose observed transport is a valid but unexpected class remains a
+transport-specific capability gap and may become GAP.
 
 The python-bugzilla adapter maps exactly the pinned 3.3.0 backend classes `_BackendREST` and
 `_BackendXMLRPC` to the same closed values. A missing backend, any other class, or an output outside
@@ -152,21 +161,32 @@ values rather than substrings.
 
 Common bzr operations are expected to observe `REST`. A gap probe that reaches its client boundary
 must likewise record and validate the resulting class; the currently unsupported bzr probe syntax
-may instead fail before dispatch with no transport claim. The #680 bug-tag mutation and query are
+may instead supply its probe-specific recognized parser rejection with no transport claim. The
+#672 dry-run control remains a separate local request-shape assertion and cannot exempt any live
+operation from transport classification. The #680 bug-tag mutation and query are
 expected to observe `XMLRPC` once those commands exist. Expectations remain assertions, not
 evidence sources. A controlled fixture makes the #680 operations succeed semantically while the
 request-boundary log reports REST and requires the result to remain GAP. Separate controls prove
-that successful invocations with missing or ambiguous bzr events remain FAIL, while unknown
-python-bugzilla backend classes and normalized values outside the closed vocabulary are rejected.
+that successful client invocations with missing or ambiguous bzr events remain FAIL, while
+connection-style no-event failures and server/command errors also remain FAIL. The no-dispatch
+fixture proves only the dedicated dry-run path omits transport evidence. Unknown python-bugzilla
+backend classes and normalized values outside the closed vocabulary are rejected.
 
 ## Failure handling and cleanup
 
 The phase stops an ordinary parity test at the first failed client operation, malformed JSON
 result, missing ID, or semantic mismatch and reports the captured command output through the
-existing harness. A gap test first validates its live python-bugzilla result, then reports the bzr
-failure or mismatch and immediately applies its one exact `expect_gap` marker. Unique bug summaries
-and run-specific values make repeated runs independent. The comparison runner's existing EXIT trap
-removes the sidecar and exchange directory, including API-key-bearing input files.
+existing harness. A gap test first validates its live python-bugzilla result. A probe-specific
+terminal classifier marks the bzr side gap-eligible only after one of three complete outcomes: a
+recognized parser rejection; successful client operations with required transport observations
+and structurally valid response evidence; or the dedicated successful no-dispatch dry-run with a
+structurally valid request payload. A semantic, request-shape, or valid-transport mismatch within
+those outcomes remains eligible, as does a complete match so the stale marker fails. Any other
+command failure, malformed evidence, observation defect, or harness assertion failure leaves the
+test ineligible. The phase applies its exact `expect_gap` marker only through a helper that checks
+this state. Unique bug summaries and run-specific values make repeated runs independent. The
+comparison runner's existing EXIT trap removes the sidecar and exchange directory, including
+API-key-bearing input files.
 
 ## Threat model
 
@@ -202,7 +222,9 @@ upstream image/dependency exposure accepted by ADR 0044, and implementing any ca
   substring control returns the near-match decoy while its exact-match query excludes it; #672's
   tagged-comment live result and `minor_update: true` request shape fail independently; #680 stays
   GAP when semantics succeed over an observed REST request; bzr transport classification rejects
-  missing or mixed request events; and the adapter rejects an unknown python-bugzilla backend.
+  missing or mixed request events; connection-style no-event failures and server/command errors
+  cannot become GAP; and the successful #672 dry-run produces no transport claim without exempting
+  a live client invocation. The adapter rejects an unknown python-bugzilla backend.
 - `make lint` validates semantic IDs, Bash syntax, ShellCheck, formatting, and Rust lints; it does
   not require host Python.
 - `make test` proves the Rust suite remains green.

@@ -187,27 +187,31 @@ finding was known before review.
    inserts or updates one `namedqueries` row using placeholders, and reads back the exact owner,
    name, and query before proceeding. Run that name through python-bugzilla and require the sorted
    IDs to equal the controlled pair, attempt `bzr bug search --saved-search <name>`, compare the
-   same exact set when the command succeeds, then apply `expect_gap 670`. Exercise setup and
+   same exact set when the command succeeds, then route owner 670 through Task 5's terminal gap
+   classifier. Exercise setup and
    readback on bz50, bz52, and bz53 rather than assuming an image-provided search. Standard-input
    execution leaves no helper or query file in the application container.
 3. Add the arbitrary-fields probe: use python-bugzilla's generic field map to create and update a
    controlled bug, verify both persisted values, attempt equivalent repeatable `--field` bzr create
-   and update operations, compare persisted values when they succeed, then apply `expect_gap 671`.
+   and update operations, compare persisted values when they succeed, then route owner 671 through
+   Task 5's terminal gap classifier.
 4. Add #672's two evidence arms under the single `update-options` ID. In the live arm, post an
    update with a tagged comment through python-bugzilla and read the tag back. In the pinned-image
    controlled backend, separately require the outgoing update to contain `minor_update: true`, and
    require the live server to accept that same option. The bzr stale-gap substitute passes only
    when its controlled request also contains `minor_update: true` and its live comment tag matches;
-   then apply `expect_gap 672`. Add no mail or notification fixture.
+   then route owner 672 through Task 5's terminal gap classifier. Add no mail or notification
+   fixture.
 5. Add the query-match-types probe: seed an exact run-specific whiteboard value and a second bug
    whose value appends a suffix. Prove the ordinary substring query returns both IDs, then query
    through python-bugzilla with `status_whiteboard_type=equals` and require only the exact ID.
    Attempt `bzr bug list --status-whiteboard-type equals`, require the same singleton on success,
-   then apply `expect_gap 679`.
+   then route owner 679 through Task 5's terminal gap classifier.
 6. Add the bug-tags probe: add a run-specific personal tag and query it through python-bugzilla,
    require its reported backend to be XML-RPC, and assert the controlled ID is returned. Attempt
    equivalent `bzr --api xmlrpc bug tag` and `bzr --api xmlrpc bug list --tag` operations, require
-   XML-RPC transport evidence plus matching tags and IDs on success, then apply `expect_gap 680`.
+   XML-RPC transport evidence plus matching tags and IDs on success, then route owner 680 through
+   Task 5's terminal gap classifier.
 7. Run the focused fixture; expect exit 0 with five GAP outcomes and exact issue ownership. Enable
    the stale-gap control; expect non-zero results naming #670, #671, #672, #679, and #680, then
    remove the control and observe green again.
@@ -250,9 +254,14 @@ finding was known before review.
 - Provides: `observe_bzr_transport`, which sets `BZR_TRANSPORT` to exactly `REST` or `XMLRPC` only
   when a successful invocation's captured request-boundary events identify one class;
   `_transport(client)`, which returns the same closed values for the two pinned backend classes;
-  lifecycle `*.transport` evidence copied from those results. Pre-dispatch command rejection writes
-  no record. `LIFECYCLE_TRANSPORT_EVIDENCE_FAILED` prevents an observation defect after command
-  success from passing through `expect_gap`.
+  lifecycle `*.transport` evidence copied from those results. `lifecycle_bzr_no_dispatch` owns only
+  the successful #672 dry-run control and writes no transport record. A probe-specific recognized
+  parser rejection requires exit 2 plus the exact unsupported option or subcommand diagnostic and
+  writes no record. A probe-specific terminal classifier sets `LIFECYCLE_GAP_ELIGIBLE` only after
+  a recognized rejection, successful observed client operations with structurally valid response
+  evidence, or the dedicated successful dry-run with a structurally valid request payload.
+  `lifecycle_expect_gap` calls `expect_gap` only in that state. Observation defects, malformed
+  evidence, harness failures, and every other non-zero outcome remain FAIL.
 
 ### Verification
 
@@ -260,9 +269,12 @@ finding was known before review.
   fake bzr boundary emits REST or XML-RPC debug markers independently of semantic output. Before
   implementation, a #680 semantic-success/observed-REST control incorrectly becomes parity; after
   implementation, `bash tests/functional/pybz/container-tests.sh` exits 0 and shows that control
-  as GAP. Missing and mixed-event controls after successful invocations must remain FAIL rather
-  than being converted to GAP. An unsupported command that exits before dispatch must produce no
-  transport record and may remain an expected capability gap.
+  as GAP. Missing and mixed-event controls after successful client invocations must remain FAIL
+  rather than being converted to GAP. A recognized unsupported command must exit 2, name its exact
+  probed option or subcommand, produce no transport record, and may remain an expected capability
+  gap. Connection-style no-event failure and server/command-error controls must remain FAIL. The
+  successful #672 dry-run must use the dedicated no-dispatch path and produce no transport claim;
+  a live operation with missing events must still fail.
 - Python backend normalization — Mode: focused-test. Give the adapter fixture concrete
   `_BackendREST` and `_BackendXMLRPC` backends plus an unknown backend case. Before implementation,
   the unknown class is emitted as transport; after implementation, the same focused command exits
@@ -271,21 +283,28 @@ finding was known before review.
 
 ### Steps
 
-1. Add the semantic-success/observed-REST #680 control, missing/mixed bzr event controls, exact
-   closed-value assertions, and unknown python-backend rejection to
+1. Add the semantic-success/observed-REST #680 control; missing/mixed successful-client controls;
+   connection-style no-event and server/command-error controls; a recognized exit-2 parser-gap
+   control; the dedicated successful #672 dry-run no-dispatch control; exact closed-value
+   assertions; and unknown python-backend rejection to
    `tests/functional/pybz/container-tests.sh`.
 2. Run `bash tests/functional/pybz/container-tests.sh`; expect non-zero because the current wrappers
    still self-assert bzr transport and the adapter still accepts unknown backend names.
 3. In `tests/functional/lib.sh`, add `BZR_TRANSPORT` and `observe_bzr_transport`: inspect
-   `BZR_STDERR` for the two established debug messages after successful commands, accept one or
-   more observations of exactly one class, and return non-zero with an actionable diagnostic for
-   neither or both. Do not inspect CLI arguments or URLs.
-4. In `tests/functional/compare/01-bug-lifecycle.sh`, invoke bzr with `RUST_LOG=bzr=debug`, call the
-   shared classifier after each successful command, copy only `BZR_TRANSPORT`, remove the transport
-   parameter and self-written defaults, and compare transport records by exact equality. Leave no
-   transport record for pre-dispatch failures. Set `LIFECYCLE_TRANSPORT_EVIDENCE_FAILED` when a
-   successful command has missing or ambiguous evidence, and skip `expect_gap` conversion whenever
-   that state is set.
+   `BZR_STDERR` for the two established debug messages after successful client operations. Accept
+   one or more observations of exactly one class and return non-zero with an actionable diagnostic
+   for neither or both. Do not inspect CLI arguments or URLs.
+4. In `tests/functional/compare/01-bug-lifecycle.sh`, invoke ordinary bzr wrappers with
+   `RUST_LOG=bzr=debug`, classify every successful invocation expected to exercise a client
+   boundary, copy only `BZR_TRANSPORT`, remove the transport parameter and self-written defaults,
+   and compare transport records by exact equality. Add a dedicated no-dispatch wrapper used only
+   by #672's successful dry-run request-shape arm. Positively recognize each unsupported probe only
+   from exit 2 plus its exact option/subcommand diagnostic. Add a probe-terminal classifier that
+   sets `LIFECYCLE_GAP_ELIGIBLE` only for that rejection, successful observed client operations
+   with structurally valid response evidence, or the dedicated successful dry-run with a
+   structurally valid request payload. Route every marker through `lifecycle_expect_gap`, which
+   refuses conversion outside that state. Every other non-zero outcome, malformed evidence,
+   harness failure, and every missing or mixed observation remains FAIL.
 5. In `tests/functional/compare/bug-lifecycle.py`, map `_BackendREST` to `REST` and
    `_BackendXMLRPC` to `XMLRPC`; raise `AdapterError` for missing or unknown classes. Update the
    fake backend names and expected closed outputs in the focused fixture.
