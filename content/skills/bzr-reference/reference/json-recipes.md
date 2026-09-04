@@ -4,6 +4,19 @@ All read paths support `--json`. Output is wrapped in a versioned envelope —
 `{"schema_version": "3.0.0", "data": <payload>}` — so read fields under `.data`.
 Pipe to `jq`. (`--output ndjson` records stay bare; see below.)
 
+**Pipeline trap:** every recipe below is `bzr ... | jq ...`. `$?` after a
+pipeline is the *last* command's exit status — jq's, not bzr's — so a bzr
+failure (auth, network, a missing bug) can be swallowed while jq happily
+parses an empty or error stream. Capture bzr's stdout, check bzr's own exit
+code, then parse — the same pattern `bzr-triage-bug` uses for stderr
+(`2>err.json`):
+
+```
+out=$(bzr bug view 12345 --json) status=$?
+[ "$status" -eq 0 ] || { echo "bzr failed: $status" >&2; exit "$status"; }
+echo "$out" | jq -r '.data.summary'
+```
+
 ```
 # The contract version itself
 bzr --server-url https://bugzilla.example.com schema --json | jq -r '.schema_version'
@@ -98,3 +111,10 @@ selecting a key a record does not carry yields a sparse object (e.g.
 `--fields data` on `attachment list`); table output ignores the flags with a
 warning, so always pair them with `--json` or `--output ndjson`. The `bug`
 verbs and `query run` support the same flags with alias-aware field names.
+
+**Exception: `bug view` is lenient where every other verb exits 7.** An
+unknown or mistyped `--fields`/`--exclude-fields` selection on `bug view`
+yields an empty `{}` object and exits **0**, with a one-line warning on
+stderr — `bug list`, `bug my`, `bug search`, and `query run` still exit 7 for
+the same case. Check stderr, not just the exit code, before assuming a `{}`
+result means the bug has no matching fields.

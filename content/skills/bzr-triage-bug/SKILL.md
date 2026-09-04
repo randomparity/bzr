@@ -53,8 +53,9 @@ bzr attachment upload <id> trace.log --comment-file notes.md
 printf '%s\n' "Patch generated from branch foo." \
   | bzr attachment upload <id> fix.patch --patch --comment-file -
 
-# Tag a comment for workflow
-bzr comment tag <id> --add needs-info
+# Tag a comment for workflow (comment <comment-id>, not the bug id above —
+# `count` is the per-bug number, `id` is the global key comment tag needs)
+bzr comment tag <comment-id> --add needs-info
 ```
 
 ### Convenience verbs (sugar over `update`)

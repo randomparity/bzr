@@ -77,6 +77,23 @@ Surface facts agents get wrong:
   status transitions, custom fields, attachment-size limit. `bzr server info`
   reports version and extensions only. Read capabilities before planning a
   mutation against an unfamiliar server.
+- **`bug view` does not embed comments.** There is no `.data.comments` field —
+  the response contains only the bug record itself. Use
+  `bzr comment list <id>` to fetch comments separately. Piping the missing
+  field into `jq '.data.comments[]'` exits 5 ("Cannot iterate over null"),
+  which collides with bzr's own exit-5 `http` error; the quieter trap is
+  `jq '.data.comments | length'`, which reads `0` and looks like "no
+  comments" rather than "wrong command".
+- **The bug description isn't a `bug view` field either.** Bugzilla stores it
+  as the comment with `count == 0`, not a bug property. Fetch it with
+  `bzr comment list 12345 --json | jq -r '.data[] | select(.count==0) | .text'`.
+- **`comment list --json` returns server order, not re-sorted.** The array at
+  `.data[]` is ascending `count` — description first (`count == 0`), newest
+  last. For the newest comment: `bzr comment list 12345 --json | jq '.data[-1]'`.
+- **`count` and `id` are different comment keys.** `count` is the per-bug
+  number humans mean by "comment 4"; `id` is the global key that
+  `comment tag <id>` and `bug history`'s `comment_id` use. Passing a comment's
+  `count` where an `id` is expected tags or looks up the wrong object.
 
 ## Global flags worth knowing
 
