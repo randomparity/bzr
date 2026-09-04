@@ -50,4 +50,3 @@ compares persisted state, not response or terminal presentation bytes.
   would describe only one consumer and become false guidance for later comparison phases.
 - **Move comparison mechanics into production Rust.** judgment: no compiled product behavior is
   required to compare the two clients, and a test-only production surface would widen the product.
-

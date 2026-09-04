@@ -124,7 +124,11 @@ an individually hard-gated check.
 
 - Creates `tests/functional/compare/03-attachments.sh` with five parity IDs and the independent
   `multi-bug-upload` and `ignore-obsolete` gap IDs mapped only to #674.
-- Modifies `tests/functional/run-compare.sh` to add `03-attachments`.
+- Modifies `tests/functional/run-compare.sh` to add `03-attachments` and an idempotent
+  `seed_comparison_attachment_flag_type` prerequisite. The function writes a private temporary SQL
+  file containing fixed `flagtypes`/`flaginclusions` rows for `bzr_compare_attachment_review`,
+  executes it through existing `run_bugzilla_sql_file PATH`, verifies the fixed row, and removes
+  the file on every return.
 - Modifies `tests/functional/pybz/container-tests.sh` for attachment fixtures, digest comparison,
   private transport arms, and stale-gap controls.
 - Consumes Task 1's attachment operations and Task 2's shared comparison helpers.
@@ -139,22 +143,29 @@ an individually hard-gated check.
   only to 674 after validated python-bugzilla results; first observe missing markers, then expect
   GAP.
   Make either bzr probe semantically pass and require the stale marker to fail the fixture.
+- Flag prerequisite isolation — Mode: focused-test and live-functional. Run the attachment phase
+  fixture without ordinary functional phases, first observe flag update cannot succeed, then
+  require the seed helper to create and verify the fixed attachment flag on bz50, bz52, and bz53.
+  A seed or readback failure must remain FAIL and must not become a #674 gap.
 
 ### Steps
 
 1. Add focused attachment phase fixtures and the complete ID-to-owner assertions; run and observe
    non-zero because the phase is absent.
-2. Create two private exchange files with identical controlled bytes and mode 0600. Implement
+2. Implement `seed_comparison_attachment_flag_type` with one fixed idempotent flag type and
+   unrestricted inclusion, call it before the attachment phase, and fail before comparison when
+   execution or exact readback fails. Do not rely on `02-server-auth.sh` state.
+3. Create two private exchange files with identical controlled bytes and mode 0600. Implement
    paired uploads, metadata/comment normalization, single and bulk content reads, SHA-256 digest
    comparison, flag update/readback, and private REST/XMLRPC list/get checks.
-3. Implement multi-bug upload and obsolete-filter probes. Permit #674 gap conversion only after the
+4. Implement multi-bug upload and obsolete-filter probes. Permit #674 gap conversion only after the
    python operation and evidence are valid and bzr reaches the exact current capability mismatch.
-4. Add `03-attachments` to the runner; run focused fixtures and expect exit 0 with five passes and
+5. Add `03-attachments` to the runner; run focused fixtures and expect exit 0 with five passes and
    two #674 gaps.
-5. Prove each mismatch and stale-gap control turns the focused fixture red, then restore green.
-6. Run `make functional-compare`; expect attachment parity passes and #674 gaps on the default live
+6. Prove each mismatch, seed failure, and stale-gap control turns the fixture red; restore green.
+7. Run `make functional-compare`; expect attachment parity passes and #674 gaps on the default live
    version.
-7. Commit with `test(functional): compare attachments across clients`.
+8. Commit with `test(functional): compare attachments across clients`.
 
 ## Task 4: Add user, group, product, and component coverage
 
@@ -168,12 +179,17 @@ an individually hard-gated check.
 - Modifies `tests/functional/pybz/container-tests.sh` for all new phase fixtures, negative
   membership proof, catalogue controls, component persisted state, and #675 stale-gap behavior.
 - Consumes Task 1 adapter operations and Task 2 shared mechanics.
+- Extends the runner cleanup contract: shared resource helpers record each added `(user, group)`
+  membership; explicit successful removal clears it, and EXIT cleanup removes remaining entries.
 
 ### Verification
 
 - User/group persisted outcomes — Mode: focused-test. First observe missing IDs, then run the
   controlled phase fixture and expect three passes. Omit an exact search result, retain membership
   after removal, or substitute a non-member; each control must fail its stable ID.
+- Partial-failure cleanup — Mode: focused-test. Interrupt the user/group phase after membership
+  add, require EXIT cleanup to attempt that exact removal, and require a cleanup failure to change
+  an otherwise-successful run to non-zero.
 - Product/component persisted outcomes — Mode: focused-test. First observe missing IDs, then
   expect catalogue and component-create passes. Remove a catalogue type/positive control or alter
   a component field; each must fail its stable ID.
@@ -188,7 +204,9 @@ an individually hard-gated check.
 1. Add focused fixtures for all six IDs, negative membership, catalogue differentiation, persisted
    component fields, exact #675 ownership, and stale-gap behavior; run and observe missing phases.
 2. Implement unique paired-user creation, exact get/search normalization, known-group reads, and
-   add/prove/remove/prove-absent membership flow.
+   add/prove/remove/prove-absent membership flow. Register each successful add before its next
+   assertion, clear it only after verified removal, and drain remaining registrations from the
+   runner's EXIT cleanup without masking the original exit status.
 3. Implement the three product catalogue comparisons with positive controls, paired unique product
    and component creation, and canonical component readback.
 4. Implement #675's controlled python-bugzilla update shape plus exact bzr parser rejection without

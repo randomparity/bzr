@@ -38,6 +38,12 @@ semantic projections: comments, attachments, users/groups, and products/componen
 families that share state remain together: group tests mutate a user membership, and component
 tests create inside a product.
 
+Before the attachment phase, the runner idempotently seeds one comparison-owned attachment flag
+type and its unrestricted inclusion row through the existing `run_bugzilla_sql_file PATH` helper.
+The fixed name `bzr_compare_attachment_review` prevents repeated single-version runs from growing
+flag metadata. A failed seed aborts comparison as infrastructure failure before any flag parity
+claim; the comparison never depends on the ordinary functional phase having run first.
+
 Each comparison follows the same data flow:
 
 1. create run-unique fixtures through one client;
@@ -106,6 +112,8 @@ with a controlled filename, summary, `text/plain` content type, comment, and pri
 metadata and bytes back through both clients, normalize attachment fields and linked comment text,
 and compare content by a deterministic SHA-256 digest. Set the same attachment flag through
 `updateattachmentflags` and `bzr attachment update --flag`, then compare normalized flag records.
+The flag is the runner-seeded `bzr_compare_attachment_review` fixture, not a Bugzilla image default
+or a flag provisioned by the separate ordinary functional runner.
 
 Private attachment list/get operations run through forced REST and XML-RPC for both clients and
 must return the controlled private attachment and exact digest. The download comparison covers
@@ -138,7 +146,10 @@ the same ID/name/description/active state.
 
 Add each paired user to the known group through `updateperms` and `bzr group add-user`, prove exact
 membership through both client read paths, then remove them and prove absence. The negative check
-is mandatory because reusable containers can retain membership from earlier runs.
+is mandatory because reusable containers can retain membership from earlier runs. The shared
+resource layer records every membership it adds and the runner's existing EXIT cleanup removes any
+still-recorded membership after a partial phase failure; successful explicit removal clears the
+record. Cleanup failure changes an otherwise-successful run to failure.
 
 Stable IDs:
 
@@ -174,6 +185,15 @@ remain ordinary failures. Gap conversion is permitted only for the two exact #67
 probes and the exact #675 controlled parser probe after their python-bugzilla evidence succeeds.
 Run-unique names prevent reused containers from turning creates into accidental idempotent passes.
 
+Created bugs, comments, attachments, users, products, and components follow the established
+functional-suite lifecycle: the all-version runner removes every version container in its EXIT
+trap, while the single-version developer target keeps its checkout/version-scoped container for
+fast follow-up. Stock Bugzilla does not offer a uniform delete path for those resources, so the
+single-version path uses run-unique bounded names and exact selectors instead of pretending to
+roll back server records. Membership is the exception because it can contaminate later assertions;
+it is always removed through the EXIT-safe cleanup above. Running `setup-bugzilla.sh reset` remains
+the explicit way to discard a retained local container and all of its fixtures.
+
 ## Threat model
 
 ### Boundaries and actors
@@ -199,6 +219,8 @@ out repository, the local container runtime, and the existing functional-test ad
 - Output uses no-follow creation and mode 0600. Phases retain only normalized non-secret evidence.
 - Fixture names and content are bounded constants plus short run tokens; no arbitrary host path or
   URL is accepted from a comparison phase.
+- The flag seed is a fixed repository-owned SQL statement sent through `run_bugzilla_sql_file`; it
+  interpolates no phase input and verifies the fixed type/inclusion rows before comparison.
 
 ### Out of scope
 
@@ -212,7 +234,9 @@ point.
 Focused container fixtures must fail before the generalized adapter, shared resource helpers,
 stable phase IDs, exact gap mappings, and parity rows exist; then pass after implementation. Fault
 controls perturb one canonical field, remove one private result, report the wrong transport, expose
-a non-private attachment path, and make each stale gap pass; every control must turn the suite red.
+a non-private attachment path, make flag seeding fail, interrupt membership removal, and make each
+stale gap pass; every control must turn the suite red. The cleanup control must prove the EXIT path
+attempts the recorded removal and converts cleanup failure into a failed run.
 
 Repository proof is:
 
