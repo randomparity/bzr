@@ -136,6 +136,11 @@ Two #674 gap baselines remain separate so either capability can close independen
 - obsolete filtering: after marking one attachment obsolete, python-bugzilla's
   `--getall --ignore-obsolete` result excludes it; bzr bulk download must do the same.
 
+The obsolete-filter proof invokes the pinned CLI's `_do_get_attach` path through the fixed adapter.
+The adapter replaces only the CLI's file opener with a private, basename-only, no-clobber writer
+inside the exchange directory; the pinned CLI still owns attachment enumeration and obsolete
+filtering. One non-obsolete attachment is required as a positive downloaded-file control.
+
 Stable IDs:
 
 - `compare/03-attachments/upload-metadata-comment`

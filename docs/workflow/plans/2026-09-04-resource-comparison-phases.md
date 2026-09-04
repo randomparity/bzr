@@ -148,7 +148,10 @@ an individually hard-gated check.
   the file on every return.
 - Modifies `tests/functional/pybz/container-tests.sh` for attachment fixtures, digest comparison,
   private transport arms, and stale-gap controls.
-- Consumes Task 1's attachment operations and Task 2's shared comparison helpers.
+- Extends `tests/functional/compare/python-bugzilla-adapter.py` with a bounded
+  `attachment_cli_download_bug` operation that invokes the pinned CLI's `_do_get_attach` obsolete
+  filter while replacing its output opener with a private basename-only exchange-directory writer.
+- Consumes Task 1's other attachment operations and Task 2's shared comparison helpers.
 
 ### Verification
 
