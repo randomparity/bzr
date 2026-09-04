@@ -1,0 +1,223 @@
+# Resource comparison phases implementation plan
+
+Goal: Compare comments, attachments, users, groups, products, and components between `bzr` and
+python-bugzilla against every supported live Bugzilla container, and publish stable parity evidence.
+
+Architecture: Generalize the existing fixed sidecar adapter, add one shared shell layer for
+resource-comparison mechanics, and keep fixtures/projections in four ordered resource-family
+phases. Every phase compares canonical persisted state and observed transport, with exact fail-
+closed ownership for #674 and #675 gaps.
+
+Tech stack: Bash, Python 3, python-bugzilla 3.3.0, jq, Docker/Podman functional containers.
+
+Expected implementation size: 1400–2200 changed lines (M) — derived from one generalized
+adapter, four phase scripts, focused fixture extensions, runner wiring, and parity rows.
+
+## Global Constraints
+
+- python-bugzilla stays pinned at 3.3.0 in the existing sidecar image.
+- The supported live matrix remains bz50, bz52, and bz53.
+- Host architecture is arm64; declared release targets are x86_64 Linux, aarch64 Linux,
+  powerpc64le Linux, s390x Linux, aarch64 macOS, x86_64 Windows, and aarch64 Windows. This test-only
+  shell/Python change does not infer one set from the other.
+- Comparison IDs use `compare/<phase>/<slug>` and remain unique across both functional trees.
+- Every successful network operation records an observed `REST` or `XMLRPC` boundary. Requested
+  transport alone is not evidence.
+- A capability gap is eligible for `expect_gap` only after the python-bugzilla side is validated
+  and the bzr side reaches a recognized semantic or exact parser mismatch. Infrastructure,
+  malformed evidence, auth, and connection failures remain failures.
+- API keys live only in private request files or process environment, never command arguments,
+  output, diagnostics, or retained fixture data.
+
+BASE_BRANCH: `main`
+
+Guardrails: `bash tests/functional/pybz/container-tests.sh`; `make lint`; `make test`;
+`make functional-compare-all`; `make functional-test-all`. Observed cost is unknown before this
+branch's first run. The focused fixture needs Bash, Python, and container tooling used by its image
+arm; live suites need Docker or Podman and may take at least ten minutes per version. CI hard-gates
+format, clippy, unit/integration tests, shell checks, and functional-test ID checks; live functional
+containers run on the scheduled workflow rather than the PR gate. The ADR index is not coupled by
+an individually hard-gated check.
+
+## Task 1: Generalize and harden the fixed sidecar adapter
+
+### Interfaces
+
+- Modifies and renames `tests/functional/compare/bug-lifecycle.py` to
+  `tests/functional/compare/python-bugzilla-adapter.py`.
+- Modifies `tests/functional/lib.sh`: `run_pybz_adapter OP INPUT OUTPUT` invokes fixed command
+  `python /work/compare/python-bugzilla-adapter.py OP INPUT OUTPUT`.
+- Modifies `tests/functional/run-compare.sh` to stage the renamed adapter privately.
+- Modifies `tests/functional/pybz/container-tests.sh` for the renamed fixed command, new operations,
+  transport selection, request validation, file confinement, and safe failures.
+- Provides fixed operations for comment add/list; attachment upload/list/get/download/flag update;
+  user create/get/search/update permissions; group get/list; product catalogue get; component add;
+  and controlled component update.
+
+### Verification
+
+- Renamed fixed command and retained lifecycle behavior — Mode: focused-test. Update the existing
+  wrapper/adapter fixture, first observe failure because the new staged path is absent, then run
+  `bash tests/functional/pybz/container-tests.sh` and expect exit 0 with all legacy operations.
+- New operation dispatch and canonical JSON serialization — Mode: focused-test. Add fake pinned
+  backend cases for every new operation, first observe unsupported-operation failures, then expect
+  the focused fixture to exit 0 with exact request shapes and `{transport,result}` objects.
+- Transport and file-boundary controls — Mode: focused-test. Add REST/XMLRPC/invalid transport,
+  outside-path, symlink, public-mode attachment, unknown-key, and upstream-exception cases; first
+  observe at least one unsafe input is accepted or unsupported, then expect the focused fixture to
+  exit 0 only when all are rejected without secret/upstream text.
+
+### Steps
+
+1. Update focused fixtures to require the generalized filename, legacy operation compatibility,
+   all new fixed operation shapes, explicit transport selection, and attachment-file controls.
+2. Run `bash tests/functional/pybz/container-tests.sh`; expect non-zero because the generalized
+   adapter path and operations do not yet exist.
+3. Rename the adapter, change its usage label, add closed transport parsing, preserve fixed backend
+   rules for legacy operations, and add the new small handlers with strict request-key validation.
+4. Require attachment input to resolve beneath `/work/compare`, be a regular non-symlink file, and
+   have mode 0600; preserve no-follow mode-0600 output and safe exception handling.
+5. Update the fixed wrapper and runner staging path with no compatibility alias.
+6. Run the focused fixture; expect exit 0.
+7. Commit with `test(functional): generalize python-bugzilla adapter`.
+
+## Task 2: Add shared resource comparison mechanics and comment coverage
+
+### Interfaces
+
+- Creates `tests/functional/compare/resource-lib.sh` with fixed adapter request/capture helpers,
+  `compare_resource_bzr`, observed transport validation, positive-ID extraction, canonical JSON
+  equality, and gap eligibility reset/allow/apply functions.
+- Creates `tests/functional/compare/02-comments.sh` with stable public, private REST, and private
+  XML-RPC comment IDs.
+- Modifies `tests/functional/run-compare.sh` to source the shared helper before phases and add
+  `02-comments` to the ordered list.
+- Modifies `tests/functional/pybz/container-tests.sh` with deterministic shell fixtures and fault
+  controls for the helper and comment phase.
+
+### Verification
+
+- Shared capture and transport behavior — Mode: focused-test. Add fake bzr/sidecar commands that
+  emit REST, XMLRPC, missing, and mixed debug events; first observe the resource helper/phase is
+  absent, then expect the fixture to accept exactly one observed class and reject the rest.
+- Comment persisted-state and private visibility — Mode: focused-test. Simulate paired comments
+  and both transports, first observe missing IDs, then expect all three IDs to pass. Remove the
+  private record or flip `is_private`; each controlled run must exit non-zero and name the ID.
+
+### Steps
+
+1. Add focused helper/comment fixtures, including missing/mixed transport and private-record faults;
+   run them and observe the expected missing-phase failure.
+2. Implement the shared private JSON request files, adapter invocation, bzr capture, observed
+   transport, canonical comparison, and fail-closed gap state.
+3. Implement paired public comments and private REST/XMLRPC arms with unique bugs and positive
+   controls; compare normalized text/privacy and exact transports.
+4. Add `02-comments` to the runner and run the focused fixture; expect exit 0.
+5. Enable each fault control, observe non-zero with the stable ID, remove the fault, and rerun
+   green.
+6. Run `make functional-compare`; expect the comment IDs to pass on the default live version.
+7. Commit with `test(functional): compare comments across clients`.
+
+## Task 3: Add attachment parity and #674 baselines
+
+### Interfaces
+
+- Creates `tests/functional/compare/03-attachments.sh` with five parity IDs and the independent
+  `multi-bug-upload` and `ignore-obsolete` gap IDs mapped only to #674.
+- Modifies `tests/functional/run-compare.sh` to add `03-attachments`.
+- Modifies `tests/functional/pybz/container-tests.sh` for attachment fixtures, digest comparison,
+  private transport arms, and stale-gap controls.
+- Consumes Task 1's attachment operations and Task 2's shared comparison helpers.
+
+### Verification
+
+- Upload, metadata, comments, download bytes, flags, and private visibility — Mode: focused-test.
+  Add deterministic attachment responses and file bytes, first observe missing IDs, then expect
+  the fixture to pass all five parity IDs. Perturb summary, comment, digest, flag, privacy, and
+  transport one at a time; each must produce non-zero for its stable ID.
+- Exact #674 ownership and stale-gap behavior — Mode: focused-test. Require both gap IDs to map
+  only to 674 after validated python-bugzilla results; first observe missing markers, then expect
+  GAP.
+  Make either bzr probe semantically pass and require the stale marker to fail the fixture.
+
+### Steps
+
+1. Add focused attachment phase fixtures and the complete ID-to-owner assertions; run and observe
+   non-zero because the phase is absent.
+2. Create two private exchange files with identical controlled bytes and mode 0600. Implement
+   paired uploads, metadata/comment normalization, single and bulk content reads, SHA-256 digest
+   comparison, flag update/readback, and private REST/XMLRPC list/get checks.
+3. Implement multi-bug upload and obsolete-filter probes. Permit #674 gap conversion only after the
+   python operation and evidence are valid and bzr reaches the exact current capability mismatch.
+4. Add `03-attachments` to the runner; run focused fixtures and expect exit 0 with five passes and
+   two #674 gaps.
+5. Prove each mismatch and stale-gap control turns the focused fixture red, then restore green.
+6. Run `make functional-compare`; expect attachment parity passes and #674 gaps on the default live
+   version.
+7. Commit with `test(functional): compare attachments across clients`.
+
+## Task 4: Add user, group, product, and component coverage
+
+### Interfaces
+
+- Creates `tests/functional/compare/04-users-groups.sh` with create/get/search, group read, and
+  membership add/remove IDs.
+- Creates `tests/functional/compare/05-products-components.sh` with catalogue, component create,
+  and #675 component-update IDs.
+- Modifies `tests/functional/run-compare.sh` to add both phases.
+- Modifies `tests/functional/pybz/container-tests.sh` for all new phase fixtures, negative
+  membership proof, catalogue controls, component persisted state, and #675 stale-gap behavior.
+- Consumes Task 1 adapter operations and Task 2 shared mechanics.
+
+### Verification
+
+- User/group persisted outcomes — Mode: focused-test. First observe missing IDs, then run the
+  controlled phase fixture and expect three passes. Omit an exact search result, retain membership
+  after removal, or substitute a non-member; each control must fail its stable ID.
+- Product/component persisted outcomes — Mode: focused-test. First observe missing IDs, then
+  expect catalogue and component-create passes. Remove a catalogue type/positive control or alter
+  a component field; each must fail its stable ID.
+- Exact #675 boundary — Mode: focused-test. Require the controlled pinned backend to receive the
+  documented component update and bzr to return exit 2 with exact unrecognized-subcommand
+  evidence;
+  first observe the ID absent, then expect GAP #675. A passing bzr substitute must make the stale
+  marker fail.
+
+### Steps
+
+1. Add focused fixtures for all six IDs, negative membership, catalogue differentiation, persisted
+   component fields, exact #675 ownership, and stale-gap behavior; run and observe missing phases.
+2. Implement unique paired-user creation, exact get/search normalization, known-group reads, and
+   add/prove/remove/prove-absent membership flow.
+3. Implement the three product catalogue comparisons with positive controls, paired unique product
+   and component creation, and canonical component readback.
+4. Implement #675's controlled python-bugzilla update shape plus exact bzr parser rejection without
+   invoking the extension on stock live servers.
+5. Add both phases to the runner; run focused fixtures and expect five passes plus one #675 gap.
+6. Run `make functional-compare`; expect all new default-version results green.
+7. Commit with `test(functional): compare admin resources across clients`.
+
+## Task 5: Publish parity evidence and verify the branch
+
+### Interfaces
+
+- Modifies `docs/dev/python-bugzilla-parity.md` with one row for every stable ID from Tasks 2–4.
+- Modifies `tests/functional/pybz/container-tests.sh` to assert exact row presence, parity status,
+  and #674/#675 ownership.
+- Provides durable evidence consumed by #674, #675, and #683.
+
+### Verification
+
+- Parity-report coverage — Mode: focused-test. Add assertions that every new stable ID occurs
+  once, parity rows say `parity`, both attachment gap rows name only #674, and the component row
+  names only #675; first observe missing rows, then expect the focused fixture to exit 0.
+
+### Steps
+
+1. Add focused parity-row assertions and observe non-zero while the report lacks the rows.
+2. Add the exact parity and expected-gap rows with their stable IDs; rerun the fixture green.
+3. Run `make lint`; expect exit 0.
+4. Run `make test`; expect exit 0.
+5. Run `make functional-compare-all`; expect bz50, bz52, and bz53 green.
+6. Run `make functional-test-all`; expect bz50, bz52, and bz53 green.
+7. Commit with `docs(parity): record resource comparison evidence`.
