@@ -89,7 +89,8 @@ else test_skip "no BUG1"; fi
 test_begin "bug-view-help-matches-output" "bug view --help matches view_single output"
 run_bzr bug view --help
 if assert_success &&
-    assert_stdout_contains "assignee, priority, CC list, depends-on, and blocks" &&
+    assert_stdout_contains "assignee, priority, depends-on, and blocks" &&
+    assert_stdout_not_contains "CC list" &&
     assert_stdout_contains "bzr comment list <id>" &&
     assert_stdout_not_contains "recent comments"; then
     test_pass
