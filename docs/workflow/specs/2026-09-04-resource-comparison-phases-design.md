@@ -76,7 +76,7 @@ lifecycle operations and adds narrow handlers for:
 - group reads through `getgroup` and `getgroups`;
 - product catalogue reads through `product_get` for `accessible`, `enterable`, and `selectable`;
 - component creation through `addcomponent`;
-- a controlled component-update dispatch used only to establish #675's client-surface gap without
+- a local component-update shape proof used only to establish #675's client-surface gap without
   claiming a stock server implements the Red Hat extension.
 
 Transport selection is a closed adapter field: absent means normal python-bugzilla probing;
@@ -166,10 +166,15 @@ run-unique products and add one equivalent component to each through `addcompone
 `bzr component create`; fresh product/component reads compare name, description, active state,
 and default assignee.
 
-The #675 baseline proves only the absent component-update client surface: a controlled pinned
-python-bugzilla backend accepts the documented update shape, while bzr returns the exact
-unrecognized-subcommand parser failure. It does not call the unsupported extension on the stock
-live containers and does not decide whether #675 later uses a proxy or records a non-goal.
+The #675 baseline proves only the absent component-update client surface. Inside the ordinary
+sidecar, the adapter constructs the pinned python-bugzilla `Bugzilla` object without a URL and
+replaces its backend with an in-process recorder that implements only `component_update`. Calling
+the library's public `editcomponent` method must dispatch the exact normalized `names` and
+`updates` request to that recorder. The operation writes `{transport: null, result}` and rejects
+any attempted network or server access; the null transport is an explicit local-proof contract,
+not missing evidence. The bzr arm then returns the exact unrecognized-subcommand parser failure.
+This does not call the unsupported extension on the stock live containers and does not decide
+whether #675 later uses a proxy or records a non-goal.
 
 Stable IDs:
 
@@ -182,7 +187,8 @@ Stable IDs:
 Every test stops its comparison arm on command failure, malformed JSON, unknown transport, missing
 positive control, non-positive generated ID, digest mismatch, or normalization failure. Such faults
 remain ordinary failures. Gap conversion is permitted only for the two exact #674 capability
-probes and the exact #675 controlled parser probe after their python-bugzilla evidence succeeds.
+probes and the exact #675 controlled parser probe after the pinned library's local request-shape
+evidence succeeds.
 Run-unique names prevent reused containers from turning creates into accidental idempotent passes.
 
 Created bugs, comments, attachments, users, products, and components follow the established

@@ -5,15 +5,15 @@ python-bugzilla against every supported live Bugzilla container, and publish sta
 
 Architecture: Generalize the existing fixed sidecar adapter, add one shared shell layer for
 resource-comparison mechanics, and keep fixtures/projections in four ordered resource-family
-phases. Every phase compares canonical persisted state and observed transport, with exact fail-
-closed ownership for #674 and #675 gaps.
+phases. Live operations compare canonical persisted state and observed transport. The one
+Red Hat-only checkpoint uses explicit no-network evidence. Gap ownership fails closed.
 
 Tech stack: Bash, Python 3, python-bugzilla 3.3.0, jq, Docker/Podman functional containers.
 
-Expected implementation size: 2200–3400 changed lines (M) — summed from 250–450 adapter lines,
+Expected implementation size: 2200–3400 changed lines (L) — summed from 250–450 adapter lines,
 150–250 shared-helper lines, 900–1400 phase lines, 800–1200 focused-fixture lines, and
 100–100 runner/report lines. The upper line count is large test data flow, while the change
-remains one medium-complexity comparison-harness slice with no compiled-product contract.
+remains one test-only comparison-harness slice with no compiled-product contract.
 
 ## Global Constraints
 
@@ -54,7 +54,7 @@ an individually hard-gated check.
   transport selection, request validation, file confinement, and safe failures.
 - Provides fixed operations for comment add/list; attachment upload/list/get/download/flag update;
   user create/get/search/update permissions; group get/list; product catalogue get; component add;
-  and controlled component update.
+  and the local component-update shape proof.
 
 ### Verification
 
@@ -63,7 +63,8 @@ an individually hard-gated check.
   `bash tests/functional/pybz/container-tests.sh` and expect exit 0 with all legacy operations.
 - New operation dispatch and canonical JSON serialization — Mode: focused-test. Add fake pinned
   backend cases for every new operation, first observe unsupported-operation failures, then expect
-  the focused fixture to exit 0 with exact request shapes and `{transport,result}` objects.
+  the focused fixture to exit 0 with exact request shapes and `{transport,result}` objects. The
+  component-update proof alone requires a null transport and an exact recorded request.
 - Transport and file-boundary controls — Mode: focused-test. Add REST/XMLRPC/invalid transport,
   outside-path, symlink, public-mode attachment, unknown-key, and upstream-exception cases; first
   observe at least one unsafe input is accepted or unsupported, then expect the focused fixture to
@@ -202,11 +203,13 @@ an individually hard-gated check.
 - Product/component persisted outcomes — Mode: focused-test. First observe missing IDs, then
   expect catalogue and component-create passes. Remove a catalogue type/positive control or alter
   a component field; each must fail its stable ID.
-- Exact #675 boundary — Mode: focused-test. Require the controlled pinned backend to receive the
-  documented component update and bzr to return exit 2 with exact unrecognized-subcommand
-  evidence;
-  first observe the ID absent, then expect GAP #675. A passing bzr substitute must make the stale
-  marker fail.
+- Exact #675 boundary — Mode: focused-test. Inside the ordinary pinned sidecar, construct
+  `Bugzilla` without a URL, install an in-process recorder implementing only
+  `component_update`, call the public `editcomponent` method, and require the recorder to receive
+  the exact normalized `names` and `updates` request. Require `{transport: null, result}` and fail
+  if the operation attempts network or server access. Then require bzr to return exit 2 with exact
+  unrecognized-subcommand evidence; first observe the ID absent, then expect GAP #675. A passing
+  bzr substitute must make the stale marker fail.
 
 ### Steps
 
@@ -218,8 +221,8 @@ an individually hard-gated check.
    runner's EXIT cleanup without masking the original exit status.
 3. Implement the three product catalogue comparisons with positive controls, paired unique product
    and component creation, and canonical component readback.
-4. Implement #675's controlled python-bugzilla update shape plus exact bzr parser rejection without
-   invoking the extension on stock live servers.
+4. Implement #675's no-network pinned-library update-shape proof plus exact bzr parser rejection
+   without invoking the extension on stock live servers.
 5. Add both phases to the runner; run focused fixtures and expect five passes plus one #675 gap.
 6. Run `make functional-compare`; expect all new default-version results green.
 7. Commit with `test(functional): compare admin resources across clients`.

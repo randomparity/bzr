@@ -20,6 +20,12 @@ all python-bugzilla library comparisons. Existing lifecycle operations retain th
 transport behavior. New operations accept an explicit `REST` or `XMLRPC` transport only where a
 test must exercise both transports; otherwise they use python-bugzilla's normal probe.
 
+The Red Hat-only component-update comparison is the one local-proof operation. The adapter
+constructs the pinned library's `Bugzilla` object without a URL, injects a recorder implementing
+only the backend's `component_update` call, and invokes the public `editcomponent` method. Its
+output carries a null transport and the normalized recorded request. This proves the pinned
+client surface without contacting a server or representing the result as transport evidence.
+
 The runner stages the helper once at `/work/compare/python-bugzilla-adapter.py`, and
 `run_pybz_adapter` remains the only shell entry point. JSON inputs, outputs, and attachment files
 stay under the private `/work/compare` exchange directory. Attachment input must resolve to a
@@ -37,6 +43,8 @@ compares persisted state, not response or terminal presentation bytes.
   no compatibility alias remains on this internal test surface.
 - The dispatch table grows, while each handler remains a small resource-specific operation.
 - Explicit transport selection is test evidence, not a production capability or public CLI.
+- A null transport is valid only for the fixed component-update local proof; network operations
+  still fail when observed transport is absent or unknown.
 - Attachment exchange remains confined to files the comparison runner created privately.
 
 ## Considered & rejected
