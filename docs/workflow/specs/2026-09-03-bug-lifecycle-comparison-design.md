@@ -10,9 +10,10 @@ exercise python-bugzilla live, demonstrate bzr's current gap, and attach the exa
 `expect_gap`; they do not implement or claim the dependent capabilities or the final report work in
 #683.
 
-No new architecture decision is required. ADR 0044 already fixes the python-bugzilla sidecar,
-semantic comparison, transport recording, and `expect_gap` contracts. This design instantiates
-those decisions for one resource.
+ADR 0044 fixes the python-bugzilla sidecar, semantic comparison, transport recording, and
+`expect_gap` contracts. [ADR 0045](../../adr/0045-observe-comparison-transport-from-debug-events.md)
+now fixes how the harness obtains that transport evidence: both clients normalize observations
+from their exercised request boundaries instead of copying the transport requested by a wrapper.
 
 ## Comparison shape
 
@@ -130,12 +131,24 @@ parity while their test still calls `expect_gap`.
 
 ## Transport evidence
 
-Each test writes a transport evidence record in the exchange directory. Common bzr operations and
-the first four gap probes record `REST`, matching their explicit `--api rest` invocation. The
-#680 bug-tag probe instead records `XML-RPC` for its explicit `--api xmlrpc` mutation and query.
-The python-bugzilla helper reports the concrete backend class selected after connecting; the phase
-rejects an empty or unknown value and requires the XML-RPC backend for #680. Each report row's test
-therefore proves both the semantic result and the transports used to obtain it.
+Each test writes a normalized `REST` or `XMLRPC` transport record in the exchange directory. A
+shared harness helper runs bzr with `bzr=debug` tracing and classifies the captured request-boundary
+events: `API response` is REST and `XML-RPC call` is XML-RPC. Repeated observations of one class,
+such as retries, retain that class; no recognized event or events from both classes are ambiguous
+and fail closed. The lifecycle phase copies only this observed value. It never receives an expected
+transport argument and never derives evidence from `--api`.
+
+The python-bugzilla adapter maps exactly the pinned 3.3.0 backend classes `_BackendREST` and
+`_BackendXMLRPC` to the same closed values. A missing backend, any other class, or an output outside
+the two-value vocabulary fails before semantic evidence is accepted. The phase compares exact
+values rather than substrings.
+
+Common bzr operations and the first four gap probes are expected to observe `REST`; the #680
+bug-tag mutation and query are expected to observe `XMLRPC`. Expectations remain assertions, not
+evidence sources. A controlled fixture makes the #680 operations succeed semantically while the
+request-boundary log reports REST and requires the result to remain GAP. Separate controls reject
+missing and ambiguous bzr events, unknown python-bugzilla backend classes, and normalized values
+outside the closed vocabulary.
 
 ## Failure handling and cleanup
 
@@ -178,8 +191,9 @@ upstream image/dependency exposure accepted by ADR 0044, and implementing any ca
   result to prove each stale `expect_gap` becomes a test failure. The fixtures additionally prove
   the saved-search row selects exactly the two controlled IDs on bz50, bz52, and bz53; #679's
   substring control returns the near-match decoy while its exact-match query excludes it; #672's
-  tagged-comment live result and `minor_update: true` request shape fail independently; and #680
-  rejects inherited REST or a missing XML-RPC transport record.
+  tagged-comment live result and `minor_update: true` request shape fail independently; #680 stays
+  GAP when semantics succeed over an observed REST request; bzr transport classification rejects
+  missing or mixed request events; and the adapter rejects an unknown python-bugzilla backend.
 - `make lint` validates semantic IDs, Bash syntax, ShellCheck, formatting, and Rust lints; it does
   not require host Python.
 - `make test` proves the Rust suite remains green.

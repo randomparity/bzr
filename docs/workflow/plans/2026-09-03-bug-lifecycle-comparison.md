@@ -7,17 +7,19 @@ exposes python-bugzilla's library operations as JSON.
 
 Tech stack: Bash, jq, Python 3.14, python-bugzilla 3.3.0, Docker/Podman, Make.
 
-Expected implementation size: 1,300–1,650 changed lines (L) — grounded after the adapter and
-red-first lifecycle fixture exposed the full cost of one ten-test shell phase, runner and
-saved-search-fixture wiring, deterministic parity and stale-gap fixtures, request-shape and
-transport controls, and ten report rows. The 1,650-line ceiling applies to implementation changes;
-the specification and this plan are excluded from that count.
+Expected implementation size: 1,760–1,850 changed lines (L) — derived from the existing
+1,709-line implementation/report delta plus the shared transport classifier, closed adapter
+normalization, and focused false-green controls. The operator-authorized 1,850-line ceiling
+applies to implementation changes; the specification, ADRs, and this plan are excluded from that
+count.
 
 ## Global constraints
 
 - Host architecture is arm64; declared targets are arm64, x86_64, powerpc64le, and s390x. The host
   is included, but passing locally does not replace multi-target CI.
 - Reuse ADR 0044's sidecar and semantic-result contracts; add no host Python dependency.
+- Follow ADR 0045: transport evidence comes only from request-boundary debug events or the pinned
+  python-bugzilla backend class and normalizes to exactly `REST` or `XMLRPC`.
 - Compare persisted server fields, not presentation bytes or generated identifiers.
 - Preserve the exact python-bugzilla 3.3.0 and Python 3.14.7 image versions.
 - Stay within issue #667's test/report baseline; issues #670–#672, #679–#680, and #683 retain
@@ -33,7 +35,7 @@ the specification and this plan are excluded from that count.
 - Create `tests/functional/compare/01-bug-lifecycle.sh`: common lifecycle comparisons, five
   expected-gap baselines, and exact issue ownership.
 - Modify `tests/functional/lib.sh`: shared private sidecar command capture boundary and thin fixed
-  CLI/adapter wrappers.
+  CLI/adapter wrappers, plus bzr request-boundary transport classification.
 - Modify `tests/functional/run-compare.sh`: credentials, private helper staging, phase order.
 - Create `tests/functional/compare/seed-saved-search.pl`: fixed, parameterized Bugzilla-container
   fixture for one run-specific administrator saved search on bz50, bz52, and bz53.
@@ -228,6 +230,53 @@ the specification and this plan are excluded from that count.
 5. Run `make functional-compare-all`; expect all supported versions to pass.
 6. Run `make functional-test-all`; expect all established functional phases to pass.
 7. Commit with `docs(parity): record bug lifecycle evidence`.
+
+## Task 5: Replace asserted transport labels with observed evidence
+
+### Interfaces
+
+- Consumes: bzr's existing debug events `API response` from `BugzillaClient::send_raw` and
+  `XML-RPC call` from `XmlRpcClient::call_with_status_policy`; python-bugzilla 3.3.0's concrete
+  `_BackendREST` and `_BackendXMLRPC` class names; the existing `BZR_STDERR` capture.
+- Provides: `observe_bzr_transport`, which sets `BZR_TRANSPORT` to exactly `REST` or `XMLRPC` only
+  when captured request-boundary events identify one class; `_transport(client)`, which returns the
+  same closed values for the two pinned backend classes; lifecycle `*.transport` evidence copied
+  from those results.
+
+### Verification
+
+- Bzr boundary classification — Mode: focused-test. Extend `run_lifecycle_phase_fixture` so its
+  fake bzr boundary emits REST or XML-RPC debug markers independently of semantic output. Before
+  implementation, a #680 semantic-success/observed-REST control incorrectly becomes parity; after
+  implementation, `bash tests/functional/pybz/container-tests.sh` exits 0 and shows that control
+  as GAP. Missing and mixed-event controls must fail their lifecycle tests.
+- Python backend normalization — Mode: focused-test. Give the adapter fixture concrete
+  `_BackendREST` and `_BackendXMLRPC` backends plus an unknown backend case. Before implementation,
+  the unknown class is emitted as transport; after implementation, the same focused command exits
+  0 only when the adapter rejects it and every successful result contains exactly `REST` or
+  `XMLRPC`.
+
+### Steps
+
+1. Add the semantic-success/observed-REST #680 control, missing/mixed bzr event controls, exact
+   closed-value assertions, and unknown python-backend rejection to
+   `tests/functional/pybz/container-tests.sh`.
+2. Run `bash tests/functional/pybz/container-tests.sh`; expect non-zero because the current wrappers
+   still self-assert bzr transport and the adapter still accepts unknown backend names.
+3. In `tests/functional/lib.sh`, add `BZR_TRANSPORT` and `observe_bzr_transport`: inspect
+   `BZR_STDERR` for the two established debug messages, accept one or more observations of exactly
+   one class, and return non-zero with an actionable diagnostic for neither or both. Do not inspect
+   CLI arguments or URLs.
+4. In `tests/functional/compare/01-bug-lifecycle.sh`, invoke bzr with `RUST_LOG=bzr=debug`, call the
+   shared classifier after each command, copy only `BZR_TRANSPORT`, remove the transport parameter
+   and self-written defaults, and compare transport records by exact equality.
+5. In `tests/functional/compare/bug-lifecycle.py`, map `_BackendREST` to `REST` and
+   `_BackendXMLRPC` to `XMLRPC`; raise `AdapterError` for missing or unknown classes. Update the
+   fake backend names and expected closed outputs in the focused fixture.
+6. Run `bash tests/functional/pybz/container-tests.sh`; expect exit 0 with every new control proven.
+7. Run `make lint`, `make test`, `make functional-compare-all`, and `make functional-test-all`;
+   expect exit 0 from each command.
+8. Commit with `fix(functional): observe lifecycle comparison transports`.
 
 ## Rollback and cleanup
 
