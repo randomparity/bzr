@@ -219,27 +219,34 @@ an individually hard-gated check.
 ### Verification
 
 - User/group persisted outcomes — Mode: focused-test. First observe missing IDs, then run the
-  controlled phase fixture and expect three passes. Omit an exact search result, retain membership
+  controlled phase fixture and expect three passes. Create paired accounts without the optional
+  display name, require empty real-name readback, and use a run-unique comparison group so default
+  effective memberships cannot satisfy the proof. Omit an exact search result, retain membership
   after removal, or substitute a non-member; each control must fail its stable ID.
 - Partial-failure cleanup — Mode: focused-test. Interrupt the user/group phase after membership
   add, require EXIT cleanup to attempt that exact removal, and require a cleanup failure to change
   an otherwise-successful run to non-zero.
 - Product/component persisted outcomes — Mode: focused-test. First observe missing IDs, then
-  expect catalogue and component-create passes. Remove a catalogue type/positive control or alter
-  a component field; each must fail its stable ID.
+  expect catalogue and component-create passes. Exercise python-bugzilla's `addcomponent` over
+  XML-RPC with the stock endpoint's accepted `name` field, then read both components through bzr.
+  Remove a catalogue type/positive control or alter a component field; each must fail its stable
+  ID.
 - Exact #675 boundary — Mode: focused-test. Inside the ordinary pinned sidecar, construct
   `Bugzilla` without a URL, install an in-process recorder implementing only
-  `component_update`, call the public `editcomponent` method, and require the recorder to receive
-  the exact normalized `names` and `updates` request. Require `{transport: null, result}` and fail
-  if the operation attempts network or server access. Then require bzr to return exit 2 with exact
-  unrecognized-subcommand evidence; first observe the ID absent, then expect GAP #675. A passing
-  bzr substitute must make the stale marker fail.
+  `component_update`, call public `editcomponent` with
+  `{product:P, component:C, initialowner:A, description:D, is_active:false}`, and require exactly
+  `{names:[{product:P, component:C}], updates:{default_assignee:A, description:D,
+  is_active:false}}`. Require `{transport: null, result}` and fail if the operation attempts network
+  or server access. Then run `bzr component update` and accept only exit 2 with literal
+  `error: unrecognized subcommand 'update'` and `Usage: bzr component [OPTIONS] <COMMAND>` lines;
+  first observe the ID absent, then expect GAP #675. A perturbed converted field, unrelated exit-2
+  diagnostic, or passing bzr substitute must remain FAIL or make the stale marker fail.
 
 ### Steps
 
 1. Add focused fixtures for all six IDs, negative membership, catalogue differentiation, persisted
    component fields, exact #675 ownership, and stale-gap behavior; run and observe missing phases.
-2. Implement unique paired-user creation, exact get/search normalization, known-group reads, and
+2. Implement unique paired-user creation, exact get/search normalization, run-unique group reads, and
    add/prove/remove/prove-absent membership flow. Register each successful add before its next
    assertion, clear it only after verified removal, and drain remaining registrations from the
    runner's EXIT cleanup without masking the original exit status.

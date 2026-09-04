@@ -157,12 +157,16 @@ Stable IDs:
 
 ### Users and groups
 
-Create two run-unique users with equivalent email/name/password data, one per client. Read each by
-exact login and by a discriminating search term; normalize email, real name, enabled state, and
-sorted group names. Read a known fixture group through both `getgroup` and `getgroups`, requiring
-the same ID/name/description/active state.
+Create two run-unique users with equivalent email/password data and no optional display name, one
+per client. The pinned client's `createuser(name=...)` sends `name`, while stock Bugzilla expects
+`full_name`, so a non-empty display name is not a common persisted create contract. Read each by
+exact login and by a discriminating search term; normalize email, the empty real name, enabled
+state, and sorted group names. Create one run-unique comparison group through bzr, then read it
+through bzr plus python-bugzilla's `getgroup` and `getgroups`, requiring the same
+name/description/active state. A fresh group avoids effective default memberships satisfying the
+membership proof before either client mutates it.
 
-Add each paired user to the known group through `updateperms` and `bzr group add-user`, prove exact
+Add each paired user to the comparison group through `updateperms` and `bzr group add-user`, prove exact
 membership through both client read paths, then remove them and prove absence. The negative check
 is mandatory because reusable containers can retain membership from earlier runs. The shared
 resource layer records every membership it adds and the runner's existing EXIT cleanup removes any
@@ -181,18 +185,23 @@ For each of `accessible`, `enterable`, and `selectable`, retrieve the live catal
 `product_get` and `bzr product list --type`, then compare sorted product names while requiring the
 known functional product as a positive control where that catalogue promises it. Create paired
 run-unique products and add one equivalent component to each through `addcomponent` and
-`bzr component create`; fresh product/component reads compare name, description, active state,
-and default assignee.
+`bzr component create`; the pinned `addcomponent` call uses its passthrough `name` field over
+XML-RPC because stock Bugzilla's component-create endpoint requires `name`. Fresh component reads
+through bzr compare name, description, active state, and default assignee.
 
 The #675 baseline proves only the absent component-update client surface. Inside the ordinary
 sidecar, the adapter constructs the pinned python-bugzilla `Bugzilla` object without a URL and
 replaces its backend with an in-process recorder that implements only `component_update`. Calling
-the library's public `editcomponent` method must dispatch the exact normalized `names` and
-`updates` request to that recorder. The operation writes `{transport: null, result}` and rejects
+the library's public `editcomponent` method with
+`{product:P, component:C, initialowner:A, description:D, is_active:false}` must dispatch
+`{names:[{product:P, component:C}], updates:{default_assignee:A, description:D,
+is_active:false}}` to that recorder. The operation writes `{transport: null, result}` and rejects
 any attempted network or server access; the null transport is an explicit local-proof contract,
-not missing evidence. The bzr arm then returns the exact unrecognized-subcommand parser failure.
-This does not call the unsupported extension on the stock live containers and does not decide
-whether #675 later uses a proxy or records a non-goal.
+not missing evidence. The bzr arm runs `bzr component update` and accepts only exit 2 plus the
+literal lines `error: unrecognized subcommand 'update'` and
+`Usage: bzr component [OPTIONS] <COMMAND>`. A perturbed converted field or unrelated exit-2
+diagnostic remains FAIL. This does not call the unsupported extension on the stock live containers
+and does not decide whether #675 later uses a proxy or records a non-goal.
 
 Stable IDs:
 
