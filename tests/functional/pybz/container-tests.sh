@@ -1428,8 +1428,8 @@ run_adapter_fixture() {
         '{"api_key":"fixture-secret","catalogue":"enterable"}' \
         '{"result":[{"id":801,"name":"enterable"}],"transport":"XMLRPC"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" component-add component_add \
-        '{"api_key":"fixture-secret","params":{"product":"Widget","component":"Core","description":"Core component","default_assignee":"admin@test.invalid"}}' \
-        '{"result":{"id":901,"request":{"component":"Core","default_assignee":"admin@test.invalid","description":"Core component","product":"Widget"}},"transport":"XMLRPC"}'
+        '{"api_key":"fixture-secret","params":{"product":"Widget","name":"Core","description":"Core component","default_assignee":"admin@test.invalid"}}' \
+        '{"result":{"id":901,"request":{"default_assignee":"admin@test.invalid","description":"Core component","name":"Core","product":"Widget"}},"transport":"XMLRPC"}'
 
     printf '%s\n' \
         '{"api_key":"fixture-secret","params":{"product":"Widget","component":"Core","initialowner":"admin@test.invalid","description":"Updated"}}' \
@@ -2071,6 +2071,285 @@ run_attachment_seed_fixture() (
     fi
 )
 
+run_user_group_phase_fixture() (
+    local phase="$PYBZ_DIR/../compare/04-users-groups.sh"
+    local fixture_output
+
+    COMPARE_EXCHANGE_DIR=$(mktemp -d)
+    fixture_output=$(mktemp)
+    trap 'rm -rf "$COMPARE_EXCHANGE_DIR"; rm -f "$fixture_output"' EXIT
+    TEST_ID_PREFIX=compare CURRENT_TEST_GROUP=04-users-groups BZ_VERSION=bz50
+    RESOURCE_SERVER=compare-resource
+
+    reset_user_group_fixture() {
+        PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
+        SEEN_TEST_IDS=$'\n' TEST_RESULT_PENDING=0 GAP_APPLIED=0
+        RESOURCE_MEMBERSHIPS="" USER_GROUP_BZR_MEMBER=0 USER_GROUP_PYBZ_MEMBER=0
+        : >"$fixture_output"
+    }
+    user_group_fixture_bzr_output() {
+        printf '%s\n' "$2" >"$COMPARE_EXCHANGE_DIR/${1}.bzr.stdout.json"
+    }
+    resource_bzr() {
+        local name="$1" command
+        shift 3
+        command="$*"
+        case $name in
+        user-bzr-create) user_group_fixture_bzr_output "$name" '{"id":101}' ;;
+        user-bzr-search)
+            if [[ ${USER_GROUP_SEARCH_FAULT:-0} -eq 1 ]]; then
+                user_group_fixture_bzr_output "$name" '[]'
+            else
+                user_group_fixture_bzr_output "$name" \
+                    "[{\"name\":\"$USER_GROUP_BZR_EMAIL\",\"real_name\":\"\",\"can_login\":true,\"groups\":[]}]"
+            fi
+            ;;
+        group-bzr-create) user_group_fixture_bzr_output "$name" '{"id":301}' ;;
+        group-bzr-view)
+            user_group_fixture_bzr_output "$name" \
+                "{\"name\":\"$USER_GROUP_FIXTURE\",\"description\":\"$USER_GROUP_DESCRIPTION\",\"is_active\":true}"
+            ;;
+        membership-bzr-add)
+            USER_GROUP_BZR_MEMBER=1
+            user_group_fixture_bzr_output "$name" '{}'
+            ;;
+        membership-bzr-remove)
+            USER_GROUP_BZR_MEMBER=0
+            user_group_fixture_bzr_output "$name" '{}'
+            ;;
+        membership-bzr-read)
+            local email="$USER_GROUP_BZR_EMAIL" groups='[]'
+            [[ ${USER_GROUP_NONMEMBER_FAULT:-0} -eq 1 ]] && email='substitute@test.bzr'
+            [[ $USER_GROUP_BZR_MEMBER -eq 1 ]] && groups="[\"$USER_GROUP_FIXTURE\"]"
+            user_group_fixture_bzr_output "$name" \
+                "[{\"name\":\"$email\",\"real_name\":\"\",\"can_login\":true,\"groups\":$groups}]"
+            ;;
+        *)
+            printf 'unhandled user/group bzr fixture command: %s\n' "$command" >&2
+            return 1
+            ;;
+        esac
+    }
+    resource_pybz() {
+        local name="$1" operation="$2" payload="$3" result groups='[]'
+        case $name in
+        user-pybz-create)
+            result="{\"id\":201,\"email\":\"$USER_GROUP_PYBZ_EMAIL\",\"real_name\":\"\",\"can_login\":true,\"groups\":[]}"
+            ;;
+        user-pybz-get)
+            result="{\"id\":201,\"email\":\"$USER_GROUP_PYBZ_EMAIL\",\"real_name\":\"\",\"can_login\":true,\"groups\":[]}"
+            ;;
+        user-pybz-search)
+            result="[{\"id\":201,\"email\":\"$USER_GROUP_PYBZ_EMAIL\",\"real_name\":\"\",\"can_login\":true,\"groups\":[]}]"
+            ;;
+        group-pybz-get)
+            result="{\"name\":\"$USER_GROUP_FIXTURE\",\"description\":\"$USER_GROUP_DESCRIPTION\",\"is_active\":true}"
+            ;;
+        group-pybz-list)
+            result="[{\"name\":\"$USER_GROUP_FIXTURE\",\"description\":\"$USER_GROUP_DESCRIPTION\",\"is_active\":true}]"
+            ;;
+        membership-pybz-add)
+            USER_GROUP_PYBZ_MEMBER=1
+            result='{}'
+            ;;
+        membership-pybz-remove)
+            [[ ${USER_GROUP_RETAIN_FAULT:-0} -eq 1 ]] || USER_GROUP_PYBZ_MEMBER=0
+            result='{}'
+            ;;
+        membership-pybz-read)
+            [[ $USER_GROUP_PYBZ_MEMBER -eq 1 ]] && groups="[\"$USER_GROUP_FIXTURE\"]"
+            result="{\"id\":201,\"email\":\"$USER_GROUP_PYBZ_EMAIL\",\"real_name\":\"\",\"can_login\":true,\"groups\":$groups}"
+            ;;
+        *)
+            printf 'unhandled user/group python fixture operation: %s %s\n' \
+                "$operation" "$payload" >&2
+            return 1
+            ;;
+        esac
+        printf '%s\n' "$result" >"$COMPARE_EXCHANGE_DIR/${name}.pybz.result.json"
+    }
+    run_user_group_control() {
+        local flag="$1" slug="$2"
+        reset_user_group_fixture
+        printf -v "$flag" 1
+        source "$phase" >"$fixture_output"
+        _render_test_result >>"$fixture_output"
+        unset "$flag"
+        if [[ $FAIL_COUNT -eq 0 ]] ||
+            ! grep -Fq "[compare/04-users-groups/${slug}]" "$fixture_output"; then
+            printf 'user/group control %s unexpectedly passed\n' "$flag" >&2
+            return 1
+        fi
+        printf 'controlled red: users/groups %s=1\n' "$flag"
+    }
+
+    reset_user_group_fixture
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    assert_equals 3 "$PASS_COUNT" "user/group comparison pass count"
+    assert_equals 0 "$FAIL_COUNT" "user/group comparison fail count"
+    assert_equals '' "$RESOURCE_MEMBERSHIPS" "user/group cleanup registry"
+    run_user_group_control USER_GROUP_SEARCH_FAULT user-create-get-search
+    run_user_group_control USER_GROUP_RETAIN_FAULT membership-add-remove
+    run_user_group_control USER_GROUP_NONMEMBER_FAULT membership-add-remove
+)
+
+run_membership_cleanup_fixture() (
+    local calls
+
+    calls=$(mktemp)
+    trap 'rm -f "$calls"' EXIT
+    RESOURCE_MEMBERSHIPS=""
+    resource_membership_record first@test.bzr editbugs
+    resource_membership_record second@test.bzr editbugs
+    run_bzr() {
+        printf '%s\n' "$*" >>"$calls"
+        BZR_EXIT=${MEMBERSHIP_CLEANUP_EXIT:-0}
+    }
+    resource_membership_cleanup
+    assert_equals 2 "$(wc -l <"$calls" | tr -d ' ')" "membership cleanup call count"
+    if ! grep -Fxq -- \
+        '--server compare-resource group remove-user --group editbugs --user first@test.bzr' \
+        "$calls"; then
+        printf 'membership cleanup omitted the first exact removal\n' >&2
+        return 1
+    fi
+    resource_membership_record failed@test.bzr editbugs
+    MEMBERSHIP_CLEANUP_EXIT=1
+    if resource_membership_cleanup; then
+        printf 'membership cleanup accepted a removal failure\n' >&2
+        return 1
+    fi
+    printf 'controlled red: membership cleanup failure\n'
+)
+
+run_product_component_phase_fixture() (
+    local phase="$PYBZ_DIR/../compare/05-products-components.sh"
+    local fixture_output
+
+    COMPARE_EXCHANGE_DIR=$(mktemp -d)
+    fixture_output=$(mktemp)
+    trap 'rm -rf "$COMPARE_EXCHANGE_DIR"; rm -f "$fixture_output"' EXIT
+    TEST_ID_PREFIX=compare CURRENT_TEST_GROUP=05-products-components BZ_VERSION=bz50
+    RESOURCE_SERVER=compare-resource
+    COMPARE_ADMIN_EMAIL=admin@test.bzr
+    RESOURCE_GAP_FILE="$COMPARE_EXCHANGE_DIR/.resource-gap-eligible"
+    eval "$(declare -f expect_gap | sed '1s/expect_gap/product_fixture_expect_gap/')"
+    expect_gap() {
+        local issue="$1"
+        [[ ${PRODUCT_GAP_OWNER_FAULT:-0} -eq 1 ]] && issue=999
+        product_fixture_expect_gap "$issue"
+    }
+    reset_product_fixture() {
+        PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
+        SEEN_TEST_IDS=$'\n' TEST_RESULT_PENDING=0 GAP_APPLIED=0
+        RESOURCE_GAP_ELIGIBLE=0
+        rm -f "$RESOURCE_GAP_FILE"
+        : >"$fixture_output"
+    }
+    product_fixture_bzr_output() {
+        printf '%s\n' "$2" >"$COMPARE_EXCHANGE_DIR/${1}.bzr.stdout.json"
+    }
+    resource_bzr() {
+        local name="$1"
+        case $name in
+        catalogue-*-bzr)
+            if [[ ${PRODUCT_CATALOGUE_FAULT:-0} -eq 1 && $name == catalogue-enterable-bzr ]]; then
+                product_fixture_bzr_output "$name" '[{"name":"Other"}]'
+            else
+                product_fixture_bzr_output "$name" '[{"name":"TestProduct"}]'
+            fi
+            ;;
+        component-*-product) product_fixture_bzr_output "$name" '{"id":301}' ;;
+        component-bzr-create) product_fixture_bzr_output "$name" '{"id":401}' ;;
+        component-*-view)
+            local description="$COMPONENT_DESCRIPTION"
+            [[ ${PRODUCT_COMPONENT_FAULT:-0} -eq 1 && $name == component-pybz-view ]] &&
+                description=wrong
+            product_fixture_bzr_output "$name" \
+                "{\"name\":\"$COMPONENT_NAME\",\"description\":\"$description\",\"default_assignee\":\"admin@test.bzr\",\"is_active\":true}"
+            ;;
+        *) return 1 ;;
+        esac
+    }
+    resource_pybz() {
+        local name="$1" operation="$2" result
+        case $operation in
+        product_catalogue) result='[{"name":"TestProduct"}]' ;;
+        component_add) result='{"id":501}' ;;
+        component_update_shape)
+            if [[ ${PRODUCT_SHAPE_FAULT:-0} -eq 1 ]]; then
+                result='{"request":{"names":[],"updates":{}}}'
+            else
+                result=$(jq -cn --arg product "$PRODUCT_PYBZ_NAME" \
+                    --arg component "$COMPONENT_NAME" \
+                    '{request:{names:[{product:$product,component:$component}],
+                      updates:{default_assignee:"admin@test.bzr",
+                        description:"updated comparison component",is_active:false}}}')
+            fi
+            ;;
+        *) return 1 ;;
+        esac
+        printf '%s\n' "$result" >"$COMPARE_EXCHANGE_DIR/${name}.pybz.result.json"
+    }
+    run_bzr() {
+        : >"$BZR_STDOUT"
+        cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
+        if [[ ${PRODUCT_GAP_STALE:-0} -eq 1 ]]; then
+            BZR_EXIT=0
+            : >"$BZR_STDERR"
+        else
+            BZR_EXIT=2
+            local diagnostic="error: unrecognized subcommand 'update'"
+            [[ ${PRODUCT_GAP_WRONG_DIAGNOSTIC:-0} -eq 1 ]] && diagnostic='error: unrelated'
+            printf "%s\n\n%s\n" "$diagnostic" \
+                'Usage: bzr component [OPTIONS] <COMMAND>' >"$BZR_STDERR"
+        fi
+    }
+    product_assert_gap_owner() {
+        grep -Eq \
+            '\[compare/05-products-components/component-update-redhat\].*GAP \(#675\)$' \
+            "$fixture_output"
+    }
+    run_product_control() {
+        local flag="$1" slug="$2"
+        reset_product_fixture
+        printf -v "$flag" 1
+        source "$phase" >"$fixture_output"
+        _render_test_result >>"$fixture_output"
+        unset "$flag"
+        if [[ $FAIL_COUNT -eq 0 ]] ||
+            ! grep -Fq "[compare/05-products-components/${slug}]" "$fixture_output"; then
+            printf 'product/component control %s unexpectedly passed\n' "$flag" >&2
+            return 1
+        fi
+        printf 'controlled red: products/components %s=1\n' "$flag"
+    }
+
+    reset_product_fixture
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    assert_equals 2 "$PASS_COUNT" "product/component comparison pass count"
+    assert_equals 0 "$FAIL_COUNT" "product/component comparison fail count"
+    assert_equals 1 "$GAP_COUNT" "product/component comparison gap count"
+    product_assert_gap_owner
+    run_product_control PRODUCT_CATALOGUE_FAULT product-catalogues
+    run_product_control PRODUCT_COMPONENT_FAULT component-create
+    run_product_control PRODUCT_SHAPE_FAULT component-update-redhat
+    run_product_control PRODUCT_GAP_WRONG_DIAGNOSTIC component-update-redhat
+    run_product_control PRODUCT_GAP_STALE component-update-redhat
+    reset_product_fixture
+    PRODUCT_GAP_OWNER_FAULT=1
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    unset PRODUCT_GAP_OWNER_FAULT
+    if product_assert_gap_owner; then
+        printf 'component-update wrong-owner control unexpectedly passed\n' >&2
+        return 1
+    fi
+    printf 'controlled red: products/components wrong gap owner\n'
+)
+
 cleanup_container_fixture() {
     local runtime="$1"
     local donor="$2"
@@ -2177,4 +2456,7 @@ run_adapter_staging_cleanup_fixture
 run_comment_phase_fixture
 run_attachment_seed_fixture
 run_attachment_phase_fixture
+run_user_group_phase_fixture
+run_membership_cleanup_fixture
+run_product_component_phase_fixture
 run_container_fixture

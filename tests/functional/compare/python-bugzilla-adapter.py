@@ -440,10 +440,10 @@ def _attachment_flag(client, request):
 
 
 def _user_create(client, request):
-    _validate_keys(request, ("api_key", "email", "name", "password"))
+    _validate_keys(request, ("api_key", "email", "password"), ("name",))
     user = client.createuser(
         _required_text(request, "email"),
-        _required_text(request, "name"),
+        _required_text(request, "name") if "name" in request else "",
         _required_text(request, "password"),
     )
     return _user_data(user)

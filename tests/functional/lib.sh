@@ -455,6 +455,7 @@ run_pybz_adapter() {
 RESOURCE_GAP_ELIGIBLE=0
 RESOURCE_GAP_FILE=""
 RESOURCE_SERVER="compare-resource"
+RESOURCE_MEMBERSHIPS=""
 
 resource_init() {
     if [[ ! -d ${COMPARE_EXCHANGE_DIR:-} ]]; then
@@ -470,6 +471,45 @@ resource_init() {
     fi
     RESOURCE_GAP_ELIGIBLE=0
     RESOURCE_GAP_FILE="$COMPARE_EXCHANGE_DIR/.resource-gap-eligible"
+    RESOURCE_MEMBERSHIPS=""
+}
+
+resource_membership_record() {
+    local user="$1" group="$2" entry
+
+    entry="$user"$'\t'"$group"
+    if [[ $'\n'${RESOURCE_MEMBERSHIPS}$'\n' != *$'\n'"$entry"$'\n'* ]]; then
+        RESOURCE_MEMBERSHIPS="${RESOURCE_MEMBERSHIPS:+${RESOURCE_MEMBERSHIPS}$'\n'}$entry"
+    fi
+}
+
+resource_membership_clear() {
+    local user="$1" group="$2" entry candidate
+    local remaining=""
+
+    entry="$user"$'\t'"$group"
+    while IFS= read -r candidate; do
+        if [[ -n $candidate && $candidate != "$entry" ]]; then
+            remaining="${remaining:+${remaining}$'\n'}$candidate"
+        fi
+    done <<<"$RESOURCE_MEMBERSHIPS"
+    RESOURCE_MEMBERSHIPS="$remaining"
+}
+
+resource_membership_cleanup() {
+    local entry user group status=0
+
+    while IFS= read -r entry; do
+        [[ -n $entry ]] || continue
+        IFS=$'\t' read -r user group <<<"$entry"
+        run_bzr --server "$RESOURCE_SERVER" group remove-user --group "$group" --user "$user"
+        if [[ $BZR_EXIT -ne 0 ]]; then
+            printf 'could not clean comparison membership for %s in %s\n' "$user" "$group" >&2
+            status=1
+        fi
+    done <<<"$RESOURCE_MEMBERSHIPS"
+    RESOURCE_MEMBERSHIPS=""
+    return "$status"
 }
 
 resource_name_is_safe() {

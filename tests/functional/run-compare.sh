@@ -64,6 +64,9 @@ fi
 cleanup() {
     local status=$?
 
+    if ! resource_membership_cleanup; then
+        [[ $status -ne 0 ]] || status=1
+    fi
     if [[ -n "${PYBZ_RUNTIME:-}" ]]; then
         if ! pybz_sidecar_stop "${_compare_runtime:-}"; then
             [[ $status -ne 0 ]] || status=1
@@ -115,7 +118,9 @@ for _phase in \
     00-products \
     01-bug-lifecycle \
     02-comments \
-    03-attachments; do
+    03-attachments \
+    04-users-groups \
+    05-products-components; do
     if [[ $_phase == 03-attachments ]]; then
         seed_comparison_attachment_flag_type
     fi
