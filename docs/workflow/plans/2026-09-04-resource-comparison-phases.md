@@ -105,8 +105,12 @@ an individually hard-gated check.
   emit REST, XMLRPC, missing, and mixed debug events; first observe the resource helper/phase is
   absent, then expect the fixture to accept exactly one observed class and reject the rest.
 - Comment persisted-state and private visibility — Mode: focused-test. Simulate paired comments
-  and both transports, first observe missing IDs, then expect all three IDs to pass. Remove the
-  private record or flip `is_private`; each controlled run must exit non-zero and name the ID.
+  and both transports, including Bugzilla 5.0's API-key REST filtering. Before comparing the empty
+  private REST projections, require independent XML-RPC reads to prove both records exist with
+  `is_private=true`; the XML-RPC arm requires the records directly. First observe missing IDs,
+  then expect all three IDs to pass. Remove the private record, flip `is_private`, unexpectedly
+  expose it through REST, or falsify a transport; each controlled run must exit non-zero and name
+  the ID.
 
 ### Steps
 
@@ -115,7 +119,9 @@ an individually hard-gated check.
 2. Implement the shared private JSON request files, adapter invocation, bzr capture, observed
    transport, canonical comparison, and fail-closed gap state.
 3. Implement paired public comments and private REST/XMLRPC arms with unique bugs and positive
-   controls; compare normalized text/privacy and exact transports.
+   controls; compare normalized text/privacy and exact read transports. Validate bzr writes on
+   their actual REST path. For the private REST arm, compare equal filtering only after XML-RPC
+   proves both private records persist.
 4. Add `02-comments` to the runner and run the focused fixture; expect exit 0.
 5. Enable each fault control, observe non-zero with the stable ID, remove the fault, and rerun
    green.

@@ -97,8 +97,12 @@ Create paired bugs with the same normalized description. Add the same public com
 client, read both through `get_comments`/`bzr comment list`, and compare normalized text and
 privacy.
 Then add private comments and read each fixture through forced REST and forced XML-RPC for both
-clients. Each transport arm must contain the controlled private text with `is_private=true`; a
-missing or filtered record fails rather than silently comparing two empty results.
+clients. On Bugzilla 5.0, API-key REST reads filter private comments for both clients; that arm
+must prove each controlled comment exists with `is_private=true` through an independent XML-RPC
+read before comparing the two empty REST projections. The XML-RPC arm must contain the controlled
+private text directly. A missing persistence proof, unexpected REST exposure, or unequal result
+fails rather than silently comparing two empty results. Because bzr comment creation is REST-only,
+its write is validated as REST while the case's selected transport governs the read.
 
 Stable IDs:
 
