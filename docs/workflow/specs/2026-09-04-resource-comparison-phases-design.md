@@ -32,11 +32,11 @@ generalizes the fixed library adapter used by the phases in this change.
 
 ## Architecture
 
-The runner stages one general python-bugzilla adapter and one resource-comparison shell library in
-its private exchange directory before starting the sidecar. Four ordered phases own fixtures and
-semantic projections: comments, attachments, users/groups, and products/components. Resource
-families that share state remain together: group tests mutate a user membership, and component
-tests create inside a product.
+The runner stages one general python-bugzilla adapter in its private exchange directory before
+starting the sidecar. It already sources `tests/functional/lib.sh`; after the sidecar starts, it
+initializes that library's shared resource-comparison state before running four ordered phases:
+comments, attachments, users/groups, and products/components. Resource families that share state
+remain together: group tests mutate a user membership, and component tests create inside a product.
 
 Before the attachment phase, the runner idempotently seeds one comparison-owned attachment flag
 type and its unrestricted inclusion row through the existing `run_bugzilla_sql_file PATH` helper.

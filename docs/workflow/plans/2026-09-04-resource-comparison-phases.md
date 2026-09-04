@@ -92,10 +92,10 @@ an individually hard-gated check.
   validation, positive-ID extraction, canonical JSON equality, and gap eligibility
   reset/allow/apply functions. A separate `compare/*.sh` helper is forbidden because every shell
   file there is a comparison phase under the functional-ID guardrail.
-- Creates `tests/functional/compare/02-comments.sh` with stable public, private REST, and private
-  XML-RPC comment IDs.
-- Modifies `tests/functional/run-compare.sh` to source the shared helper before phases and add
-  `02-comments` to the ordered list.
+- Creates `tests/functional/compare/02-comments.sh` with stable `public-comments`,
+  `private-comments-rest`, and `private-comments-xmlrpc` IDs.
+- Modifies `tests/functional/run-compare.sh` to initialize shared resource state and add
+  `02-comments` to the ordered phase list.
 - Modifies `tests/functional/pybz/container-tests.sh` with deterministic shell fixtures and fault
   controls for the helper and comment phase.
 
@@ -119,15 +119,18 @@ an individually hard-gated check.
 4. Add `02-comments` to the runner and run the focused fixture; expect exit 0.
 5. Enable each fault control, observe non-zero with the stable ID, remove the fault, and rerun
    green.
-6. Run `make functional-compare`; expect the comment IDs to pass on the default live version.
-7. Commit with `test(functional): compare comments across clients`.
+6. Run `make check-functional-test-ids`; expect exit 0 with all three exact IDs unique.
+7. Run `make functional-compare`; expect the comment IDs to pass on the default live version.
+8. Commit with `test(functional): compare comments across clients`.
 
 ## Task 3: Add attachment parity and #674 baselines
 
 ### Interfaces
 
-- Creates `tests/functional/compare/03-attachments.sh` with five parity IDs and the independent
-  `multi-bug-upload` and `ignore-obsolete` gap IDs mapped only to #674.
+- Creates `tests/functional/compare/03-attachments.sh` with exact IDs
+  `upload-metadata-comment`, `download-content`, `attachment-flags`,
+  `private-attachments-rest`, `private-attachments-xmlrpc`, `multi-bug-upload`, and
+  `ignore-obsolete`; only the final two map to #674.
 - Modifies `tests/functional/run-compare.sh` to add `03-attachments` and an idempotent
   `seed_comparison_attachment_flag_type` prerequisite. The function writes a private temporary SQL
   file containing fixed `flagtypes`/`flaginclusions` rows for `bzr_compare_attachment_review`,
@@ -174,18 +177,20 @@ an individually hard-gated check.
 5. Add `03-attachments` to the runner; run focused fixtures and expect exit 0 with five passes and
    two #674 gaps.
 6. Prove each mismatch, seed failure, and stale-gap control turns the fixture red; restore green.
-7. Run `make functional-compare`; expect attachment parity passes and #674 gaps on the default live
+7. Run `make check-functional-test-ids`; expect exit 0 with all seven exact IDs unique.
+8. Run `make functional-compare`; expect attachment parity passes and #674 gaps on the default live
    version.
-8. Commit with `test(functional): compare attachments across clients`.
+9. Commit with `test(functional): compare attachments across clients`.
 
 ## Task 4: Add user, group, product, and component coverage
 
 ### Interfaces
 
-- Creates `tests/functional/compare/04-users-groups.sh` with create/get/search, group read, and
-  membership add/remove IDs.
-- Creates `tests/functional/compare/05-products-components.sh` with catalogue, component create,
-  and #675 component-update IDs.
+- Creates `tests/functional/compare/04-users-groups.sh` with exact IDs
+  `user-create-get-search`, `group-get-and-list`, and `membership-add-remove`.
+- Creates `tests/functional/compare/05-products-components.sh` with exact IDs
+  `product-catalogues`, `component-create`, and `component-update-redhat`; only the final ID maps
+  to #675.
 - Modifies `tests/functional/run-compare.sh` to add both phases.
 - Modifies `tests/functional/pybz/container-tests.sh` for all new phase fixtures, negative
   membership proof, catalogue controls, component persisted state, and #675 stale-gap behavior.
@@ -225,8 +230,9 @@ an individually hard-gated check.
 4. Implement #675's no-network pinned-library update-shape proof plus exact bzr parser rejection
    without invoking the extension on stock live servers.
 5. Add both phases to the runner; run focused fixtures and expect five passes plus one #675 gap.
-6. Run `make functional-compare`; expect all new default-version results green.
-7. Commit with `test(functional): compare admin resources across clients`.
+6. Run `make check-functional-test-ids`; expect exit 0 with all six exact IDs unique.
+7. Run `make functional-compare`; expect all new default-version results green.
+8. Commit with `test(functional): compare admin resources across clients`.
 
 ## Task 5: Publish parity evidence and verify the branch
 
