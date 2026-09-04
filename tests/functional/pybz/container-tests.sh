@@ -226,7 +226,12 @@ class Bugzilla:
         return {"ids": ids, "update": update}
 
     def getbug(self, bug_id):
-        return _FixtureBug({"id": bug_id, "source": "view"})
+        data = {"id": bug_id, "source": "view"}
+        if bug_id == 37:
+            from xmlrpc.client import DateTime
+
+            data["last_change_time"] = DateTime("20260101T00:00:00")
+        return _FixtureBug(data)
 
     def bugs_history_raw(self, bug_ids):
         return {
@@ -309,6 +314,9 @@ run_adapter_fixture() {
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" view view \
         '{"api_key":"fixture-secret","bug_id":32}' \
         '{"result":{"id":32,"source":"view"},"transport":"_FixtureBackend"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" view-xmlrpc-date view \
+        '{"api_key":"fixture-secret","bug_id":37}' \
+        '{"result":{"id":37,"last_change_time":"20260101T00:00:00","source":"view"},"transport":"_FixtureBackend"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" history history \
         '{"api_key":"fixture-secret","bug_id":33}' \
         '{"result":{"bugs":[{"history":[{"changes":[{"added":"new","field_name":"summary","removed":"old"}],"when":"fixture"}],"id":33}]},"transport":"_FixtureBackend"}'

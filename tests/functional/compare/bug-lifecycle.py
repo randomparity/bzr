@@ -6,6 +6,7 @@ import json
 import os
 import stat
 import sys
+from xmlrpc.client import DateTime
 from pathlib import Path
 
 from bugzilla import Bugzilla
@@ -245,6 +246,8 @@ def _transport(client):
 def _json_default(value):
     if isinstance(value, (datetime.date, datetime.datetime)):
         return value.isoformat()
+    if isinstance(value, DateTime):
+        return value.value
     raise TypeError(f"{type(value).__name__} is not JSON serializable")
 
 
