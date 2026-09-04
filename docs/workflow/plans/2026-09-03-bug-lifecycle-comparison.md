@@ -7,9 +7,11 @@ exposes python-bugzilla's library operations as JSON.
 
 Tech stack: Bash, jq, Python 3.14, python-bugzilla 3.3.0, Docker/Podman, Make.
 
-Expected implementation size: 450–700 changed lines (M) — derived from one Python adapter, one
-ten-test shell phase, runner and saved-search-fixture wiring, deterministic parity and stale-gap
-fixtures, request-shape and transport controls, and ten report rows.
+Expected implementation size: 1,300–1,650 changed lines (L) — grounded after the adapter and
+red-first lifecycle fixture exposed the full cost of one ten-test shell phase, runner and
+saved-search-fixture wiring, deterministic parity and stale-gap fixtures, request-shape and
+transport controls, and ten report rows. The 1,650-line ceiling applies to implementation changes;
+the specification and this plan are excluded from that count.
 
 ## Global constraints
 
