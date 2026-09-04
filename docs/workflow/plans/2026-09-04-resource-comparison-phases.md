@@ -92,7 +92,8 @@ an individually hard-gated check.
   validation, positive-ID extraction, canonical JSON equality, and gap eligibility
   reset/allow/apply functions. A separate `compare/*.sh` helper is forbidden because every shell
   file there is a comparison phase under the functional-ID guardrail. Resource initialization
-  creates a temporary named bzr server with query-parameter API-key auth to match python-bugzilla.
+  creates a temporary named bzr server with query-parameter API-key auth to match
+  python-bugzilla's REST behavior; both XML-RPC clients authenticate in the request body.
 - Creates `tests/functional/compare/02-comments.sh` with stable `public-comments`,
   `private-comments-rest`, and `private-comments-xmlrpc` IDs.
 - Modifies `tests/functional/run-compare.sh` to initialize shared resource state and add
@@ -106,8 +107,9 @@ an individually hard-gated check.
   emit REST, XMLRPC, missing, and mixed debug events; first observe the resource helper/phase is
   absent, then expect the fixture to accept exactly one observed class and reject the rest.
 - Comment persisted-state and private visibility — Mode: focused-test. Simulate paired comments
-  and both transports with matching query-parameter auth. First observe missing IDs, then expect
-  all three IDs to pass with the controlled records present directly. Remove the private record,
+  with matching query-parameter auth for REST and matching request-body auth for XML-RPC. First
+  observe missing IDs, then expect all three IDs to pass with the controlled records present
+  directly. Remove the private record,
   flip `is_private`, omit bzr's matching auth configuration, or falsify a transport; each
   controlled run must exit non-zero and name the ID. A failed named-server setup must abort before
   any resource test.
