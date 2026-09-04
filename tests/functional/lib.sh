@@ -259,7 +259,40 @@ BZR_STDOUT=$(mktemp /tmp/bzr-func-stdout.XXXXXX)
 BZR_STDOUT_RAW=$(mktemp /tmp/bzr-func-stdout-raw.XXXXXX)
 BZR_STDERR=$(mktemp /tmp/bzr-func-stderr.XXXXXX)
 BZR_EXIT=0
+# Read by comparison phases after observe_bzr_transport returns.
+# shellcheck disable=SC2034
+BZR_TRANSPORT=""
 PYBZ_RUNTIME=""
+
+# Assigns public state read by sourced comparison phases.
+# shellcheck disable=SC2034
+observe_bzr_transport() {
+    local counts rest_count xmlrpc_count
+
+    BZR_TRANSPORT=""
+    if ! counts=$(awk '
+        /API response/ { rest += 1 }
+        /XML-RPC call/ { xmlrpc += 1 }
+        END { print rest + 0, xmlrpc + 0 }
+    ' "$BZR_STDERR"); then
+        printf 'could not read bzr transport observations\n' >&2
+        return 1
+    fi
+    read -r rest_count xmlrpc_count <<<"$counts"
+    case "$((rest_count > 0)):$((xmlrpc_count > 0))" in
+    1:0) BZR_TRANSPORT=REST ;;
+    0:1) BZR_TRANSPORT=XMLRPC ;;
+    0:0)
+        printf 'bzr transport observation is missing\n' >&2
+        return 1
+        ;;
+    *)
+        printf 'bzr transport observation is ambiguous (REST and XML-RPC)\n' >&2
+        return 1
+        ;;
+    esac
+    return 0
+}
 
 _cleanup_tmpfiles() {
     rm -f "$BZR_STDOUT" "$BZR_STDOUT_RAW" "$BZR_STDERR"

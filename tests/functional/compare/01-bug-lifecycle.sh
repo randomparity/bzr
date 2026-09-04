@@ -14,48 +14,125 @@ LIFECYCLE_UPDATED_SEVERITY="major"
 LIFECYCLE_UPDATED_PRIORITY="High"
 LIFECYCLE_BZR_ID=""
 LIFECYCLE_PYBZ_ID=""
+LIFECYCLE_GAP_ELIGIBLE=0
+LIFECYCLE_GAP_ELIGIBLE_FILE="$COMPARE_EXCHANGE_DIR/.lifecycle-gap-eligible"
+
+lifecycle_gap_reset() {
+    LIFECYCLE_GAP_ELIGIBLE=0
+    rm -f "$LIFECYCLE_GAP_ELIGIBLE_FILE"
+}
+
+lifecycle_gap_allow() {
+    LIFECYCLE_GAP_ELIGIBLE=1
+    : >"$LIFECYCLE_GAP_ELIGIBLE_FILE"
+}
 
 lifecycle_capture_bzr() {
     local name="$1"
-    local transport="${2:-REST}"
 
     cp "$BZR_STDOUT" "$COMPARE_EXCHANGE_DIR/${name}.bzr.stdout.json"
     cp "$BZR_STDOUT_RAW" "$COMPARE_EXCHANGE_DIR/${name}.bzr.raw"
     cp "$BZR_STDERR" "$COMPARE_EXCHANGE_DIR/${name}.bzr.stderr"
     printf '%s\n' "$BZR_EXIT" >"$COMPARE_EXCHANGE_DIR/${name}.bzr.exit"
-    printf '%s\n' "$transport" >"$COMPARE_EXCHANGE_DIR/${name}.bzr.transport"
 }
 
-lifecycle_bzr() {
+lifecycle_bzr_probe() {
     local name="$1"
+    local api="$2"
+    local expected_transport="$3"
+    local expected_diagnostic="$4"
     # shellcheck disable=SC2034 # The controlled run_bzr fixture reads this dynamic-scope value.
     local LIFECYCLE_BZR_CALL_NAME="$name"
-    shift
+    shift 4
 
-    run_bzr --server-url "$BZ_URL" --server-api-key-env BZR_COMPARE_API_KEY \
-        --server-email "$COMPARE_ADMIN_EMAIL" --api rest "$@"
+    lifecycle_gap_reset
+    RUST_LOG=bzr=debug run_bzr --server-url "$BZ_URL" \
+        --server-api-key-env BZR_COMPARE_API_KEY --server-email "$COMPARE_ADMIN_EMAIL" \
+        --api "$api" "$@"
     lifecycle_capture_bzr "$name"
     if [[ $BZR_EXIT -ne 0 ]]; then
+        if [[ -n $expected_diagnostic && $BZR_EXIT -eq 2 ]] &&
+            grep -Fxq "$expected_diagnostic" "$BZR_STDERR"; then
+            lifecycle_gap_allow
+        fi
         test_fail "bzr $name failed with exit $BZR_EXIT"
+        return 1
+    fi
+    if ! jq -e . "$BZR_STDOUT" >/dev/null; then
+        test_fail "bzr $name returned invalid JSON evidence"
+        return 1
+    fi
+    if ! observe_bzr_transport; then
+        test_fail "bzr $name transport could not be observed"
+        return 1
+    fi
+    printf '%s\n' "$BZR_TRANSPORT" >"$COMPARE_EXCHANGE_DIR/${name}.bzr.transport"
+    lifecycle_gap_allow
+    if [[ $BZR_TRANSPORT != "$expected_transport" ]]; then
+        test_fail "bzr $name did not use $expected_transport"
         return 1
     fi
     return 0
 }
 
-lifecycle_bzr_xmlrpc() {
+lifecycle_bzr() {
     local name="$1"
     shift
+    lifecycle_bzr_probe "$name" rest REST "" "$@"
+}
 
-    run_bzr --server-url "$BZ_URL" --server-api-key-env BZR_COMPARE_API_KEY \
-        --server-email "$COMPARE_ADMIN_EMAIL" --api xmlrpc "$@"
-    lifecycle_capture_bzr "$name" XMLRPC
+lifecycle_bzr_gap() {
+    local name="$1"
+    local diagnostic="$2"
+    shift 2
+    lifecycle_bzr_probe "$name" rest REST "$diagnostic" "$@"
+}
+
+lifecycle_bzr_xmlrpc_gap() {
+    local name="$1"
+    local diagnostic="$2"
+    shift 2
+    lifecycle_bzr_probe "$name" xmlrpc XMLRPC "$diagnostic" "$@"
+}
+
+lifecycle_bzr_no_dispatch() {
+    local name="$1"
+    # shellcheck disable=SC2034 # The controlled run_bzr fixture reads this dynamic-scope value.
+    local LIFECYCLE_BZR_CALL_NAME="$name"
+    shift
+
+    lifecycle_gap_reset
+    RUST_LOG=bzr=debug run_bzr --server-url "$BZ_URL" \
+        --server-api-key-env BZR_COMPARE_API_KEY --server-email "$COMPARE_ADMIN_EMAIL" \
+        --api rest "$@"
+    lifecycle_capture_bzr "$name"
     if [[ $BZR_EXIT -ne 0 ]]; then
         test_fail "bzr $name failed with exit $BZR_EXIT"
         return 1
     fi
-    if [[ $(<"$COMPARE_EXCHANGE_DIR/${name}.bzr.transport") != XMLRPC ]]; then
-        test_fail "bzr $name did not use XML-RPC"
+    grep -Eq 'API response|XML-RPC call' "$BZR_STDERR"
+    local event_status=$?
+    if [[ $event_status -eq 0 ]]; then
+        test_fail "bzr $name unexpectedly exercised a client request boundary"
         return 1
+    fi
+    if [[ $event_status -gt 1 ]]; then
+        test_fail "bzr $name boundary evidence could not be read"
+        return 1
+    fi
+    if ! jq -e . "$BZR_STDOUT" >/dev/null; then
+        test_fail "bzr $name returned invalid no-dispatch evidence"
+        return 1
+    fi
+    lifecycle_gap_allow
+    return 0
+}
+
+lifecycle_expect_gap() {
+    local issue="$1"
+
+    if [[ $LIFECYCLE_GAP_ELIGIBLE -eq 1 && -f $LIFECYCLE_GAP_ELIGIBLE_FILE ]]; then
+        expect_gap "$issue"
     fi
     return 0
 }
@@ -88,14 +165,33 @@ lifecycle_pybz() {
 
 lifecycle_positive_id() {
     local path="$1"
-    jq -er '.id | select(type == "number" and floor == . and . > 0)' "$path"
+    local id
+
+    if ! id=$(jq -er '.id | select(type == "number" and floor == . and . > 0)' "$path"); then
+        rm -f "$LIFECYCLE_GAP_ELIGIBLE_FILE"
+        return 1
+    fi
+    printf '%s\n' "$id"
 }
 
 lifecycle_ids_are() {
     local source="$1"
     local expected="$2"
+    local status
 
+    if ! jq -e 'type == "array" and all(.[]; .id | type == "number")' \
+        "$source" >/dev/null; then
+        lifecycle_gap_reset
+        test_fail "bzr ID evidence had an invalid structure"
+        return 1
+    fi
     jq -e --argjson expected "$expected" '[.[].id] | sort == $expected' "$source" >/dev/null
+    status=$?
+    if [[ $status -gt 1 ]]; then
+        LIFECYCLE_GAP_ELIGIBLE=0
+        test_fail "could not validate bzr ID evidence"
+    fi
+    return "$status"
 }
 
 lifecycle_transport_is() {
@@ -106,7 +202,7 @@ lifecycle_transport_is() {
 
     actual=$(<"$COMPARE_EXCHANGE_DIR/${name}.${client}.transport")
     case "$expected:$actual" in
-    REST:*REST* | XMLRPC:*XMLRPC*) return 0 ;;
+    REST:REST | XMLRPC:XMLRPC) return 0 ;;
     *)
         test_fail "$client $name did not use $expected"
         return 1
@@ -352,14 +448,15 @@ if [[ -n $LIFECYCLE_BZR_ID && -n $LIFECYCLE_PYBZ_ID ]] &&
     lifecycle_transport_is saved-search pybz XMLRPC &&
     lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/saved-search.pybz.result.json" \
         "[$LIFECYCLE_BZR_ID,$LIFECYCLE_PYBZ_ID]"; then
-    if lifecycle_bzr saved-search bug search --saved-search "$LIFECYCLE_SAVED_SEARCH" &&
+    if lifecycle_bzr_gap saved-search "error: unexpected argument '--saved-search' found" \
+        bug search --saved-search "$LIFECYCLE_SAVED_SEARCH" &&
         lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/saved-search.bzr.stdout.json" \
             "[$LIFECYCLE_BZR_ID,$LIFECYCLE_PYBZ_ID]"; then
         test_pass
     elif [[ $LAST_TEST_RESULT != FAIL ]]; then
         test_fail "bzr saved-search result differed"
     fi
-    expect_gap 670
+    lifecycle_expect_gap 670
 elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail "saved-search precondition failed"
 fi
@@ -384,7 +481,8 @@ if lifecycle_pybz arbitrary-fields-create generic_fields "$(jq -cn \
         --argjson id "$LIFECYCLE_GENERIC_PYBZ_ID" '{bug_id:$id}')" &&
     jq -e --arg value "$LIFECYCLE_FIELD_UPDATED" '.whiteboard == $value' \
         "$COMPARE_EXCHANGE_DIR/arbitrary-fields-update-view.pybz.result.json" >/dev/null; then
-    if lifecycle_bzr arbitrary-fields-create bug create --product TestProduct --component TestComponent \
+    if lifecycle_bzr_gap arbitrary-fields-create "error: unexpected argument '--field' found" \
+        bug create --product TestProduct --component TestComponent \
         --summary "$LIFECYCLE_STEM generic bzr" --description "generic fields" --op-sys Linux \
         --platform PC --field "whiteboard=$LIFECYCLE_FIELD_INITIAL" &&
         LIFECYCLE_GENERIC_BZR_ID=$(lifecycle_positive_id \
@@ -392,7 +490,8 @@ if lifecycle_pybz arbitrary-fields-create generic_fields "$(jq -cn \
         lifecycle_bzr arbitrary-fields-create-view-bzr bug view "$LIFECYCLE_GENERIC_BZR_ID" &&
         jq -e --arg value "$LIFECYCLE_FIELD_INITIAL" '.whiteboard == $value' \
             "$COMPARE_EXCHANGE_DIR/arbitrary-fields-create-view-bzr.bzr.stdout.json" >/dev/null &&
-        lifecycle_bzr arbitrary-fields-update bug update "$LIFECYCLE_GENERIC_BZR_ID" \
+        lifecycle_bzr_gap arbitrary-fields-update "error: unexpected argument '--field' found" \
+            bug update "$LIFECYCLE_GENERIC_BZR_ID" \
             --field "whiteboard=$LIFECYCLE_FIELD_UPDATED" &&
         lifecycle_bzr arbitrary-fields-view bug view "$LIFECYCLE_GENERIC_BZR_ID" &&
         jq -e --arg value "$LIFECYCLE_FIELD_UPDATED" '.whiteboard == $value' \
@@ -401,7 +500,7 @@ if lifecycle_pybz arbitrary-fields-create generic_fields "$(jq -cn \
     elif [[ $LAST_TEST_RESULT != FAIL ]]; then
         test_fail "bzr arbitrary-fields result differed"
     fi
-    expect_gap 671
+    lifecycle_expect_gap 671
 elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail "arbitrary-fields precondition failed"
 fi
@@ -412,14 +511,16 @@ if [[ -n $LIFECYCLE_PYBZ_ID ]] &&
         --arg comment "$LIFECYCLE_COMMENT" --arg tag "$LIFECYCLE_COMMENT_TAG" \
         '{bug_id:$id,comment:$comment,comment_tags:[$tag],minor_update:true}')" &&
     lifecycle_transport_is update-options pybz REST; then
-    if lifecycle_bzr update-options-bzr bug update "$LIFECYCLE_PYBZ_ID" \
+    if lifecycle_bzr_gap update-options-bzr "error: unexpected argument '--comment-tag' found" \
+        bug update "$LIFECYCLE_PYBZ_ID" \
         --comment "$LIFECYCLE_BZR_COMMENT" --comment-tag "$LIFECYCLE_BZR_COMMENT_TAG" \
         --minor-update &&
         lifecycle_bzr update-options-bzr-comment comment list "$LIFECYCLE_PYBZ_ID" &&
         jq -e --arg comment "$LIFECYCLE_BZR_COMMENT" --arg tag "$LIFECYCLE_BZR_COMMENT_TAG" \
             'any(.[]; .text == $comment and (.tags | index($tag)))' \
             "$COMPARE_EXCHANGE_DIR/update-options-bzr-comment.bzr.stdout.json" >/dev/null &&
-        lifecycle_bzr update-options-bzr-request --dry-run bug update "$LIFECYCLE_PYBZ_ID" \
+        lifecycle_bzr_no_dispatch update-options-bzr-request --dry-run \
+            bug update "$LIFECYCLE_PYBZ_ID" \
             --comment "$LIFECYCLE_BZR_COMMENT" --comment-tag "$LIFECYCLE_BZR_COMMENT_TAG" \
             --minor-update &&
         jq '.changes' "$COMPARE_EXCHANGE_DIR/update-options-bzr-request.bzr.stdout.json" \
@@ -430,7 +531,7 @@ if [[ -n $LIFECYCLE_PYBZ_ID ]] &&
     elif [[ $LAST_TEST_RESULT != FAIL ]]; then
         test_fail "bzr update-options result differed"
     fi
-    expect_gap 672
+    lifecycle_expect_gap 672
 elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail "update-options precondition failed"
 fi
@@ -457,7 +558,9 @@ if lifecycle_pybz query-match-exact-create generic_fields "$(jq -cn \
     lifecycle_transport_is query-match-equals pybz XMLRPC &&
     lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/query-match-equals.pybz.result.json" \
         "[$LIFECYCLE_MATCH_EXACT_ID]"; then
-    if lifecycle_bzr query-match-types bug list --whiteboard "$LIFECYCLE_WHITEBOARD_EXACT" \
+    if lifecycle_bzr_gap query-match-types \
+        "error: unexpected argument '--status-whiteboard-type' found" \
+        bug list --whiteboard "$LIFECYCLE_WHITEBOARD_EXACT" \
         --status-whiteboard-type equals &&
         lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/query-match-types.bzr.stdout.json" \
             "[$LIFECYCLE_MATCH_EXACT_ID]"; then
@@ -465,7 +568,7 @@ if lifecycle_pybz query-match-exact-create generic_fields "$(jq -cn \
     elif [[ $LAST_TEST_RESULT != FAIL ]]; then
         test_fail "bzr query-match-types result differed"
     fi
-    expect_gap 679
+    lifecycle_expect_gap 679
 elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail "query-match-types precondition failed"
 fi
@@ -477,16 +580,18 @@ if [[ -n $LIFECYCLE_PYBZ_ID ]] &&
     lifecycle_transport_is bug-tags pybz XMLRPC &&
     jq -e --argjson id "$LIFECYCLE_PYBZ_ID" '[.bugs[].id] | sort == [$id]' \
         "$COMPARE_EXCHANGE_DIR/bug-tags.pybz.result.json" >/dev/null; then
-    if lifecycle_bzr_xmlrpc bug-tags-add bug tag "$LIFECYCLE_PYBZ_ID" \
+    if lifecycle_bzr_xmlrpc_gap bug-tags-add "error: unrecognized subcommand 'tag'" \
+        bug tag "$LIFECYCLE_PYBZ_ID" \
         --add "$LIFECYCLE_BZR_BUG_TAG" &&
-        lifecycle_bzr_xmlrpc bug-tags-list bug list --tag "$LIFECYCLE_BZR_BUG_TAG" &&
+        lifecycle_bzr_xmlrpc_gap bug-tags-list "error: unexpected argument '--tag' found" \
+            bug list --tag "$LIFECYCLE_BZR_BUG_TAG" &&
         lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/bug-tags-list.bzr.stdout.json" \
             "[$LIFECYCLE_PYBZ_ID]"; then
         test_pass
     elif [[ $LAST_TEST_RESULT != FAIL ]]; then
         test_fail "bzr bug-tags result differed"
     fi
-    expect_gap 680
+    lifecycle_expect_gap 680
 elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail "bug-tags precondition failed"
 fi

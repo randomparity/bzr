@@ -259,9 +259,16 @@ def _load_request(path):
 def _transport(client):
     backend = getattr(client, "_backend", None)
     name = type(backend).__name__ if backend is not None else ""
-    if not name:
-        raise AdapterError("python-bugzilla did not select a backend")
-    return name
+    transports = {
+        "_BackendREST": "REST",
+        "_BackendXMLRPC": "XMLRPC",
+    }
+    try:
+        return transports[name]
+    except KeyError as error:
+        if not name:
+            raise AdapterError("python-bugzilla did not select a backend") from error
+        raise AdapterError(f"unsupported python-bugzilla backend: {name}") from error
 
 
 def _json_default(value):

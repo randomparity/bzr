@@ -186,6 +186,41 @@ run_sidecar_wrapper_fixture() (
     assert_equals 19 "$BZR_EXIT" "adapter exit"
 )
 
+run_transport_observation_fixture() (
+    if ! declare -F observe_bzr_transport >/dev/null; then
+        printf 'observe_bzr_transport is not defined\n' >&2
+        return 1
+    fi
+
+    printf 'DEBUG bzr::client::transport: API response\n' >"$BZR_STDERR"
+    observe_bzr_transport
+    assert_equals REST "$BZR_TRANSPORT" "single REST observation"
+
+    printf '%s\n' \
+        'DEBUG bzr::client::transport: API response' \
+        'DEBUG bzr::client::transport: API response' >"$BZR_STDERR"
+    observe_bzr_transport
+    assert_equals REST "$BZR_TRANSPORT" "repeated REST observations"
+
+    printf 'DEBUG bzr::xmlrpc::protocol::client: XML-RPC call\n' >"$BZR_STDERR"
+    observe_bzr_transport
+    assert_equals XMLRPC "$BZR_TRANSPORT" "single XML-RPC observation"
+
+    : >"$BZR_STDERR"
+    if observe_bzr_transport; then
+        printf 'missing transport observation was accepted\n' >&2
+        return 1
+    fi
+
+    printf '%s\n' \
+        'DEBUG bzr::client::transport: API response' \
+        'DEBUG bzr::xmlrpc::protocol::client: XML-RPC call' >"$BZR_STDERR"
+    if observe_bzr_transport; then
+        printf 'mixed transport observations were accepted\n' >&2
+        return 1
+    fi
+)
+
 run_lifecycle_phase_fixture() (
     local phase="$PYBZ_DIR/../compare/01-bug-lifecycle.sh"
     local fixture_output
@@ -204,6 +239,14 @@ run_lifecycle_phase_fixture() (
     COMPARE_ADMIN_EMAIL=admin@test.bzr PYBZ_RUNTIME=fake_lifecycle_runtime
     LIFECYCLE_BZR_ARGS="$COMPARE_EXCHANGE_DIR/bzr.args"
     sleep() { :; }
+    jq() {
+        if [[ ${LIFECYCLE_DOWNSTREAM_ASSERTION_FAILED:-0} -eq 1 &&
+            " $* " == *" --argjson expected "* &&
+            " $* " == *" saved-search.bzr.stdout.json "* ]]; then
+            return 2
+        fi
+        command jq "$@"
+    }
 
     seed_server_saved_search() {
         [[ $1 == admin@test.bzr && -n $2 && ${#2} -le 64 &&
@@ -274,6 +317,73 @@ run_lifecycle_phase_fixture() (
         fi
         printf 'controlled red: %s %s=1\n' "$capability" "$flag"
     }
+    run_gap_ineligible_control() {
+        local flag="$1" capability="$2" label="$3"
+
+        reset_lifecycle_fixture
+        LIFECYCLE_STALE_GAPS=1
+        printf -v "$flag" 1
+        : >"$fixture_output"
+        source "$phase" >"$fixture_output"
+        _render_test_result >>"$fixture_output"
+        unset "$flag" LIFECYCLE_STALE_GAPS
+        if [[ $FAIL_COUNT -eq 0 || $GAP_COUNT -ne 0 ]] ||
+            ! grep -Fq \
+                "[compare/01-bug-lifecycle/${capability}] ${label} ... FAIL" \
+                "$fixture_output"; then
+            printf '%s ineligible control %s became a gap\n' "$capability" "$flag" >&2
+            cat "$fixture_output" >&2
+            return 1
+        fi
+        printf 'controlled ineligible: %s %s=1\n' "$capability" "$flag"
+    }
+    run_repeated_transport_control() {
+        reset_lifecycle_fixture
+        LIFECYCLE_REPEATED_REST_EVENTS=1
+        : >"$fixture_output"
+        source "$phase" >"$fixture_output"
+        _render_test_result >>"$fixture_output"
+        unset LIFECYCLE_REPEATED_REST_EVENTS
+        if [[ $FAIL_COUNT -ne 0 || $PASS_COUNT -ne 5 || $GAP_COUNT -ne 5 ]]; then
+            printf 'repeated REST observations did not preserve lifecycle outcomes\n' >&2
+            cat "$fixture_output" >&2
+            return 1
+        fi
+    }
+    run_observed_rest_gap_control() {
+        reset_lifecycle_fixture
+        LIFECYCLE_STALE_GAPS=1 LIFECYCLE_BUG_TAGS_OBSERVED_REST=1
+        : >"$fixture_output"
+        source "$phase" >"$fixture_output"
+        _render_test_result >>"$fixture_output"
+        unset LIFECYCLE_STALE_GAPS LIFECYCLE_BUG_TAGS_OBSERVED_REST
+        if [[ $GAP_COUNT -ne 1 ]] ||
+            ! grep -Fq \
+                '[compare/01-bug-lifecycle/bug-tags] personal bug tags ... GAP (#680)' \
+                "$fixture_output"; then
+            printf 'observed REST bug-tag operations did not remain gap #680\n' >&2
+            cat "$fixture_output" >&2
+            return 1
+        fi
+    }
+    run_eligibility_reset_control() {
+        reset_lifecycle_fixture
+        LIFECYCLE_ELIGIBILITY_RESET_CONTROL=1
+        : >"$fixture_output"
+        source "$phase" >"$fixture_output"
+        _render_test_result >>"$fixture_output"
+        unset LIFECYCLE_ELIGIBILITY_RESET_CONTROL
+        if ! grep -Fq \
+            '[compare/01-bug-lifecycle/saved-search] server saved search ... GAP (#670)' \
+            "$fixture_output" ||
+            ! grep -Fq \
+                '[compare/01-bug-lifecycle/arbitrary-fields] generic arbitrary fields ... FAIL' \
+                "$fixture_output"; then
+            printf 'gap eligibility leaked into the following probe\n' >&2
+            cat "$fixture_output" >&2
+            return 1
+        fi
+    }
     run_noop_stale_gap_control() {
         reset_lifecycle_fixture
         LIFECYCLE_NOOP_STALE_GAPS=1
@@ -287,21 +397,93 @@ run_lifecycle_phase_fixture() (
             ! grep -Fq '[compare/01-bug-lifecycle/bug-tags] personal bug tags ... GAP (#680)' \
                 "$fixture_output"; then
             printf 'no-op stale mutation controls did not remain gaps\n' >&2
+            cat "$fixture_output" >&2
             return 1
         fi
     }
+    fixture_finish_bzr() {
+        local exit_code="$1"
+        local transport=REST
+
+        cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
+        : >"$BZR_STDERR"
+        BZR_EXIT="$exit_code"
+        [[ $exit_code -eq 0 ]] || return 0
+        if [[ ${LIFECYCLE_BZR_CALL_NAME:-} == update-options-bzr-request ]]; then
+            if [[ ${LIFECYCLE_NO_DISPATCH_EVENT:-0} -eq 1 ]]; then
+                printf 'DEBUG bzr::client::transport: API response\n' >"$BZR_STDERR"
+            fi
+            return 0
+        fi
+        if [[ ${LIFECYCLE_MISSING_BZR_EVENTS:-0} -eq 1 &&
+            ${LIFECYCLE_BZR_CALL_NAME:-} == saved-search ]]; then
+            return 0
+        fi
+        if [[ ${LIFECYCLE_MIXED_BZR_EVENTS:-0} -eq 1 &&
+            ${LIFECYCLE_BZR_CALL_NAME:-} == saved-search ]]; then
+            printf '%s\n' 'DEBUG bzr::client::transport: API response' \
+                'DEBUG bzr::xmlrpc::protocol::client: XML-RPC call' >"$BZR_STDERR"
+            return 0
+        fi
+        [[ $args == *" --api xmlrpc "* ]] && transport=XMLRPC
+        if [[ ${LIFECYCLE_BUG_TAGS_OBSERVED_REST:-0} -eq 1 &&
+            ${LIFECYCLE_BZR_CALL_NAME:-} == bug-tags-* ]]; then
+            transport=REST
+        fi
+        if [[ $transport == REST ]]; then
+            printf 'DEBUG bzr::client::transport: API response\n' >"$BZR_STDERR"
+            if [[ ${LIFECYCLE_REPEATED_REST_EVENTS:-0} -eq 1 ]]; then
+                printf 'DEBUG bzr::client::transport: API response\n' >>"$BZR_STDERR"
+            fi
+        else
+            printf 'DEBUG bzr::xmlrpc::protocol::client: XML-RPC call\n' >"$BZR_STDERR"
+        fi
+    }
     run_bzr() {
-        local args=" $* " id=41 summary="$LIFECYCLE_BZR_SUMMARY" value
+        local args=" $* " id=41 summary="$LIFECYCLE_BZR_SUMMARY" value diagnostic
         printf '%s\n' "$*" >>"$LIFECYCLE_BZR_ARGS"
         : >"$BZR_STDOUT"
         [[ $args == *" 42 "* ]] && id=42 && summary="$LIFECYCLE_PYBZ_SUMMARY"
         if [[ ${LIFECYCLE_BZR_CALL_NAME:-} == view-bzr &&
             ${LIFECYCLE_WRONG_ID_TARGET:-} == bzr-view ]]; then id=99; fi
         if [[ ${LIFECYCLE_UPDATED:-0} -eq 1 ]]; then summary="$LIFECYCLE_UPDATED_SUMMARY"; fi
+        if [[ ${LIFECYCLE_BZR_CALL_NAME:-} == saved-search &&
+            ( ${LIFECYCLE_WRONG_PARSER_DIAGNOSTIC:-0} -eq 1 ||
+                ${LIFECYCLE_EXPECTED_DIAGNOSTIC_EXIT_ONE:-0} -eq 1 ) ]]; then
+            diagnostic="error: unexpected argument '--saved-search' found"
+            [[ ${LIFECYCLE_WRONG_PARSER_DIAGNOSTIC:-0} -eq 0 ]] ||
+                diagnostic="error: unexpected argument '--different-option' found"
+            cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
+            printf '%s\n' "$diagnostic" >"$BZR_STDERR"
+            BZR_EXIT=2
+            [[ ${LIFECYCLE_EXPECTED_DIAGNOSTIC_EXIT_ONE:-0} -eq 0 ]] || BZR_EXIT=1
+            return 0
+        fi
+        if [[ ${LIFECYCLE_BZR_CALL_NAME:-} == saved-search &&
+            ${LIFECYCLE_CONNECTION_FAILURE:-0} -eq 1 ]]; then
+            cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
+            : >"$BZR_STDERR"
+            BZR_EXIT=4
+            return 0
+        fi
+        if [[ ${LIFECYCLE_BZR_CALL_NAME:-} == saved-search &&
+            ${LIFECYCLE_SERVER_COMMAND_ERROR:-0} -eq 1 ]]; then
+            cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
+            printf 'server rejected fixture operation\n' >"$BZR_STDERR"
+            BZR_EXIT=5
+            return 0
+        fi
+        if [[ ${LIFECYCLE_ELIGIBILITY_RESET_CONTROL:-0} -eq 1 &&
+            ${LIFECYCLE_BZR_CALL_NAME:-} == arbitrary-fields-create ]]; then
+            cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
+            : >"$BZR_STDERR"
+            BZR_EXIT=4
+            return 0
+        fi
         if [[ ${LIFECYCLE_NOOP_STALE_GAPS:-0} -eq 1 &&
             ( $args == *" --comment-tag "* || $args == *" bug tag "* ) ]]; then
             printf '{}\n' >"$BZR_STDOUT"
-            cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"; : >"$BZR_STDERR"; BZR_EXIT=0
+            fixture_finish_bzr 0
             return 0
         fi
         if [[ ${LIFECYCLE_NOOP_STALE_GAPS:-0} -eq 1 && $args == *" bug list "* &&
@@ -311,21 +493,36 @@ run_lifecycle_phase_fixture() (
             else
                 printf '[]\n' >"$BZR_STDOUT"
             fi
-            cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"; : >"$BZR_STDERR"; BZR_EXIT=0
+            fixture_finish_bzr 0
             return 0
         fi
         if [[ ${LIFECYCLE_STALE_GAPS:-0} -eq 1 && $args == *" bug list "* &&
             $args == *" --tag "* ]]; then
             printf '[{"id":42}]\n' >"$BZR_STDOUT"
-            cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"; : >"$BZR_STDERR"; BZR_EXIT=0
+            fixture_finish_bzr 0
             return 0
         fi
         if [[ ${LIFECYCLE_STALE_GAPS:-0} -ne 1 &&
-            ${LIFECYCLE_NOOP_STALE_GAPS:-0} -ne 1 &&
             ( $args == *" --saved-search "* || $args == *" --field "* ||
                 $args == *" --comment-tag "* || $args == *" --status-whiteboard-type "* ||
                 $args == *" bug tag "* || $args == *" --tag "* ) ]]; then
-            cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"; : >"$BZR_STDERR"; BZR_EXIT=2
+            case "$args" in
+            *" --saved-search "*) diagnostic="error: unexpected argument '--saved-search' found" ;;
+            *" --field "*) diagnostic="error: unexpected argument '--field' found" ;;
+            *" --comment-tag "*) diagnostic="error: unexpected argument '--comment-tag' found" ;;
+            *" --status-whiteboard-type "*)
+                diagnostic="error: unexpected argument '--status-whiteboard-type' found"
+                ;;
+            *" bug tag "*) diagnostic="error: unrecognized subcommand 'tag'" ;;
+            *) diagnostic="error: unexpected argument '--tag' found" ;;
+            esac
+            if [[ ${LIFECYCLE_WRONG_PARSER_DIAGNOSTIC:-0} -eq 1 ]]; then
+                diagnostic="error: unexpected argument '--different-option' found"
+            fi
+            cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
+            printf '%s\n' "$diagnostic" >"$BZR_STDERR"
+            BZR_EXIT=2
+            [[ ${LIFECYCLE_EXPECTED_DIAGNOSTIC_EXIT_ONE:-0} -eq 0 ]] || BZR_EXIT=1
             return 0
         fi
         if [[ ${LIFECYCLE_STALE_GAPS:-0} -eq 1 ]]; then
@@ -354,7 +551,15 @@ run_lifecycle_phase_fixture() (
             *) : ;;
             esac
             if [[ -s $BZR_STDOUT ]]; then
-                cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"; : >"$BZR_STDERR"; BZR_EXIT=0
+                if [[ ${LIFECYCLE_MALFORMED_BZR_RESULT:-0} -eq 1 &&
+                    ${LIFECYCLE_BZR_CALL_NAME:-} == saved-search ]]; then
+                    printf '{invalid\n' >"$BZR_STDOUT"
+                fi
+                if [[ ${LIFECYCLE_INVALID_NO_DISPATCH_RESULT:-0} -eq 1 &&
+                    ${LIFECYCLE_BZR_CALL_NAME:-} == update-options-bzr-request ]]; then
+                    printf '{invalid\n' >"$BZR_STDOUT"
+                fi
+                fixture_finish_bzr 0
                 return 0
             fi
         fi
@@ -394,17 +599,17 @@ run_lifecycle_phase_fixture() (
               map(select(.field != $omit))' >"$BZR_STDOUT" ;;
         *)
             if [[ ${LIFECYCLE_STALE_GAPS:-0} -ne 1 ]]; then
-                : >"$BZR_STDOUT"; cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"; : >"$BZR_STDERR"
-                BZR_EXIT=2
+                : >"$BZR_STDOUT"
+                fixture_finish_bzr 2
                 return 0
             fi
             return 2
             ;;
         esac
-        cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"; : >"$BZR_STDERR"; BZR_EXIT=0
+        fixture_finish_bzr 0
     }
     fake_lifecycle_runtime() {
-        local operation="$5" output="$COMPARE_EXCHANGE_DIR/${7##*/}" result transport=FixtureXMLRPC
+        local operation="$5" output="$COMPARE_EXCHANGE_DIR/${7##*/}" result transport=XMLRPC
         local input="$COMPARE_EXCHANGE_DIR/${6##*/}" request value
         request=$(<"$input")
         case "$operation" in
@@ -459,8 +664,8 @@ run_lifecycle_phase_fixture() (
             else LIFECYCLE_GENERIC_UPDATED=1; result='{}'; fi
             ;;
         match_type) result='[{"id":44}]' ;;
-        update_options) LIFECYCLE_PYBZ_TAGGED=1; result='{}'; transport=FixtureREST ;;
-        bug_tags) result='{"bugs":[{"id":42}],"update":{}}'; transport=FixtureXMLRPC ;;
+        update_options) LIFECYCLE_PYBZ_TAGGED=1; result='{}'; transport=REST ;;
+        bug_tags) result='{"bugs":[{"id":42}],"update":{}}'; transport=XMLRPC ;;
         *) return 2 ;;
         esac
         if [[ $operation == view && $(jq -r '.bug_id // 0' <<<"$request") == 43 ]]; then
@@ -559,6 +764,34 @@ run_lifecycle_phase_fixture() (
         control_failures=$((control_failures + 1))
     fi
     if ! run_noop_stale_gap_control; then
+        control_failures=$((control_failures + 1))
+    fi
+    for control in \
+        LIFECYCLE_MISSING_BZR_EVENTS \
+        LIFECYCLE_MIXED_BZR_EVENTS \
+        LIFECYCLE_CONNECTION_FAILURE \
+        LIFECYCLE_SERVER_COMMAND_ERROR \
+        LIFECYCLE_WRONG_PARSER_DIAGNOSTIC \
+        LIFECYCLE_EXPECTED_DIAGNOSTIC_EXIT_ONE \
+        LIFECYCLE_MALFORMED_BZR_RESULT \
+        LIFECYCLE_DOWNSTREAM_ASSERTION_FAILED; do
+        if ! run_gap_ineligible_control "$control" saved-search 'server saved search'; then
+            control_failures=$((control_failures + 1))
+        fi
+    done
+    for control in LIFECYCLE_NO_DISPATCH_EVENT LIFECYCLE_INVALID_NO_DISPATCH_RESULT; do
+        if ! run_gap_ineligible_control "$control" update-options \
+            'comment tags and minor update'; then
+            control_failures=$((control_failures + 1))
+        fi
+    done
+    if ! run_repeated_transport_control; then
+        control_failures=$((control_failures + 1))
+    fi
+    if ! run_observed_rest_gap_control; then
+        control_failures=$((control_failures + 1))
+    fi
+    if ! run_eligibility_reset_control; then
         control_failures=$((control_failures + 1))
     fi
 
@@ -714,11 +947,7 @@ write_fake_bugzilla_module() {
 
     mkdir -p "$fixture_dir/bugzilla"
     cat >"$fixture_dir/bugzilla/__init__.py" <<'PY'
-class _FixtureAutoBackend:
-    pass
-
-
-class _FixtureRESTBackend:
+class _BackendREST:
     def __init__(self):
         self.comment_tags = []
 
@@ -729,7 +958,11 @@ class _FixtureRESTBackend:
         raise ValueError("array response")
 
 
-class _FixtureXMLRPCBackend:
+class _BackendXMLRPC:
+    pass
+
+
+class _UnknownBackend:
     pass
 
 
@@ -758,11 +991,13 @@ class Bugzilla:
         ):
             raise RuntimeError("unexpected constructor arguments")
         self._backend = (
-            _FixtureXMLRPCBackend()
+            _UnknownBackend()
+            if __import__("os").environ.get("FIXTURE_UNKNOWN_BACKEND") == "1"
+            else _BackendXMLRPC()
             if force_xmlrpc
-            else _FixtureRESTBackend()
+            else _BackendREST()
             if force_rest
-            else _FixtureAutoBackend()
+            else _BackendXMLRPC()
         )
 
     def build_createbug(self, **params):
@@ -879,40 +1114,51 @@ run_adapter_fixture() {
     "$runtime" exec "$sidecar" python -m py_compile /work/bug-lifecycle.py
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" create create \
         '{"api_key":"fixture-secret","params":{"product":"Widget","summary":"create"}}' \
-        '{"result":{"id":101,"request":{"builder":"create","product":"Widget","summary":"create"}},"transport":"_FixtureAutoBackend"}'
+        '{"result":{"id":101,"request":{"builder":"create","product":"Widget","summary":"create"}},"transport":"XMLRPC"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" query query \
         '{"api_key":"fixture-secret","params":{"short_desc":"needle"}}' \
-        '{"result":[{"id":201,"request":{"builder":"query","short_desc":"needle"}}],"transport":"_FixtureAutoBackend"}'
+        '{"result":[{"id":201,"request":{"builder":"query","short_desc":"needle"}}],"transport":"XMLRPC"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" update update \
         '{"api_key":"fixture-secret","bug_id":31,"params":{"summary":"updated"}}' \
-        '{"result":{"ids":[31],"update":{"builder":"update","summary":"updated"}},"transport":"_FixtureAutoBackend"}'
+        '{"result":{"ids":[31],"update":{"builder":"update","summary":"updated"}},"transport":"XMLRPC"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" view view \
         '{"api_key":"fixture-secret","bug_id":32}' \
-        '{"result":{"id":32,"source":"view"},"transport":"_FixtureAutoBackend"}'
+        '{"result":{"id":32,"source":"view"},"transport":"XMLRPC"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" view-xmlrpc-date view \
         '{"api_key":"fixture-secret","bug_id":37}' \
-        '{"result":{"id":37,"last_change_time":"20260101T00:00:00","source":"view"},"transport":"_FixtureAutoBackend"}'
+        '{"result":{"id":37,"last_change_time":"20260101T00:00:00","source":"view"},"transport":"XMLRPC"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" history history \
         '{"api_key":"fixture-secret","bug_id":33}' \
-        '{"result":{"bugs":[{"history":[{"changes":[{"added":"new","field_name":"summary","removed":"old"}],"when":"fixture"}],"id":33}]},"transport":"_FixtureAutoBackend"}'
+        '{"result":{"bugs":[{"history":[{"changes":[{"added":"new","field_name":"summary","removed":"old"}],"when":"fixture"}],"id":33}]},"transport":"XMLRPC"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" saved-search saved_search \
         '{"api_key":"fixture-secret","name":"owned-search"}' \
-        '{"result":[{"id":201,"request":{"builder":"query","savedsearch":"owned-search"}}],"transport":"_FixtureAutoBackend"}'
+        '{"result":[{"id":201,"request":{"builder":"query","savedsearch":"owned-search"}}],"transport":"XMLRPC"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" generic-create generic_fields \
         '{"api_key":"fixture-secret","action":"create","params":{"product":"Widget","summary":"generic"},"fields":{"cf_probe":"initial"}}' \
-        '{"result":{"id":101,"request":{"builder":"create","cf_probe":"initial","product":"Widget","summary":"generic"}},"transport":"_FixtureAutoBackend"}'
+        '{"result":{"id":101,"request":{"builder":"create","cf_probe":"initial","product":"Widget","summary":"generic"}},"transport":"XMLRPC"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" generic-update generic_fields \
         '{"api_key":"fixture-secret","action":"update","bug_id":34,"params":{"summary":"generic-updated"},"fields":{"cf_probe":"changed"}}' \
-        '{"result":{"ids":[34],"update":{"builder":"update","cf_probe":"changed","summary":"generic-updated"}},"transport":"_FixtureAutoBackend"}'
+        '{"result":{"ids":[34],"update":{"builder":"update","cf_probe":"changed","summary":"generic-updated"}},"transport":"XMLRPC"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" update-options update_options \
         '{"api_key":"fixture-secret","bug_id":35,"comment":"tagged comment","comment_tags":["probe"],"minor_update":true}' \
-        '{"result":{"ids":[35],"update":{"builder":"update","comment":{"comment":"tagged comment"},"minor_update":true}},"transport":"_FixtureRESTBackend"}'
+        '{"result":{"ids":[35],"update":{"builder":"update","comment":{"comment":"tagged comment"},"minor_update":true}},"transport":"REST"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" match-type match_type \
         '{"api_key":"fixture-secret","value":"needle","match_type":"equals"}' \
-        '{"result":[{"id":201,"request":{"builder":"query","status_whiteboard":"needle","status_whiteboard_type":"equals"}}],"transport":"_FixtureAutoBackend"}'
+        '{"result":[{"id":201,"request":{"builder":"query","status_whiteboard":"needle","status_whiteboard_type":"equals"}}],"transport":"XMLRPC"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" bug-tags bug_tags \
         '{"api_key":"fixture-secret","bug_id":36,"tag":"probe"}' \
-        '{"result":{"bugs":[{"id":201,"request":{"builder":"query","tags":["probe"]}}],"update":{"add":["probe"],"ids":[36],"remove":null}},"transport":"_FixtureXMLRPCBackend"}'
+        '{"result":{"bugs":[{"id":201,"request":{"builder":"query","tags":["probe"]}}],"update":{"add":["probe"],"ids":[36],"remove":null}},"transport":"XMLRPC"}'
+
+    if "$runtime" exec -e PYTHONPATH=/work/adapter-fixture -e FIXTURE_UNKNOWN_BACKEND=1 \
+        "$sidecar" python /work/bug-lifecycle.py create /work/create.input.json \
+        /work/unknown-backend.output.json 2>"$error_output"; then
+        printf 'adapter accepted an unknown backend class\n' >&2
+        return 1
+    fi
+    if ! grep -Fq 'unsupported python-bugzilla backend: _UnknownBackend' "$error_output"; then
+        printf 'adapter unknown-backend rejection omitted its diagnostic\n' >&2
+        return 1
+    fi
 
     printf '%s\n' '{"api_key":"fixture-secret","bug_id":0}' >"$invalid_input"
     chmod 600 "$invalid_input"
@@ -958,7 +1204,7 @@ cleanup_container_fixture() {
     return 0
 }
 
-run_container_fixture() {
+run_container_fixture() (
     local runtime
     local checkout_id
     local fixture_image
@@ -982,7 +1228,7 @@ run_container_fixture() {
     config_dir=$(mktemp -d)
     export FUNC_CONFIG_DIR="$config_dir"
     BZ_VERSION="bz50"
-    trap 'cleanup_container_fixture "$runtime" "$donor" "$config_dir"' RETURN
+    trap 'cleanup_container_fixture "$runtime" "$donor" "$config_dir"' EXIT
 
     "$runtime" build -t "$fixture_image" -f "$PYBZ_DIR/Containerfile" "$PYBZ_DIR"
     package_version=$("$runtime" run --rm "$fixture_image" python -c \
@@ -1037,12 +1283,13 @@ run_container_fixture() {
     assert_equals exchange-proof "$(<"$config_dir/proof")" "bind-mount bytes"
     run_adapter_fixture "$runtime" "$sidecar" "$config_dir"
     return 0
-}
+)
 
 run_expected_gap_fixture
 run_summary_fixture
 run_product_normalization_fixture
 run_sidecar_wrapper_fixture
+run_transport_observation_fixture
 run_lifecycle_phase_fixture
 run_parity_report_fixture
 run_sidecar_stop_failure_fixture
