@@ -225,11 +225,13 @@ upstream image/dependency exposure accepted by ADR 0044, and implementing any ca
   tagged-comment live result and `minor_update: true` request shape fail independently; #680 stays
   GAP when semantics succeed over an observed REST request; bzr transport classification rejects
   missing or mixed request events; connection-style no-event failures and server/command errors
-  cannot become GAP; exit 2 with a non-matching clap diagnostic remains FAIL; a malformed response
-  after one valid transport event and a downstream assertion failure after valid evidence remain
+  cannot become GAP; exit 2 with a non-matching clap diagnostic and exit 1 with the exact expected
+  diagnostic remain FAIL; one or multiple same-class events are accepted; a malformed response
+  after valid transport evidence and a downstream assertion failure after valid evidence remain
   FAIL; and the successful #672 dry-run produces no transport claim while either a boundary event
-  or structurally invalid request evidence on that path remains FAIL. The adapter rejects an
-  unknown python-bugzilla backend.
+  or structurally invalid request evidence on that path remains FAIL. A sequential control proves
+  eligibility from one probe cannot leak into the next. The adapter rejects an unknown
+  python-bugzilla backend.
 - `make lint` validates semantic IDs, Bash syntax, ShellCheck, formatting, and Rust lints; it does
   not require host Python.
 - `make test` proves the Rust suite remains green.

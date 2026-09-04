@@ -33,7 +33,8 @@ failure and cannot be converted to GAP by `expect_gap`. A non-zero invocation ma
 expected gap only when exit 2 and its captured clap diagnostic positively identify the exact
 unsupported option or subcommand exercised by that probe. Every other non-zero outcome, including
 connection, timeout, TLS, authentication, server, and harness failures, remains FAIL. A recognized
-parser rejection makes no transport claim.
+parser rejection makes no transport claim. Repeated events from one transport, such as retries,
+remain one unambiguous observation.
 
 A probe becomes eligible for `expect_gap` only through a terminal classifier that has positively
 validated one complete outcome: the recognized parser rejection; successful client operations
@@ -42,7 +43,7 @@ successful no-dispatch dry-run with a structurally valid request payload. Semant
 request-shape, and valid-transport mismatches inside those outcomes remain gap evidence, while
 malformed evidence and harness failures do not. Eligibility is assigned only after the terminal
 classifier completes, so a later validation or assertion failure cannot inherit an earlier safe
-state.
+state. The phase resets eligibility before every gap probe so state cannot cross test boundaries.
 
 The python-bugzilla adapter will map exactly `_BackendREST` and `_BackendXMLRPC` to the same closed
 vocabulary. Missing or unknown backend classes fail closed. Lifecycle checks compare exact

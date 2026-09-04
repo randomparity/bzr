@@ -261,8 +261,9 @@ finding was known before review.
   terminal classifier sets `LIFECYCLE_GAP_ELIGIBLE` only after
   a recognized rejection, successful observed client operations with structurally valid response
   evidence, or the dedicated successful dry-run with a structurally valid request payload.
-  `lifecycle_expect_gap` calls `expect_gap` only in that state. Observation defects, malformed
-  evidence, harness failures, and every other non-zero outcome remain FAIL.
+  `lifecycle_expect_gap` calls `expect_gap` only in that state. Each gap probe resets the state to
+  ineligible before its first operation. Observation defects, malformed evidence, harness
+  failures, and every other non-zero outcome remain FAIL.
 
 ### Verification
 
@@ -273,16 +274,23 @@ finding was known before review.
   as GAP. Missing and mixed-event controls after successful client invocations must remain FAIL
   rather than being converted to GAP. A recognized unsupported command must exit 2, name its exact
   probed option or subcommand, produce no transport record, and may remain an expected capability
-  gap. Connection-style no-event failure, server/command error, and exit 2 with a non-matching clap
-  diagnostic must remain FAIL. The successful #672 dry-run must use the dedicated no-dispatch path
-  and produce no transport claim; a live operation with missing events, a boundary event on the
+  gap. Connection-style no-event failure, server/command error, exit 2 with a non-matching clap
+  diagnostic, and exit 1 with the exact expected diagnostic must remain FAIL. One and multiple
+  same-class events must both classify successfully, while mixed classes remain FAIL. The
+  successful #672 dry-run must use the dedicated no-dispatch path and produce no transport claim;
+  a live operation with missing events, a boundary event on the
   no-dispatch path, and malformed or structurally invalid no-dispatch request evidence must still
   fail. A malformed bzr result after a valid single-class observation and a downstream assertion
   failure after otherwise valid evidence must each remain FAIL with no GAP increment. For each of
-  `LIFECYCLE_WRONG_PARSER_DIAGNOSTIC`, `LIFECYCLE_MALFORMED_BZR_RESULT`,
-  `LIFECYCLE_DOWNSTREAM_ASSERTION_FAILED`, `LIFECYCLE_NO_DISPATCH_EVENT`, and
-  `LIFECYCLE_INVALID_NO_DISPATCH_RESULT`, the fixture runs the phase in isolation and requires a
-  positive `FAIL_COUNT`, zero `GAP_COUNT`, and the target test ID in rendered failure output.
+  `LIFECYCLE_WRONG_PARSER_DIAGNOSTIC`, `LIFECYCLE_EXPECTED_DIAGNOSTIC_EXIT_ONE`,
+  `LIFECYCLE_MALFORMED_BZR_RESULT`, `LIFECYCLE_DOWNSTREAM_ASSERTION_FAILED`,
+  `LIFECYCLE_NO_DISPATCH_EVENT`, and `LIFECYCLE_INVALID_NO_DISPATCH_RESULT`, the fixture runs the
+  phase in isolation and requires a positive `FAIL_COUNT`, zero `GAP_COUNT`, and the target test ID
+  in rendered failure output. A separate `LIFECYCLE_REPEATED_REST_EVENTS` run emits two REST
+  markers with structurally valid evidence and must reach its intended semantic or stale-gap
+  outcome without a transport failure. A sequential run first establishes an eligible parser gap,
+  then injects an infrastructure failure into the next probe and requires that second probe to
+  remain FAIL with no additional GAP.
 - Python backend normalization — Mode: focused-test. Give the adapter fixture concrete
   `_BackendREST` and `_BackendXMLRPC` backends plus an unknown backend case. Before implementation,
   the unknown class is emitted as transport; after implementation, the same focused command exits
@@ -294,13 +302,15 @@ finding was known before review.
 1. Add the semantic-success/observed-REST #680 control; missing/mixed successful-client controls;
    connection-style no-event and server/command-error controls; a recognized exit-2 parser-gap
    control; `LIFECYCLE_WRONG_PARSER_DIAGNOSTIC` to pair exit 2 with a different option diagnostic;
+   `LIFECYCLE_EXPECTED_DIAGNOSTIC_EXIT_ONE` to pair exit 1 with the exact expected diagnostic;
+   `LIFECYCLE_REPEATED_REST_EVENTS` to emit two REST markers with valid response evidence;
    `LIFECYCLE_MALFORMED_BZR_RESULT` to emit malformed response evidence after one REST marker;
    `LIFECYCLE_DOWNSTREAM_ASSERTION_FAILED` to fail after otherwise valid evidence;
    `LIFECYCLE_NO_DISPATCH_EVENT` to emit a REST marker from the successful #672 dry-run;
    `LIFECYCLE_INVALID_NO_DISPATCH_RESULT` to return successful, event-free, structurally invalid
    dry-run output; the true no-event dry-run control; exact closed-value assertions; and unknown
-   python-backend rejection to
-   `tests/functional/pybz/container-tests.sh`.
+   python-backend rejection to `tests/functional/pybz/container-tests.sh`. Add a sequential
+   eligibility-reset control in the same fixture.
 2. Run `bash tests/functional/pybz/container-tests.sh`; expect non-zero because the current wrappers
    still self-assert bzr transport and the adapter still accepts unknown backend names.
 3. In `tests/functional/lib.sh`, add `BZR_TRANSPORT` and `observe_bzr_transport`: inspect
