@@ -376,6 +376,31 @@ run_lifecycle_phase_fixture() (
     unset LIFECYCLE_STALE_GAPS
 )
 
+run_parity_report_fixture() {
+    local report="$PYBZ_DIR/../../../docs/dev/python-bugzilla-parity.md"
+    local row
+    # shellcheck disable=SC2016 # Markdown code spans are literal fixture data.
+    local -a rows=(
+        '| Bug create and first description | `bzr bug create`, `bzr comment list`, `bzr bug view` | parity | `compare/01-bug-lifecycle/create` |'
+        '| Bug query | `bzr bug list` | parity | `compare/01-bug-lifecycle/query` |'
+        '| Bug update | `bzr bug update` | parity | `compare/01-bug-lifecycle/update` |'
+        '| Bug view | `bzr bug view` | parity | `compare/01-bug-lifecycle/view` |'
+        '| Bug history | `bzr bug history` | parity | `compare/01-bug-lifecycle/history` |'
+        '| Server saved search | `bzr bug search --saved-search` | expected gap (#670) | `compare/01-bug-lifecycle/saved-search` |'
+        '| Generic arbitrary fields | `bzr bug create/update --field` | expected gap (#671) | `compare/01-bug-lifecycle/arbitrary-fields` |'
+        '| Comment tags and minor update | `bzr bug update --comment-tag --minor-update` | expected gap (#672) | `compare/01-bug-lifecycle/update-options` |'
+        '| Whiteboard match types | `bzr bug list --status-whiteboard-type` | expected gap (#679) | `compare/01-bug-lifecycle/query-match-types` |'
+        '| Personal bug tags | `bzr bug tag`, `bzr bug list --tag` | expected gap (#680) | `compare/01-bug-lifecycle/bug-tags` |'
+    )
+
+    for row in "${rows[@]}"; do
+        if [[ $(grep -Fxc "$row" "$report") -ne 1 ]]; then
+            printf 'missing or duplicate parity report row: %s\n' "$row" >&2
+            return 1
+        fi
+    done
+}
+
 run_sidecar_stop_failure_fixture() (
     local error_output
     error_output=$(mktemp)
@@ -741,5 +766,6 @@ run_summary_fixture
 run_product_normalization_fixture
 run_sidecar_wrapper_fixture
 run_lifecycle_phase_fixture
+run_parity_report_fixture
 run_sidecar_stop_failure_fixture
 run_container_fixture
