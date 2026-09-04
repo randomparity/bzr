@@ -296,6 +296,11 @@ finding was known before review.
   the unknown class is emitted as transport; after implementation, the same focused command exits
   0 only when the adapter rejects it and every successful result contains exactly `REST` or
   `XMLRPC`.
+- Authorized implementation ceiling — Mode: focused-test. Immediately before delivery, calculate
+  additions plus deletions against `main` for the seven implementation/report paths named below,
+  print the measured total, and fail when it exceeds 2,150. Prove the check is sensitive by rerunning
+  the same calculation with a limit one lower than the measured total and expecting exit 1. ADRs,
+  specifications, and this plan are excluded only because the command uses this explicit path list.
 
 ### Steps
 
@@ -335,7 +340,27 @@ finding was known before review.
 6. Run `bash tests/functional/pybz/container-tests.sh`; expect exit 0 with every new control proven.
 7. Run `make lint`, `make test`, `make functional-compare-all`, and `make functional-test-all`;
    expect exit 0 from each command.
-8. Commit with `fix(functional): observe lifecycle comparison transports`.
+8. Immediately before delivery, run the following exact ceiling gate and require exit 0 with a
+   printed total no greater than 2,150:
+
+   ```bash
+   limit=2150
+   total=$(git diff --numstat main -- \
+     docs/dev/python-bugzilla-parity.md \
+     tests/functional/compare/01-bug-lifecycle.sh \
+     tests/functional/compare/bug-lifecycle.py \
+     tests/functional/compare/seed-saved-search.pl \
+     tests/functional/lib.sh \
+     tests/functional/pybz/container-tests.sh \
+     tests/functional/run-compare.sh | \
+     awk '{ total += $1 + $2 } END { print total + 0 }')
+   printf 'implementation/report changed lines: %s\n' "$total"
+   test "$total" -le "$limit"
+   ```
+
+   Then rerun the same calculation with `limit=$((total - 1))`; expect exit 1, proving the upper
+   bound is active rather than documentary.
+9. Commit with `fix(functional): observe lifecycle comparison transports`.
 
 ## Rollback and cleanup
 
