@@ -148,7 +148,8 @@ and writes no transport record. It establishes an expected capability gap only w
 the captured clap diagnostic name the exact unsupported option or subcommand expected by that
 probe. A dedicated `lifecycle_bzr_no_dispatch` wrapper owns only the successful #672 `--dry-run`
 request-shape control; it asserts success and copies request output without writing transport
-evidence. Every invocation through the ordinary REST or XML-RPC wrappers is a claimed client
+evidence, and fails if captured stderr contains either recognized request-boundary event. Every
+invocation through the ordinary REST or XML-RPC wrappers is a claimed client
 operation, so success without exactly one observed class sets a distinct evidence-failure state.
 Neither that defect nor any unrecognized non-zero outcome can pass through `expect_gap`. A
 successful operation whose observed transport is a valid but unexpected class remains a
@@ -169,8 +170,9 @@ evidence sources. A controlled fixture makes the #680 operations succeed semanti
 request-boundary log reports REST and requires the result to remain GAP. Separate controls prove
 that successful client invocations with missing or ambiguous bzr events remain FAIL, while
 connection-style no-event failures and server/command errors also remain FAIL. The no-dispatch
-fixture proves only the dedicated dry-run path omits transport evidence. Unknown python-bugzilla
-backend classes and normalized values outside the closed vocabulary are rejected.
+fixture proves the dedicated dry-run path omits transport evidence and fails if that path emits a
+REST or XML-RPC boundary event. Unknown python-bugzilla backend classes and normalized values
+outside the closed vocabulary are rejected.
 
 ## Failure handling and cleanup
 
@@ -223,8 +225,10 @@ upstream image/dependency exposure accepted by ADR 0044, and implementing any ca
   tagged-comment live result and `minor_update: true` request shape fail independently; #680 stays
   GAP when semantics succeed over an observed REST request; bzr transport classification rejects
   missing or mixed request events; connection-style no-event failures and server/command errors
-  cannot become GAP; and the successful #672 dry-run produces no transport claim without exempting
-  a live client invocation. The adapter rejects an unknown python-bugzilla backend.
+  cannot become GAP; a malformed response after one valid transport event and a downstream
+  assertion failure after valid evidence remain FAIL; and the successful #672 dry-run produces no
+  transport claim while a boundary event on that path remains FAIL. The adapter rejects an unknown
+  python-bugzilla backend.
 - `make lint` validates semantic IDs, Bash syntax, ShellCheck, formatting, and Rust lints; it does
   not require host Python.
 - `make test` proves the Rust suite remains green.

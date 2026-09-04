@@ -23,7 +23,9 @@ client operation must have one or more events from exactly one transport, normal
 `XMLRPC`; no recognized event or events from both transports are infrastructure failures. A
 dedicated local-only wrapper runs the #672 `--dry-run` request-shape control without making a
 transport claim because that successful invocation deliberately performs no client operation.
-Requested CLI arguments are assertions only and never supply the observation.
+It requires no recognized request-boundary event; either event proves the no-dispatch assumption
+false and fails the test. Requested CLI arguments are assertions only and never supply the
+observation.
 
 The lifecycle phase keeps observation and infrastructure failures distinct from expected
 capability gaps. A successful client operation with missing or ambiguous evidence remains a test
@@ -38,7 +40,9 @@ validated one complete outcome: the recognized parser rejection; successful clie
 with required transport observations and structurally valid response evidence; or the dedicated
 successful no-dispatch dry-run with a structurally valid request payload. Semantic,
 request-shape, and valid-transport mismatches inside those outcomes remain gap evidence, while
-malformed evidence and harness failures do not.
+malformed evidence and harness failures do not. Eligibility is assigned only after the terminal
+classifier completes, so a later validation or assertion failure cannot inherit an earlier safe
+state.
 
 The python-bugzilla adapter will map exactly `_BackendREST` and `_BackendXMLRPC` to the same closed
 vocabulary. Missing or unknown backend classes fail closed. Lifecycle checks compare exact

@@ -255,9 +255,10 @@ finding was known before review.
   when a successful invocation's captured request-boundary events identify one class;
   `_transport(client)`, which returns the same closed values for the two pinned backend classes;
   lifecycle `*.transport` evidence copied from those results. `lifecycle_bzr_no_dispatch` owns only
-  the successful #672 dry-run control and writes no transport record. A probe-specific recognized
-  parser rejection requires exit 2 plus the exact unsupported option or subcommand diagnostic and
-  writes no record. A probe-specific terminal classifier sets `LIFECYCLE_GAP_ELIGIBLE` only after
+  the successful #672 dry-run control, writes no transport record, and fails if either recognized
+  boundary event appears. A probe-specific recognized parser rejection requires exit 2 plus the
+  exact unsupported option or subcommand diagnostic and writes no record. A probe-specific
+  terminal classifier sets `LIFECYCLE_GAP_ELIGIBLE` only after
   a recognized rejection, successful observed client operations with structurally valid response
   evidence, or the dedicated successful dry-run with a structurally valid request payload.
   `lifecycle_expect_gap` calls `expect_gap` only in that state. Observation defects, malformed
@@ -274,7 +275,12 @@ finding was known before review.
   probed option or subcommand, produce no transport record, and may remain an expected capability
   gap. Connection-style no-event failure and server/command-error controls must remain FAIL. The
   successful #672 dry-run must use the dedicated no-dispatch path and produce no transport claim;
-  a live operation with missing events must still fail.
+  a live operation with missing events and a boundary event on the no-dispatch path must still
+  fail. A malformed bzr result after a valid single-class observation and a downstream assertion
+  failure after otherwise valid evidence must each remain FAIL with no GAP increment. For each of
+  `LIFECYCLE_MALFORMED_BZR_RESULT`, `LIFECYCLE_DOWNSTREAM_ASSERTION_FAILED`, and
+  `LIFECYCLE_NO_DISPATCH_EVENT`, the fixture runs the phase in isolation and requires a positive
+  `FAIL_COUNT`, zero `GAP_COUNT`, and the target test ID in the rendered failure output.
 - Python backend normalization — Mode: focused-test. Give the adapter fixture concrete
   `_BackendREST` and `_BackendXMLRPC` backends plus an unknown backend case. Before implementation,
   the unknown class is emitted as transport; after implementation, the same focused command exits
@@ -285,8 +291,10 @@ finding was known before review.
 
 1. Add the semantic-success/observed-REST #680 control; missing/mixed successful-client controls;
    connection-style no-event and server/command-error controls; a recognized exit-2 parser-gap
-   control; the dedicated successful #672 dry-run no-dispatch control; exact closed-value
-   assertions; and unknown python-backend rejection to
+   control; `LIFECYCLE_MALFORMED_BZR_RESULT` to emit malformed response evidence after one REST
+   marker; `LIFECYCLE_DOWNSTREAM_ASSERTION_FAILED` to fail after otherwise valid evidence;
+   `LIFECYCLE_NO_DISPATCH_EVENT` to emit a REST marker from the successful #672 dry-run; the true
+   no-event dry-run control; exact closed-value assertions; and unknown python-backend rejection to
    `tests/functional/pybz/container-tests.sh`.
 2. Run `bash tests/functional/pybz/container-tests.sh`; expect non-zero because the current wrappers
    still self-assert bzr transport and the adapter still accepts unknown backend names.
@@ -304,7 +312,8 @@ finding was known before review.
    with structurally valid response evidence, or the dedicated successful dry-run with a
    structurally valid request payload. Route every marker through `lifecycle_expect_gap`, which
    refuses conversion outside that state. Every other non-zero outcome, malformed evidence,
-   harness failure, and every missing or mixed observation remains FAIL.
+   harness failure, and every missing or mixed observation remains FAIL. The no-dispatch wrapper
+   must also reject either recognized boundary event instead of silently discarding it.
 5. In `tests/functional/compare/bug-lifecycle.py`, map `_BackendREST` to `REST` and
    `_BackendXMLRPC` to `XMLRPC`; raise `AdapterError` for missing or unknown classes. Update the
    fake backend names and expected closed outputs in the focused fixture.
