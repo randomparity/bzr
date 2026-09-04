@@ -7,11 +7,11 @@ exposes python-bugzilla's library operations as JSON.
 
 Tech stack: Bash, jq, Python 3.14, python-bugzilla 3.3.0, Docker/Podman, Make.
 
-Expected implementation size: 1,760–1,850 changed lines (L) — derived from the existing
-1,709-line implementation/report delta plus the shared transport classifier, closed adapter
-normalization, and focused false-green controls. The operator-authorized 1,850-line ceiling
-applies to implementation changes; the specification, ADRs, and this plan are excluded from that
-count.
+Expected implementation size: 2,050–2,150 changed lines (L) — derived from the measured 2,097-line
+implementation/report delta containing the shared transport classifier, closed adapter
+normalization, and independently falsifiable false-green controls. The operator-authorized
+2,150-line ceiling applies to implementation changes; the specification, ADRs, and this plan are
+excluded from that count.
 
 ## Global constraints
 
