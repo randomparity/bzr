@@ -259,7 +259,46 @@ BZR_STDOUT=$(mktemp /tmp/bzr-func-stdout.XXXXXX)
 BZR_STDOUT_RAW=$(mktemp /tmp/bzr-func-stdout-raw.XXXXXX)
 BZR_STDERR=$(mktemp /tmp/bzr-func-stderr.XXXXXX)
 BZR_EXIT=0
+# Read by comparison phases after observe_bzr_transport returns.
+# shellcheck disable=SC2034
+BZR_TRANSPORT=""
 PYBZ_RUNTIME=""
+
+# Assigns public state read by sourced comparison phases.
+# shellcheck disable=SC2034
+observe_bzr_transport() {
+    local counts rest_count xmlrpc_count
+
+    BZR_TRANSPORT=""
+    if ! counts=$(awk '
+        BEGIN {
+            rest_re = "(^|[[:space:]])DEBUG[[:space:]]+bzr::client::transport: " \
+                "(strict )?API response([[:space:]]|$)"
+            xmlrpc_re = "(^|[[:space:]])DEBUG[[:space:]]+" \
+                "bzr::xmlrpc::protocol::client: XML-RPC call([[:space:]]|$)"
+        }
+        $0 ~ rest_re { rest += 1 }
+        $0 ~ xmlrpc_re { xmlrpc += 1 }
+        END { print rest + 0, xmlrpc + 0 }
+    ' "$BZR_STDERR"); then
+        printf 'could not read bzr transport observations\n' >&2
+        return 1
+    fi
+    read -r rest_count xmlrpc_count <<<"$counts"
+    case "$((rest_count > 0)):$((xmlrpc_count > 0))" in
+    1:0) BZR_TRANSPORT=REST ;;
+    0:1) BZR_TRANSPORT=XMLRPC ;;
+    0:0)
+        printf 'bzr transport observation is missing\n' >&2
+        return 1
+        ;;
+    *)
+        printf 'bzr transport observation is ambiguous (REST and XML-RPC)\n' >&2
+        return 1
+        ;;
+    esac
+    return 0
+}
 
 _cleanup_tmpfiles() {
     rm -f "$BZR_STDOUT" "$BZR_STDOUT_RAW" "$BZR_STDERR"
@@ -388,20 +427,28 @@ pybz_sidecar_stop() {
     return 0
 }
 
-run_pybz() {
+_run_pybz_command() {
+    local command="$1"
     local sidecar
+    shift
 
     if [[ -z $PYBZ_RUNTIME ]]; then
-        printf 'run_pybz: sidecar has not been started\n' >&2
+        printf '_run_pybz_command: sidecar has not been started\n' >&2
         return 2
     fi
     sidecar=$(pybz_sidecar_name) || return 1
     set +e
-    "$PYBZ_RUNTIME" exec "$sidecar" bugzilla "$@" >"$BZR_STDOUT_RAW" 2>"$BZR_STDERR"
+    "$PYBZ_RUNTIME" exec "$sidecar" "$command" "$@" >"$BZR_STDOUT_RAW" 2>"$BZR_STDERR"
     BZR_EXIT=$?
     set -e
     _project_envelope
     return 0
+}
+
+run_pybz() { _run_pybz_command bugzilla "$@"; }
+
+run_pybz_adapter() {
+    _run_pybz_command python /work/compare/bug-lifecycle.py "$@"
 }
 
 # ── Assertions ───────────────────────────────────────────────────────

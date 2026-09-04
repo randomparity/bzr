@@ -31,24 +31,41 @@ if [[ -z "$BZ_PORT" ]]; then
 fi
 BZ_URL="http://127.0.0.1:${BZ_PORT}"
 
+seed_server_saved_search() {
+    if [[ $# -ne 4 ]]; then
+        printf 'seed_server_saved_search: expected LOGIN NAME BUG_ID BUG_ID\n' >&2
+        return 2
+    fi
+
+    local login="$1" name="$2" first_id="$3" second_id="$4"
+    local runtime container helper query
+    if [[ -z $login || -z $name || ${#name} -gt 64 || $name == *$'\n'* ||
+        ! $first_id =~ ^[1-9][0-9]*$ || ! $second_id =~ ^[1-9][0-9]*$ ]]; then
+        printf 'seed_server_saved_search: invalid login, name, or bug ID\n' >&2
+        return 2
+    fi
+    runtime=$(container_runtime) || return 1
+    container=$(bugzilla_container_name) || return 1
+    helper="$SCRIPT_DIR/compare/seed-saved-search.pl"
+    query="bug_id=${first_id},${second_id}&bug_id_type=anyexact"
+    if [[ ! -r $helper ]]; then
+        printf 'seed_server_saved_search: helper is unreadable\n' >&2
+        return 1
+    fi
+    "$runtime" exec -i --workdir /var/www/html/bugzilla "$container" perl -I. - \
+        "$login" "$name" "$query" <"$helper"
+}
+
 if [[ ! -x "$BZR_BIN" ]]; then
     echo "ERROR: bzr comparison binary is not executable: $BZR_BIN" >&2
     exit 1
 fi
 
-FUNC_CONFIG_DIR=$(mktemp -d /tmp/bzr-compare-config.XXXXXX)
-COMPARE_EXCHANGE_DIR="$FUNC_CONFIG_DIR/compare"
-mkdir -p "$COMPARE_EXCHANGE_DIR"
-export XDG_CONFIG_HOME="$FUNC_CONFIG_DIR"
-export BZ_URL BZR_BIN COMPARE_EXCHANGE_DIR
-CURRENT_TEST_GROUP=""
-_compare_runtime="${_compare_runtime:-}"
-
 cleanup() {
     local status=$?
 
-    if [[ -n "$PYBZ_RUNTIME" ]]; then
-        if ! pybz_sidecar_stop "$_compare_runtime"; then
+    if [[ -n "${PYBZ_RUNTIME:-}" ]]; then
+        if ! pybz_sidecar_stop "${_compare_runtime:-}"; then
             [[ $status -ne 0 ]] || status=1
         fi
     fi
@@ -57,7 +74,29 @@ cleanup() {
     trap - EXIT
     exit "$status"
 }
+
+umask 077
+FUNC_CONFIG_DIR=$(mktemp -d /tmp/bzr-compare-config.XXXXXX)
 trap cleanup EXIT
+COMPARE_EXCHANGE_DIR="$FUNC_CONFIG_DIR/compare"
+mkdir -p "$COMPARE_EXCHANGE_DIR"
+COMPARE_ADMIN_EMAIL="admin@test.bzr"
+BZR_COMPARE_API_KEY="FuncTest0123456789abcdef0123456789abcdef"
+_compare_adapter="$SCRIPT_DIR/compare/bug-lifecycle.py"
+if [[ ! -r $_compare_adapter ]]; then
+    echo "ERROR: comparison adapter is missing or unreadable: $_compare_adapter" >&2
+    exit 1
+fi
+cp "$_compare_adapter" "$COMPARE_EXCHANGE_DIR/bug-lifecycle.py"
+chmod 600 "$COMPARE_EXCHANGE_DIR/bug-lifecycle.py"
+if [[ ! -r $COMPARE_EXCHANGE_DIR/bug-lifecycle.py ]]; then
+    echo "ERROR: comparison adapter staging failed" >&2
+    exit 1
+fi
+export XDG_CONFIG_HOME="$FUNC_CONFIG_DIR"
+export BZ_URL BZR_BIN COMPARE_EXCHANGE_DIR COMPARE_ADMIN_EMAIL BZR_COMPARE_API_KEY
+CURRENT_TEST_GROUP=""
+_compare_runtime="${_compare_runtime:-}"
 
 if [[ -z "$_compare_runtime" ]]; then
     _compare_runtime=$(container_runtime) || {
@@ -72,7 +111,8 @@ _compare_container=$(bugzilla_container_name) || {
 pybz_sidecar_start "$_compare_runtime" "$_compare_container"
 
 for _phase in \
-    00-products; do
+    00-products \
+    01-bug-lifecycle; do
     CURRENT_TEST_GROUP="$_phase"
     source "$SCRIPT_DIR/compare/${_phase}.sh"
     _render_test_result
