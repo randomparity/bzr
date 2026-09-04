@@ -273,14 +273,16 @@ finding was known before review.
   as GAP. Missing and mixed-event controls after successful client invocations must remain FAIL
   rather than being converted to GAP. A recognized unsupported command must exit 2, name its exact
   probed option or subcommand, produce no transport record, and may remain an expected capability
-  gap. Connection-style no-event failure and server/command-error controls must remain FAIL. The
-  successful #672 dry-run must use the dedicated no-dispatch path and produce no transport claim;
-  a live operation with missing events and a boundary event on the no-dispatch path must still
+  gap. Connection-style no-event failure, server/command error, and exit 2 with a non-matching clap
+  diagnostic must remain FAIL. The successful #672 dry-run must use the dedicated no-dispatch path
+  and produce no transport claim; a live operation with missing events, a boundary event on the
+  no-dispatch path, and malformed or structurally invalid no-dispatch request evidence must still
   fail. A malformed bzr result after a valid single-class observation and a downstream assertion
   failure after otherwise valid evidence must each remain FAIL with no GAP increment. For each of
-  `LIFECYCLE_MALFORMED_BZR_RESULT`, `LIFECYCLE_DOWNSTREAM_ASSERTION_FAILED`, and
-  `LIFECYCLE_NO_DISPATCH_EVENT`, the fixture runs the phase in isolation and requires a positive
-  `FAIL_COUNT`, zero `GAP_COUNT`, and the target test ID in the rendered failure output.
+  `LIFECYCLE_WRONG_PARSER_DIAGNOSTIC`, `LIFECYCLE_MALFORMED_BZR_RESULT`,
+  `LIFECYCLE_DOWNSTREAM_ASSERTION_FAILED`, `LIFECYCLE_NO_DISPATCH_EVENT`, and
+  `LIFECYCLE_INVALID_NO_DISPATCH_RESULT`, the fixture runs the phase in isolation and requires a
+  positive `FAIL_COUNT`, zero `GAP_COUNT`, and the target test ID in rendered failure output.
 - Python backend normalization — Mode: focused-test. Give the adapter fixture concrete
   `_BackendREST` and `_BackendXMLRPC` backends plus an unknown backend case. Before implementation,
   the unknown class is emitted as transport; after implementation, the same focused command exits
@@ -291,10 +293,13 @@ finding was known before review.
 
 1. Add the semantic-success/observed-REST #680 control; missing/mixed successful-client controls;
    connection-style no-event and server/command-error controls; a recognized exit-2 parser-gap
-   control; `LIFECYCLE_MALFORMED_BZR_RESULT` to emit malformed response evidence after one REST
-   marker; `LIFECYCLE_DOWNSTREAM_ASSERTION_FAILED` to fail after otherwise valid evidence;
-   `LIFECYCLE_NO_DISPATCH_EVENT` to emit a REST marker from the successful #672 dry-run; the true
-   no-event dry-run control; exact closed-value assertions; and unknown python-backend rejection to
+   control; `LIFECYCLE_WRONG_PARSER_DIAGNOSTIC` to pair exit 2 with a different option diagnostic;
+   `LIFECYCLE_MALFORMED_BZR_RESULT` to emit malformed response evidence after one REST marker;
+   `LIFECYCLE_DOWNSTREAM_ASSERTION_FAILED` to fail after otherwise valid evidence;
+   `LIFECYCLE_NO_DISPATCH_EVENT` to emit a REST marker from the successful #672 dry-run;
+   `LIFECYCLE_INVALID_NO_DISPATCH_RESULT` to return successful, event-free, structurally invalid
+   dry-run output; the true no-event dry-run control; exact closed-value assertions; and unknown
+   python-backend rejection to
    `tests/functional/pybz/container-tests.sh`.
 2. Run `bash tests/functional/pybz/container-tests.sh`; expect non-zero because the current wrappers
    still self-assert bzr transport and the adapter still accepts unknown backend names.
