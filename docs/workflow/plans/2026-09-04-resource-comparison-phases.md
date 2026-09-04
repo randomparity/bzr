@@ -88,9 +88,10 @@ an individually hard-gated check.
 
 ### Interfaces
 
-- Creates `tests/functional/compare/resource-lib.sh` with fixed adapter request/capture helpers,
-  `compare_resource_bzr`, observed transport validation, positive-ID extraction, canonical JSON
-  equality, and gap eligibility reset/allow/apply functions.
+- Extends `tests/functional/lib.sh` with fixed adapter request/capture helpers, observed transport
+  validation, positive-ID extraction, canonical JSON equality, and gap eligibility
+  reset/allow/apply functions. A separate `compare/*.sh` helper is forbidden because every shell
+  file there is a comparison phase under the functional-ID guardrail.
 - Creates `tests/functional/compare/02-comments.sh` with stable public, private REST, and private
   XML-RPC comment IDs.
 - Modifies `tests/functional/run-compare.sh` to source the shared helper before phases and add

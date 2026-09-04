@@ -83,10 +83,11 @@ Transport selection is a closed adapter field: absent means normal python-bugzil
 `REST` sets `force_rest`; `XMLRPC` sets `force_xmlrpc`; any other value fails before connecting.
 Operations that historically require a fixed backend retain and validate that backend.
 
-`tests/functional/compare/resource-lib.sh` provides phase-local mechanics: private request-file
+The existing `tests/functional/lib.sh` provides the shared phase mechanics: private request-file
 creation, the fixed adapter invocation, capture preservation, bzr debug-event transport
 observation, positive-ID validation, canonical JSON comparison, and fail-closed gap eligibility.
-It does not own resource fixtures or projections.
+It does not own resource fixtures or projections. Keeping these functions in the established
+library also preserves the invariant that every `tests/functional/compare/*.sh` file is a phase.
 
 ## Comparison coverage
 
