@@ -137,7 +137,7 @@ if attachment_upload_pair public false REST &&
         resource_equal public-comment "$COMPARE_EXCHANGE_DIR/public.bzr.comment.json" \
             "$COMPARE_EXCHANGE_DIR/public.pybz.comment.json"; then
         test_pass
-    else
+    elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
         test_fail "attachment comment persisted outcome differs"
     fi
 fi
@@ -203,7 +203,7 @@ if [[ -n $ATTACHMENT_BZR_ID && -n $ATTACHMENT_PYBZ_ID ]] &&
         resource_equal attachment-flag "$COMPARE_EXCHANGE_DIR/flag.bzr.json" \
             "$COMPARE_EXCHANGE_DIR/flag.pybz.json"; then
         test_pass
-    else
+    elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
         test_fail "attachment flag readback differs"
     fi
 fi

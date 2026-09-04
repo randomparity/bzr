@@ -1928,9 +1928,14 @@ run_attachment_phase_fixture() (
                 if [[ ${ATTACHMENT_FLAG_FAULT:-0} -eq 1 ]]; then
                     result="{\"attachments\":{\"$id\":{\"id\":$id,\"flags\":[]}}}"
                 else
+                    local requestee=null
+                    [[ ${ATTACHMENT_FLAG_EQUALITY_FAULT:-0} -eq 1 ]] &&
+                        requestee='"other@test.bzr"'
                     result=$(jq -cn --arg id "$id" \
+                        --argjson requestee "$requestee" \
                         '{attachments:{($id):{id:($id|tonumber),
-                          flags:[{name:"bzr_compare_attachment_review",status:"?"}]}}}')
+                          flags:[{name:"bzr_compare_attachment_review",status:"?",
+                            requestee:$requestee}]}}}')
                 fi
             else
                 result="{\"attachments\":{\"$id\":{\"id\":$id,\"is_private\":true}}}"
@@ -1969,13 +1974,14 @@ run_attachment_phase_fixture() (
         BZR_EXIT=2
     }
     run_attachment_control() {
-        local flag="$1" slug="$2"
+        local flag="$1" slug="$2" expected_failures="${3:-minimum}"
         reset_attachment_fixture
         printf -v "$flag" 1
         source "$phase" >"$fixture_output"
         _render_test_result >>"$fixture_output"
         unset "$flag"
         if [[ $FAIL_COUNT -eq 0 ]] ||
+            [[ $expected_failures != minimum && $FAIL_COUNT -ne $expected_failures ]] ||
             ! grep -Fq "[compare/03-attachments/${slug}]" "$fixture_output"; then
             printf 'attachment control %s unexpectedly passed\n' "$flag" >&2
             return 1
@@ -2014,6 +2020,7 @@ run_attachment_phase_fixture() (
     run_attachment_control ATTACHMENT_COMMENT_FAULT upload-metadata-comment
     run_attachment_control ATTACHMENT_DIGEST_FAULT download-content
     run_attachment_control ATTACHMENT_FLAG_FAULT attachment-flags
+    run_attachment_control ATTACHMENT_FLAG_EQUALITY_FAULT attachment-flags 1
     run_attachment_control ATTACHMENT_PRIVACY_FAULT private-attachments-rest
     run_attachment_control ATTACHMENT_TRANSPORT_FAULT private-attachments-xmlrpc
     run_attachment_control ATTACHMENT_GAP_WRONG_DIAGNOSTIC multi-bug-upload
