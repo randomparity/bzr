@@ -5,8 +5,9 @@ use crate::cli::bug::FieldArgs;
 pub const LONG_ABOUT: &str = r#"View one or more bugs by ID or alias.
 
 Single-ID: prints the bug's full record (summary, status,
-assignee, priority, CC list, depends-on, blocks, and the most
-recent comments) as a formatted detail block or JSON object.
+assignee, priority, CC list, depends-on, and blocks) as a
+formatted detail block or JSON object. Comments are a separate
+resource, not included here; use `bzr comment list <id>`.
 
 Multi-ID: emits one detail block per bug separated by a
 horizontal divider, in argument order. Aliases and numeric IDs
@@ -48,7 +49,7 @@ Examples:
   bzr bug view my-alias --fields id,summary,status
 
 See bzr-bug-history(1) for the change log and
-bzr-comment-list(1) for the full comment thread."#;
+bzr-comment-list(1) for the comment thread."#;
 
 /// Arguments for `bug view`.
 #[derive(Args, Debug)]

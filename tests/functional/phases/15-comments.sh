@@ -23,6 +23,14 @@ if [[ -n "$BUG1" ]]; then
     if assert_success; then test_pass; fi
 else test_skip "no BUG1"; fi
 
+test_begin "comment-list-help-matches-output" "comment list --help matches write_comments output"
+run_bzr comment list --help
+if assert_success &&
+    assert_stdout_contains "number, author, creation time, and" &&
+    assert_stdout_not_contains "tags"; then
+    test_pass
+fi
+
 test_begin "comment-list" "comment list"
 if [[ -n "$BUG1" ]]; then
     run_bzr comment list "$BUG1"
