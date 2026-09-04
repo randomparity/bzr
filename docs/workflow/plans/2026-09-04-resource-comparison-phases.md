@@ -91,7 +91,8 @@ an individually hard-gated check.
 - Extends `tests/functional/lib.sh` with fixed adapter request/capture helpers, observed transport
   validation, positive-ID extraction, canonical JSON equality, and gap eligibility
   reset/allow/apply functions. A separate `compare/*.sh` helper is forbidden because every shell
-  file there is a comparison phase under the functional-ID guardrail.
+  file there is a comparison phase under the functional-ID guardrail. Resource initialization
+  creates a temporary named bzr server with query-parameter API-key auth to match python-bugzilla.
 - Creates `tests/functional/compare/02-comments.sh` with stable `public-comments`,
   `private-comments-rest`, and `private-comments-xmlrpc` IDs.
 - Modifies `tests/functional/run-compare.sh` to initialize shared resource state and add
@@ -105,23 +106,22 @@ an individually hard-gated check.
   emit REST, XMLRPC, missing, and mixed debug events; first observe the resource helper/phase is
   absent, then expect the fixture to accept exactly one observed class and reject the rest.
 - Comment persisted-state and private visibility — Mode: focused-test. Simulate paired comments
-  and both transports, including Bugzilla 5.0's API-key REST filtering. Before comparing the empty
-  private REST projections, require independent XML-RPC reads to prove both records exist with
-  `is_private=true`; the XML-RPC arm requires the records directly. First observe missing IDs,
-  then expect all three IDs to pass. Remove the private record, flip `is_private`, unexpectedly
-  expose it through REST, or falsify a transport; each controlled run must exit non-zero and name
-  the ID.
+  and both transports with matching query-parameter auth. First observe missing IDs, then expect
+  all three IDs to pass with the controlled records present directly. Remove the private record,
+  flip `is_private`, omit bzr's matching auth configuration, or falsify a transport; each
+  controlled run must exit non-zero and name the ID. A failed named-server setup must abort before
+  any resource test.
 
 ### Steps
 
 1. Add focused helper/comment fixtures, including missing/mixed transport and private-record faults;
    run them and observe the expected missing-phase failure.
 2. Implement the shared private JSON request files, adapter invocation, bzr capture, observed
-   transport, canonical comparison, and fail-closed gap state.
+   transport, canonical comparison, fail-closed gap state, and temporary named bzr server using
+   query-parameter auth to match python-bugzilla.
 3. Implement paired public comments and private REST/XMLRPC arms with unique bugs and positive
    controls; compare normalized text/privacy and exact read transports. Validate bzr writes on
-   their actual REST path. For the private REST arm, compare equal filtering only after XML-RPC
-   proves both private records persist.
+   their actual REST path and fail if either read filters the controlled private record.
 4. Add `02-comments` to the runner and run the focused fixture; expect exit 0.
 5. Enable each fault control, observe non-zero with the stable ID, remove the fault, and rerun
    green.

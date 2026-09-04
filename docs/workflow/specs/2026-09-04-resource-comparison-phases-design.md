@@ -34,9 +34,12 @@ generalizes the fixed library adapter used by the phases in this change.
 
 The runner stages one general python-bugzilla adapter in its private exchange directory before
 starting the sidecar. It already sources `tests/functional/lib.sh`; after the sidecar starts, it
-initializes that library's shared resource-comparison state before running four ordered phases:
-comments, attachments, users/groups, and products/components. Resource families that share state
-remain together: group tests mutate a user membership, and component tests create inside a product.
+initializes that library's shared resource-comparison state and a temporary named bzr server before
+running four ordered phases: comments, attachments, users/groups, and products/components.
+The server explicitly uses query-parameter API-key auth to match python-bugzilla; Bugzilla 5.0
+filters private REST results under bzr's otherwise-preferred header auth, which would compare
+different authentication semantics. Resource families that share state remain together: group
+tests mutate a user membership, and component tests create inside a product.
 
 Before the attachment phase, the runner idempotently seeds one comparison-owned attachment flag
 type and its unrestricted inclusion row through the existing `run_bugzilla_sql_file PATH` helper.
@@ -97,12 +100,11 @@ Create paired bugs with the same normalized description. Add the same public com
 client, read both through `get_comments`/`bzr comment list`, and compare normalized text and
 privacy.
 Then add private comments and read each fixture through forced REST and forced XML-RPC for both
-clients. On Bugzilla 5.0, API-key REST reads filter private comments for both clients; that arm
-must prove each controlled comment exists with `is_private=true` through an independent XML-RPC
-read before comparing the two empty REST projections. The XML-RPC arm must contain the controlled
-private text directly. A missing persistence proof, unexpected REST exposure, or unequal result
-fails rather than silently comparing two empty results. Because bzr comment creation is REST-only,
-its write is validated as REST while the case's selected transport governs the read.
+clients. Both clients use query-parameter API-key auth, so each transport arm must contain the
+controlled private text with `is_private=true`; missing or filtered records fail. A focused control
+proves that omitting the matching bzr auth configuration makes the private REST case fail rather
+than silently comparing different auth behavior. Because bzr comment creation is REST-only, its
+write is validated as REST while the case's selected transport governs the read.
 
 Stable IDs:
 
