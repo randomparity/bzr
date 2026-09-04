@@ -231,6 +231,35 @@ fn parse_string_with_cdata_section() {
     );
 }
 
+// Entity references (named, decimal, and hex character references) inside a
+// typed <string> must be resolved. quick-xml 0.42 emits them as separate
+#[test]
+fn parse_string_unescapes_entities() {
+    let xml = r"<methodResponse><params><param><value>
+        <string>Tom &amp; Jerry &lt;laugh&gt; &#34; &#x41;</string>
+    </value></param></params></methodResponse>";
+    let result = parse_response(xml).unwrap();
+    assert_eq!(result.as_str().unwrap(), r#"Tom & Jerry <laugh> " A"#);
+}
+
+// Bare text inside <value> (no type tag) must resolve entity references too.
+#[test]
+fn parse_bare_text_unescapes_entities() {
+    let xml = r"<methodResponse><params><param><value>R&amp;D &lt;ok&gt;</value></param></params></methodResponse>";
+    let result = parse_response(xml).unwrap();
+    assert_eq!(result.as_str().unwrap(), "R&D <ok>");
+}
+
+// A bare <value> made up entirely of an entity reference must not be
+// mistaken for the empty-value case.
+#[test]
+fn parse_bare_entity_only_value_is_not_empty() {
+    let xml =
+        r"<methodResponse><params><param><value>&amp;</value></param></params></methodResponse>";
+    let result = parse_response(xml).unwrap();
+    assert_eq!(result.as_str().unwrap(), "&");
+}
+
 // Empty `<value></value>` is treated as an empty string.
 #[test]
 fn parse_empty_value_returns_empty_string() {

@@ -54,7 +54,7 @@ serde_json = { version = "=1.0.151", features = ["preserve_order"] }
 tokio = { version = "=1.53.1", features = ["macros", "rt", "sync", "time"] }
 toml = "=1.1.4"
 dirs = "=6.0.0"
-open = "=5.4.1"
+open = "=5.4.2"
 tabled = { version = "=0.21.0", default-features = false, features = ["std"] }
 thiserror = "=2.0.20"
 colored = "=3.1.1"
@@ -62,7 +62,7 @@ tracing = "=0.1.44"
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
 percent-encoding = "=2.3.2"
 url = "=2.5.8"
-quick-xml = "=0.41.0"
+quick-xml = "=0.42.0"
 # Optional: used only by test-helpers feature
 wiremock = { version = "=0.6.5", optional = true }
 tempfile = { version = "=3.27.0", optional = true }
@@ -78,7 +78,7 @@ default-features = false
 apple-native-keyring-store = { version = "=1.0.2", features = ["keychain"], optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies.dbus-secret-service-keyring-store]
-version = "=1.0.0"
+version = "=1.0.1"
 features = ["crypto-rust"]
 optional = true
 
