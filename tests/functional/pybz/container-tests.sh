@@ -1785,6 +1785,11 @@ run_attachment_phase_fixture() (
             test_fail "controlled attachment transport failure"
             return 1
         fi
+        if [[ ${ATTACHMENT_DOWNLOAD_COMMAND_FAILURE:-0} -eq 1 &&
+            $name == public-bzr-download ]]; then
+            test_fail "controlled attachment download command failure"
+            return 1
+        fi
         case $command in
         "bug create "*)
             attachment_fixture_write_bzr "$name" "{\"id\":$next_bug}"
@@ -2013,6 +2018,17 @@ run_attachment_phase_fixture() (
     run_attachment_control ATTACHMENT_TRANSPORT_FAULT private-attachments-xmlrpc
     run_attachment_control ATTACHMENT_GAP_WRONG_DIAGNOSTIC multi-bug-upload
     run_attachment_control ATTACHMENT_GAP_STALE multi-bug-upload
+    reset_attachment_fixture
+    ATTACHMENT_DOWNLOAD_COMMAND_FAILURE=1
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    unset ATTACHMENT_DOWNLOAD_COMMAND_FAILURE
+    assert_equals 1 "$FAIL_COUNT" "attachment download command failure count"
+    if ! grep -Fq '[compare/03-attachments/download-content]' "$fixture_output"; then
+        printf 'attachment download command failure omitted its stable ID\n' >&2
+        return 1
+    fi
+    printf 'controlled red: attachment download command failure counted once\n'
     reset_attachment_fixture
     ATTACHMENT_GAP_OWNER_FAULT=1
     source "$phase" >"$fixture_output"

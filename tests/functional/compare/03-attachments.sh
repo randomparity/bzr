@@ -169,7 +169,7 @@ if [[ -n $ATTACHMENT_BZR_ID && -n $ATTACHMENT_PYBZ_ID ]] &&
     else
         test_fail "single or per-bug attachment content digest differs"
     fi
-else
+elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail "public attachment precondition or download failed"
 fi
 
