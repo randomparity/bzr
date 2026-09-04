@@ -139,9 +139,11 @@ an individually hard-gated check.
   `upload-metadata-comment`, `download-content`, `attachment-flags`,
   `private-attachments-rest`, `private-attachments-xmlrpc`, `multi-bug-upload`, and
   `ignore-obsolete`; only the final two map to #674.
-- Modifies `tests/functional/run-compare.sh` to add `03-attachments` and an idempotent
-  `seed_comparison_attachment_flag_type` prerequisite. The function writes a private temporary SQL
-  file containing fixed `flagtypes`/`flaginclusions` rows for `bzr_compare_attachment_review`,
+- Extends `tests/functional/lib.sh` with an idempotent
+  `seed_comparison_attachment_flag_type` prerequisite and modifies
+  `tests/functional/run-compare.sh` to call it before `03-attachments`. The function writes a
+  private temporary SQL file containing fixed `flagtypes`/`flaginclusions` rows for
+  `bzr_compare_attachment_review`,
   executes it through existing `run_bugzilla_sql_file PATH`, verifies the fixed row, and removes
   the file on every return.
 - Modifies `tests/functional/pybz/container-tests.sh` for attachment fixtures, digest comparison,
