@@ -36,11 +36,25 @@ if [[ ! -x "$BZR_BIN" ]]; then
     exit 1
 fi
 
+umask 077
 FUNC_CONFIG_DIR=$(mktemp -d /tmp/bzr-compare-config.XXXXXX)
 COMPARE_EXCHANGE_DIR="$FUNC_CONFIG_DIR/compare"
 mkdir -p "$COMPARE_EXCHANGE_DIR"
+COMPARE_ADMIN_EMAIL="admin@test.bzr"
+BZR_COMPARE_API_KEY="FuncTest0123456789abcdef0123456789abcdef"
+_compare_adapter="$SCRIPT_DIR/compare/bug-lifecycle.py"
+if [[ ! -r $_compare_adapter ]]; then
+    echo "ERROR: comparison adapter is missing or unreadable: $_compare_adapter" >&2
+    exit 1
+fi
+cp "$_compare_adapter" "$COMPARE_EXCHANGE_DIR/bug-lifecycle.py"
+chmod 600 "$COMPARE_EXCHANGE_DIR/bug-lifecycle.py"
+if [[ ! -r $COMPARE_EXCHANGE_DIR/bug-lifecycle.py ]]; then
+    echo "ERROR: comparison adapter staging failed" >&2
+    exit 1
+fi
 export XDG_CONFIG_HOME="$FUNC_CONFIG_DIR"
-export BZ_URL BZR_BIN COMPARE_EXCHANGE_DIR
+export BZ_URL BZR_BIN COMPARE_EXCHANGE_DIR COMPARE_ADMIN_EMAIL BZR_COMPARE_API_KEY
 CURRENT_TEST_GROUP=""
 _compare_runtime="${_compare_runtime:-}"
 
@@ -72,7 +86,8 @@ _compare_container=$(bugzilla_container_name) || {
 pybz_sidecar_start "$_compare_runtime" "$_compare_container"
 
 for _phase in \
-    00-products; do
+    00-products \
+    01-bug-lifecycle; do
     CURRENT_TEST_GROUP="$_phase"
     source "$SCRIPT_DIR/compare/${_phase}.sh"
     _render_test_result

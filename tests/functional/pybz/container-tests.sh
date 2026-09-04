@@ -1,5 +1,7 @@
 #!/bin/bash
 # Focused fixtures for the python-bugzilla comparison sidecar.
+# The sourced phase calls fixture functions dynamically; wrapper output is captured in a subshell.
+# shellcheck disable=SC1090,SC2030,SC2031,SC2034,SC2329
 set -euo pipefail
 
 PYBZ_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -150,6 +152,126 @@ run_product_normalization_fixture() (
         "normalized bzr product names"
     assert_equals $'Alpha\nBeta' "$(<"$COMPARE_EXCHANGE_DIR/pybz-product-names")" \
         "normalized python-bugzilla product names"
+)
+
+run_sidecar_wrapper_fixture() (
+    local invoked
+    invoked=$(mktemp)
+    trap 'rm -f "$invoked"' EXIT
+    BZ_VERSION=bz50 PYBZ_RUNTIME=fake_wrapper_runtime
+    fake_wrapper_runtime() {
+        printf '%s\n' "${*:3}" >"$invoked"
+        printf '{"schema_version":"3.0.0","data":{"fixed":true}}\n'
+        printf 'fixed stderr\n' >&2
+        [[ $3 == bugzilla ]] && return 17
+        return 19
+    }
+
+    run_pybz info
+    assert_equals 'bugzilla info' "$(<"$invoked")" "fixed CLI command"
+    assert_equals $'{\n  "fixed": true\n}' "$(<"$BZR_STDOUT")" "CLI projected stdout"
+    assert_equals '{"schema_version":"3.0.0","data":{"fixed":true}}' \
+        "$(<"$BZR_STDOUT_RAW")" "CLI raw stdout"
+    assert_equals 'fixed stderr' "$(<"$BZR_STDERR")" "CLI stderr"
+    assert_equals 17 "$BZR_EXIT" "CLI exit"
+
+    run_pybz_adapter view /work/compare/in.json /work/compare/out.json
+    assert_equals \
+        'python /work/compare/bug-lifecycle.py view /work/compare/in.json /work/compare/out.json' \
+        "$(<"$invoked")" "fixed adapter command"
+    assert_equals $'{\n  "fixed": true\n}' "$(<"$BZR_STDOUT")" "adapter projected stdout"
+    assert_equals '{"schema_version":"3.0.0","data":{"fixed":true}}' \
+        "$(<"$BZR_STDOUT_RAW")" "adapter raw stdout"
+    assert_equals 'fixed stderr' "$(<"$BZR_STDERR")" "adapter stderr"
+    assert_equals 19 "$BZR_EXIT" "adapter exit"
+)
+
+run_lifecycle_phase_fixture() (
+    local phase="$PYBZ_DIR/../compare/01-bug-lifecycle.sh"
+    local fixture_output
+    COMPARE_EXCHANGE_DIR=$(mktemp -d)
+    fixture_output=$(mktemp)
+    trap 'rm -rf "$COMPARE_EXCHANGE_DIR"; rm -f "$fixture_output"' EXIT
+    if [[ ! -r $phase ]]; then
+        printf 'missing lifecycle phase IDs: compare/01-bug-lifecycle/{create,query,update,view,history}\n' >&2
+        return 1
+    fi
+
+    umask 077
+    PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
+    TEST_ID_PREFIX=compare CURRENT_TEST_GROUP=01-bug-lifecycle BZ_VERSION=bz50
+    BZ_URL=http://127.0.0.1 BZR_COMPARE_API_KEY=fixture-secret
+    COMPARE_ADMIN_EMAIL=admin@test.bzr PYBZ_RUNTIME=fake_lifecycle_runtime
+
+    fixture_bug() {
+        local id="$1" summary="$2"
+        jq -cn --argjson id "$id" --arg summary "$summary" \
+            '{id:$id,product:"TestProduct",component:"TestComponent",version:"unspecified",
+              summary:$summary,op_sys:"Linux",platform:"PC",severity:"normal",priority:"Normal",
+              status:"NEW",resolution:"",url:"https://example.test/updated",whiteboard:"updated",
+              cc:[],keywords:[]}'
+    }
+    run_bzr() {
+        local args=" $* " id=41 summary="$LIFECYCLE_BZR_SUMMARY"
+        [[ $args == *" 42 "* ]] && id=42 && summary="$LIFECYCLE_PYBZ_SUMMARY"
+        if [[ ${LIFECYCLE_UPDATED:-0} -eq 1 ]]; then summary="$LIFECYCLE_UPDATED_SUMMARY"; fi
+        case "$args" in
+        *" bug create "*) printf '{"id":41}\n' >"$BZR_STDOUT" ;;
+        *" bug list "*) fixture_bug 41 "$LIFECYCLE_BZR_SUMMARY" | jq -s . >"$BZR_STDOUT" ;;
+        *" bug update "*) LIFECYCLE_UPDATED=1; printf '{}\n' >"$BZR_STDOUT" ;;
+        *" bug view "*) fixture_bug "$id" "$summary" >"$BZR_STDOUT" ;;
+        *" comment list "*) printf '[{"count":0,"text":"lifecycle description"}]\n' >"$BZR_STDOUT" ;;
+        *" bug history "*) jq -cn --arg old "$LIFECYCLE_BZR_SUMMARY" --arg near "$LIFECYCLE_STEM [bzr] extra" \
+            '[{field:"summary",old_value:$old,new_value:"updated"},{field:"summary",old_value:$near,new_value:"preserved"},{field:"url",old_value:"",new_value:"https://example.test/updated"}]' >"$BZR_STDOUT" ;;
+        *) return 2 ;;
+        esac
+        cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"; : >"$BZR_STDERR"; BZR_EXIT=0
+    }
+    fake_lifecycle_runtime() {
+        local operation="$5" output="$COMPARE_EXCHANGE_DIR/${7##*/}" result
+        case "$operation" in
+        create) result='{"id":42}' ;;
+        query) result=$(fixture_bug 42 "$LIFECYCLE_PYBZ_SUMMARY" | jq -s .) ;;
+        update) LIFECYCLE_UPDATED=1; result='{}' ;;
+        view)
+            result=$(fixture_bug 42 "$LIFECYCLE_UPDATED_SUMMARY")
+            [[ ${PYBZ_LIFECYCLE_MISMATCH:-0} -eq 0 ]] || result=$(jq '.priority="Wrong"' <<<"$result")
+            ;;
+        history) result=$(jq -cn --arg old "$LIFECYCLE_PYBZ_SUMMARY" --arg near "$LIFECYCLE_STEM [bzr] extra" \
+            '{bugs:[{history:[{changes:[{field_name:"summary",removed:$old,added:"updated"},{field_name:"summary",removed:$near,added:"preserved"},{field_name:"url",removed:"",added:"https://example.test/updated"}]}]}]}') ;;
+        *) return 2 ;;
+        esac
+        jq -cn --argjson result "$result" '{transport:"FixtureREST",result:$result}' >"$output"
+        return 0
+    }
+
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    if [[ $FAIL_COUNT -ne 0 ]]; then cat "$fixture_output" >&2; fi
+    assert_equals 5 "$PASS_COUNT" "lifecycle pass count"
+    assert_equals 0 "$FAIL_COUNT" "lifecycle fail count"
+    for slug in create query update view history; do
+        grep -Fq "compare/01-bug-lifecycle/$slug" "$fixture_output"
+    done
+    assert_equals \
+        '[{"field":"summary","old_value":"'"$LIFECYCLE_STEM"'","new_value":"updated"},{"field":"summary","old_value":"'"$LIFECYCLE_STEM"' [bzr] extra","new_value":"preserved"},{"field":"url","old_value":"","new_value":"https://example.test/updated"}]' \
+        "$(jq -c . "$COMPARE_EXCHANGE_DIR/history.bzr.normalized.json")" \
+        "exact-only ordered history normalization"
+
+    PYBZ_LIFECYCLE_MISMATCH=1
+    PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
+    SEEN_TEST_IDS=$'\n' TEST_RESULT_PENDING=0 LIFECYCLE_UPDATED=0
+    source "$phase" >>"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    if test_summary >>"$fixture_output"; then
+        printf 'lifecycle mismatch unexpectedly passed\n' >&2
+        return 1
+    fi
+    if ! grep -Fq 'compare/01-bug-lifecycle/view' "$fixture_output"; then
+        printf 'lifecycle mismatch did not name the view capability\n' >&2
+        return 1
+    fi
+    unset PYBZ_LIFECYCLE_MISMATCH
 )
 
 run_sidecar_stop_failure_fixture() (
@@ -467,5 +589,7 @@ run_container_fixture() {
 run_expected_gap_fixture
 run_summary_fixture
 run_product_normalization_fixture
+run_sidecar_wrapper_fixture
+run_lifecycle_phase_fixture
 run_sidecar_stop_failure_fixture
 run_container_fixture

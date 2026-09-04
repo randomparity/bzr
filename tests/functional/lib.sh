@@ -388,20 +388,28 @@ pybz_sidecar_stop() {
     return 0
 }
 
-run_pybz() {
+_run_pybz_command() {
+    local command="$1"
     local sidecar
+    shift
 
     if [[ -z $PYBZ_RUNTIME ]]; then
-        printf 'run_pybz: sidecar has not been started\n' >&2
+        printf '_run_pybz_command: sidecar has not been started\n' >&2
         return 2
     fi
     sidecar=$(pybz_sidecar_name) || return 1
     set +e
-    "$PYBZ_RUNTIME" exec "$sidecar" bugzilla "$@" >"$BZR_STDOUT_RAW" 2>"$BZR_STDERR"
+    "$PYBZ_RUNTIME" exec "$sidecar" "$command" "$@" >"$BZR_STDOUT_RAW" 2>"$BZR_STDERR"
     BZR_EXIT=$?
     set -e
     _project_envelope
     return 0
+}
+
+run_pybz() { _run_pybz_command bugzilla "$@"; }
+
+run_pybz_adapter() {
+    _run_pybz_command python /work/compare/bug-lifecycle.py "$@"
 }
 
 # ── Assertions ───────────────────────────────────────────────────────
