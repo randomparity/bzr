@@ -885,6 +885,22 @@ run_parity_report_fixture() {
         '| Comment tags and minor update | `bzr bug update --comment-tag --minor-update` | expected gap (#672) | `compare/01-bug-lifecycle/update-options` |'
         '| Whiteboard match types | `bzr bug list --status-whiteboard-type` | expected gap (#679) | `compare/01-bug-lifecycle/query-match-types` |'
         '| Personal bug tags | `bzr bug tag`, `bzr bug list --tag` | expected gap (#680) | `compare/01-bug-lifecycle/bug-tags` |'
+        '| Public comments | `bzr comment add`, `bzr comment list` | parity | `compare/02-comments/public-comments` |'
+        '| Private comments over REST | `bzr comment add --private`, `bzr comment list` | parity | `compare/02-comments/private-comments-rest` |'
+        '| Private comments over XML-RPC | `bzr comment add --private`, `bzr comment list` | parity | `compare/02-comments/private-comments-xmlrpc` |'
+        '| Attachment upload metadata and comment | `bzr attachment upload`, `bzr attachment list`, `bzr comment list` | parity | `compare/03-attachments/upload-metadata-comment` |'
+        '| Attachment download content | `bzr attachment download` | parity | `compare/03-attachments/download-content` |'
+        '| Attachment flags | `bzr attachment update --flag` | parity | `compare/03-attachments/attachment-flags` |'
+        '| Private attachments over REST | `bzr attachment list/view/download` | parity | `compare/03-attachments/private-attachments-rest` |'
+        '| Private attachments over XML-RPC | `bzr attachment list/view/download` | parity | `compare/03-attachments/private-attachments-xmlrpc` |'
+        '| Multi-bug attachment upload | `bzr attachment upload` | expected gap (#674) | `compare/03-attachments/multi-bug-upload` |'
+        '| Ignore obsolete attachments | `bzr attachment download --bug --ignore-obsolete` | expected gap (#674) | `compare/03-attachments/ignore-obsolete` |'
+        '| User create, get, and search | `bzr user create`, `bzr user search` | parity | `compare/04-users-groups/user-create-get-search` |'
+        '| Group get and list | `bzr group view` | parity | `compare/04-users-groups/group-get-and-list` |'
+        '| Membership add and remove | `bzr group add-user/remove-user`, `bzr user search` | parity | `compare/04-users-groups/membership-add-remove` |'
+        '| Product catalogues | `bzr product list --type` | parity | `compare/05-products-components/product-catalogues` |'
+        '| Component create | `bzr component create`, `bzr component view` | parity | `compare/05-products-components/component-create` |'
+        '| Red Hat component update | `bzr component update` | expected gap (#675) | `compare/05-products-components/component-update-redhat` |'
     )
 
     for row in "${rows[@]}"; do
