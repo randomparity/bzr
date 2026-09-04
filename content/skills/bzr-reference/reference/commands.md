@@ -19,6 +19,7 @@ Operate on bugs.
   - Extra filters: `--resolution --version --op-sys --platform --whiteboard
     --target-milestone --qa-contact --url --created-since --changed-since`.
 - `bzr bug view 12345 [--json] [--web]`   # `--web` opens the bug in a browser
+  - Comments are not included — use `bzr comment list <id>` for those.
 - `bzr bug search "memory leak" [--json]`
 - `bzr bug create --product Foo --component bar --summary "..." --description "..."`
   - Field parity with update in one call: `--alias --url --whiteboard
