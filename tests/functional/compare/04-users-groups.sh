@@ -34,13 +34,14 @@ user_group_require_one() {
 test_begin "user-create-get-search" "user create, exact get, and search"
 if resource_bzr user-bzr-create xmlrpc XMLRPC user create \
     --email "$USER_GROUP_BZR_EMAIL" --password 'ComparePass1!' &&
-    resource_positive_id \
-        "$COMPARE_EXCHANGE_DIR/user-bzr-create.bzr.stdout.json" '.id' >/dev/null &&
+    resource_require_positive_id \
+        "$COMPARE_EXCHANGE_DIR/user-bzr-create.bzr.stdout.json" '.id' bzr-user-create &&
     resource_pybz user-pybz-create user_create \
         "$(jq -cn --arg email "$USER_GROUP_PYBZ_EMAIL" \
             '{transport:"XMLRPC",email:$email,password:"ComparePass1!"}')" XMLRPC &&
-    resource_positive_id \
-        "$COMPARE_EXCHANGE_DIR/user-pybz-create.pybz.result.json" '.id' >/dev/null &&
+    resource_require_positive_id \
+        "$COMPARE_EXCHANGE_DIR/user-pybz-create.pybz.result.json" '.id' \
+        python-bugzilla-user-create &&
     resource_bzr user-bzr-search rest REST user search "$USER_GROUP_BZR_EMAIL" --details &&
     resource_pybz user-pybz-get user_get \
         "$(jq -cn --arg email "$USER_GROUP_PYBZ_EMAIL" \
@@ -65,7 +66,7 @@ if resource_bzr user-bzr-create xmlrpc XMLRPC user create \
         resource_equal user-search "$COMPARE_EXCHANGE_DIR/user.bzr.json" \
             "$COMPARE_EXCHANGE_DIR/user.pybz.search.json"; then
         test_pass
-    else
+    elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
         test_fail "user create, exact get, or search outcome differs"
     fi
 fi
@@ -73,8 +74,8 @@ fi
 test_begin "group-get-and-list" "group get and list"
 if resource_bzr group-bzr-create rest REST group create --name "$USER_GROUP_FIXTURE" \
     --description "$USER_GROUP_DESCRIPTION" &&
-    resource_positive_id \
-        "$COMPARE_EXCHANGE_DIR/group-bzr-create.bzr.stdout.json" '.id' >/dev/null &&
+    resource_require_positive_id \
+        "$COMPARE_EXCHANGE_DIR/group-bzr-create.bzr.stdout.json" '.id' bzr-group-create &&
     resource_bzr group-bzr-view xmlrpc XMLRPC group view "$USER_GROUP_FIXTURE" &&
     resource_pybz group-pybz-get group_get \
         "$(jq -cn --arg name "$USER_GROUP_FIXTURE" \
@@ -102,7 +103,7 @@ if resource_bzr group-bzr-create rest REST group create --name "$USER_GROUP_FIXT
             'length == 1 and .[0] == $expected[0]' \
             "$COMPARE_EXCHANGE_DIR/group.pybz.list.json" >/dev/null; then
         test_pass
-    else
+    elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
         test_fail "group get or list outcome differs"
     fi
 fi

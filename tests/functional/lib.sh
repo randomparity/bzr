@@ -595,6 +595,15 @@ resource_positive_id() {
     jq -er "$expression | select(type == \"number\" and floor == . and . > 0)" "$path"
 }
 
+resource_require_positive_id() {
+    local path="$1" expression="$2" label="$3"
+
+    if ! resource_positive_id "$path" "$expression" >/dev/null; then
+        test_fail "$label returned an invalid ID"
+        return 1
+    fi
+}
+
 resource_equal() {
     local name="$1" left="$2" right="$3"
 

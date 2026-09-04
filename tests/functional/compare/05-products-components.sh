@@ -17,7 +17,7 @@ for _product_catalogue in accessible enterable selectable; do
             "$(jq -cn --arg catalogue "$_product_catalogue" \
                 '{transport:"REST",catalogue:$catalogue}')" REST; then
         _PRODUCT_CATALOGUES_OK=0
-        continue
+        break
     fi
     jq '[.[].name] | sort' \
         "$COMPARE_EXCHANGE_DIR/catalogue-${_product_catalogue}-bzr.bzr.stdout.json" \
@@ -33,11 +33,12 @@ for _product_catalogue in accessible enterable selectable; do
             "$COMPARE_EXCHANGE_DIR/catalogue-${_product_catalogue}.bzr.json" \
             "$COMPARE_EXCHANGE_DIR/catalogue-${_product_catalogue}.pybz.json"; then
         _PRODUCT_CATALOGUES_OK=0
+        break
     fi
 done
 if [[ $_PRODUCT_CATALOGUES_OK -eq 1 ]]; then
     test_pass
-else
+elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail "product catalogues differ or lack the positive control"
 fi
 unset _PRODUCT_CATALOGUES_OK _product_catalogue
@@ -57,15 +58,17 @@ if resource_bzr component-bzr-product rest REST product create \
         --product "$PRODUCT_BZR_NAME" --name "$COMPONENT_NAME" \
         --description "$COMPONENT_DESCRIPTION" \
         --default-assignee "$COMPARE_ADMIN_EMAIL" &&
-    resource_positive_id \
-        "$COMPARE_EXCHANGE_DIR/component-bzr-create.bzr.stdout.json" '.id' >/dev/null &&
+    resource_require_positive_id \
+        "$COMPARE_EXCHANGE_DIR/component-bzr-create.bzr.stdout.json" '.id' \
+        bzr-component-create &&
     resource_pybz component-pybz-create component_add \
         "$(jq -cn --arg product "$PRODUCT_PYBZ_NAME" --arg component "$COMPONENT_NAME" \
             --arg description "$COMPONENT_DESCRIPTION" --arg owner "$COMPARE_ADMIN_EMAIL" \
             '{transport:"XMLRPC",params:{product:$product,name:$component,
               description:$description,default_assignee:$owner}}')" XMLRPC &&
-    resource_positive_id \
-        "$COMPARE_EXCHANGE_DIR/component-pybz-create.pybz.result.json" '.id' >/dev/null &&
+    resource_require_positive_id \
+        "$COMPARE_EXCHANGE_DIR/component-pybz-create.pybz.result.json" '.id' \
+        python-bugzilla-component-create &&
     resource_bzr component-bzr-view rest REST component view \
         "$PRODUCT_BZR_NAME" "$COMPONENT_NAME" &&
     resource_bzr component-pybz-view rest REST component view \
@@ -85,7 +88,7 @@ if resource_bzr component-bzr-product rest REST product create \
         resource_equal component-create "$COMPARE_EXCHANGE_DIR/component.bzr.json" \
             "$COMPARE_EXCHANGE_DIR/component.pybz.json"; then
         test_pass
-    else
+    elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
         test_fail "component persisted outcome differs"
     fi
 fi

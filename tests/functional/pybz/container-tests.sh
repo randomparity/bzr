@@ -2130,7 +2130,13 @@ run_user_group_phase_fixture() (
         shift 3
         command="$*"
         case $name in
-        user-bzr-create) user_group_fixture_bzr_output "$name" '{"id":101}' ;;
+        user-bzr-create)
+            if [[ ${USER_GROUP_BZR_USER_ID_FAULT:-0} -eq 1 ]]; then
+                user_group_fixture_bzr_output "$name" '{"id":0}'
+            else
+                user_group_fixture_bzr_output "$name" '{"id":101}'
+            fi
+            ;;
         user-bzr-search)
             if [[ ${USER_GROUP_SEARCH_FAULT:-0} -eq 1 ]]; then
                 user_group_fixture_bzr_output "$name" '[]'
@@ -2139,7 +2145,13 @@ run_user_group_phase_fixture() (
                     "[{\"name\":\"$USER_GROUP_BZR_EMAIL\",\"real_name\":\"\",\"can_login\":true,\"groups\":[]}]"
             fi
             ;;
-        group-bzr-create) user_group_fixture_bzr_output "$name" '{"id":301}' ;;
+        group-bzr-create)
+            if [[ ${USER_GROUP_GROUP_ID_FAULT:-0} -eq 1 ]]; then
+                user_group_fixture_bzr_output "$name" '{"id":0}'
+            else
+                user_group_fixture_bzr_output "$name" '{"id":301}'
+            fi
+            ;;
         group-bzr-view)
             user_group_fixture_bzr_output "$name" \
                 "{\"name\":\"$USER_GROUP_FIXTURE\",\"description\":\"$USER_GROUP_DESCRIPTION\",\"is_active\":true}"
@@ -2171,7 +2183,11 @@ run_user_group_phase_fixture() (
         USER_GROUP_PYBZ_TRANSPORTS+="${name}:${expected_transport}"$'\n'
         case $name in
         user-pybz-create)
-            result="{\"id\":201,\"email\":\"$USER_GROUP_PYBZ_EMAIL\",\"real_name\":\"\",\"can_login\":true,\"groups\":[]}"
+            if [[ ${USER_GROUP_PYBZ_USER_ID_FAULT:-0} -eq 1 ]]; then
+                result="{\"id\":0,\"email\":\"$USER_GROUP_PYBZ_EMAIL\",\"real_name\":\"\",\"can_login\":true,\"groups\":[]}"
+            else
+                result="{\"id\":201,\"email\":\"$USER_GROUP_PYBZ_EMAIL\",\"real_name\":\"\",\"can_login\":true,\"groups\":[]}"
+            fi
             ;;
         user-pybz-get)
             result="{\"id\":201,\"email\":\"$USER_GROUP_PYBZ_EMAIL\",\"real_name\":\"\",\"can_login\":true,\"groups\":[]}"
@@ -2212,7 +2228,7 @@ run_user_group_phase_fixture() (
         source "$phase" >"$fixture_output"
         _render_test_result >>"$fixture_output"
         unset "$flag"
-        if [[ $FAIL_COUNT -eq 0 ]] ||
+        if [[ $FAIL_COUNT -ne 1 ]] ||
             ! grep -Fq "[compare/04-users-groups/${slug}]" "$fixture_output"; then
             printf 'user/group control %s unexpectedly passed\n' "$flag" >&2
             return 1
@@ -2236,6 +2252,9 @@ run_user_group_phase_fixture() (
         return 1
     fi
     run_user_group_control USER_GROUP_SEARCH_FAULT user-create-get-search
+    run_user_group_control USER_GROUP_BZR_USER_ID_FAULT user-create-get-search
+    run_user_group_control USER_GROUP_PYBZ_USER_ID_FAULT user-create-get-search
+    run_user_group_control USER_GROUP_GROUP_ID_FAULT group-get-and-list
     run_user_group_control USER_GROUP_RETAIN_FAULT membership-add-remove
     run_user_group_control USER_GROUP_NONMEMBER_FAULT membership-add-remove
 )
@@ -2307,7 +2326,13 @@ run_product_component_phase_fixture() (
             fi
             ;;
         component-*-product) product_fixture_bzr_output "$name" '{"id":301}' ;;
-        component-bzr-create) product_fixture_bzr_output "$name" '{"id":401}' ;;
+        component-bzr-create)
+            if [[ ${PRODUCT_BZR_COMPONENT_ID_FAULT:-0} -eq 1 ]]; then
+                product_fixture_bzr_output "$name" '{"id":0}'
+            else
+                product_fixture_bzr_output "$name" '{"id":401}'
+            fi
+            ;;
         component-*-view)
             local description="$COMPONENT_DESCRIPTION"
             [[ ${PRODUCT_COMPONENT_FAULT:-0} -eq 1 && $name == component-pybz-view ]] &&
@@ -2322,7 +2347,13 @@ run_product_component_phase_fixture() (
         local name="$1" operation="$2" result
         case $operation in
         product_catalogue) result='[{"name":"TestProduct"}]' ;;
-        component_add) result='{"id":501}' ;;
+        component_add)
+            if [[ ${PRODUCT_PYBZ_COMPONENT_ID_FAULT:-0} -eq 1 ]]; then
+                result='{"id":0}'
+            else
+                result='{"id":501}'
+            fi
+            ;;
         component_update_shape)
             if [[ ${PRODUCT_SHAPE_FAULT:-0} -eq 1 ]]; then
                 result='{"request":{"names":[],"updates":{}}}'
@@ -2364,7 +2395,7 @@ run_product_component_phase_fixture() (
         source "$phase" >"$fixture_output"
         _render_test_result >>"$fixture_output"
         unset "$flag"
-        if [[ $FAIL_COUNT -eq 0 ]] ||
+        if [[ $FAIL_COUNT -ne 1 ]] ||
             ! grep -Fq "[compare/05-products-components/${slug}]" "$fixture_output"; then
             printf 'product/component control %s unexpectedly passed\n' "$flag" >&2
             return 1
@@ -2381,6 +2412,8 @@ run_product_component_phase_fixture() (
     product_assert_gap_owner
     run_product_control PRODUCT_CATALOGUE_FAULT product-catalogues
     run_product_control PRODUCT_COMPONENT_FAULT component-create
+    run_product_control PRODUCT_BZR_COMPONENT_ID_FAULT component-create
+    run_product_control PRODUCT_PYBZ_COMPONENT_ID_FAULT component-create
     run_product_control PRODUCT_SHAPE_FAULT component-update-redhat
     run_product_control PRODUCT_GAP_WRONG_DIAGNOSTIC component-update-redhat
     run_product_control PRODUCT_GAP_STALE component-update-redhat
