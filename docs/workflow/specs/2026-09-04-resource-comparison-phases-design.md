@@ -162,7 +162,7 @@ per client. The pinned client's `createuser(name=...)` sends `name`, while stock
 `full_name`, so a non-empty display name is not a common persisted create contract. Read each by
 exact login and by a discriminating search term; normalize email, the empty real name, enabled
 state, and sorted group names. Create one run-unique comparison group through bzr, then read it
-through bzr plus python-bugzilla's `getgroup` and `getgroups`, requiring the same
+over forced XML-RPC through bzr plus python-bugzilla's `getgroup` and `getgroups`. Require the same
 name/description/active state. A fresh group avoids effective default memberships satisfying the
 membership proof before either client mutates it.
 

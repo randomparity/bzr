@@ -2085,13 +2085,16 @@ run_user_group_phase_fixture() (
         PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
         SEEN_TEST_IDS=$'\n' TEST_RESULT_PENDING=0 GAP_APPLIED=0
         RESOURCE_MEMBERSHIPS="" USER_GROUP_BZR_MEMBER=0 USER_GROUP_PYBZ_MEMBER=0
+        USER_GROUP_BZR_TRANSPORTS=""
+        USER_GROUP_PYBZ_TRANSPORTS=""
         : >"$fixture_output"
     }
     user_group_fixture_bzr_output() {
         printf '%s\n' "$2" >"$COMPARE_EXCHANGE_DIR/${1}.bzr.stdout.json"
     }
     resource_bzr() {
-        local name="$1" command
+        local name="$1" api="$2" expected_transport="$3" command
+        USER_GROUP_BZR_TRANSPORTS+="${name}:${api}:${expected_transport}"$'\n'
         shift 3
         command="$*"
         case $name in
@@ -2131,7 +2134,9 @@ run_user_group_phase_fixture() (
         esac
     }
     resource_pybz() {
-        local name="$1" operation="$2" payload="$3" result groups='[]'
+        local name="$1" operation="$2" payload="$3" expected_transport="$4"
+        local result groups='[]'
+        USER_GROUP_PYBZ_TRANSPORTS+="${name}:${expected_transport}"$'\n'
         case $name in
         user-pybz-create)
             result="{\"id\":201,\"email\":\"$USER_GROUP_PYBZ_EMAIL\",\"real_name\":\"\",\"can_login\":true,\"groups\":[]}"
@@ -2189,6 +2194,15 @@ run_user_group_phase_fixture() (
     assert_equals 3 "$PASS_COUNT" "user/group comparison pass count"
     assert_equals 0 "$FAIL_COUNT" "user/group comparison fail count"
     assert_equals '' "$RESOURCE_MEMBERSHIPS" "user/group cleanup registry"
+    if [[ $USER_GROUP_BZR_TRANSPORTS != *$'group-bzr-view:xmlrpc:XMLRPC\n'* ]]; then
+        printf 'group view did not force XML-RPC transport\n' >&2
+        return 1
+    fi
+    if [[ $USER_GROUP_PYBZ_TRANSPORTS != *$'group-pybz-get:XMLRPC\n'* ||
+        $USER_GROUP_PYBZ_TRANSPORTS != *$'group-pybz-list:XMLRPC\n'* ]]; then
+        printf 'python-bugzilla group reads did not force XML-RPC transport\n' >&2
+        return 1
+    fi
     run_user_group_control USER_GROUP_SEARCH_FAULT user-create-get-search
     run_user_group_control USER_GROUP_RETAIN_FAULT membership-add-remove
     run_user_group_control USER_GROUP_NONMEMBER_FAULT membership-add-remove

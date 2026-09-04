@@ -220,8 +220,8 @@ an individually hard-gated check.
 
 - User/group persisted outcomes — Mode: focused-test. First observe missing IDs, then run the
   controlled phase fixture and expect three passes. Create paired accounts without the optional
-  display name, require empty real-name readback, and use a run-unique comparison group so default
-  effective memberships cannot satisfy the proof. Omit an exact search result, retain membership
+  display name, require empty real-name readback, and force run-unique group reads over XML-RPC so
+  Bugzilla 5.3 cannot reject REST `Group.get`. Omit an exact search result, retain membership
   after removal, or substitute a non-member; each control must fail its stable ID.
 - Partial-failure cleanup — Mode: focused-test. Interrupt the user/group phase after membership
   add, require EXIT cleanup to attempt that exact removal, and require a cleanup failure to change

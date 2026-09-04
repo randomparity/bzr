@@ -75,13 +75,13 @@ if resource_bzr group-bzr-create rest REST group create --name "$USER_GROUP_FIXT
     --description "$USER_GROUP_DESCRIPTION" &&
     resource_positive_id \
         "$COMPARE_EXCHANGE_DIR/group-bzr-create.bzr.stdout.json" '.id' >/dev/null &&
-    resource_bzr group-bzr-view rest REST group view "$USER_GROUP_FIXTURE" &&
+    resource_bzr group-bzr-view xmlrpc XMLRPC group view "$USER_GROUP_FIXTURE" &&
     resource_pybz group-pybz-get group_get \
         "$(jq -cn --arg name "$USER_GROUP_FIXTURE" \
-            '{transport:"REST",name:$name,membership:false}')" REST &&
+            '{transport:"XMLRPC",name:$name,membership:false}')" XMLRPC &&
     resource_pybz group-pybz-list group_list \
         "$(jq -cn --arg name "$USER_GROUP_FIXTURE" \
-            '{transport:"REST",names:[$name],membership:false}')" REST; then
+            '{transport:"XMLRPC",names:[$name],membership:false}')" XMLRPC; then
     jq '{name,description,is_active}' \
         "$COMPARE_EXCHANGE_DIR/group-bzr-view.bzr.stdout.json" \
         >"$COMPARE_EXCHANGE_DIR/group.bzr.json"
