@@ -2367,6 +2367,11 @@ run_product_component_phase_fixture() (
     }
     resource_pybz() {
         local name="$1" operation="$2" result
+        if [[ ${PRODUCT_SHAPE_COMMAND_FAILURE:-0} -eq 1 &&
+            $operation == component_update_shape ]]; then
+            test_fail "controlled component update shape command failure"
+            return 1
+        fi
         case $operation in
         product_catalogue) result='[{"name":"TestProduct"}]' ;;
         component_add)
@@ -2437,6 +2442,7 @@ run_product_component_phase_fixture() (
     run_product_control PRODUCT_BZR_COMPONENT_ID_FAULT component-create
     run_product_control PRODUCT_PYBZ_COMPONENT_ID_FAULT component-create
     run_product_control PRODUCT_SHAPE_FAULT component-update-redhat
+    run_product_control PRODUCT_SHAPE_COMMAND_FAILURE component-update-redhat
     run_product_control PRODUCT_GAP_WRONG_DIAGNOSTIC component-update-redhat
     run_product_control PRODUCT_GAP_STALE component-update-redhat
     reset_product_fixture

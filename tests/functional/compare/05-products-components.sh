@@ -117,7 +117,7 @@ if resource_pybz component-update-shape component_update_shape \
     else
         test_fail "bzr component update parser result was not the controlled gap"
     fi
-else
+elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail "python-bugzilla component update request-shape proof is invalid"
 fi
 resource_expect_gap 675
