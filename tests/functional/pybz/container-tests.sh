@@ -189,6 +189,7 @@ run_sidecar_wrapper_fixture() (
 run_lifecycle_phase_fixture() (
     local phase="$PYBZ_DIR/../compare/01-bug-lifecycle.sh"
     local fixture_output
+    local control_failures=0
     COMPARE_EXCHANGE_DIR=$(mktemp -d)
     fixture_output=$(mktemp)
     trap 'rm -rf "$COMPARE_EXCHANGE_DIR"; rm -f "$fixture_output"' EXIT
@@ -210,11 +211,54 @@ run_lifecycle_phase_fixture() (
 
     fixture_bug() {
         local id="$1" summary="$2"
-        jq -cn --argjson id "$id" --arg summary "$summary" \
+        local severity=normal priority=Normal
+        if [[ ${LIFECYCLE_UPDATED:-0} -eq 1 ]]; then
+            severity=major priority=High
+        fi
+        jq -cn --argjson id "$id" --arg summary "$summary" --arg severity "$severity" \
+            --arg priority "$priority" \
             '{id:$id,product:"TestProduct",component:"TestComponent",version:"unspecified",
-              summary:$summary,op_sys:"Linux",platform:"PC",severity:"normal",priority:"Normal",
+              summary:$summary,op_sys:"Linux",platform:"PC",severity:$severity,priority:$priority,
               status:"NEW",resolution:"",url:"https://example.test/updated",whiteboard:"updated",
               cc:[],keywords:[]}'
+    }
+    reset_lifecycle_fixture() {
+        PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
+        SEEN_TEST_IDS=$'\n' TEST_RESULT_PENDING=0 LIFECYCLE_UPDATED=0
+        LIFECYCLE_PYBZ_TAGGED=0 LIFECYCLE_GENERIC_CREATE_COUNT=0 LIFECYCLE_GENERIC_UPDATED=0
+        : >"$LIFECYCLE_BZR_ARGS"
+    }
+    run_lifecycle_failure_control() {
+        local flag="$1" capability="$2" label="$3"
+
+        reset_lifecycle_fixture
+        printf -v "$flag" 1
+        : >"$fixture_output"
+        source "$phase" >"$fixture_output"
+        _render_test_result >>"$fixture_output"
+        unset "$flag"
+        if [[ $FAIL_COUNT -eq 0 ]] ||
+            ! grep -Fq "[compare/01-bug-lifecycle/${capability}] ${label} ... FAIL" \
+                "$fixture_output"; then
+            printf '%s control %s unexpectedly passed\n' "$capability" "$flag" >&2
+            return 1
+        fi
+    }
+    run_noop_stale_gap_control() {
+        reset_lifecycle_fixture
+        LIFECYCLE_NOOP_STALE_GAPS=1
+        : >"$fixture_output"
+        source "$phase" >"$fixture_output"
+        _render_test_result >>"$fixture_output"
+        unset LIFECYCLE_NOOP_STALE_GAPS
+        if [[ $FAIL_COUNT -ne 0 || $GAP_COUNT -ne 5 ]] ||
+            ! grep -Fq '[compare/01-bug-lifecycle/update-options] comment tags and minor update ... GAP (#672)' \
+                "$fixture_output" ||
+            ! grep -Fq '[compare/01-bug-lifecycle/bug-tags] personal bug tags ... GAP (#680)' \
+                "$fixture_output"; then
+            printf 'no-op stale mutation controls did not remain gaps\n' >&2
+            return 1
+        fi
     }
     run_bzr() {
         local args=" $* " id=41 summary="$LIFECYCLE_BZR_SUMMARY"
@@ -222,6 +266,22 @@ run_lifecycle_phase_fixture() (
         : >"$BZR_STDOUT"
         [[ $args == *" 42 "* ]] && id=42 && summary="$LIFECYCLE_PYBZ_SUMMARY"
         if [[ ${LIFECYCLE_UPDATED:-0} -eq 1 ]]; then summary="$LIFECYCLE_UPDATED_SUMMARY"; fi
+        if [[ ${LIFECYCLE_NOOP_STALE_GAPS:-0} -eq 1 &&
+            ( $args == *" --comment-tag "* || $args == *" bug tag "* ) ]]; then
+            printf '{}\n' >"$BZR_STDOUT"
+            cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"; : >"$BZR_STDERR"; BZR_EXIT=0
+            return 0
+        fi
+        if [[ ${LIFECYCLE_NOOP_STALE_GAPS:-0} -eq 1 && $args == *" bug list "* &&
+            $args == *" --tag "* ]]; then
+            if [[ $args == *" --tag $LIFECYCLE_BUG_TAG "* ]]; then
+                printf '[{"id":42}]\n' >"$BZR_STDOUT"
+            else
+                printf '[]\n' >"$BZR_STDOUT"
+            fi
+            cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"; : >"$BZR_STDERR"; BZR_EXIT=0
+            return 0
+        fi
         if [[ ${LIFECYCLE_STALE_GAPS:-0} -eq 1 && $args == *" bug list "* &&
             $args == *" --tag "* ]]; then
             printf '[{"id":42}]\n' >"$BZR_STDOUT"
@@ -229,6 +289,7 @@ run_lifecycle_phase_fixture() (
             return 0
         fi
         if [[ ${LIFECYCLE_STALE_GAPS:-0} -ne 1 &&
+            ${LIFECYCLE_NOOP_STALE_GAPS:-0} -ne 1 &&
             ( $args == *" --saved-search "* || $args == *" --field "* ||
                 $args == *" --comment-tag "* || $args == *" --status-whiteboard-type "* ||
                 $args == *" bug tag "* || $args == *" --tag "* ) ]]; then
@@ -258,17 +319,35 @@ run_lifecycle_phase_fixture() (
         fi
         case "$args" in
         *" bug create "*) printf '{"id":41}\n' >"$BZR_STDOUT" ;;
-        *" bug list "*) fixture_bug 41 "$LIFECYCLE_BZR_SUMMARY" | jq -s . >"$BZR_STDOUT" ;;
+        *" bug list "*)
+            if [[ $args == *" --summary "* && ${LIFECYCLE_QUERY_EMPTY:-0} -eq 1 ]]; then
+                printf '[]\n' >"$BZR_STDOUT"
+            elif [[ $args == *" --summary "* && ${LIFECYCLE_QUERY_COLLISION:-0} -eq 1 ]]; then
+                fixture_bug 41 "$LIFECYCLE_BZR_SUMMARY" | jq -s '. + [.[0] + {id:40}]' \
+                    >"$BZR_STDOUT"
+            else
+                fixture_bug 41 "$LIFECYCLE_BZR_SUMMARY" | jq -s . >"$BZR_STDOUT"
+            fi
+            ;;
         *" bug update "*) LIFECYCLE_UPDATED=1; printf '{}\n' >"$BZR_STDOUT" ;;
         *" bug view "*) fixture_bug "$id" "$summary" >"$BZR_STDOUT" ;;
         *" comment list "*)
-            if [[ ${LIFECYCLE_PYBZ_TAGGED:-0} -eq 1 && $args == *" 42 "* ]]; then
+            if [[ ${LIFECYCLE_STALE_GAPS:-0} -eq 1 ]]; then
+                jq -cn --arg text "${LIFECYCLE_BZR_COMMENT:-$LIFECYCLE_COMMENT}" \
+                    --arg tag "${LIFECYCLE_BZR_COMMENT_TAG:-$LIFECYCLE_COMMENT_TAG}" \
+                    '[{text:$text,tags:[$tag]}]' >"$BZR_STDOUT"
+            elif [[ ${LIFECYCLE_PYBZ_TAGGED:-0} -eq 1 && $args == *" 42 "* ]]; then
                 jq -cn --arg text "$LIFECYCLE_COMMENT" --arg tag "$LIFECYCLE_COMMENT_TAG" \
                     '[{text:$text,tags:[$tag]}]' >"$BZR_STDOUT"
             else printf '[{"count":0,"text":"lifecycle description"}]\n' >"$BZR_STDOUT"; fi
             ;;
         *" bug history "*) jq -cn --arg old "$LIFECYCLE_BZR_SUMMARY" --arg near "$LIFECYCLE_STEM [bzr] extra" \
-            '[{field:"summary",old_value:$old,new_value:"updated"},{field:"summary",old_value:$near,new_value:"preserved"},{field:"url",old_value:"",new_value:"https://example.test/updated"}]' >"$BZR_STDOUT" ;;
+            '[{field:"summary",old_value:$old,new_value:"updated"},
+              {field:"summary",old_value:$near,new_value:"preserved"},
+              {field:"url",old_value:"",new_value:"https://example.test/updated"},
+              {field:"whiteboard",old_value:"",new_value:"updated"},
+              {field:"severity",old_value:"normal",new_value:"major"},
+              {field:"priority",old_value:"Normal",new_value:"High"}]' >"$BZR_STDOUT" ;;
         *)
             if [[ ${LIFECYCLE_STALE_GAPS:-0} -ne 1 ]]; then
                 : >"$BZR_STDOUT"; cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"; : >"$BZR_STDERR"
@@ -286,14 +365,33 @@ run_lifecycle_phase_fixture() (
         request=$(<"$input")
         case "$operation" in
         create) result='{"id":42}' ;;
-        query) result=$(fixture_bug 42 "$LIFECYCLE_PYBZ_SUMMARY" | jq -s .) ;;
+        query)
+            result=$(fixture_bug 42 "$LIFECYCLE_PYBZ_SUMMARY" | jq -s .)
+            if [[ ${LIFECYCLE_QUERY_EMPTY:-0} -eq 1 && $request == *short_desc* ]]; then
+                result='[]'
+            elif [[ ${LIFECYCLE_QUERY_EXTRA:-0} -eq 1 && $request == *short_desc* ]]; then
+                result=$(jq '. + [.[0] + {id:52}]' <<<"$result")
+            elif [[ ${LIFECYCLE_QUERY_COLLISION:-0} -eq 1 && $request == *short_desc* ]]; then
+                result=$(jq '. + [.[0] + {id:40}]' <<<"$result")
+            fi
+            ;;
         update) LIFECYCLE_UPDATED=1; result='{}' ;;
         view)
             result=$(fixture_bug 42 "$LIFECYCLE_UPDATED_SUMMARY")
             [[ ${PYBZ_LIFECYCLE_MISMATCH:-0} -eq 0 ]] || result=$(jq '.priority="Wrong"' <<<"$result")
             ;;
-        history) result=$(jq -cn --arg old "$LIFECYCLE_PYBZ_SUMMARY" --arg near "$LIFECYCLE_STEM [bzr] extra" \
-            '{bugs:[{history:[{changes:[{field_name:"summary",removed:$old,added:"updated"},{field_name:"summary",removed:$near,added:"preserved"},{field_name:"url",removed:"",added:"https://example.test/updated"}]}]}]}') ;;
+        history)
+            result=$(jq -cn --arg old "$LIFECYCLE_PYBZ_SUMMARY" --arg near "$LIFECYCLE_STEM [bzr] extra" \
+                '{bugs:[{history:[{changes:[{field_name:"summary",removed:$old,added:"updated"},
+                  {field_name:"summary",removed:$near,added:"preserved"},
+                  {field_name:"url",removed:"",added:"https://example.test/updated"},
+                  {field_name:"whiteboard",removed:"",added:"updated"},
+                  {field_name:"severity",removed:"normal",added:"major"},
+                  {field_name:"priority",removed:"Normal",added:"High"}]}]}]}')
+            if [[ ${LIFECYCLE_HISTORY_REVERSED:-0} -eq 1 ]]; then
+                result=$(jq '.bugs[0].history[0].changes |= reverse' <<<"$result")
+            fi
+            ;;
         saved_search) result='[{"id":41},{"id":42}]' ;;
         generic_fields)
             if [[ $(jq -r '.action' <<<"$request") == create ]]; then
@@ -332,9 +430,52 @@ run_lifecycle_phase_fixture() (
         grep -Fq "compare/01-bug-lifecycle/$slug" "$fixture_output"
     done
     assert_equals \
-        '[{"field":"summary","old_value":"'"$LIFECYCLE_STEM"'","new_value":"updated"},{"field":"summary","old_value":"'"$LIFECYCLE_STEM"' [bzr] extra","new_value":"preserved"},{"field":"url","old_value":"","new_value":"https://example.test/updated"}]' \
+        '[{"field":"summary","old_value":"'"$LIFECYCLE_STEM"'","new_value":"updated"},{"field":"summary","old_value":"'"$LIFECYCLE_STEM"' [bzr] extra","new_value":"preserved"},{"field":"url","old_value":"","new_value":"https://example.test/updated"},{"field":"whiteboard","old_value":"","new_value":"updated"},{"field":"severity","old_value":"normal","new_value":"major"},{"field":"priority","old_value":"Normal","new_value":"High"}]' \
         "$(jq -c . "$COMPARE_EXCHANGE_DIR/history.bzr.normalized.json")" \
         "exact-only ordered history normalization"
+    if ! grep -Fq -- '--severity major' "$LIFECYCLE_BZR_ARGS" ||
+        ! grep -Fq -- '--priority High' "$LIFECYCLE_BZR_ARGS" ||
+        ! jq -e '.params.severity == "major"' \
+            "$COMPARE_EXCHANGE_DIR/update-severity.pybz.input.json" >/dev/null ||
+        ! jq -e '.params.priority == "High"' \
+            "$COMPARE_EXCHANGE_DIR/update-priority.pybz.input.json" >/dev/null ||
+        ! jq -se 'all(.[]; .severity == "major" and .priority == "High")' \
+            "$COMPARE_EXCHANGE_DIR/update.bzr.normalized.json" \
+            "$COMPARE_EXCHANGE_DIR/update.pybz.normalized.json" >/dev/null ||
+        ! jq -se 'all(.[]; [.[] | select(.field == "severity" or .field == "priority")] ==
+            [{field:"severity",old_value:"normal",new_value:"major"},
+             {field:"priority",old_value:"Normal",new_value:"High"}])' \
+            "$COMPARE_EXCHANGE_DIR/history.bzr.normalized.json" \
+            "$COMPARE_EXCHANGE_DIR/history.pybz.normalized.json" >/dev/null; then
+        printf 'update did not persist and preserve ordered severity/priority transitions\n' >&2
+        control_failures=$((control_failures + 1))
+    fi
+    _run_token=${LIFECYCLE_RUN_TOKEN:-}
+    if [[ ! $_run_token =~ ^[0-9a-f]+-[0-9a-f]+-[0-9a-f]+$ || ${#_run_token} -gt 18 ||
+        $LIFECYCLE_STEM != "bzr-pybz-lifecycle-${BZ_VERSION}-${_run_token}" ||
+        $LIFECYCLE_SAVED_SEARCH != "lifecycle-${BZ_VERSION}-${_run_token}" ||
+        $LIFECYCLE_COMMENT != "tagged-comment-${_run_token}" ||
+        $LIFECYCLE_BUG_TAG != "bug-tag-${_run_token}" || ${#LIFECYCLE_COMMENT_TAG} -gt 24 ||
+        ${#LIFECYCLE_BZR_COMMENT_TAG} -gt 24 ]]; then
+        printf 'lifecycle values did not reuse one bounded high-entropy run token\n' >&2
+        control_failures=$((control_failures + 1))
+    fi
+
+    if ! run_lifecycle_failure_control LIFECYCLE_QUERY_EMPTY query 'bug query'; then
+        control_failures=$((control_failures + 1))
+    fi
+    if ! run_lifecycle_failure_control LIFECYCLE_QUERY_EXTRA query 'bug query'; then
+        control_failures=$((control_failures + 1))
+    fi
+    if ! run_lifecycle_failure_control LIFECYCLE_QUERY_COLLISION query 'bug query'; then
+        control_failures=$((control_failures + 1))
+    fi
+    if ! run_lifecycle_failure_control LIFECYCLE_HISTORY_REVERSED history 'bug history'; then
+        control_failures=$((control_failures + 1))
+    fi
+    if ! run_noop_stale_gap_control; then
+        control_failures=$((control_failures + 1))
+    fi
 
     PYBZ_LIFECYCLE_MISMATCH=1
     PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
@@ -374,6 +515,9 @@ run_lifecycle_phase_fixture() (
         return 1
     fi
     unset LIFECYCLE_STALE_GAPS
+    if [[ $control_failures -ne 0 ]]; then
+        return 1
+    fi
 )
 
 run_parity_report_fixture() {
@@ -429,6 +573,54 @@ run_sidecar_stop_failure_fixture() (
         return 1
     fi
     assert_equals fake_runtime "$PYBZ_RUNTIME" "failed sidecar ownership"
+)
+
+run_adapter_staging_cleanup_fixture() (
+    local fixture_root
+    local residue
+    local status
+    local executable
+    fixture_root=$(mktemp -d)
+    residue="$fixture_root/compare-config"
+    executable=$(command -v bash)
+    trap 'rm -rf "$fixture_root"' EXIT
+
+    mktemp() {
+        local path
+        case "$*" in
+        '-d /tmp/bzr-compare-config.XXXXXX') path="$residue" ;;
+        /tmp/bzr-func-stdout.XXXXXX) path="$fixture_root/stdout" ;;
+        /tmp/bzr-func-stdout-raw.XXXXXX) path="$fixture_root/stdout-raw" ;;
+        /tmp/bzr-func-stderr.XXXXXX) path="$fixture_root/stderr" ;;
+        *) command mktemp "$@"; return ;;
+        esac
+        if [[ ${1:-} == -d ]]; then
+            mkdir -p "$path"
+        else
+            : >"$path"
+        fi
+        printf '%s\n' "$path"
+    }
+    cp() {
+        if [[ ${2:-} == "$residue/compare/bug-lifecycle.py" ]]; then
+            return 1
+        fi
+        command cp "$@"
+    }
+
+    set +e
+    (
+        BZR_COMPARE_BIN="$executable" BZR_FUNC_PORT=1
+        # shellcheck source=tests/functional/run-compare.sh
+        source "$PYBZ_DIR/../run-compare.sh"
+    )
+    status=$?
+    set -e
+    assert_equals 1 "$status" "adapter staging failure status"
+    if [[ -e $residue ]]; then
+        printf 'adapter staging failure left exchange residue: %s\n' "$residue" >&2
+        return 1
+    fi
 )
 
 write_fake_bugzilla_module() {
@@ -768,4 +960,5 @@ run_sidecar_wrapper_fixture
 run_lifecycle_phase_fixture
 run_parity_report_fixture
 run_sidecar_stop_failure_fixture
+run_adapter_staging_cleanup_fixture
 run_container_fixture

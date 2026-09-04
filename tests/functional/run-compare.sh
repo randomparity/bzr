@@ -61,8 +61,23 @@ if [[ ! -x "$BZR_BIN" ]]; then
     exit 1
 fi
 
+cleanup() {
+    local status=$?
+
+    if [[ -n "${PYBZ_RUNTIME:-}" ]]; then
+        if ! pybz_sidecar_stop "${_compare_runtime:-}"; then
+            [[ $status -ne 0 ]] || status=1
+        fi
+    fi
+    rm -rf "$FUNC_CONFIG_DIR" || true
+    _cleanup_tmpfiles || true
+    trap - EXIT
+    exit "$status"
+}
+
 umask 077
 FUNC_CONFIG_DIR=$(mktemp -d /tmp/bzr-compare-config.XXXXXX)
+trap cleanup EXIT
 COMPARE_EXCHANGE_DIR="$FUNC_CONFIG_DIR/compare"
 mkdir -p "$COMPARE_EXCHANGE_DIR"
 COMPARE_ADMIN_EMAIL="admin@test.bzr"
@@ -82,21 +97,6 @@ export XDG_CONFIG_HOME="$FUNC_CONFIG_DIR"
 export BZ_URL BZR_BIN COMPARE_EXCHANGE_DIR COMPARE_ADMIN_EMAIL BZR_COMPARE_API_KEY
 CURRENT_TEST_GROUP=""
 _compare_runtime="${_compare_runtime:-}"
-
-cleanup() {
-    local status=$?
-
-    if [[ -n "$PYBZ_RUNTIME" ]]; then
-        if ! pybz_sidecar_stop "$_compare_runtime"; then
-            [[ $status -ne 0 ]] || status=1
-        fi
-    fi
-    rm -rf "$FUNC_CONFIG_DIR" || true
-    _cleanup_tmpfiles || true
-    trap - EXIT
-    exit "$status"
-}
-trap cleanup EXIT
 
 if [[ -z "$_compare_runtime" ]]; then
     _compare_runtime=$(container_runtime) || {
