@@ -109,10 +109,12 @@ _compare_container=$(bugzilla_container_name) || {
     exit 1
 }
 pybz_sidecar_start "$_compare_runtime" "$_compare_container"
+resource_init
 
 for _phase in \
     00-products \
-    01-bug-lifecycle; do
+    01-bug-lifecycle \
+    02-comments; do
     CURRENT_TEST_GROUP="$_phase"
     source "$SCRIPT_DIR/compare/${_phase}.sh"
     _render_test_result

@@ -1432,6 +1432,201 @@ run_adapter_fixture() {
     fi
 }
 
+run_comment_phase_fixture() (
+    local phase="$PYBZ_DIR/../compare/02-comments.sh"
+    local fixture_output
+    local counter_file
+
+    if [[ ! -r $phase ]] || ! declare -F resource_init >/dev/null; then
+        printf 'missing resource helper or comment comparison phase\n' >&2
+        return 1
+    fi
+
+    COMPARE_EXCHANGE_DIR=$(mktemp -d)
+    fixture_output=$(mktemp)
+    counter_file="$COMPARE_EXCHANGE_DIR/fixture-next-id"
+    trap 'rm -rf "$COMPARE_EXCHANGE_DIR"; rm -f "$fixture_output"' EXIT
+    printf '100\n' >"$counter_file"
+    TEST_ID_PREFIX=compare CURRENT_TEST_GROUP=02-comments BZ_VERSION=bz50
+    BZ_URL=http://127.0.0.1 BZR_COMPARE_API_KEY=fixture-secret
+    COMPARE_ADMIN_EMAIL=admin@test.bzr
+
+    reset_comment_fixture() {
+        PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
+        SEEN_TEST_IDS=$'\n' TEST_RESULT_PENDING=0 RESOURCE_GAP_ELIGIBLE=0
+        rm -f "$COMPARE_EXCHANGE_DIR"/fixture-comment-*.json
+        printf '100\n' >"$counter_file"
+        : >"$fixture_output"
+    }
+    comment_fixture_transport() {
+        local api="$1"
+        if [[ $api == xmlrpc ]]; then
+            printf 'DEBUG bzr::xmlrpc::protocol::client: XML-RPC call\n'
+        else
+            printf 'DEBUG bzr::client::transport: API response\n'
+        fi
+    }
+    run_bzr() {
+        local args=("$@") api=rest command='' id='' text='' private=false index next
+        local state
+        BZR_EXIT=0
+        for ((index = 0; index < ${#args[@]}; index++)); do
+            next=$((index + 1))
+            case ${args[index]} in
+            --api) api=${args[next]} ;;
+            --body) text=${args[next]} ;;
+            --private) private=true ;;
+            bug)
+                [[ ${args[next]:-} == create ]] && command=bug-create
+                ;;
+            comment)
+                if [[ ${args[next]:-} == add ]]; then
+                    command='comment-add'
+                    id=${args[index + 2]}
+                elif [[ ${args[next]:-} == list ]]; then
+                    command='comment-list'
+                    id=${args[index + 2]}
+                fi
+                ;;
+            config)
+                [[ ${args[next]:-} == set-server ]] && command=config-set-server
+                ;;
+            esac
+        done
+        case $command in
+        config-set-server)
+            if [[ ${COMMENT_CONFIG_FAILURE:-0} -eq 1 ]]; then
+                BZR_EXIT=1
+            else
+                RESOURCE_QUERY_AUTH_CONFIGURED=1
+                printf '{}\n' >"$BZR_STDOUT"
+            fi
+            ;;
+        bug-create)
+            if [[ ${COMMENT_CREATE_FAILURE:-0} -eq 1 ]]; then
+                printf 'controlled bug create failure\n' >"$BZR_STDERR"
+                BZR_EXIT=1
+            elif [[ ${COMMENT_CREATE_NONPOSITIVE_ID:-0} -eq 1 ]]; then
+                printf '{"id":0}\n' >"$BZR_STDOUT"
+            else
+                id=$(<"$counter_file")
+                printf '%s\n' "$((id + 1))" >"$counter_file"
+                jq -cn --argjson id "$id" '{id:$id}' >"$BZR_STDOUT"
+            fi
+            ;;
+        comment-add)
+            state="$COMPARE_EXCHANGE_DIR/fixture-comment-${id}.json"
+            jq -cn --arg text "$text" --argjson private "$private" \
+                '{id:350,text:$text,is_private:$private}' >"$state"
+            printf '{"id":350}\n' >"$BZR_STDOUT"
+            ;;
+        comment-list)
+            state="$COMPARE_EXCHANGE_DIR/fixture-comment-${id}.json"
+            if [[ ${RESOURCE_QUERY_AUTH_CONFIGURED:-0} -ne 1 && $api == rest && -r $state ]] &&
+                jq -e '.is_private == true' "$state" >/dev/null; then
+                printf '[]\n' >"$BZR_STDOUT"
+            elif [[ -r $state ]]; then
+                jq -s '.' "$state" >"$BZR_STDOUT"
+            else
+                printf '[]\n' >"$BZR_STDOUT"
+            fi
+            ;;
+        *) return 2 ;;
+        esac
+        cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
+        if [[ ${COMMENT_TRANSPORT_MISSING:-0} -eq 1 && $command == comment-list ]]; then
+            : >"$BZR_STDERR"
+        else
+            comment_fixture_transport "$api" >"$BZR_STDERR"
+        fi
+    }
+    run_pybz_adapter() {
+        local operation="$1" input_name="${2##*/}" output_name="${3##*/}"
+        local input="$COMPARE_EXCHANGE_DIR/$input_name"
+        local output="$COMPARE_EXCHANGE_DIR/$output_name"
+        local transport id state comment
+        transport=$(jq -r '.transport' "$input")
+        id=$(jq -r '.bug_id' "$input")
+        state="$COMPARE_EXCHANGE_DIR/fixture-comment-${id}.json"
+        case $operation in
+        comment_add)
+            jq '{id:351,text:.text,is_private:.is_private}' "$input" >"$state"
+            jq -cn --arg transport "$transport" \
+                '{transport:$transport,result:{ids:[351]}}' >"$output"
+            ;;
+        comment_list)
+            if [[ ${COMMENT_MISSING_RECORD:-0} -eq 1 ]]; then
+                comment='null'
+            else
+                comment=$(<"$state")
+                if [[ ${COMMENT_PRIVACY_FLIPPED:-0} -eq 1 ]] &&
+                    jq -e '.is_private == true' "$state" >/dev/null; then
+                    comment=$(jq '.is_private = false' "$state")
+                fi
+            fi
+            jq -cn --arg transport "$transport" --argjson id "$id" \
+                --argjson comment "$comment" \
+                '{transport:$transport,result:{bugs:{($id|tostring):
+                  {comments:(if $comment == null then [] else [$comment] end)}}}}' >"$output"
+            ;;
+        *) return 2 ;;
+        esac
+        : >"$BZR_STDOUT"
+        : >"$BZR_STDOUT_RAW"
+        : >"$BZR_STDERR"
+        BZR_EXIT=0
+    }
+    run_comment_control() {
+        local flag="$1" slug="$2"
+        reset_comment_fixture
+        printf -v "$flag" 1
+        source "$phase" >"$fixture_output"
+        _render_test_result >>"$fixture_output"
+        unset "$flag"
+        if [[ $FAIL_COUNT -eq 0 ]] ||
+            ! grep -Fq "[compare/02-comments/${slug}]" "$fixture_output"; then
+            printf 'comment control %s unexpectedly passed\n' "$flag" >&2
+            return 1
+        fi
+        printf 'controlled red: comments %s=1\n' "$flag"
+    }
+
+    COMMENT_CONFIG_FAILURE=1
+    if resource_init; then
+        printf 'resource_init accepted a failed comparison-server setup\n' >&2
+        return 1
+    fi
+    unset COMMENT_CONFIG_FAILURE
+    resource_init
+    reset_comment_fixture
+    # shellcheck source=tests/functional/compare/02-comments.sh
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    assert_equals 3 "$PASS_COUNT" "comment comparison pass count"
+    assert_equals 0 "$FAIL_COUNT" "comment comparison fail count"
+    for slug in public-comments private-comments-rest private-comments-xmlrpc; do
+        if ! grep -Fq "[compare/02-comments/${slug}]" "$fixture_output"; then
+            printf 'comment phase omitted stable ID: %s\n' "$slug" >&2
+            return 1
+        fi
+    done
+    run_comment_control COMMENT_MISSING_RECORD public-comments
+    run_comment_control COMMENT_PRIVACY_FLIPPED private-comments-rest
+    run_comment_control COMMENT_TRANSPORT_MISSING public-comments
+    run_comment_control COMMENT_CREATE_FAILURE public-comments
+    run_comment_control COMMENT_CREATE_NONPOSITIVE_ID public-comments
+    reset_comment_fixture
+    RESOURCE_QUERY_AUTH_CONFIGURED=0
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    if [[ $FAIL_COUNT -eq 0 ]] ||
+        ! grep -Fq '[compare/02-comments/private-comments-rest]' "$fixture_output"; then
+        printf 'comment query-auth omission unexpectedly passed\n' >&2
+        return 1
+    fi
+    printf 'controlled red: comments query-parameter auth omitted\n'
+)
+
 cleanup_container_fixture() {
     local runtime="$1"
     local donor="$2"
@@ -1535,4 +1730,5 @@ run_lifecycle_phase_fixture
 run_parity_report_fixture
 run_sidecar_stop_failure_fixture
 run_adapter_staging_cleanup_fixture
+run_comment_phase_fixture
 run_container_fixture

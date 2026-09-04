@@ -451,6 +451,137 @@ run_pybz_adapter() {
     _run_pybz_command python /work/compare/python-bugzilla-adapter.py "$@"
 }
 
+# Shared mechanics for resource comparison phases.
+RESOURCE_GAP_ELIGIBLE=0
+RESOURCE_GAP_FILE=""
+RESOURCE_SERVER="compare-resource"
+
+resource_init() {
+    if [[ ! -d ${COMPARE_EXCHANGE_DIR:-} ]]; then
+        printf 'resource_init: COMPARE_EXCHANGE_DIR must name a directory\n' >&2
+        return 2
+    fi
+    run_bzr config set-server "$RESOURCE_SERVER" --url "$BZ_URL" \
+        --api-key-env BZR_COMPARE_API_KEY --email "$COMPARE_ADMIN_EMAIL" \
+        --auth-method query_param
+    if [[ $BZR_EXIT -ne 0 ]]; then
+        printf 'resource_init: could not configure matching query-parameter auth\n' >&2
+        return 1
+    fi
+    RESOURCE_GAP_ELIGIBLE=0
+    RESOURCE_GAP_FILE="$COMPARE_EXCHANGE_DIR/.resource-gap-eligible"
+}
+
+resource_name_is_safe() {
+    [[ $1 =~ ^[a-z0-9][a-z0-9-]*$ ]]
+}
+
+resource_capture_bzr() {
+    local name="$1"
+
+    cp "$BZR_STDOUT" "$COMPARE_EXCHANGE_DIR/${name}.bzr.stdout.json"
+    cp "$BZR_STDOUT_RAW" "$COMPARE_EXCHANGE_DIR/${name}.bzr.raw"
+    cp "$BZR_STDERR" "$COMPARE_EXCHANGE_DIR/${name}.bzr.stderr"
+    printf '%s\n' "$BZR_EXIT" >"$COMPARE_EXCHANGE_DIR/${name}.bzr.exit"
+}
+
+resource_bzr() {
+    local name="$1" api="$2" expected_transport="$3"
+    shift 3
+
+    if ! resource_name_is_safe "$name"; then
+        test_fail "invalid resource capture name"
+        return 1
+    fi
+    RUST_LOG=bzr=debug run_bzr --server "$RESOURCE_SERVER" --api "$api" "$@"
+    resource_capture_bzr "$name"
+    if [[ $BZR_EXIT -ne 0 ]]; then
+        test_fail "bzr $name failed with exit $BZR_EXIT"
+        return 1
+    fi
+    if ! jq -e . "$BZR_STDOUT" >/dev/null; then
+        test_fail "bzr $name returned invalid JSON evidence"
+        return 1
+    fi
+    if ! observe_bzr_transport || [[ $BZR_TRANSPORT != "$expected_transport" ]]; then
+        test_fail "bzr $name did not prove $expected_transport transport"
+        return 1
+    fi
+    printf '%s\n' "$BZR_TRANSPORT" >"$COMPARE_EXCHANGE_DIR/${name}.bzr.transport"
+}
+
+resource_pybz() {
+    local name="$1" operation="$2" payload="$3" expected_transport="$4"
+    local input output transport_filter
+
+    if ! resource_name_is_safe "$name"; then
+        test_fail "invalid resource capture name"
+        return 1
+    fi
+    input="$COMPARE_EXCHANGE_DIR/${name}.pybz.input.json"
+    output="$COMPARE_EXCHANGE_DIR/${name}.pybz.output.json"
+    if ! jq -ecn --arg api_key "$BZR_COMPARE_API_KEY" --argjson payload "$payload" \
+        '$payload | select(type == "object") | . + {api_key:$api_key}' >"$input"; then
+        test_fail "python-bugzilla $name request is invalid"
+        return 1
+    fi
+    chmod 600 "$input"
+    run_pybz_adapter "$operation" "/work/compare/${input##*/}" \
+        "/work/compare/${output##*/}"
+    cp "$BZR_STDOUT" "$COMPARE_EXCHANGE_DIR/${name}.pybz.stdout"
+    cp "$BZR_STDOUT_RAW" "$COMPARE_EXCHANGE_DIR/${name}.pybz.raw"
+    cp "$BZR_STDERR" "$COMPARE_EXCHANGE_DIR/${name}.pybz.stderr"
+    printf '%s\n' "$BZR_EXIT" >"$COMPARE_EXCHANGE_DIR/${name}.pybz.exit"
+    if [[ $expected_transport == LOCAL ]]; then
+        transport_filter='.transport == null'
+    else
+        transport_filter=".transport == \$expected"
+    fi
+    if [[ $BZR_EXIT -ne 0 || ! -r $output ]] ||
+        ! jq -e --arg expected "$expected_transport" \
+            "type == \"object\" and (keys | sort) == [\"result\",\"transport\"] and
+             ($transport_filter)" "$output" >/dev/null; then
+        test_fail "python-bugzilla $name failed to prove $expected_transport transport"
+        return 1
+    fi
+    jq '.result' "$output" >"$COMPARE_EXCHANGE_DIR/${name}.pybz.result.json"
+    jq -r '.transport // "LOCAL"' "$output" \
+        >"$COMPARE_EXCHANGE_DIR/${name}.pybz.transport"
+}
+
+resource_positive_id() {
+    local path="$1" expression="$2"
+
+    jq -er "$expression | select(type == \"number\" and floor == . and . > 0)" "$path"
+}
+
+resource_equal() {
+    local name="$1" left="$2" right="$3"
+
+    if ! diff -u "$left" "$right" >"$COMPARE_EXCHANGE_DIR/${name}.diff"; then
+        test_fail "normalized $name differs"
+        return 1
+    fi
+}
+
+resource_gap_reset() {
+    RESOURCE_GAP_ELIGIBLE=0
+    rm -f "$RESOURCE_GAP_FILE"
+}
+
+resource_gap_allow() {
+    RESOURCE_GAP_ELIGIBLE=1
+    : >"$RESOURCE_GAP_FILE"
+}
+
+resource_expect_gap() {
+    local issue="$1"
+
+    if [[ $RESOURCE_GAP_ELIGIBLE -eq 1 && -f $RESOURCE_GAP_FILE ]]; then
+        expect_gap "$issue"
+    fi
+}
+
 # ── Assertions ───────────────────────────────────────────────────────
 
 assert_success() {
