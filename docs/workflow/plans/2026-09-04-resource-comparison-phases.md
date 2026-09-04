@@ -11,9 +11,9 @@ closed ownership for #674 and #675 gaps.
 Tech stack: Bash, Python 3, python-bugzilla 3.3.0, jq, Docker/Podman functional containers.
 
 Expected implementation size: 2200–3400 changed lines (M) — summed from 250–450 adapter lines,
-150–250 shared-helper lines, 900–1400 phase lines, 800–1200 focused-fixture lines, and 100–100
-runner/report lines. The upper line count is large test data flow, while the change remains one
-medium-complexity comparison-harness slice with no compiled-product contract.
+150–250 shared-helper lines, 900–1400 phase lines, 800–1200 focused-fixture lines, and
+100–100 runner/report lines. The upper line count is large test data flow, while the change remains
+one medium-complexity comparison-harness slice with no compiled-product contract.
 
 ## Global Constraints
 
