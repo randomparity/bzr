@@ -177,7 +177,7 @@ run_sidecar_wrapper_fixture() (
 
     run_pybz_adapter view /work/compare/in.json /work/compare/out.json
     assert_equals \
-        'python /work/compare/bug-lifecycle.py view /work/compare/in.json /work/compare/out.json' \
+        'python /work/compare/python-bugzilla-adapter.py view /work/compare/in.json /work/compare/out.json' \
         "$(<"$invoked")" "fixed adapter command"
     assert_equals $'{\n  "fixed": true\n}' "$(<"$BZR_STDOUT")" "adapter projected stdout"
     assert_equals '{"schema_version":"3.0.0","data":{"fixed":true}}' \
@@ -952,7 +952,7 @@ run_adapter_staging_cleanup_fixture() (
         printf '%s\n' "$path"
     }
     cp() {
-        if [[ ${2:-} == "$residue/compare/bug-lifecycle.py" ]]; then
+        if [[ ${2:-} == "$residue/compare/python-bugzilla-adapter.py" ]]; then
             return 1
         fi
         command cp "$@"
@@ -1005,6 +1005,24 @@ class _FixtureBug:
         return self._data
 
 
+class _FixtureUser:
+    def __init__(self, email):
+        self.userid = 601
+        self.email = email
+        self.name = email
+        self.real_name = "Fixture User"
+        self.can_login = True
+        self.groupnames = ["editbugs"]
+
+
+class _FixtureGroup:
+    groupid = 701
+    name = "editbugs"
+    description = "Can edit bugs"
+    is_active = True
+    member_emails = ["fixture-user@test.invalid"]
+
+
 class Bugzilla:
     def __init__(
         self,
@@ -1045,7 +1063,10 @@ class Bugzilla:
 
     def build_update(self, **params):
         if "comment" in params:
-            params["comment"] = {"comment": params["comment"]}
+            comment = {"comment": params.pop("comment")}
+            if params.pop("comment_private", False):
+                comment["is_private"] = True
+            params["comment"] = comment
         return {"builder": "update", **params}
 
     def update_bugs(self, ids, update):
@@ -1097,6 +1118,55 @@ class Bugzilla:
 
     def update_tags(self, ids, tags_add=None, tags_remove=None):
         return {"ids": ids, "add": tags_add, "remove": tags_remove}
+
+    def attachfile(self, ids, source, summary, **kwargs):
+        with open(source, "rb") as attachment:
+            data = attachment.read().decode("utf-8")
+        return 451 if ids == [41] and data == "fixture attachment\n" else 0
+
+    def get_attachments(self, ids, attachment_ids):
+        return {"bugs": ids, "attachment_ids": attachment_ids, "attachments": {"451": {"id": 451}}}
+
+    def openattachment(self, attachment_id):
+        from io import BytesIO
+
+        if attachment_id != 451:
+            raise RuntimeError("fixture upstream attachment detail")
+        return BytesIO(b"fixture attachment\n")
+
+    def updateattachmentflags(self, bug_id, attachment_id, flag_name, **kwargs):
+        return {
+            "bug_id": bug_id,
+            "attachment_id": attachment_id,
+            "flag_name": flag_name,
+            **kwargs,
+        }
+
+    def createuser(self, email, name="", password=""):
+        if not password:
+            raise RuntimeError("fixture upstream password detail")
+        return _FixtureUser(email)
+
+    def getuser(self, email):
+        return _FixtureUser(email)
+
+    def searchusers(self, pattern):
+        return [_FixtureUser(pattern)]
+
+    def updateperms(self, user, action, groups):
+        return {"user": user, "action": action, "groups": groups}
+
+    def getgroup(self, name, membership=False):
+        return _FixtureGroup()
+
+    def getgroups(self, names, membership=False):
+        return [_FixtureGroup()]
+
+    def product_get(self, ptype=None, names=None):
+        return [{"id": 801, "name": ptype or names[0]}]
+
+    def addcomponent(self, data):
+        return {"id": 901, "request": data}
 PY
 }
 
@@ -1108,41 +1178,80 @@ assert_adapter_case() {
     local operation="$5"
     local request="$6"
     local expected="$7"
-    local input="$config_dir/${name}.input.json"
-    local output="$config_dir/${name}.output.json"
+    local input="$config_dir/compare/${name}.input.json"
+    local output="$config_dir/compare/${name}.output.json"
     local actual
 
     printf '%s\n' "$request" >"$input"
     chmod 600 "$input"
     "$runtime" exec -e PYTHONPATH=/work/adapter-fixture "$sidecar" \
-        python /work/bug-lifecycle.py "$operation" "/work/${name}.input.json" \
-        "/work/${name}.output.json"
-    if ! jq -e '.transport | type == "string" and length > 0' "$output" >/dev/null; then
-        printf 'adapter case %s omitted transport\n' "$name" >&2
-        return 1
-    fi
+        python /work/compare/python-bugzilla-adapter.py "$operation" \
+        "/work/compare/${name}.input.json" "/work/compare/${name}.output.json"
     actual=$(jq -cS . "$output")
     assert_equals "$expected" "$actual" "adapter $name result"
+}
+
+assert_adapter_rejection() {
+    local runtime="$1"
+    local sidecar="$2"
+    local config_dir="$3"
+    local name="$4"
+    local operation="$5"
+    local request="$6"
+    local diagnostic="$7"
+    local input="$config_dir/compare/${name}.input.json"
+    local output="$config_dir/compare/${name}.output.json"
+    local error_output="$config_dir/compare/${name}.stderr"
+    local status
+
+    printf '%s\n' "$request" >"$input"
+    chmod 600 "$input"
+    set +e
+    "$runtime" exec -e PYTHONPATH=/work/adapter-fixture "$sidecar" \
+        python /work/compare/python-bugzilla-adapter.py "$operation" \
+        "/work/compare/${name}.input.json" "/work/compare/${name}.output.json" \
+        2>"$error_output"
+    status=$?
+    set -e
+    assert_equals 1 "$status" "adapter $name rejection status"
+    if ! grep -Fq "$diagnostic" "$error_output"; then
+        printf 'adapter rejection %s omitted diagnostic: %s\n' "$name" "$diagnostic" >&2
+        return 1
+    fi
+    if grep -Eq 'fixture-secret|/work/compare|fixture upstream' "$error_output"; then
+        printf 'adapter rejection %s leaked private failure detail\n' "$name" >&2
+        return 1
+    fi
+    if [[ -e $output ]]; then
+        printf 'adapter rejection %s created an output file\n' "$name" >&2
+        return 1
+    fi
 }
 
 run_adapter_fixture() {
     local runtime="$1"
     local sidecar="$2"
     local config_dir="$3"
-    local adapter="$PYBZ_DIR/../compare/bug-lifecycle.py"
+    local adapter="$PYBZ_DIR/../compare/python-bugzilla-adapter.py"
     local error_output="$config_dir/adapter-error.stderr"
-    local invalid_input="$config_dir/invalid-id.input.json"
+    local invalid_input="$config_dir/compare/invalid-id.input.json"
+    local local_input="$config_dir/compare/component-update-local.input.json"
+    local local_output="$config_dir/compare/component-update-local.output.json"
     local invalid_status
 
     if [[ ! -r $adapter ]]; then
-        printf 'python-bugzilla lifecycle adapter is missing: %s\n' "$adapter" >&2
+        printf 'python-bugzilla comparison adapter is missing: %s\n' "$adapter" >&2
         return 1
     fi
-    cp "$adapter" "$config_dir/bug-lifecycle.py"
-    chmod 600 "$config_dir/bug-lifecycle.py"
+    mkdir -p "$config_dir/compare"
+    cp "$adapter" "$config_dir/compare/python-bugzilla-adapter.py"
+    chmod 600 "$config_dir/compare/python-bugzilla-adapter.py"
+    printf 'fixture attachment\n' >"$config_dir/compare/attachment.txt"
+    chmod 600 "$config_dir/compare/attachment.txt"
     write_fake_bugzilla_module "$config_dir/adapter-fixture"
 
-    "$runtime" exec "$sidecar" python -m py_compile /work/bug-lifecycle.py
+    "$runtime" exec "$sidecar" python -m py_compile \
+        /work/compare/python-bugzilla-adapter.py
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" create create \
         '{"api_key":"fixture-secret","params":{"product":"Widget","summary":"create"}}' \
         '{"result":{"id":101,"request":{"builder":"create","product":"Widget","summary":"create"}},"transport":"XMLRPC"}'
@@ -1179,10 +1288,108 @@ run_adapter_fixture() {
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" bug-tags bug_tags \
         '{"api_key":"fixture-secret","bug_id":36,"tag":"probe"}' \
         '{"result":{"bugs":[{"id":201,"request":{"builder":"query","tags":["probe"]}}],"update":{"add":["probe"],"ids":[36],"remove":null}},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" comment-add comment_add \
+        '{"api_key":"fixture-secret","transport":"REST","bug_id":41,"text":"hello","is_private":true}' \
+        '{"result":{"ids":[41],"update":{"builder":"update","comment":{"comment":"hello","is_private":true}}},"transport":"REST"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" comment-list comment_list \
+        '{"api_key":"fixture-secret","transport":"XMLRPC","bug_id":41}' \
+        '{"result":{"bugs":{"41":{"comments":[{"id":350,"tags":[],"text":"tagged comment"}]}}},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" attachment-upload attachment_upload \
+        '{"api_key":"fixture-secret","transport":"REST","bug_ids":[41],"source":"/work/compare/attachment.txt","summary":"Fixture","file_name":"attachment.txt","content_type":"text/plain","comment":"uploaded","is_private":false}' \
+        '{"result":{"attachment_ids":[451]},"transport":"REST"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" attachment-list attachment_list \
+        '{"api_key":"fixture-secret","transport":"REST","bug_ids":[41]}' \
+        '{"result":{"attachment_ids":null,"attachments":{"451":{"id":451}},"bugs":[41]},"transport":"REST"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" attachment-get attachment_get \
+        '{"api_key":"fixture-secret","transport":"XMLRPC","attachment_ids":[451]}' \
+        '{"result":{"attachment_ids":[451],"attachments":{"451":{"id":451}},"bugs":null},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" attachment-download attachment_download \
+        '{"api_key":"fixture-secret","transport":"REST","attachment_id":451,"destination":"/work/compare/download.txt"}' \
+        '{"result":{"attachment_id":451,"bytes":19},"transport":"REST"}'
+    assert_equals 'fixture attachment' "$(<"$config_dir/compare/download.txt")" \
+        "adapter attachment download bytes"
+    assert_equals 600 \
+        "$("$runtime" exec "$sidecar" stat -c '%a' /work/compare/download.txt)" \
+        "adapter attachment download mode"
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" attachment-flag attachment_flag \
+        '{"api_key":"fixture-secret","transport":"XMLRPC","bug_id":41,"attachment_id":451,"flag_name":"review","status":"?","requestee":"reviewer@test.invalid"}' \
+        '{"result":{"attachment_id":451,"bug_id":41,"flag_name":"review","requestee":"reviewer@test.invalid","status":"?"},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" user-create user_create \
+        '{"api_key":"fixture-secret","email":"fixture-user@test.invalid","name":"Fixture User","password":"secret"}' \
+        '{"result":{"can_login":true,"email":"fixture-user@test.invalid","groups":["editbugs"],"id":601,"name":"fixture-user@test.invalid","real_name":"Fixture User"},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" user-get user_get \
+        '{"api_key":"fixture-secret","email":"fixture-user@test.invalid"}' \
+        '{"result":{"can_login":true,"email":"fixture-user@test.invalid","groups":["editbugs"],"id":601,"name":"fixture-user@test.invalid","real_name":"Fixture User"},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" user-search user_search \
+        '{"api_key":"fixture-secret","pattern":"fixture-user@test.invalid"}' \
+        '{"result":[{"can_login":true,"email":"fixture-user@test.invalid","groups":["editbugs"],"id":601,"name":"fixture-user@test.invalid","real_name":"Fixture User"}],"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" user-groups user_groups \
+        '{"api_key":"fixture-secret","email":"fixture-user@test.invalid","action":"add","groups":["editbugs"]}' \
+        '{"result":{"action":"add","groups":["editbugs"],"user":"fixture-user@test.invalid"},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" group-get group_get \
+        '{"api_key":"fixture-secret","name":"editbugs","membership":true}' \
+        '{"result":{"description":"Can edit bugs","id":701,"is_active":true,"members":["fixture-user@test.invalid"],"name":"editbugs"},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" group-list group_list \
+        '{"api_key":"fixture-secret","names":["editbugs"],"membership":true}' \
+        '{"result":[{"description":"Can edit bugs","id":701,"is_active":true,"members":["fixture-user@test.invalid"],"name":"editbugs"}],"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" product-catalogue product_catalogue \
+        '{"api_key":"fixture-secret","catalogue":"enterable"}' \
+        '{"result":[{"id":801,"name":"enterable"}],"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" component-add component_add \
+        '{"api_key":"fixture-secret","params":{"product":"Widget","component":"Core","description":"Core component","default_assignee":"admin@test.invalid"}}' \
+        '{"result":{"id":901,"request":{"component":"Core","default_assignee":"admin@test.invalid","description":"Core component","product":"Widget"}},"transport":"XMLRPC"}'
+
+    printf '%s\n' \
+        '{"api_key":"fixture-secret","params":{"product":"Widget","component":"Core","initialowner":"admin@test.invalid","description":"Updated"}}' \
+        >"$local_input"
+    chmod 600 "$local_input"
+    "$runtime" exec "$sidecar" python /work/compare/python-bugzilla-adapter.py \
+        component_update_shape /work/compare/component-update-local.input.json \
+        /work/compare/component-update-local.output.json
+    assert_equals \
+        '{"result":{"request":{"names":[{"component":"Core","product":"Widget"}],"updates":{"default_assignee":"admin@test.invalid","description":"Updated"}}},"transport":null}' \
+        "$(jq -cS . "$local_output")" "adapter local component-update shape"
+
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" invalid-transport \
+        comment_list \
+        '{"api_key":"fixture-secret","transport":"hybrid","bug_id":41}' \
+        'transport must be REST or XMLRPC'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" unknown-key \
+        user_get \
+        '{"api_key":"fixture-secret","email":"fixture-user@test.invalid","extra":true}' \
+        'unexpected request fields: extra'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" outside-attachment \
+        attachment_upload \
+        '{"api_key":"fixture-secret","bug_ids":[41],"source":"/work/outside.txt","summary":"Fixture","file_name":"attachment.txt","content_type":"text/plain","comment":"uploaded","is_private":false}' \
+        'source path is outside the exchange directory'
+    ln -s attachment.txt "$config_dir/compare/attachment-link.txt"
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" symlink-attachment \
+        attachment_upload \
+        '{"api_key":"fixture-secret","bug_ids":[41],"source":"/work/compare/attachment-link.txt","summary":"Fixture","file_name":"attachment.txt","content_type":"text/plain","comment":"uploaded","is_private":false}' \
+        'source path must not be a symlink'
+    cp "$config_dir/compare/attachment.txt" "$config_dir/compare/public-attachment.txt"
+    chmod 644 "$config_dir/compare/public-attachment.txt"
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" public-attachment \
+        attachment_upload \
+        '{"api_key":"fixture-secret","bug_ids":[41],"source":"/work/compare/public-attachment.txt","summary":"Fixture","file_name":"attachment.txt","content_type":"text/plain","comment":"uploaded","is_private":false}' \
+        'source file mode must be 0600'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" upstream-error \
+        attachment_download \
+        '{"api_key":"fixture-secret","attachment_id":999,"destination":"/work/compare/upstream.txt"}' \
+        'operation failed (RuntimeError)'
+    printf 'sentinel\n' >"$config_dir/compare/sentinel.txt"
+    ln -s sentinel.txt "$config_dir/compare/output-link.txt"
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" output-symlink \
+        attachment_download \
+        '{"api_key":"fixture-secret","attachment_id":451,"destination":"/work/compare/output-link.txt"}' \
+        'destination path must not be a symlink'
+    assert_equals sentinel "$(<"$config_dir/compare/sentinel.txt")" \
+        "adapter output symlink sentinel"
 
     if "$runtime" exec -e PYTHONPATH=/work/adapter-fixture -e FIXTURE_UNKNOWN_BACKEND=1 \
-        "$sidecar" python /work/bug-lifecycle.py create /work/create.input.json \
-        /work/unknown-backend.output.json 2>"$error_output"; then
+        "$sidecar" python /work/compare/python-bugzilla-adapter.py create \
+        /work/compare/create.input.json /work/compare/unknown-backend.output.json \
+        2>"$error_output"; then
         printf 'adapter accepted an unknown backend class\n' >&2
         return 1
     fi
@@ -1195,8 +1402,9 @@ run_adapter_fixture() {
     chmod 600 "$invalid_input"
     set +e
     "$runtime" exec -e PYTHONPATH=/work/adapter-fixture "$sidecar" \
-        python /work/bug-lifecycle.py view /work/invalid-id.input.json \
-        /work/invalid-id.output.json 2>"$error_output"
+        python /work/compare/python-bugzilla-adapter.py view \
+        /work/compare/invalid-id.input.json /work/compare/invalid-id.output.json \
+        2>"$error_output"
     invalid_status=$?
     set -e
     assert_equals 1 "$invalid_status" "invalid adapter ID status"
@@ -1204,18 +1412,20 @@ run_adapter_fixture() {
         printf 'adapter error leaked the API key\n' >&2
         return 1
     fi
-    if ! grep -Fq '/work/invalid-id.input.json' "$error_output"; then
-        printf 'adapter error omitted the input path\n' >&2
+    if grep -Fq '/work/compare/invalid-id.input.json' "$error_output"; then
+        printf 'adapter error leaked the input path\n' >&2
         return 1
     fi
     if "$runtime" exec -e PYTHONPATH=/work/adapter-fixture "$sidecar" \
-        python /work/bug-lifecycle.py unsupported /work/invalid-id.input.json \
-        /work/unsupported.output.json 2>"$error_output"; then
+        python /work/compare/python-bugzilla-adapter.py unsupported \
+        /work/compare/invalid-id.input.json /work/compare/unsupported.output.json \
+        2>"$error_output"; then
         printf 'adapter accepted an unsupported operation\n' >&2
         return 1
     fi
     if "$runtime" exec -e PYTHONPATH=/work/adapter-fixture "$sidecar" \
-        python /work/bug-lifecycle.py view /work/invalid-id.input.json \
+        python /work/compare/python-bugzilla-adapter.py view \
+        /work/compare/invalid-id.input.json \
         2>"$error_output"; then
         printf 'adapter accepted an incomplete argument list\n' >&2
         return 1

@@ -82,14 +82,14 @@ COMPARE_EXCHANGE_DIR="$FUNC_CONFIG_DIR/compare"
 mkdir -p "$COMPARE_EXCHANGE_DIR"
 COMPARE_ADMIN_EMAIL="admin@test.bzr"
 BZR_COMPARE_API_KEY="FuncTest0123456789abcdef0123456789abcdef"
-_compare_adapter="$SCRIPT_DIR/compare/bug-lifecycle.py"
+_compare_adapter="$SCRIPT_DIR/compare/python-bugzilla-adapter.py"
 if [[ ! -r $_compare_adapter ]]; then
     echo "ERROR: comparison adapter is missing or unreadable: $_compare_adapter" >&2
     exit 1
 fi
-cp "$_compare_adapter" "$COMPARE_EXCHANGE_DIR/bug-lifecycle.py"
-chmod 600 "$COMPARE_EXCHANGE_DIR/bug-lifecycle.py"
-if [[ ! -r $COMPARE_EXCHANGE_DIR/bug-lifecycle.py ]]; then
+cp "$_compare_adapter" "$COMPARE_EXCHANGE_DIR/python-bugzilla-adapter.py"
+chmod 600 "$COMPARE_EXCHANGE_DIR/python-bugzilla-adapter.py"
+if [[ ! -r $COMPARE_EXCHANGE_DIR/python-bugzilla-adapter.py ]]; then
     echo "ERROR: comparison adapter staging failed" >&2
     exit 1
 fi

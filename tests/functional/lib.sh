@@ -448,7 +448,7 @@ _run_pybz_command() {
 run_pybz() { _run_pybz_command bugzilla "$@"; }
 
 run_pybz_adapter() {
-    _run_pybz_command python /work/compare/bug-lifecycle.py "$@"
+    _run_pybz_command python /work/compare/python-bugzilla-adapter.py "$@"
 }
 
 # ── Assertions ───────────────────────────────────────────────────────
