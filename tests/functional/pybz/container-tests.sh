@@ -196,12 +196,17 @@ run_lifecycle_phase_fixture() (
         printf 'missing lifecycle phase IDs: compare/01-bug-lifecycle/{create,query,update,view,history}\n' >&2
         return 1
     fi
-
     umask 077
     PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
     TEST_ID_PREFIX=compare CURRENT_TEST_GROUP=01-bug-lifecycle BZ_VERSION=bz50
     BZ_URL=http://127.0.0.1 BZR_COMPARE_API_KEY=fixture-secret
     COMPARE_ADMIN_EMAIL=admin@test.bzr PYBZ_RUNTIME=fake_lifecycle_runtime
+    LIFECYCLE_BZR_ARGS="$COMPARE_EXCHANGE_DIR/bzr.args"
+
+    seed_server_saved_search() {
+        [[ $1 == admin@test.bzr && -n $2 && ${#2} -le 64 &&
+            $3 =~ ^[1-9][0-9]*$ && $4 =~ ^[1-9][0-9]*$ ]]
+    }
 
     fixture_bug() {
         local id="$1" summary="$2"
@@ -213,22 +218,72 @@ run_lifecycle_phase_fixture() (
     }
     run_bzr() {
         local args=" $* " id=41 summary="$LIFECYCLE_BZR_SUMMARY"
+        printf '%s\n' "$*" >>"$LIFECYCLE_BZR_ARGS"
+        : >"$BZR_STDOUT"
         [[ $args == *" 42 "* ]] && id=42 && summary="$LIFECYCLE_PYBZ_SUMMARY"
         if [[ ${LIFECYCLE_UPDATED:-0} -eq 1 ]]; then summary="$LIFECYCLE_UPDATED_SUMMARY"; fi
+        if [[ ${LIFECYCLE_STALE_GAPS:-0} -eq 1 && $args == *" bug list "* &&
+            $args == *" --tag "* ]]; then
+            printf '[{"id":42}]\n' >"$BZR_STDOUT"
+            cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"; : >"$BZR_STDERR"; BZR_EXIT=0
+            return 0
+        fi
+        if [[ ${LIFECYCLE_STALE_GAPS:-0} -ne 1 &&
+            ( $args == *" --saved-search "* || $args == *" --field "* ||
+                $args == *" --comment-tag "* || $args == *" --status-whiteboard-type "* ||
+                $args == *" bug tag "* || $args == *" --tag "* ) ]]; then
+            cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"; : >"$BZR_STDERR"; BZR_EXIT=2
+            return 0
+        fi
+        if [[ ${LIFECYCLE_STALE_GAPS:-0} -eq 1 ]]; then
+            case "$args" in
+            *" --saved-search "*) printf '[{"id":41},{"id":42}]\n' >"$BZR_STDOUT" ;;
+            *" --field whiteboard="*)
+                if [[ $args == *" bug create "* ]]; then printf '{"id":46}\n' >"$BZR_STDOUT"
+                else printf '{}\n' >"$BZR_STDOUT"; fi
+                ;;
+            *" bug view 46 "*)
+                jq -cn --arg value "$LIFECYCLE_FIELD_UPDATED" '{id:46,whiteboard:$value}' >"$BZR_STDOUT"
+                ;;
+            *" --comment-tag "*) printf '{}\n' >"$BZR_STDOUT" ;;
+            *" bug list "*" --status-whiteboard-type equals "*) printf '[{"id":44}]\n' >"$BZR_STDOUT" ;;
+            *" bug tag "*) printf '{}\n' >"$BZR_STDOUT" ;;
+            *" bug list "*" --tag "*) printf '[{"id":42}]\n' >"$BZR_STDOUT" ;;
+            *) : ;;
+            esac
+            if [[ -s $BZR_STDOUT ]]; then
+                cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"; : >"$BZR_STDERR"; BZR_EXIT=0
+                return 0
+            fi
+        fi
         case "$args" in
         *" bug create "*) printf '{"id":41}\n' >"$BZR_STDOUT" ;;
         *" bug list "*) fixture_bug 41 "$LIFECYCLE_BZR_SUMMARY" | jq -s . >"$BZR_STDOUT" ;;
         *" bug update "*) LIFECYCLE_UPDATED=1; printf '{}\n' >"$BZR_STDOUT" ;;
         *" bug view "*) fixture_bug "$id" "$summary" >"$BZR_STDOUT" ;;
-        *" comment list "*) printf '[{"count":0,"text":"lifecycle description"}]\n' >"$BZR_STDOUT" ;;
+        *" comment list "*)
+            if [[ ${LIFECYCLE_PYBZ_TAGGED:-0} -eq 1 && $args == *" 42 "* ]]; then
+                jq -cn --arg text "$LIFECYCLE_COMMENT" --arg tag "$LIFECYCLE_COMMENT_TAG" \
+                    '[{text:$text,tags:[$tag]}]' >"$BZR_STDOUT"
+            else printf '[{"count":0,"text":"lifecycle description"}]\n' >"$BZR_STDOUT"; fi
+            ;;
         *" bug history "*) jq -cn --arg old "$LIFECYCLE_BZR_SUMMARY" --arg near "$LIFECYCLE_STEM [bzr] extra" \
             '[{field:"summary",old_value:$old,new_value:"updated"},{field:"summary",old_value:$near,new_value:"preserved"},{field:"url",old_value:"",new_value:"https://example.test/updated"}]' >"$BZR_STDOUT" ;;
-        *) return 2 ;;
+        *)
+            if [[ ${LIFECYCLE_STALE_GAPS:-0} -ne 1 ]]; then
+                : >"$BZR_STDOUT"; cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"; : >"$BZR_STDERR"
+                BZR_EXIT=2
+                return 0
+            fi
+            return 2
+            ;;
         esac
         cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"; : >"$BZR_STDERR"; BZR_EXIT=0
     }
     fake_lifecycle_runtime() {
-        local operation="$5" output="$COMPARE_EXCHANGE_DIR/${7##*/}" result
+        local operation="$5" output="$COMPARE_EXCHANGE_DIR/${7##*/}" result transport=FixtureXMLRPC
+        local input="$COMPARE_EXCHANGE_DIR/${6##*/}" request value
+        request=$(<"$input")
         case "$operation" in
         create) result='{"id":42}' ;;
         query) result=$(fixture_bug 42 "$LIFECYCLE_PYBZ_SUMMARY" | jq -s .) ;;
@@ -239,9 +294,30 @@ run_lifecycle_phase_fixture() (
             ;;
         history) result=$(jq -cn --arg old "$LIFECYCLE_PYBZ_SUMMARY" --arg near "$LIFECYCLE_STEM [bzr] extra" \
             '{bugs:[{history:[{changes:[{field_name:"summary",removed:$old,added:"updated"},{field_name:"summary",removed:$near,added:"preserved"},{field_name:"url",removed:"",added:"https://example.test/updated"}]}]}]}') ;;
+        saved_search) result='[{"id":41},{"id":42}]' ;;
+        generic_fields)
+            if [[ $(jq -r '.action' <<<"$request") == create ]]; then
+                LIFECYCLE_GENERIC_CREATE_COUNT=${LIFECYCLE_GENERIC_CREATE_COUNT:-0}
+                LIFECYCLE_GENERIC_CREATE_COUNT=$((LIFECYCLE_GENERIC_CREATE_COUNT + 1))
+                result=$(jq -cn --argjson id "$((42 + LIFECYCLE_GENERIC_CREATE_COUNT))" '{id:$id}')
+            else LIFECYCLE_GENERIC_UPDATED=1; result='{}'; fi
+            ;;
+        match_type) result='[{"id":44}]' ;;
+        update_options) LIFECYCLE_PYBZ_TAGGED=1; result='{}'; transport=FixtureREST ;;
+        bug_tags) result='{"bugs":[{"id":42}],"update":{}}'; transport=FixtureXMLRPC ;;
         *) return 2 ;;
         esac
-        jq -cn --argjson result "$result" '{transport:"FixtureREST",result:$result}' >"$output"
+        if [[ $operation == view && $(jq -r '.bug_id // 0' <<<"$request") == 43 ]]; then
+            value="$LIFECYCLE_FIELD_INITIAL"
+            [[ ${LIFECYCLE_GENERIC_UPDATED:-0} -eq 0 ]] || value="$LIFECYCLE_FIELD_UPDATED"
+            result=$(jq -cn --arg value "$value" \
+                '{id:43,whiteboard:$value}')
+        fi
+        if [[ $operation == query && $request == *status_whiteboard* ]]; then
+            result='[{"id":44},{"id":45}]'
+        fi
+        jq -cn --arg transport "$transport" --argjson result "$result" \
+            '{transport:$transport,result:$result}' >"$output"
         return 0
     }
 
@@ -250,7 +326,9 @@ run_lifecycle_phase_fixture() (
     if [[ $FAIL_COUNT -ne 0 ]]; then cat "$fixture_output" >&2; fi
     assert_equals 5 "$PASS_COUNT" "lifecycle pass count"
     assert_equals 0 "$FAIL_COUNT" "lifecycle fail count"
-    for slug in create query update view history; do
+    assert_equals 5 "$GAP_COUNT" "lifecycle gap count"
+    for slug in create query update view history saved-search arbitrary-fields update-options \
+        query-match-types bug-tags; do
         grep -Fq "compare/01-bug-lifecycle/$slug" "$fixture_output"
     done
     assert_equals \
@@ -272,6 +350,30 @@ run_lifecycle_phase_fixture() (
         return 1
     fi
     unset PYBZ_LIFECYCLE_MISMATCH
+
+    LIFECYCLE_STALE_GAPS=1
+    LIFECYCLE_PYBZ_TAGGED=0 LIFECYCLE_GENERIC_CREATE_COUNT=0 LIFECYCLE_GENERIC_UPDATED=0
+    PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
+    SEEN_TEST_IDS=$'\n' TEST_RESULT_PENDING=0 LIFECYCLE_UPDATED=0
+    : >"$LIFECYCLE_BZR_ARGS"
+    source "$phase" >>"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    if test_summary >>"$fixture_output"; then
+        printf 'stale gap controls unexpectedly passed\n' >&2
+        return 1
+    fi
+    for issue in 670 671 672 679 680; do
+        if ! grep -Fq "#${issue} appears resolved" "$fixture_output"; then
+            printf 'stale gap control did not name #%s\n' "$issue" >&2
+            return 1
+        fi
+    done
+    assert_equals 5 "$FAIL_COUNT" "stale gap fail count"
+    if ! grep -Fq -- '--minor-update' "$LIFECYCLE_BZR_ARGS"; then
+        printf 'stale update-options control omitted --minor-update\n' >&2
+        return 1
+    fi
+    unset LIFECYCLE_STALE_GAPS
 )
 
 run_sidecar_stop_failure_fixture() (
@@ -309,7 +411,22 @@ write_fake_bugzilla_module() {
 
     mkdir -p "$fixture_dir/bugzilla"
     cat >"$fixture_dir/bugzilla/__init__.py" <<'PY'
-class _FixtureBackend:
+class _FixtureAutoBackend:
+    pass
+
+
+class _FixtureRESTBackend:
+    def __init__(self):
+        self.comment_tags = []
+
+    def _put(self, path, payload):
+        if path != "/bug/comment/350/tags" or payload != {"add": ["probe"]}:
+            raise RuntimeError("unexpected comment-tag request")
+        self.comment_tags = payload["add"]
+        raise ValueError("array response")
+
+
+class _FixtureXMLRPCBackend:
     pass
 
 
@@ -322,10 +439,28 @@ class _FixtureBug:
 
 
 class Bugzilla:
-    def __init__(self, url, api_key=None, use_creds=True):
-        if url != "http://127.0.0.1" or api_key != "fixture-secret" or use_creds:
+    def __init__(
+        self,
+        url,
+        api_key=None,
+        use_creds=True,
+        force_rest=False,
+        force_xmlrpc=False,
+    ):
+        if (
+            url != "http://127.0.0.1"
+            or api_key != "fixture-secret"
+            or use_creds
+            or (force_rest and force_xmlrpc)
+        ):
             raise RuntimeError("unexpected constructor arguments")
-        self._backend = _FixtureBackend()
+        self._backend = (
+            _FixtureXMLRPCBackend()
+            if force_xmlrpc
+            else _FixtureRESTBackend()
+            if force_rest
+            else _FixtureAutoBackend()
+        )
 
     def build_createbug(self, **params):
         return {"builder": "create", **params}
@@ -346,6 +481,21 @@ class Bugzilla:
 
     def update_bugs(self, ids, update):
         return {"ids": ids, "update": update}
+
+    def get_comments(self, ids):
+        return {
+            "bugs": {
+                str(ids[0]): {
+                    "comments": [
+                        {
+                            "id": 350,
+                            "text": "tagged comment",
+                            "tags": getattr(self._backend, "comment_tags", []),
+                        }
+                    ]
+                }
+            }
+        }
 
     def getbug(self, bug_id):
         data = {"id": bug_id, "source": "view"}
@@ -426,40 +576,40 @@ run_adapter_fixture() {
     "$runtime" exec "$sidecar" python -m py_compile /work/bug-lifecycle.py
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" create create \
         '{"api_key":"fixture-secret","params":{"product":"Widget","summary":"create"}}' \
-        '{"result":{"id":101,"request":{"builder":"create","product":"Widget","summary":"create"}},"transport":"_FixtureBackend"}'
+        '{"result":{"id":101,"request":{"builder":"create","product":"Widget","summary":"create"}},"transport":"_FixtureAutoBackend"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" query query \
         '{"api_key":"fixture-secret","params":{"short_desc":"needle"}}' \
-        '{"result":[{"id":201,"request":{"builder":"query","short_desc":"needle"}}],"transport":"_FixtureBackend"}'
+        '{"result":[{"id":201,"request":{"builder":"query","short_desc":"needle"}}],"transport":"_FixtureAutoBackend"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" update update \
         '{"api_key":"fixture-secret","bug_id":31,"params":{"summary":"updated"}}' \
-        '{"result":{"ids":[31],"update":{"builder":"update","summary":"updated"}},"transport":"_FixtureBackend"}'
+        '{"result":{"ids":[31],"update":{"builder":"update","summary":"updated"}},"transport":"_FixtureAutoBackend"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" view view \
         '{"api_key":"fixture-secret","bug_id":32}' \
-        '{"result":{"id":32,"source":"view"},"transport":"_FixtureBackend"}'
+        '{"result":{"id":32,"source":"view"},"transport":"_FixtureAutoBackend"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" view-xmlrpc-date view \
         '{"api_key":"fixture-secret","bug_id":37}' \
-        '{"result":{"id":37,"last_change_time":"20260101T00:00:00","source":"view"},"transport":"_FixtureBackend"}'
+        '{"result":{"id":37,"last_change_time":"20260101T00:00:00","source":"view"},"transport":"_FixtureAutoBackend"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" history history \
         '{"api_key":"fixture-secret","bug_id":33}' \
-        '{"result":{"bugs":[{"history":[{"changes":[{"added":"new","field_name":"summary","removed":"old"}],"when":"fixture"}],"id":33}]},"transport":"_FixtureBackend"}'
+        '{"result":{"bugs":[{"history":[{"changes":[{"added":"new","field_name":"summary","removed":"old"}],"when":"fixture"}],"id":33}]},"transport":"_FixtureAutoBackend"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" saved-search saved_search \
         '{"api_key":"fixture-secret","name":"owned-search"}' \
-        '{"result":[{"id":201,"request":{"builder":"query","savedsearch":"owned-search"}}],"transport":"_FixtureBackend"}'
+        '{"result":[{"id":201,"request":{"builder":"query","savedsearch":"owned-search"}}],"transport":"_FixtureAutoBackend"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" generic-create generic_fields \
         '{"api_key":"fixture-secret","action":"create","params":{"product":"Widget","summary":"generic"},"fields":{"cf_probe":"initial"}}' \
-        '{"result":{"id":101,"request":{"builder":"create","cf_probe":"initial","product":"Widget","summary":"generic"}},"transport":"_FixtureBackend"}'
+        '{"result":{"id":101,"request":{"builder":"create","cf_probe":"initial","product":"Widget","summary":"generic"}},"transport":"_FixtureAutoBackend"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" generic-update generic_fields \
         '{"api_key":"fixture-secret","action":"update","bug_id":34,"params":{"summary":"generic-updated"},"fields":{"cf_probe":"changed"}}' \
-        '{"result":{"ids":[34],"update":{"builder":"update","cf_probe":"changed","summary":"generic-updated"}},"transport":"_FixtureBackend"}'
+        '{"result":{"ids":[34],"update":{"builder":"update","cf_probe":"changed","summary":"generic-updated"}},"transport":"_FixtureAutoBackend"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" update-options update_options \
         '{"api_key":"fixture-secret","bug_id":35,"comment":"tagged comment","comment_tags":["probe"],"minor_update":true}' \
-        '{"result":{"ids":[35],"update":{"builder":"update","comment":{"comment":"tagged comment"},"comment_tags":["probe"],"minor_update":true}},"transport":"_FixtureBackend"}'
+        '{"result":{"ids":[35],"update":{"builder":"update","comment":{"comment":"tagged comment"},"minor_update":true}},"transport":"_FixtureRESTBackend"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" match-type match_type \
         '{"api_key":"fixture-secret","value":"needle","match_type":"equals"}' \
-        '{"result":[{"id":201,"request":{"builder":"query","status_whiteboard":"needle","status_whiteboard_type":"equals"}}],"transport":"_FixtureBackend"}'
+        '{"result":[{"id":201,"request":{"builder":"query","status_whiteboard":"needle","status_whiteboard_type":"equals"}}],"transport":"_FixtureAutoBackend"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" bug-tags bug_tags \
         '{"api_key":"fixture-secret","bug_id":36,"tag":"probe"}' \
-        '{"result":{"bugs":[{"id":201,"request":{"builder":"query","tags":["probe"]}}],"update":{"add":["probe"],"ids":[36],"remove":null}},"transport":"_FixtureBackend"}'
+        '{"result":{"bugs":[{"id":201,"request":{"builder":"query","tags":["probe"]}}],"update":{"add":["probe"],"ids":[36],"remove":null}},"transport":"_FixtureXMLRPCBackend"}'
 
     printf '%s\n' '{"api_key":"fixture-secret","bug_id":0}' >"$invalid_input"
     chmod 600 "$invalid_input"

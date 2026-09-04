@@ -165,10 +165,31 @@ def _update_options(client, request):
         raise AdapterError("minor_update must be true")
     update = client.build_update(
         comment=comment,
-        comment_tags=comment_tags,
         minor_update=True,
     )
-    return client.update_bugs([bug_id], update)
+    result = client.update_bugs([bug_id], update)
+    comments = client.get_comments([bug_id])
+    bug_comments = comments.get("bugs", {}).get(str(bug_id), {}).get("comments", [])
+    comment_id = next(
+        (entry.get("id") for entry in reversed(bug_comments) if entry.get("text") == comment),
+        None,
+    )
+    if not isinstance(comment_id, int) or comment_id <= 0:
+        raise AdapterError("updated comment was not found")
+    try:
+        client._backend._put(f"/bug/comment/{comment_id}/tags", {"add": comment_tags})
+    except ValueError:
+        # python-bugzilla 3.3.0 assumes REST mutations return an object, but
+        # this endpoint returns its tag array after committing the change.
+        pass
+    tagged_comments = client.get_comments([bug_id])
+    tagged = tagged_comments.get("bugs", {}).get(str(bug_id), {}).get("comments", [])
+    if not any(
+        entry.get("id") == comment_id and all(tag in entry.get("tags", []) for tag in comment_tags)
+        for entry in tagged
+    ):
+        raise AdapterError("updated comment tags were not read back")
+    return result
 
 
 def _match_type(client, request):
@@ -286,6 +307,8 @@ def main(argv):
             SERVER_URL,
             api_key=request["api_key"],
             use_creds=False,
+            force_rest=operation == "update_options",
+            force_xmlrpc=operation == "bug_tags",
         )
         result = handler(client, request)
         _write_output(

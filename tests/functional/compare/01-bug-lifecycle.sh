@@ -13,12 +13,13 @@ LIFECYCLE_PYBZ_ID=""
 
 lifecycle_capture_bzr() {
     local name="$1"
+    local transport="${2:-REST}"
 
     cp "$BZR_STDOUT" "$COMPARE_EXCHANGE_DIR/${name}.bzr.stdout.json"
     cp "$BZR_STDOUT_RAW" "$COMPARE_EXCHANGE_DIR/${name}.bzr.raw"
     cp "$BZR_STDERR" "$COMPARE_EXCHANGE_DIR/${name}.bzr.stderr"
     printf '%s\n' "$BZR_EXIT" >"$COMPARE_EXCHANGE_DIR/${name}.bzr.exit"
-    printf 'REST\n' >"$COMPARE_EXCHANGE_DIR/${name}.bzr.transport"
+    printf '%s\n' "$transport" >"$COMPARE_EXCHANGE_DIR/${name}.bzr.transport"
 }
 
 lifecycle_bzr() {
@@ -30,6 +31,24 @@ lifecycle_bzr() {
     lifecycle_capture_bzr "$name"
     if [[ $BZR_EXIT -ne 0 ]]; then
         test_fail "bzr $name failed with exit $BZR_EXIT"
+        return 1
+    fi
+    return 0
+}
+
+lifecycle_bzr_xmlrpc() {
+    local name="$1"
+    shift
+
+    run_bzr --server-url "$BZ_URL" --server-api-key-env BZR_COMPARE_API_KEY \
+        --server-email "$COMPARE_ADMIN_EMAIL" --api xmlrpc "$@"
+    lifecycle_capture_bzr "$name" XMLRPC
+    if [[ $BZR_EXIT -ne 0 ]]; then
+        test_fail "bzr $name failed with exit $BZR_EXIT"
+        return 1
+    fi
+    if [[ $(<"$COMPARE_EXCHANGE_DIR/${name}.bzr.transport") != XMLRPC ]]; then
+        test_fail "bzr $name did not use XML-RPC"
         return 1
     fi
     return 0
@@ -64,6 +83,29 @@ lifecycle_pybz() {
 lifecycle_positive_id() {
     local path="$1"
     jq -er '.id | select(type == "number" and floor == . and . > 0)' "$path"
+}
+
+lifecycle_ids_are() {
+    local source="$1"
+    local expected="$2"
+
+    jq -e --argjson expected "$expected" '[.[].id] | sort == $expected' "$source" >/dev/null
+}
+
+lifecycle_transport_is() {
+    local name="$1"
+    local client="$2"
+    local expected="$3"
+    local actual
+
+    actual=$(<"$COMPARE_EXCHANGE_DIR/${name}.${client}.transport")
+    case "$expected:$actual" in
+    REST:*REST* | XMLRPC:*XMLRPC*) return 0 ;;
+    *)
+        test_fail "$client $name did not use $expected"
+        return 1
+        ;;
+    esac
 }
 
 lifecycle_state() {
@@ -231,4 +273,149 @@ if [[ -n $LIFECYCLE_BZR_ID && -n $LIFECYCLE_PYBZ_ID ]] &&
     test_pass
 elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail "create did not produce IDs for history"
+fi
+
+LIFECYCLE_SAVED_SEARCH="lifecycle-${BZ_VERSION}-${RANDOM}"
+LIFECYCLE_FIELD_INITIAL="field-initial-${RANDOM}"
+LIFECYCLE_FIELD_UPDATED="field-updated-${RANDOM}"
+LIFECYCLE_COMMENT="tagged-comment-${RANDOM}"
+LIFECYCLE_COMMENT_TAG="tag-${RANDOM}"
+LIFECYCLE_WHITEBOARD_EXACT="equals-${RANDOM}"
+LIFECYCLE_WHITEBOARD_DECOY="${LIFECYCLE_WHITEBOARD_EXACT}-suffix"
+LIFECYCLE_BUG_TAG="bug-tag-${RANDOM}"
+
+test_begin "saved-search" "server saved search"
+if [[ -n $LIFECYCLE_BZR_ID && -n $LIFECYCLE_PYBZ_ID ]] &&
+    seed_server_saved_search "$COMPARE_ADMIN_EMAIL" "$LIFECYCLE_SAVED_SEARCH" \
+        "$LIFECYCLE_BZR_ID" "$LIFECYCLE_PYBZ_ID" &&
+    lifecycle_pybz saved-search saved_search "$(jq -cn --arg name "$LIFECYCLE_SAVED_SEARCH" \
+        '{name:$name}')" &&
+    lifecycle_transport_is saved-search pybz XMLRPC &&
+    lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/saved-search.pybz.result.json" \
+        "[$LIFECYCLE_BZR_ID,$LIFECYCLE_PYBZ_ID]"; then
+    if lifecycle_bzr saved-search bug search --saved-search "$LIFECYCLE_SAVED_SEARCH" &&
+        lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/saved-search.bzr.stdout.json" \
+            "[$LIFECYCLE_BZR_ID,$LIFECYCLE_PYBZ_ID]"; then
+        test_pass
+    elif [[ $LAST_TEST_RESULT != FAIL ]]; then
+        test_fail "bzr saved-search result differed"
+    fi
+    expect_gap 670
+elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
+    test_fail "saved-search precondition failed"
+fi
+
+test_begin "arbitrary-fields" "generic arbitrary fields"
+if lifecycle_pybz arbitrary-fields-create generic_fields "$(jq -cn \
+    --arg summary "$LIFECYCLE_STEM generic pybz" --arg value "$LIFECYCLE_FIELD_INITIAL" \
+    '{action:"create",params:{product:"TestProduct",component:"TestComponent",version:"unspecified",
+      summary:$summary,description:"generic fields",op_sys:"Linux",platform:"PC"},
+      fields:{whiteboard:$value}}')" &&
+    lifecycle_transport_is arbitrary-fields-create pybz XMLRPC &&
+    LIFECYCLE_GENERIC_PYBZ_ID=$(lifecycle_positive_id \
+        "$COMPARE_EXCHANGE_DIR/arbitrary-fields-create.pybz.result.json") &&
+    lifecycle_pybz arbitrary-fields-create-view view "$(jq -cn \
+        --argjson id "$LIFECYCLE_GENERIC_PYBZ_ID" '{bug_id:$id}')" &&
+    jq -e --arg value "$LIFECYCLE_FIELD_INITIAL" '.whiteboard == $value' \
+        "$COMPARE_EXCHANGE_DIR/arbitrary-fields-create-view.pybz.result.json" >/dev/null &&
+    lifecycle_pybz arbitrary-fields-update generic_fields "$(jq -cn \
+        --argjson id "$LIFECYCLE_GENERIC_PYBZ_ID" --arg value "$LIFECYCLE_FIELD_UPDATED" \
+        '{action:"update",bug_id:$id,params:{},fields:{whiteboard:$value}}')" &&
+    lifecycle_pybz arbitrary-fields-update-view view "$(jq -cn \
+        --argjson id "$LIFECYCLE_GENERIC_PYBZ_ID" '{bug_id:$id}')" &&
+    jq -e --arg value "$LIFECYCLE_FIELD_UPDATED" '.whiteboard == $value' \
+        "$COMPARE_EXCHANGE_DIR/arbitrary-fields-update-view.pybz.result.json" >/dev/null; then
+    if lifecycle_bzr arbitrary-fields-create bug create --product TestProduct --component TestComponent \
+        --summary "$LIFECYCLE_STEM generic bzr" --description "generic fields" --op-sys Linux \
+        --platform PC --field "whiteboard=$LIFECYCLE_FIELD_INITIAL" &&
+        LIFECYCLE_GENERIC_BZR_ID=$(lifecycle_positive_id \
+            "$COMPARE_EXCHANGE_DIR/arbitrary-fields-create.bzr.stdout.json") &&
+        lifecycle_bzr arbitrary-fields-update bug update "$LIFECYCLE_GENERIC_BZR_ID" \
+            --field "whiteboard=$LIFECYCLE_FIELD_UPDATED" &&
+        lifecycle_bzr arbitrary-fields-view bug view "$LIFECYCLE_GENERIC_BZR_ID" &&
+        jq -e --arg value "$LIFECYCLE_FIELD_UPDATED" '.whiteboard == $value' \
+            "$COMPARE_EXCHANGE_DIR/arbitrary-fields-view.bzr.stdout.json" >/dev/null; then
+        test_pass
+    elif [[ $LAST_TEST_RESULT != FAIL ]]; then
+        test_fail "bzr arbitrary-fields result differed"
+    fi
+    expect_gap 671
+elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
+    test_fail "arbitrary-fields precondition failed"
+fi
+
+test_begin "update-options" "comment tags and minor update"
+if [[ -n $LIFECYCLE_PYBZ_ID ]] &&
+    lifecycle_pybz update-options update_options "$(jq -cn --argjson id "$LIFECYCLE_PYBZ_ID" \
+        --arg comment "$LIFECYCLE_COMMENT" --arg tag "$LIFECYCLE_COMMENT_TAG" \
+        '{bug_id:$id,comment:$comment,comment_tags:[$tag],minor_update:true}')" &&
+    lifecycle_transport_is update-options pybz REST; then
+    if lifecycle_bzr update-options-bzr bug update "$LIFECYCLE_PYBZ_ID" \
+        --comment "$LIFECYCLE_COMMENT" --comment-tag "$LIFECYCLE_COMMENT_TAG" --minor-update &&
+        lifecycle_bzr update-options-bzr-comment comment list "$LIFECYCLE_PYBZ_ID" &&
+        jq -e --arg comment "$LIFECYCLE_COMMENT" --arg tag "$LIFECYCLE_COMMENT_TAG" \
+            'any(.[]; .text == $comment and (.tags | index($tag)))' \
+            "$COMPARE_EXCHANGE_DIR/update-options-bzr-comment.bzr.stdout.json" >/dev/null; then
+        test_pass
+    elif [[ $LAST_TEST_RESULT != FAIL ]]; then
+        test_fail "bzr update-options result differed"
+    fi
+    expect_gap 672
+elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
+    test_fail "update-options precondition failed"
+fi
+
+test_begin "query-match-types" "whiteboard match types"
+if lifecycle_pybz query-match-exact-create generic_fields "$(jq -cn \
+    --arg summary "$LIFECYCLE_STEM exact" --arg value "$LIFECYCLE_WHITEBOARD_EXACT" \
+    '{action:"create",params:{product:"TestProduct",component:"TestComponent",version:"unspecified",
+      summary:$summary,description:"match type",op_sys:"Linux",platform:"PC"},fields:{whiteboard:$value}}')" &&
+    LIFECYCLE_MATCH_EXACT_ID=$(lifecycle_positive_id \
+        "$COMPARE_EXCHANGE_DIR/query-match-exact-create.pybz.result.json") &&
+    lifecycle_pybz query-match-decoy-create generic_fields "$(jq -cn \
+    --arg summary "$LIFECYCLE_STEM decoy" --arg value "$LIFECYCLE_WHITEBOARD_DECOY" \
+    '{action:"create",params:{product:"TestProduct",component:"TestComponent",version:"unspecified",
+      summary:$summary,description:"match type",op_sys:"Linux",platform:"PC"},fields:{whiteboard:$value}}')" &&
+    LIFECYCLE_MATCH_DECOY_ID=$(lifecycle_positive_id \
+        "$COMPARE_EXCHANGE_DIR/query-match-decoy-create.pybz.result.json") &&
+    lifecycle_pybz query-match-substring query "$(jq -cn --arg value "$LIFECYCLE_WHITEBOARD_EXACT" \
+        '{params:{status_whiteboard:$value}}')" &&
+    lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/query-match-substring.pybz.result.json" \
+        "[$LIFECYCLE_MATCH_EXACT_ID,$LIFECYCLE_MATCH_DECOY_ID]" &&
+    lifecycle_pybz query-match-equals match_type "$(jq -cn --arg value "$LIFECYCLE_WHITEBOARD_EXACT" \
+        '{value:$value,match_type:"equals"}')" &&
+    lifecycle_transport_is query-match-equals pybz XMLRPC &&
+    lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/query-match-equals.pybz.result.json" \
+        "[$LIFECYCLE_MATCH_EXACT_ID]"; then
+    if lifecycle_bzr query-match-types bug list --whiteboard "$LIFECYCLE_WHITEBOARD_EXACT" \
+        --status-whiteboard-type equals &&
+        lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/query-match-types.bzr.stdout.json" \
+            "[$LIFECYCLE_MATCH_EXACT_ID]"; then
+        test_pass
+    elif [[ $LAST_TEST_RESULT != FAIL ]]; then
+        test_fail "bzr query-match-types result differed"
+    fi
+    expect_gap 679
+elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
+    test_fail "query-match-types precondition failed"
+fi
+
+test_begin "bug-tags" "personal bug tags"
+if [[ -n $LIFECYCLE_PYBZ_ID ]] &&
+    lifecycle_pybz bug-tags bug_tags "$(jq -cn --argjson id "$LIFECYCLE_PYBZ_ID" \
+        --arg tag "$LIFECYCLE_BUG_TAG" '{bug_id:$id,tag:$tag}')" &&
+    lifecycle_transport_is bug-tags pybz XMLRPC &&
+    jq -e --argjson id "$LIFECYCLE_PYBZ_ID" '[.bugs[].id] | sort == [$id]' \
+        "$COMPARE_EXCHANGE_DIR/bug-tags.pybz.result.json" >/dev/null; then
+    if lifecycle_bzr_xmlrpc bug-tags-add bug tag "$LIFECYCLE_PYBZ_ID" --add "$LIFECYCLE_BUG_TAG" &&
+        lifecycle_bzr_xmlrpc bug-tags-list bug list --tag "$LIFECYCLE_BUG_TAG" &&
+        lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/bug-tags-list.bzr.stdout.json" \
+            "[$LIFECYCLE_PYBZ_ID]"; then
+        test_pass
+    elif [[ $LAST_TEST_RESULT != FAIL ]]; then
+        test_fail "bzr bug-tags result differed"
+    fi
+    expect_gap 680
+elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
+    test_fail "bug-tags precondition failed"
 fi
