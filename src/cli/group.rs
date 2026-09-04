@@ -80,10 +80,9 @@ pub(crate) enum GroupAction {
 
     /// View group metadata (description, active flag, ID).
     ///
-    /// Prints the group's name, description, active status,
-    /// numeric ID, and any group-specific permissions. The
-    /// positional argument can be either the group name or its
-    /// numeric ID.
+    /// Prints the group's name, description, active status, and
+    /// numeric ID. The positional argument can be either the group
+    /// name or its numeric ID.
     ///
     /// Examples:
     ///

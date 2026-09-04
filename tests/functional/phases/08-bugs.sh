@@ -86,6 +86,15 @@ if [[ -n "$BUG1" ]]; then
         assert_json '.rep_platform' "null"; then test_pass; fi
 else test_skip "no BUG1"; fi
 
+test_begin "bug-view-help-matches-output" "bug view --help matches view_single output"
+run_bzr bug view --help
+if assert_success &&
+    assert_stdout_contains "assignee, priority, CC list, depends-on, and blocks" &&
+    assert_stdout_contains "bzr comment list <id>" &&
+    assert_stdout_not_contains "recent comments"; then
+    test_pass
+fi
+
 test_begin "bug-update-platform-round-trip" "bug update --platform round-trip"
 if [[ -n "$BUG1" ]]; then
     run_bzr bug update "$BUG1" --platform All

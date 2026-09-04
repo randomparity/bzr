@@ -4,8 +4,8 @@ use clap::Subcommand;
 pub(crate) enum CommentAction {
     /// List all comments on a bug.
     ///
-    /// Prints each comment's number, author, creation time, tags,
-    /// and body in chronological order. Comment 0 is the bug's
+    /// Prints each comment's number, author, creation time, and
+    /// body in chronological order. Comment 0 is the bug's
     /// initial description. Use `--since` (ISO 8601 date or
     /// datetime) to limit output to comments newer than the given
     /// point.

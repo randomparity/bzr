@@ -18,6 +18,14 @@ else
   assert_success
 fi
 
+test_begin "group-view-help-matches-output" "group view --help matches write_group_info output"
+run_bzr group view --help
+if assert_success &&
+    assert_stdout_contains "description, active status, and" &&
+    assert_stdout_not_contains "permissions"; then
+    test_pass
+fi
+
 test_begin "group-view-functest-grp" "group view functest-grp"
 run_bzr group view functest-grp
 if [[ $BZR_EXIT -eq 0 ]] && assert_json '.name' "functest-grp"; then
