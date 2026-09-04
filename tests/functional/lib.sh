@@ -271,8 +271,8 @@ observe_bzr_transport() {
 
     BZR_TRANSPORT=""
     if ! counts=$(awk '
-        /API response/ { rest += 1 }
-        /XML-RPC call/ { xmlrpc += 1 }
+        /bzr::client::transport: (strict )?API response([[:space:]]|$)/ { rest += 1 }
+        /bzr::xmlrpc::protocol::client: XML-RPC call([[:space:]]|$)/ { xmlrpc += 1 }
         END { print rest + 0, xmlrpc + 0 }
     ' "$BZR_STDERR"); then
         printf 'could not read bzr transport observations\n' >&2

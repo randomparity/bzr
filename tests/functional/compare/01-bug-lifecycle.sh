@@ -97,6 +97,9 @@ lifecycle_bzr_xmlrpc_gap() {
 
 lifecycle_bzr_no_dispatch() {
     local name="$1"
+    local boundary_re
+    boundary_re='bzr::client::transport: (strict )?API response([[:space:]]|$)'
+    boundary_re+='|bzr::xmlrpc::protocol::client: XML-RPC call([[:space:]]|$)'
     # shellcheck disable=SC2034 # The controlled run_bzr fixture reads this dynamic-scope value.
     local LIFECYCLE_BZR_CALL_NAME="$name"
     shift
@@ -110,7 +113,7 @@ lifecycle_bzr_no_dispatch() {
         test_fail "bzr $name failed with exit $BZR_EXIT"
         return 1
     fi
-    grep -Eq 'API response|XML-RPC call' "$BZR_STDERR"
+    grep -Eq "$boundary_re" "$BZR_STDERR"
     local event_status=$?
     if [[ $event_status -eq 0 ]]; then
         test_fail "bzr $name unexpectedly exercised a client request boundary"
@@ -120,7 +123,8 @@ lifecycle_bzr_no_dispatch() {
         test_fail "bzr $name boundary evidence could not be read"
         return 1
     fi
-    if ! jq -e . "$BZR_STDOUT" >/dev/null; then
+    if ! jq -e 'type == "object" and (.changes | type == "object")' \
+        "$BZR_STDOUT" >/dev/null; then
         test_fail "bzr $name returned invalid no-dispatch evidence"
         return 1
     fi
@@ -154,7 +158,7 @@ lifecycle_pybz() {
     cp "$BZR_STDERR" "$COMPARE_EXCHANGE_DIR/${name}.pybz.stderr"
     printf '%s\n' "$BZR_EXIT" >"$COMPARE_EXCHANGE_DIR/${name}.pybz.exit"
     if [[ $BZR_EXIT -ne 0 || ! -r $output ]] ||
-        ! jq -e '.transport | type == "string" and length > 0' "$output" >/dev/null; then
+        ! jq -e '.transport == "REST" or .transport == "XMLRPC"' "$output" >/dev/null; then
         test_fail "python-bugzilla $name failed"
         return 1
     fi

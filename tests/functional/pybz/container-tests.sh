@@ -206,6 +206,16 @@ run_transport_observation_fixture() (
     observe_bzr_transport
     assert_equals XMLRPC "$BZR_TRANSPORT" "single XML-RPC observation"
 
+    printf 'INFO bzr::client: overriding header auth for XML-RPC calls\n' >"$BZR_STDERR"
+    if observe_bzr_transport; then
+        printf 'non-boundary transport decoy was accepted\n' >&2
+        return 1
+    fi
+    printf '%s\n' 'DEBUG bzr::client::transport: API response' \
+        'INFO bzr::client: overriding header auth for XML-RPC calls' >"$BZR_STDERR"
+    observe_bzr_transport
+    assert_equals REST "$BZR_TRANSPORT" "REST observation with XML-RPC decoy"
+
     : >"$BZR_STDERR"
     if observe_bzr_transport; then
         printf 'missing transport observation was accepted\n' >&2
@@ -559,6 +569,10 @@ run_lifecycle_phase_fixture() (
                     ${LIFECYCLE_BZR_CALL_NAME:-} == update-options-bzr-request ]]; then
                     printf '{invalid\n' >"$BZR_STDOUT"
                 fi
+                if [[ ${LIFECYCLE_INVALID_NO_DISPATCH_SHAPE:-0} -eq 1 &&
+                    ${LIFECYCLE_BZR_CALL_NAME:-} == update-options-bzr-request ]]; then
+                    printf 'true\n' >"$BZR_STDOUT"
+                fi
                 fixture_finish_bzr 0
                 return 0
             fi
@@ -677,6 +691,9 @@ run_lifecycle_phase_fixture() (
         if [[ $operation == query && $request == *status_whiteboard* ]]; then
             result='[{"id":44},{"id":45}]'
         fi
+        if [[ $operation == create && ${LIFECYCLE_UNKNOWN_PYBZ_TRANSPORT:-0} -eq 1 ]]; then
+            transport=RESTFUL
+        fi
         jq -cn --arg transport "$transport" --argjson result "$result" \
             '{transport:$transport,result:$result}' >"$output"
         return 0
@@ -755,6 +772,10 @@ run_lifecycle_phase_fixture() (
     if ! run_lifecycle_failure_control LIFECYCLE_HISTORY_EXTRA history 'bug history'; then
         control_failures=$((control_failures + 1))
     fi
+    if ! run_lifecycle_failure_control LIFECYCLE_UNKNOWN_PYBZ_TRANSPORT create \
+        'bug create and first description'; then
+        control_failures=$((control_failures + 1))
+    fi
     if ! run_partial_stale_gap_control LIFECYCLE_GENERIC_CREATE_NOOP 671 arbitrary-fields \
         'generic arbitrary fields'; then
         control_failures=$((control_failures + 1))
@@ -779,7 +800,8 @@ run_lifecycle_phase_fixture() (
             control_failures=$((control_failures + 1))
         fi
     done
-    for control in LIFECYCLE_NO_DISPATCH_EVENT LIFECYCLE_INVALID_NO_DISPATCH_RESULT; do
+    for control in LIFECYCLE_NO_DISPATCH_EVENT LIFECYCLE_INVALID_NO_DISPATCH_RESULT \
+        LIFECYCLE_INVALID_NO_DISPATCH_SHAPE; do
         if ! run_gap_ineligible_control "$control" update-options \
             'comment tags and minor update'; then
             control_failures=$((control_failures + 1))
