@@ -1867,6 +1867,13 @@ run_attachment_phase_fixture() (
     resource_pybz() {
         local name="$1" operation="$2" payload="$3" transport="$4"
         local result id bug_id summary private=false destination count
+        if [[ ${ATTACHMENT_MULTI_COMMAND_FAILURE:-0} -eq 1 &&
+            $name == multi-pybz-upload ]] ||
+            [[ ${ATTACHMENT_OBSOLETE_COMMAND_FAILURE:-0} -eq 1 &&
+                $name == obsolete-pybz-download ]]; then
+            test_fail "controlled attachment command failure"
+            return 1
+        fi
         case $operation in
         attachment_upload)
             count=$(jq '.bug_ids | length' <<<"$payload")
@@ -2025,6 +2032,8 @@ run_attachment_phase_fixture() (
     run_attachment_control ATTACHMENT_TRANSPORT_FAULT private-attachments-xmlrpc
     run_attachment_control ATTACHMENT_GAP_WRONG_DIAGNOSTIC multi-bug-upload
     run_attachment_control ATTACHMENT_GAP_STALE multi-bug-upload
+    run_attachment_control ATTACHMENT_MULTI_COMMAND_FAILURE multi-bug-upload 1
+    run_attachment_control ATTACHMENT_OBSOLETE_COMMAND_FAILURE ignore-obsolete 1
     reset_attachment_fixture
     ATTACHMENT_DOWNLOAD_COMMAND_FAILURE=1
     source "$phase" >"$fixture_output"
@@ -2188,6 +2197,11 @@ run_user_group_phase_fixture() (
         local name="$1" operation="$2" payload="$3" expected_transport="$4"
         local result groups='[]'
         USER_GROUP_PYBZ_TRANSPORTS+="${name}:${expected_transport}"$'\n'
+        if [[ ${USER_GROUP_MEMBERSHIP_COMMAND_FAILURE:-0} -eq 1 &&
+            $name == membership-pybz-remove ]]; then
+            test_fail "controlled membership command failure"
+            return 1
+        fi
         case $name in
         user-pybz-create)
             if [[ ${USER_GROUP_PYBZ_USER_ID_FAULT:-0} -eq 1 ]]; then
@@ -2264,6 +2278,7 @@ run_user_group_phase_fixture() (
     run_user_group_control USER_GROUP_GROUP_ID_FAULT group-get-and-list
     run_user_group_control USER_GROUP_RETAIN_FAULT membership-add-remove
     run_user_group_control USER_GROUP_NONMEMBER_FAULT membership-add-remove
+    run_user_group_control USER_GROUP_MEMBERSHIP_COMMAND_FAILURE membership-add-remove
 )
 
 run_membership_cleanup_fixture() (

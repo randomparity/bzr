@@ -294,10 +294,10 @@ if attachment_create_bug multi-pybz-second "$ATTACHMENT_STEM multi second"; then
         attachment_parser_gap 674 \
             "error: unexpected argument '$ATTACHMENT_SOURCE' found" \
             'Usage: bzr attachment upload [OPTIONS] <BUG_ID> <FILE>'
-    else
+    elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
         test_fail "python-bugzilla multi-bug upload evidence is invalid"
     fi
-else
+elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail "multi-bug upload precondition failed"
 fi
 
@@ -318,6 +318,6 @@ if [[ -n $ATTACHMENT_PYBZ_ID ]] &&
     attachment_parser_gap 674 \
         "error: unexpected argument '--ignore-obsolete' found" \
         'Usage: bzr attachment download --bug <BUG_ID> [ID]...'
-else
+elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail "python-bugzilla obsolete-filter evidence is invalid"
 fi

@@ -150,10 +150,10 @@ if resource_bzr membership-bzr-add rest REST group add-user \
                 user_group_membership_present_pybz "$USER_GROUP_PYBZ_EMAIL" false; then
                 resource_membership_clear "$USER_GROUP_PYBZ_EMAIL" "$USER_GROUP_FIXTURE"
                 test_pass
-            else
+            elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
                 test_fail "python-bugzilla membership removal did not persist"
             fi
-        else
+        elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
             test_fail "membership add or bzr removal did not persist"
         fi
     fi
