@@ -114,7 +114,11 @@ resource_init
 for _phase in \
     00-products \
     01-bug-lifecycle \
-    02-comments; do
+    02-comments \
+    03-attachments; do
+    if [[ $_phase == 03-attachments ]]; then
+        seed_comparison_attachment_flag_type
+    fi
     CURRENT_TEST_GROUP="$_phase"
     source "$SCRIPT_DIR/compare/${_phase}.sh"
     _render_test_result

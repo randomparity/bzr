@@ -6,6 +6,7 @@ import json
 import os
 import stat
 import sys
+from types import SimpleNamespace
 from xmlrpc.client import DateTime
 from pathlib import Path
 
@@ -334,7 +335,9 @@ def _attachment_upload(client, request):
 
 def _attachment_list(client, request):
     _validate_keys(request, ("api_key", "bug_ids"))
-    result = client.get_attachments(_required_id_list(request, "bug_ids"), None)
+    result = client.get_attachments(
+        _required_id_list(request, "bug_ids"), None, exclude_fields=["data"]
+    )
     if not isinstance(result, dict):
         raise AdapterError("python-bugzilla returned invalid attachments")
     return result
@@ -342,7 +345,9 @@ def _attachment_list(client, request):
 
 def _attachment_get(client, request):
     _validate_keys(request, ("api_key", "attachment_ids"))
-    result = client.get_attachments(None, _required_id_list(request, "attachment_ids"))
+    result = client.get_attachments(
+        None, _required_id_list(request, "attachment_ids"), exclude_fields=["data"]
+    )
     if not isinstance(result, dict):
         raise AdapterError("python-bugzilla returned invalid attachments")
     return result
@@ -373,6 +378,48 @@ def _attachment_download(client, request):
         raise AdapterError("python-bugzilla returned non-byte attachment data")
     _write_private_bytes(destination, data)
     return {"attachment_id": attachment_id, "bytes": len(data)}
+
+
+def _attachment_cli_download_bug(client, request):
+    import bugzilla._cli as bugzilla_cli
+
+    _validate_keys(request, ("api_key", "bug_id", "destination", "ignore_obsolete"))
+    bug_id = _required_id(request)
+    destination = _work_path(_required_text(request, "destination"), "destination")
+    ignore_obsolete = _required_bool(request, "ignore_obsolete")
+    original_directory = Path.cwd()
+    original_open = bugzilla_cli.open_without_clobber
+    original_umask = os.umask(0o077)
+
+    def safe_open(name, *args):
+        if not isinstance(name, str) or not name or Path(name).name != name:
+            raise AdapterError("python-bugzilla returned an unsafe attachment name")
+        return original_open(name, *args)
+
+    try:
+        try:
+            destination.mkdir(mode=0o700)
+        except FileExistsError:
+            if destination.is_symlink() or not destination.is_dir():
+                raise AdapterError("destination must be a non-symlink directory") from None
+        destination.chmod(0o700)
+        before = {path.name for path in destination.iterdir()}
+        os.chdir(destination)
+        bugzilla_cli.open_without_clobber = safe_open
+        bugzilla_cli._do_get_attach(
+            client,
+            SimpleNamespace(
+                getall=[bug_id],
+                get=None,
+                ignore_obsolete=ignore_obsolete,
+            ),
+        )
+    finally:
+        bugzilla_cli.open_without_clobber = original_open
+        os.chdir(original_directory)
+        os.umask(original_umask)
+    files = sorted(path.name for path in destination.iterdir() if path.name not in before)
+    return {"bug_id": bug_id, "files": files}
 
 
 def _attachment_flag(client, request):
@@ -492,6 +539,7 @@ OPERATIONS = {
     "attachment_list": _attachment_list,
     "attachment_get": _attachment_get,
     "attachment_download": _attachment_download,
+    "attachment_cli_download_bug": _attachment_cli_download_bug,
     "attachment_flag": _attachment_flag,
     "user_create": _user_create,
     "user_get": _user_get,

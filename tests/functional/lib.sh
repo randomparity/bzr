@@ -577,9 +577,51 @@ resource_gap_allow() {
 resource_expect_gap() {
     local issue="$1"
 
-    if [[ $RESOURCE_GAP_ELIGIBLE -eq 1 && -f $RESOURCE_GAP_FILE ]]; then
+    if [[ $LAST_TEST_RESULT == PASS ]] ||
+        [[ $RESOURCE_GAP_ELIGIBLE -eq 1 && -f $RESOURCE_GAP_FILE ]]; then
         expect_gap "$issue"
     fi
+}
+
+seed_comparison_attachment_flag_type() {
+    local sql_file="$COMPARE_EXCHANGE_DIR/attachment-flag.sql"
+    local result status=0
+
+    printf '%s\n' \
+        "INSERT INTO flagtypes (name, description, target_type, is_active," \
+        "  is_requestable, is_requesteeble, is_multiplicable, sortkey)" \
+        "SELECT 'bzr_compare_attachment_review'," \
+        "  'bzr python-bugzilla comparison attachment flag', 'a', 1, 1, 1, 1, 30" \
+        "WHERE NOT EXISTS (SELECT 1 FROM flagtypes" \
+        "  WHERE name = 'bzr_compare_attachment_review' AND target_type = 'a');" \
+        "INSERT INTO flaginclusions (type_id, product_id, component_id)" \
+        "SELECT id, NULL, NULL FROM flagtypes" \
+        "WHERE name = 'bzr_compare_attachment_review' AND target_type = 'a'" \
+        "  AND NOT EXISTS (SELECT 1 FROM flaginclusions" \
+        "    WHERE flaginclusions.type_id = flagtypes.id" \
+        "      AND flaginclusions.product_id IS NULL" \
+        "      AND flaginclusions.component_id IS NULL);" \
+        "SELECT" \
+        "  (SELECT COUNT(*) FROM flagtypes" \
+        "    WHERE name = 'bzr_compare_attachment_review'" \
+        "      AND target_type = 'a') AS flag_type_count," \
+        "  (SELECT COUNT(*) FROM flaginclusions" \
+        "    JOIN flagtypes ON flagtypes.id = flaginclusions.type_id" \
+        "    WHERE flagtypes.name = 'bzr_compare_attachment_review'" \
+        "      AND flagtypes.target_type = 'a'" \
+        "      AND flaginclusions.product_id IS NULL" \
+        "      AND flaginclusions.component_id IS NULL)" \
+        "    AS unrestricted_inclusion_count;" >"$sql_file"
+    chmod 600 "$sql_file"
+    if ! result=$(run_bugzilla_sql_file "$sql_file"); then
+        printf 'could not seed comparison attachment flag type\n' >&2
+        status=1
+    elif [[ ${result##*$'\n'} != $'1\t1' ]]; then
+        printf 'comparison attachment flag type readback was not exactly one type and inclusion\n' >&2
+        status=1
+    fi
+    rm -f "$sql_file"
+    return "$status"
 }
 
 # ── Assertions ───────────────────────────────────────────────────────
