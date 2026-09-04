@@ -144,13 +144,16 @@ an individually hard-gated check.
   `tests/functional/run-compare.sh` to call it before `03-attachments`. The function writes a
   private temporary SQL file containing fixed `flagtypes`/`flaginclusions` rows for
   `bzr_compare_attachment_review`,
-  executes it through existing `run_bugzilla_sql_file PATH`, verifies the fixed row, and removes
-  the file on every return.
+  executes it through existing `run_bugzilla_sql_file PATH`, verifies exactly one matching type and
+  one unrestricted inclusion (`product_id` and `component_id` both null), and removes the file on
+  every return.
 - Modifies `tests/functional/pybz/container-tests.sh` for attachment fixtures, digest comparison,
   private transport arms, and stale-gap controls.
 - Extends `tests/functional/compare/python-bugzilla-adapter.py` with a bounded
   `attachment_cli_download_bug` operation that invokes the pinned CLI's `_do_get_attach` obsolete
   filter while replacing its output opener with a private basename-only exchange-directory writer.
+  Focused controls cover path-bearing names, symlink/non-directory destinations, a same-name
+  collision sentinel, and private directory/file modes.
 - Consumes Task 1's other attachment operations and Task 2's shared comparison helpers.
 
 ### Verification
@@ -160,8 +163,9 @@ an individually hard-gated check.
   the fixture to pass all five parity IDs. Perturb summary, comment, digest, flag, privacy, and
   transport one at a time; each must produce non-zero for its stable ID.
 - Exact #674 ownership and stale-gap behavior — Mode: focused-test. Require both gap IDs to map
-  only to 674 after validated python-bugzilla results; first observe missing markers, then expect
-  GAP. Multi-bug upload runs
+  only to 674 after validated python-bugzilla results, assert the rendered owner per ID, and make a
+  substituted owner turn the fixture red; first observe missing markers, then expect GAP.
+  Multi-bug upload runs
   `bzr attachment upload <BUG1> <BUG2> <FILE>` and accepts only exit 2 plus the exact controlled
   `unexpected argument '<FILE>' found` line and upload usage. Obsolete filtering runs
   `bzr attachment download --bug <BUG> --ignore-obsolete --out-dir <DIR>` and accepts only exit 2
@@ -171,7 +175,8 @@ an individually hard-gated check.
 - Flag prerequisite isolation — Mode: focused-test and live-functional. Run the attachment phase
   fixture without ordinary functional phases, first observe flag update cannot succeed, then
   require the seed helper to create and verify the fixed attachment flag on bz50, bz52, and bz53.
-  A seed or readback failure must remain FAIL and must not become a #674 gap.
+  Restricted-only inclusion, seed, or readback failure must remain FAIL and must not become a #674
+  gap.
 
 ### Steps
 

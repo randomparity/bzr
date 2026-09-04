@@ -45,7 +45,9 @@ together: group tests mutate a user membership, and component tests create insid
 Before the attachment phase, the runner idempotently seeds one comparison-owned attachment flag
 type and its unrestricted inclusion row through the existing `run_bugzilla_sql_file PATH` helper.
 The fixed name `bzr_compare_attachment_review` prevents repeated single-version runs from growing
-flag metadata. A failed seed aborts comparison as infrastructure failure before any flag parity
+flag metadata. Readback requires exactly one matching attachment flag type and exactly one matching
+inclusion whose product and component are both unrestricted; a restricted inclusion cannot satisfy
+the prerequisite. A failed seed aborts comparison as infrastructure failure before any flag parity
 claim; the comparison never depends on the ordinary functional phase having run first.
 
 Each comparison follows the same data flow:
@@ -139,7 +141,9 @@ Two #674 gap baselines remain separate so either capability can close independen
 The obsolete-filter proof invokes the pinned CLI's `_do_get_attach` path through the fixed adapter.
 The adapter replaces only the CLI's file opener with a private, basename-only, no-clobber writer
 inside the exchange directory; the pinned CLI still owns attachment enumeration and obsolete
-filtering. One non-obsolete attachment is required as a positive downloaded-file control.
+filtering. One non-obsolete attachment is required as a positive downloaded-file control. Focused
+controls reject path-bearing attachment names and symlink/non-directory destinations, prove a
+pre-existing same-name sentinel is preserved, and verify private directory and file modes.
 
 Stable IDs:
 
@@ -254,9 +258,11 @@ point.
 Focused container fixtures must fail before the generalized adapter, shared resource helpers,
 stable phase IDs, exact gap mappings, and parity rows exist; then pass after implementation. Fault
 controls perturb one canonical field, remove one private result, report the wrong transport, expose
-a non-private attachment path, make flag seeding fail, interrupt membership removal, and make each
-stale gap pass; every control must turn the suite red. The cleanup control must prove the EXIT path
-attempts the recorded removal and converts cleanup failure into a failed run.
+a non-private attachment path, exercise unsafe and colliding CLI output names, make flag seeding or
+its exact unrestricted-row readback fail, substitute the wrong gap owner, interrupt membership
+removal, and make each stale gap pass; every control must turn the suite red. The cleanup control
+must prove the EXIT path attempts the recorded removal and converts cleanup failure into a failed
+run.
 
 Repository proof is:
 
