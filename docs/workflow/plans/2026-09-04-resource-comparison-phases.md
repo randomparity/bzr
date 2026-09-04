@@ -10,8 +10,10 @@ closed ownership for #674 and #675 gaps.
 
 Tech stack: Bash, Python 3, python-bugzilla 3.3.0, jq, Docker/Podman functional containers.
 
-Expected implementation size: 1400–2200 changed lines (M) — derived from one generalized
-adapter, four phase scripts, focused fixture extensions, runner wiring, and parity rows.
+Expected implementation size: 2200–3400 changed lines (M) — summed from 250–450 adapter lines,
+150–250 shared-helper lines, 900–1400 phase lines, 800–1200 focused-fixture lines, and 100–100
+runner/report lines. The upper line count is large test data flow, while the change remains one
+medium-complexity comparison-harness slice with no compiled-product contract.
 
 ## Global Constraints
 
@@ -141,8 +143,13 @@ an individually hard-gated check.
   transport one at a time; each must produce non-zero for its stable ID.
 - Exact #674 ownership and stale-gap behavior — Mode: focused-test. Require both gap IDs to map
   only to 674 after validated python-bugzilla results; first observe missing markers, then expect
-  GAP.
-  Make either bzr probe semantically pass and require the stale marker to fail the fixture.
+  GAP. Multi-bug upload runs
+  `bzr attachment upload <BUG1> <BUG2> <FILE>` and accepts only exit 2 plus the exact controlled
+  `unexpected argument '<FILE>' found` line and upload usage. Obsolete filtering runs
+  `bzr attachment download --bug <BUG> --ignore-obsolete --out-dir <DIR>` and accepts only exit 2
+  plus `unexpected argument '--ignore-obsolete' found` and download usage. An unrelated exit-2
+  diagnostic, any other non-zero status, or invalid python evidence remains FAIL. Make either bzr
+  probe semantically pass and require the stale marker to fail the fixture.
 - Flag prerequisite isolation — Mode: focused-test and live-functional. Run the attachment phase
   fixture without ordinary functional phases, first observe flag update cannot succeed, then
   require the seed helper to create and verify the fixed attachment flag on bz50, bz52, and bz53.
@@ -158,8 +165,10 @@ an individually hard-gated check.
 3. Create two private exchange files with identical controlled bytes and mode 0600. Implement
    paired uploads, metadata/comment normalization, single and bulk content reads, SHA-256 digest
    comparison, flag update/readback, and private REST/XMLRPC list/get checks.
-4. Implement multi-bug upload and obsolete-filter probes. Permit #674 gap conversion only after the
-   python operation and evidence are valid and bzr reaches the exact current capability mismatch.
+4. Implement multi-bug upload and obsolete-filter probes with the exact commands and exit-2
+   diagnostics in the verification inventory. Permit #674 gap conversion only after the python
+   operation and evidence are valid. Add a controlled unrelated exit-2 diagnostic and prove it
+   remains FAIL.
 5. Add `03-attachments` to the runner; run focused fixtures and expect exit 0 with five passes and
    two #674 gaps.
 6. Prove each mismatch, seed failure, and stale-gap control turns the fixture red; restore green.
