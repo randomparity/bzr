@@ -216,6 +216,15 @@ run_transport_observation_fixture() (
     observe_bzr_transport
     assert_equals REST "$BZR_TRANSPORT" "REST observation with XML-RPC decoy"
 
+    for decoy in 'bzr::client::transport: API response' \
+        'bzr::xmlrpc::protocol::client: XML-RPC call'; do
+        printf 'DEBUG unrelated::target: %s\n' "$decoy" >"$BZR_STDERR"
+        if observe_bzr_transport; then
+            printf 'wrong-target transport decoy was accepted: %s\n' "$decoy" >&2
+            return 1
+        fi
+    done
+
     : >"$BZR_STDERR"
     if observe_bzr_transport; then
         printf 'missing transport observation was accepted\n' >&2

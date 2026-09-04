@@ -271,8 +271,14 @@ observe_bzr_transport() {
 
     BZR_TRANSPORT=""
     if ! counts=$(awk '
-        /bzr::client::transport: (strict )?API response([[:space:]]|$)/ { rest += 1 }
-        /bzr::xmlrpc::protocol::client: XML-RPC call([[:space:]]|$)/ { xmlrpc += 1 }
+        BEGIN {
+            rest_re = "(^|[[:space:]])DEBUG[[:space:]]+bzr::client::transport: " \
+                "(strict )?API response([[:space:]]|$)"
+            xmlrpc_re = "(^|[[:space:]])DEBUG[[:space:]]+" \
+                "bzr::xmlrpc::protocol::client: XML-RPC call([[:space:]]|$)"
+        }
+        $0 ~ rest_re { rest += 1 }
+        $0 ~ xmlrpc_re { xmlrpc += 1 }
         END { print rest + 0, xmlrpc + 0 }
     ' "$BZR_STDERR"); then
         printf 'could not read bzr transport observations\n' >&2

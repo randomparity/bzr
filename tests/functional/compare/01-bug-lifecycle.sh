@@ -98,8 +98,9 @@ lifecycle_bzr_xmlrpc_gap() {
 lifecycle_bzr_no_dispatch() {
     local name="$1"
     local boundary_re
-    boundary_re='bzr::client::transport: (strict )?API response([[:space:]]|$)'
-    boundary_re+='|bzr::xmlrpc::protocol::client: XML-RPC call([[:space:]]|$)'
+    boundary_re='(^|[[:space:]])DEBUG[[:space:]]+bzr::client::transport: (strict )?API response'
+    boundary_re+='([[:space:]]|$)|(^|[[:space:]])DEBUG[[:space:]]+'
+    boundary_re+='bzr::xmlrpc::protocol::client: XML-RPC call([[:space:]]|$)'
     # shellcheck disable=SC2034 # The controlled run_bzr fixture reads this dynamic-scope value.
     local LIFECYCLE_BZR_CALL_NAME="$name"
     shift
