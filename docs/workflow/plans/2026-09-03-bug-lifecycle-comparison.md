@@ -28,6 +28,15 @@ count.
   live proof is `make functional-compare-all`.
 - BASE_BRANCH is `main`; branch is `feat/bug-lifecycle-comparison-667`.
 
+## Resume status
+
+Tasks 1–4 were completed before the final whole-branch review exposed the self-asserted transport
+defect. Their commits have not been pushed or delivered in a pull request. Task 5 is the corrective
+continuation authorized by the expanded scope and is a hard gate before any delivery; its focused
+controls and complete guardrail rerun replace the weaker transport evidence from the earlier task
+checkpoints. The historical tasks remain in their executed order rather than pretending the
+finding was known before review.
+
 ## File map
 
 - Create `tests/functional/compare/bug-lifecycle.py`: fixed python-bugzilla JSON adapter for the
@@ -239,9 +248,11 @@ count.
   `XML-RPC call` from `XmlRpcClient::call_with_status_policy`; python-bugzilla 3.3.0's concrete
   `_BackendREST` and `_BackendXMLRPC` class names; the existing `BZR_STDERR` capture.
 - Provides: `observe_bzr_transport`, which sets `BZR_TRANSPORT` to exactly `REST` or `XMLRPC` only
-  when captured request-boundary events identify one class; `_transport(client)`, which returns the
-  same closed values for the two pinned backend classes; lifecycle `*.transport` evidence copied
-  from those results.
+  when a successful invocation's captured request-boundary events identify one class;
+  `_transport(client)`, which returns the same closed values for the two pinned backend classes;
+  lifecycle `*.transport` evidence copied from those results. Pre-dispatch command rejection writes
+  no record. `LIFECYCLE_TRANSPORT_EVIDENCE_FAILED` prevents an observation defect after command
+  success from passing through `expect_gap`.
 
 ### Verification
 
@@ -249,7 +260,9 @@ count.
   fake bzr boundary emits REST or XML-RPC debug markers independently of semantic output. Before
   implementation, a #680 semantic-success/observed-REST control incorrectly becomes parity; after
   implementation, `bash tests/functional/pybz/container-tests.sh` exits 0 and shows that control
-  as GAP. Missing and mixed-event controls must fail their lifecycle tests.
+  as GAP. Missing and mixed-event controls after successful invocations must remain FAIL rather
+  than being converted to GAP. An unsupported command that exits before dispatch must produce no
+  transport record and may remain an expected capability gap.
 - Python backend normalization — Mode: focused-test. Give the adapter fixture concrete
   `_BackendREST` and `_BackendXMLRPC` backends plus an unknown backend case. Before implementation,
   the unknown class is emitted as transport; after implementation, the same focused command exits
@@ -264,12 +277,15 @@ count.
 2. Run `bash tests/functional/pybz/container-tests.sh`; expect non-zero because the current wrappers
    still self-assert bzr transport and the adapter still accepts unknown backend names.
 3. In `tests/functional/lib.sh`, add `BZR_TRANSPORT` and `observe_bzr_transport`: inspect
-   `BZR_STDERR` for the two established debug messages, accept one or more observations of exactly
-   one class, and return non-zero with an actionable diagnostic for neither or both. Do not inspect
-   CLI arguments or URLs.
+   `BZR_STDERR` for the two established debug messages after successful commands, accept one or
+   more observations of exactly one class, and return non-zero with an actionable diagnostic for
+   neither or both. Do not inspect CLI arguments or URLs.
 4. In `tests/functional/compare/01-bug-lifecycle.sh`, invoke bzr with `RUST_LOG=bzr=debug`, call the
-   shared classifier after each command, copy only `BZR_TRANSPORT`, remove the transport parameter
-   and self-written defaults, and compare transport records by exact equality.
+   shared classifier after each successful command, copy only `BZR_TRANSPORT`, remove the transport
+   parameter and self-written defaults, and compare transport records by exact equality. Leave no
+   transport record for pre-dispatch failures. Set `LIFECYCLE_TRANSPORT_EVIDENCE_FAILED` when a
+   successful command has missing or ambiguous evidence, and skip `expect_gap` conversion whenever
+   that state is set.
 5. In `tests/functional/compare/bug-lifecycle.py`, map `_BackendREST` to `REST` and
    `_BackendXMLRPC` to `XMLRPC`; raise `AdapterError` for missing or unknown classes. Update the
    fake backend names and expected closed outputs in the focused fixture.

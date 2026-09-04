@@ -131,24 +131,33 @@ parity while their test still calls `expect_gap`.
 
 ## Transport evidence
 
-Each test writes a normalized `REST` or `XMLRPC` transport record in the exchange directory. A
-shared harness helper runs bzr with `bzr=debug` tracing and classifies the captured request-boundary
-events: `API response` is REST and `XML-RPC call` is XML-RPC. Repeated observations of one class,
-such as retries, retain that class; no recognized event or events from both classes are ambiguous
-and fail closed. The lifecycle phase copies only this observed value. It never receives an expected
-transport argument and never derives evidence from `--api`.
+Each successful client operation writes a normalized `REST` or `XMLRPC` transport record in the
+exchange directory. A shared harness helper runs bzr with `bzr=debug` tracing and classifies the
+captured request-boundary events: `API response` is REST and `XML-RPC call` is XML-RPC. Repeated
+observations of one class, such as retries, retain that class; no recognized event or events from
+both classes are ambiguous and fail closed. The lifecycle phase copies only this observed value.
+It never receives an expected transport argument and never derives evidence from `--api`.
+
+A bzr command rejected by argument parsing before client dispatch exercised no client operation
+and writes no transport record. That rejection may establish an expected capability gap, but it
+makes no transport claim. Once a bzr command succeeds, missing or ambiguous observation sets a
+distinct evidence-failure state; the phase leaves the test failed and does not let `expect_gap`
+convert that infrastructure defect into GAP. A successful operation whose observed transport is a
+valid but unexpected class remains a transport-specific capability gap and may become GAP.
 
 The python-bugzilla adapter maps exactly the pinned 3.3.0 backend classes `_BackendREST` and
 `_BackendXMLRPC` to the same closed values. A missing backend, any other class, or an output outside
 the two-value vocabulary fails before semantic evidence is accepted. The phase compares exact
 values rather than substrings.
 
-Common bzr operations and the first four gap probes are expected to observe `REST`; the #680
-bug-tag mutation and query are expected to observe `XMLRPC`. Expectations remain assertions, not
+Common bzr operations are expected to observe `REST`. A gap probe that reaches its client boundary
+must likewise record and validate the resulting class; the currently unsupported bzr probe syntax
+may instead fail before dispatch with no transport claim. The #680 bug-tag mutation and query are
+expected to observe `XMLRPC` once those commands exist. Expectations remain assertions, not
 evidence sources. A controlled fixture makes the #680 operations succeed semantically while the
-request-boundary log reports REST and requires the result to remain GAP. Separate controls reject
-missing and ambiguous bzr events, unknown python-bugzilla backend classes, and normalized values
-outside the closed vocabulary.
+request-boundary log reports REST and requires the result to remain GAP. Separate controls prove
+that successful invocations with missing or ambiguous bzr events remain FAIL, while unknown
+python-bugzilla backend classes and normalized values outside the closed vocabulary are rejected.
 
 ## Failure handling and cleanup
 
