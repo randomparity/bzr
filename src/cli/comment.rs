@@ -1,8 +1,12 @@
 use clap::Subcommand;
 
 #[derive(Subcommand)]
+#[expect(
+    clippy::doc_markdown,
+    reason = "jq expressions in CLI help must stay literal, not backticked"
+)]
 pub(crate) enum CommentAction {
-    /// List all comments on a bug.
+    /// List all comments on one or more bugs.
     ///
     /// Prints each comment's number, author, creation time, and
     /// body in chronological order. Comment 0 is the bug's
@@ -10,18 +14,48 @@ pub(crate) enum CommentAction {
     /// datetime) to limit output to comments newer than the given
     /// point.
     ///
+    /// Multi-ID: the bugs are fetched in argument order. Table
+    /// output separates them with a `Bug #N` header. JSON output
+    /// stays one flat array -- each record carries its own
+    /// `bug_id`, so consumers group with
+    /// `jq '.data | group_by(.bug_id)'`. On a multi-ID call
+    /// `bug_id` is kept even when `--fields` or `--exclude-fields`
+    /// would drop it, since it is what makes a record
+    /// attributable; a note goes to stderr when that happens.
+    /// Single-ID output is unchanged.
+    ///
+    /// `--permissive` (multi-ID only) reports inaccessible or
+    /// missing bugs as one line each on stderr and continues,
+    /// exiting 0. Without it the first per-bug failure aborts the
+    /// whole call. Session-wide failures (transport, auth,
+    /// security) always bail. Because failures go only to stderr,
+    /// a `--json` consumer cannot tell a bug that failed from a
+    /// bug with no comments.
+    ///
     /// Examples:
     ///
     ///   bzr comment list 12345
+    ///   bzr comment list 12345 12346 12347
+    ///   bzr comment list 12345 12346 --permissive
     ///   bzr comment list 12345 --since 2026-01-01
     ///   bzr comment list 12345 --json | jq '.data | length'
+    ///   bzr comment list 12345 12346 --json | jq '.data | group_by(.bug_id)'
     ///
     /// See bzr-bug-history(1) for the full bug change log including
     /// non-comment events and bzr-comment-add(1) to post a comment.
     #[command(verbatim_doc_comment)]
     List {
-        /// Bug ID
-        bug_id: u64,
+        /// Bug ID(s)
+        #[arg(required = true, num_args = 1..)]
+        bug_ids: Vec<u64>,
+        /// Continue past per-bug failures (multi-ID only).
+        ///
+        /// Missing or inaccessible bugs are reported one per line
+        /// on stderr and the command exits 0. Without this flag the
+        /// first per-bug failure aborts. Rejected with exit code 7
+        /// when only one bug ID is given.
+        #[arg(long)]
+        permissive: bool,
         /// Only show comments created after this date (ISO 8601)
         #[arg(long)]
         since: Option<String>,

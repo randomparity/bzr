@@ -23,8 +23,8 @@ fn parse_error_kind(args: &[&str]) -> ErrorKind {
 #[test]
 fn parse_comment_list_minimal_defaults_since_none() {
     match comment_action(&["bzr", "comment", "list", "12345"]) {
-        CommentAction::List { bug_id, since, .. } => {
-            assert_eq!(bug_id, 12345);
+        CommentAction::List { bug_ids, since, .. } => {
+            assert_eq!(bug_ids, vec![12345]);
             assert!(since.is_none());
         }
         _ => panic!("expected List"),
@@ -36,6 +36,36 @@ fn parse_comment_list_binds_since() {
     match comment_action(&["bzr", "comment", "list", "12345", "--since", "2026-01-01"]) {
         CommentAction::List { since, .. } => {
             assert_eq!(since.as_deref(), Some("2026-01-01"));
+        }
+        _ => panic!("expected List"),
+    }
+}
+
+#[test]
+fn parse_comment_list_accepts_several_bug_ids() {
+    match comment_action(&["bzr", "comment", "list", "1", "2", "3"]) {
+        CommentAction::List {
+            bug_ids,
+            permissive,
+            ..
+        } => {
+            assert_eq!(bug_ids, vec![1, 2, 3]);
+            assert!(!permissive);
+        }
+        _ => panic!("expected List"),
+    }
+}
+
+#[test]
+fn parse_comment_list_binds_permissive() {
+    match comment_action(&["bzr", "comment", "list", "1", "2", "--permissive"]) {
+        CommentAction::List {
+            bug_ids,
+            permissive,
+            ..
+        } => {
+            assert_eq!(bug_ids, vec![1, 2]);
+            assert!(permissive);
         }
         _ => panic!("expected List"),
     }

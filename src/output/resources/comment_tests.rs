@@ -120,3 +120,14 @@ fn write_comments_table_does_not_emit_ansi_when_writing_to_buffer() {
         "expected no ANSI escapes when writing to Vec<u8>: {output:?}",
     );
 }
+
+#[test]
+fn bug_header_names_the_bug() {
+    let mut out = Vec::new();
+    crate::output::resources::comment::write_comment_bug_header(42, &mut out);
+    let text = String::from_utf8(out).unwrap();
+    assert!(
+        text.contains("Bug #42"),
+        "header should name the bug: {text}"
+    );
+}

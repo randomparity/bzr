@@ -43,6 +43,18 @@ pub fn write_comments<W: Write + ?Sized>(
     });
 }
 
+/// Header separating one bug's comments from the next in multi-ID table
+/// output. JSON stays a flat array attributed by each record's `bug_id`.
+pub fn write_comment_bug_header<W: Write + ?Sized>(bug_id: u64, out: &mut W) {
+    // Every other table writer reaches `colored`'s test seam through the
+    // `write_formatted*` family; this one writes directly, so it calls the seam
+    // itself. Without it, `colored` would emit `ESC[1mBugESC[0m #42` and split
+    // the `Bug #42` substring the tests match on.
+    crate::output::formatting::disable_color_for_tests();
+    let _ = writeln!(out, "{} #{}", "Bug".bold(), bug_id);
+    let _ = writeln!(out);
+}
+
 #[cfg(test)]
 #[path = "comment_tests.rs"]
 mod tests;

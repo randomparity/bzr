@@ -52,6 +52,23 @@ impl FieldProjection {
         })
     }
 
+    /// Would `key` be dropped by this projection?
+    #[must_use]
+    pub fn would_drop(&self, key: &str) -> bool {
+        self.exclude.contains(key) || self.include.as_ref().is_some_and(|inc| !inc.contains(key))
+    }
+
+    /// Force `key` through regardless of the flags: into the include set when
+    /// one exists, and out of the exclude set. For a field carrying meaning the
+    /// caller cannot opt out of — `comment list`'s multi-ID `bug_id`, which is
+    /// the only thing attributing a record to its bug, is the sole use today.
+    pub fn retain_key(&mut self, key: &str) {
+        if let Some(inc) = &mut self.include {
+            inc.insert(key.to_string());
+        }
+        self.exclude.remove(key);
+    }
+
     /// Project a serialized value in place: an object keeps/drops top-level
     /// keys; an array projects each element; other values are untouched.
     pub fn apply(&self, value: &mut serde_json::Value) {
