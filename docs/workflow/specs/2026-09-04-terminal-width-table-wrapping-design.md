@@ -102,7 +102,9 @@ No CLI flag, config key, JSON schema, exit code, or persisted data changes.
 - Added boundary: `bzr` asks the local OS terminal handle for a width through `terminal_size`.
 - Added supply-chain boundary: `terminal_size` and its locked transitive platform crates enter the
   build.
-- Widened boundaries: none; no network, credential, Bugzilla, or file-content boundary changes.
+- Existing boundary newly transformed: Bugzilla-provided values, operator-selected fields, and
+  local path text pass through `Width::wrap` before terminal output. The change adds no new source
+  of cell data and does not widen network, credential, or file-ingestion authority.
 
 ### Actor model and controls
 
@@ -112,16 +114,21 @@ input is logged without echoing its raw bytes or other environment data and cann
 The local OS is trusted to return a terminal cell count, which the dependency already represents as
 `u16`; zero is treated as absent.
 
+Bugzilla servers and local inputs can supply cell text. The renderer applies wrapping but does not
+sanitize terminal-control sequences; that limitation predates this change. Width guarantees apply
+to ordinary Unicode display text for which tabled's non-ANSI width model is defined.
+
 The dependency is exact-pinned at the current 0.4.4 release, recorded in `Cargo.lock`, and checked
 by the repository's native and cross-target CI. It requires Rust 1.71, below this repository's
-1.89.0 floor. Table cells remain ANSI-free, so `tabled`'s `ansi` feature is not enabled.
+1.89.0 floor. Bzr does not add ANSI styling to grid cells, so `tabled`'s `ansi` feature is not
+enabled; externally supplied cell text is not assumed to be free of control sequences.
 
 ### Out of scope threats
 
 This design does not prevent a local parent process from choosing an inconvenient but valid width;
 that process already controls bzr's arguments and output destination. It does not attempt to make an
 arbitrarily large number of selected columns fit into fewer cells than their borders require. It
-does not alter terminal escape handling because these grid cells contain no ANSI sequences today.
+does not add terminal-control sanitization or otherwise change the existing escape-handling policy.
 
 ## Testing
 
