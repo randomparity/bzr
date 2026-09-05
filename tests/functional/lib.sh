@@ -412,6 +412,21 @@ pybz_sidecar_start() {
     return 0
 }
 
+pybz_auth_cache_clear() {
+    if [[ -z ${PYBZ_RUNTIME:-} ]]; then
+        printf 'pybz_auth_cache_clear: active sidecar required\n' >&2
+        return 2
+    fi
+
+    local sidecar
+
+    sidecar=$(pybz_sidecar_name) || return 1
+    # shellcheck disable=SC2016 # HOME expands in the sidecar shell.
+    "$PYBZ_RUNTIME" exec "$sidecar" sh -c '# pybz-auth-cache-clear
+rm -f "$HOME/.cache/bzr-comparison/python-bugzilla-token" \
+    "$HOME/.cache/bzr-comparison/python-bugzilla-stale-token"'
+}
+
 pybz_sidecar_stop() {
     if [[ $# -ne 1 ]]; then
         printf 'pybz_sidecar_stop: expected runtime\n' >&2

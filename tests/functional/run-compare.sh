@@ -78,6 +78,9 @@ cleanup() {
         if ! pybz_proxy_stop redhat; then
             [[ $status -ne 0 ]] || status=1
         fi
+        if ! pybz_auth_cache_clear; then
+            [[ $status -ne 0 ]] || status=1
+        fi
         if ! pybz_sidecar_stop "${_compare_runtime:-}"; then
             [[ $status -ne 0 ]] || status=1
         fi

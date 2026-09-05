@@ -1145,6 +1145,7 @@ run_namespace_proxy_helper_fixture() (
             ;;
         sh:*pybz-proxy-alive*) [[ $FAKE_PROXY_ALIVE -eq 1 ]] ;;
         sh:*pybz-proxy-stop*) FAKE_PROXY_ALIVE=0 ;;
+        sh:*pybz-auth-cache-clear*) ;;
         python:*) [[ $FAKE_PROXY_READY -eq 1 ]] ;;
         sh:*pybz-redhat-alias*) ;;
         *) return 2 ;;
@@ -1183,6 +1184,12 @@ run_namespace_proxy_helper_fixture() (
     FAKE_PROXY_ALIVE=0
     pybz_proxy_stop redhat
     pybz_proxy_stop redhat
+    pybz_auth_cache_clear
+    if ! grep -Fq 'python-bugzilla-token' "$FAKE_PROXY_LOG" ||
+        ! grep -Fq 'python-bugzilla-stale-token' "$FAKE_PROXY_LOG"; then
+        printf 'auth cache cleanup omitted a comparison-owned token path\n' >&2
+        return 1
+    fi
     mkdir -p "$FUNC_CONFIG_DIR/tls-fixture"
     : >"$FUNC_CONFIG_DIR/tls-fixture/server.crt"
     : >"$FUNC_CONFIG_DIR/tls-fixture/server.key"
@@ -2975,6 +2982,11 @@ run_container_fixture() (
     "$runtime" exec "$sidecar" sh -c "printf '%s' exchange-proof > /work/proof"
     assert_equals exchange-proof "$(<"$config_dir/proof")" "bind-mount bytes"
     run_adapter_fixture "$runtime" "$sidecar" "$config_dir"
+    pybz_auth_cache_clear
+    # shellcheck disable=SC2016 # HOME expands in the sidecar shell.
+    "$runtime" exec "$sidecar" sh -c \
+        'test ! -e "$HOME/.cache/bzr-comparison/python-bugzilla-token" &&
+test ! -e "$HOME/.cache/bzr-comparison/python-bugzilla-stale-token"'
     return 0
 )
 

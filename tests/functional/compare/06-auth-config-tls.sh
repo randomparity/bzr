@@ -80,11 +80,7 @@ r11_auth_control() {
     return "$status"
 }
 declare -F r11_login_control >/dev/null || r11_login_control() {
-    local sidecar
-    sidecar=$(pybz_sidecar_name) || return 1
-    # shellcheck disable=SC2016 # HOME expands in the sidecar shell.
-    "$PYBZ_RUNTIME" exec "$sidecar" sh -c \
-        'rm -f "$HOME/.cache/bzr-comparison/python-bugzilla-token" "$HOME/.cache/bzr-comparison/python-bugzilla-stale-token"'
+    pybz_auth_cache_clear || return 1
     r11_auth_control login \
         '.transport == "REST" and .result == {authenticated:true,cache_written:true,restricted:true}'
 }
