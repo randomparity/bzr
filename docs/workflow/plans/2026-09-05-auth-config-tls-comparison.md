@@ -10,8 +10,9 @@ markers.
 Tech stack: Bash functional harness, Python 3 stdlib proxy fixtures, Docker/Podman, jq, openssl,
 python-bugzilla 3.3.0, and Markdown parity documentation.
 
-Expected implementation size: 320–520 changed lines (L) — derived from two proxy/helper fixture
-surfaces, one multi-contract comparison phase, runner wiring, and parity rows.
+Expected implementation size: 400–650 changed lines (L) — derived from proxy/helper fixtures,
+private-file adapter operations, one multi-contract comparison phase, runner wiring, and parity
+rows.
 
 ## Global constraints
 
@@ -34,6 +35,8 @@ surfaces, one multi-contract comparison phase, runner wiring, and parity rows.
 - Modify `tests/functional/redhat-shape-proxy.py`: observe credential kind and translate Bearer in
   explicit fixture mode.
 - Modify `tests/functional/lib.sh`: stage/start/read/stop namespace proxies and install the alias.
+- Modify `tests/functional/compare/python-bugzilla-adapter.py`: private-file token lifecycle and
+  client-certificate surface observations.
 - Modify `tests/functional/pybz/container-tests.sh`: executable fixtures for proxy helpers and phase.
 - Create `tests/functional/compare/06-auth-config-tls.sh`: R11 live comparison and gaps.
 - Modify `tests/functional/run-compare.sh`: stage scripts, register phase, and order cleanup.
@@ -82,13 +85,14 @@ Interfaces:
   and a basename destination, copies it mode 0600 below `COMPARE_EXCHANGE_DIR`, and returns its
   `/work/<destination-name>` path.
 - Add `pybz_proxy_start <tls|redhat> <listen-port> [cert-relative-dir]`; it validates the fixed kind
-  and decimal port, launches the staged program with backend `127.0.0.1:80`, writes a fixed PID/log
-  under `/work`, and proves readiness from the sidecar within 30 attempts.
+  and decimal port, rejects a live prior PID, removes stale PID state, atomically creates a new
+  mode-0600 evidence log, launches the staged program with backend `127.0.0.1:80`, and proves
+  readiness from the sidecar within 30 attempts. It returns the exact current log path.
 - Add `pybz_proxy_stop <tls|redhat>`; it validates the PID record and is idempotent.
 - Add `pybz_redhat_alias_install`; it idempotently maps `bugzilla.redhat.com` to `127.0.0.1` inside
   the running sidecar.
 - Later phase code consumes `PYBZ_TLS_URL=https://127.0.0.1:<port>`,
-  `PYBZ_REDHAT_URL=http://bugzilla.redhat.com:<port>`, and fixed log paths.
+  `PYBZ_REDHAT_URL=http://bugzilla.redhat.com:<port>`, and the returned per-start log paths.
 
 Verification:
 
@@ -104,8 +108,8 @@ Verification:
 Steps:
 
 1. Write fake-runtime fixtures for valid TLS/Red Hat starts, malformed kind/port/PID rejection,
-   readiness exhaustion, alias idempotency, and repeated stop. Assert no runtime call receives a
-   secret sentinel.
+   readiness exhaustion, alias idempotency, stale-log replacement, live-PID refusal, and repeated
+   stop. Assert no runtime call receives a secret sentinel.
 2. Implement the four helpers beside existing sidecar lifecycle functions. Use fixed `sh -c`
    programs with data passed as positional parameters; validate before invocation. Never compose
    parameters into shell source.
@@ -119,16 +123,60 @@ Steps:
 Acceptance: no new container is created, no proxy binds beyond namespace loopback, every wait is
 bounded, and sidecar removal still cleans up after an early phase exit.
 
-## Task 3: Add the R11 comparison phase and parity rows
+## Task 3: Add private-file python-bugzilla auth operations
+
+Interfaces:
+
+- Extend `python-bugzilla-adapter.py` with `login`, `cached_auth`, `logout`, and
+  `client_certificate_surface` operations.
+- Each operation accepts one path beneath `/work` to a mode-0600 JSON request, validates its exact
+  allowed keys and value types, and returns a mode-0600 result containing only booleans and bounded
+  non-secret identifiers.
+- `login` accepts URL, username, password, and restrict-login; `cached_auth` accepts URL and username
+  but no password; `logout` accepts URL and invalidates the cached token; the certificate operation
+  accepts a dummy certificate path and reports only whether the constructed session retained it.
+- Task 4 consumes these operations through existing `run_pybz_adapter`.
+
+Verification:
+
+- Mode: focused-test — extend adapter fixtures in `container-tests.sh` for restricted login request
+  shape, cache reuse with the password file removed, logout invalidation, wrong-mode request files,
+  path confinement, and secret-free failure output. The red command is
+  `bash tests/functional/pybz/container-tests.sh` failing on the unknown `login` operation; the green
+  command is the same script with all adapter cases passing.
+- Mode: focused-test — client-certificate surface proof; inject the existing adapter fixture module,
+  construct a client from a private dummy path, assert the session receives it, and assert neither
+  the path nor contents appear in output. The same fixture command is red on the unknown operation
+  and green after implementation.
+
+Steps:
+
+1. Add adapter fixture cases and controlled failures before changing the operation registry.
+2. Implement strict private-request loading with `/work` direct-child confinement, regular-file and
+   mode-0600 checks, exact-key validation, and bounded strings. Reuse the existing JSON result path
+   contract rather than stdout for results.
+3. Implement token lifecycle operations through the pinned python-bugzilla library. Construct a new
+   client per operation so `cached_auth` proves persisted cache behavior rather than object reuse.
+4. Implement the local certificate operation without issuing a network request and return only
+   `{\"configured\": true|false}`.
+5. Run `bash tests/functional/pybz/container-tests.sh`; expect all adapter fixtures to pass and all
+   secret-sentinel scans to remain empty.
+6. Commit as `test(functional): adapt python-bugzilla auth lifecycle`.
+
+Acceptance: passwords and tokens never enter process argv or emitted JSON, logout uses the library
+surface absent from the CLI, and certificate evidence is explicitly configuration-only.
+
+## Task 4: Add the R11 comparison phase and parity rows
 
 Interfaces:
 
 - Create phase `06-auth-config-tls` and register it after `05-products-components`.
-- Use existing `test_begin`, `test_pass`, `test_fail`, `expect_gap`, `run_bzr`, and `run_pybz`.
-- Consume Task 1's exact evidence lines and Task 2's URLs/helpers.
+- Use existing `test_begin`, `test_pass`, `test_fail`, `expect_gap`, `run_bzr`, `run_pybz`, and
+  `run_pybz_adapter`.
+- Consume Task 1's exact evidence lines, Task 2's URLs/helpers, and Task 3's adapter operations.
 - Produce stable IDs for API-key placement, restricted login, cached token, logout, bugzillarc
   precedence/default/section, nosslverify, token transport gap, login-command gap, bugzillarc-import
-  gap, client-certificate gap, and Bearer gap.
+  gap, client-certificate surface gap, and Bearer gap.
 
 Verification:
 
@@ -146,25 +194,29 @@ Verification:
 
 Steps:
 
-1. Add phase fixtures for each live contract and five gap owners. Include stale-home controls,
-   secret-sentinel scans, unsupported-version handling, and a forced positive-control failure.
+1. Add phase fixtures for each live contract and five gap owners. Include stale-home and stale-log
+   controls, secret-sentinel scans, unsupported-version handling, an omitted-`/etc` precedence
+   fault, and a forced positive-control failure.
 2. Implement `06-auth-config-tls.sh`: reset owned sidecar state; run API-key observations; prove
-   login/restricted/cache/logout; write and select bugzillarc fixtures; start the namespace TLS
-   proxy and prove default rejection plus `--nosslverify` success; install the Red Hat alias, start
-   the Bearer proxy, and prove translated authentication.
+   login/restricted/cache/logout via private adapter request files; copy the staged system
+   bugzillarc to the sidecar's `/etc`, write both home-path files, and prove their precedence; start
+   the namespace TLS proxy and prove default rejection plus `--nosslverify` success; install the Red
+   Hat alias, start the Bearer proxy, and prove translated authentication from the current log.
 3. For missing bzr surfaces, use exact parser or transport observations before calling
    `expect_gap` for #676, #681, #682, #677, and #678. Never convert a failed python-bugzilla
    operation or proxy readiness failure into a gap.
-4. Register the phase in `run-compare.sh` and append the matching rows to
+4. Run the local client-certificate adapter proof and pair it with bzr's exact parser/config absence;
+   label its parity row as a surface gap rather than live mutual-TLS evidence.
+5. Register the phase in `run-compare.sh` and append the matching rows to
    `docs/dev/python-bugzilla-parity.md`.
-5. Run `bash tests/functional/pybz/container-tests.sh`; expect all fixture checks to pass.
-6. Run `make check-functional-test-ids`; expect exit 0 with both phase trees valid.
-7. Commit as `test(functional): compare auth config and TLS`.
+6. Run `bash tests/functional/pybz/container-tests.sh`; expect all fixture checks to pass.
+7. Run `make check-functional-test-ids`; expect exit 0 with both phase trees valid.
+8. Commit as `test(functional): compare auth config and TLS`.
 
 Acceptance: every sourced R11 situation has a stable live test, each known bzr absence points to its
 own open issue, and no row or expected gap can pass without its positive control.
 
-## Task 4: Verify the complete change
+## Task 5: Verify the complete change
 
 Interfaces:
 

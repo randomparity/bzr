@@ -20,8 +20,10 @@ runs in the existing sidecar and reaches Bugzilla or namespace-local proxy proce
 
 `run-compare.sh` stages the two proxy programs in the existing private exchange directory before
 starting the sidecar. `lib.sh` owns fixed-purpose helpers to add the Red Hat alias, start a proxy,
-check readiness from inside the sidecar, read sanitized evidence, and stop a namespace proxy. The
-runner's EXIT trap remains the final cleanup boundary.
+check readiness from inside the sidecar, read sanitized evidence, and stop a namespace proxy. Each
+start creates a fresh private evidence log after proving no prior PID remains; assertions consume
+that exact path and require one current credential-kind record. The runner's EXIT trap remains the
+final cleanup boundary.
 
 The Red Hat proxy gains a request transform selected by a `bearer-auth` fixture mode. It accepts a
 non-empty `Authorization: Bearer <value>`, removes that header, forwards the same value as
@@ -41,19 +43,24 @@ before the real multi-version run is accepted.
 
 ### Token login and cache
 
-The phase uses python-bugzilla's real login/logout operations against the disposable server. It
-proves a restricted login succeeds, a token cache file is created in the sidecar home, a later
-invocation reuses the token without the password, and logout invalidates it. The equivalent bzr
-surface is checked as a controlled absence and recorded against #676 (token transport) and #681
-(login/logout commands). Unexpected python-bugzilla failure is an ordinary failure, not a gap.
+The shared python-bugzilla adapter gains `login`, `cached_auth`, and `logout` operations because the
+pinned CLI exposes login but not logout. Each consumes a private mode-0600 JSON request file rather
+than argv or stdin and emits only booleans and non-secret identifiers. The phase proves a restricted
+login succeeds, a token cache file is created in the sidecar home, a later adapter invocation reuses
+the token after the password file is removed, and the library logout operation invalidates it. The
+equivalent bzr surface is checked as a controlled absence and recorded against #676 (token
+transport) and #681 (login/logout commands). Unexpected python-bugzilla failure is an ordinary
+failure, not a gap.
 
 ### bugzillarc
 
-The phase writes only within the sidecar's dedicated home and `/work`. It creates system-equivalent,
-home, and XDG fixture files with distinct non-secret sentinel values, then uses python-bugzilla's
-resolved server and credential behavior to prove later-file precedence, `[DEFAULT] url`, and
-URL-substring section selection. bzr's missing import command is a controlled parser gap against
-#682. The fixture never edits the host's real `/etc` or home configuration.
+The phase writes a private staged fixture to `/work` and copies it to the disposable sidecar's real
+`/etc/bugzillarc`, then creates `~/.bugzillarc` and
+`~/.config/python-bugzilla/bugzillarc` under its isolated home. Distinct non-secret sentinel values
+prove later-file precedence, `[DEFAULT] url`, and URL-substring section selection. A fault fixture
+omitting the `/etc` layer must fail the three-layer proof. bzr's missing import command is a
+controlled parser gap against #682. The fixture never edits the host's `/etc` or home; sidecar
+removal discards the system-level fixture.
 
 ### TLS verification
 
@@ -61,8 +68,11 @@ The existing host TLS fixture generates its short-lived CA, leaf certificate, an
 comparison exchange directory so the sidecar can read the same material at `/work`. A second
 instance of `tls-proxy.py` listens on sidecar loopback and forwards to port 80. Python-bugzilla must
 fail verification without `--nosslverify` and succeed with it. Existing bzr TLS functional coverage
-remains the bzr-side proof. Client certificate support is represented only as a controlled surface
-gap against #677; mutual TLS remains excluded.
+remains the bzr-side proof. For the client-certificate gap, the shared adapter performs a local,
+network-free positive control: it constructs the pinned client from a private dummy certificate
+path and reports whether its requests session received that exact path, without returning path or
+certificate content. That surface proof is paired with bzr's exact parser/config absence and #677.
+Mutual TLS and a claim that the certificate authenticates remain excluded.
 
 ### Red Hat Bearer path
 
@@ -74,13 +84,17 @@ The equivalent bzr parser/transport absence is a controlled gap against #678.
 ### Gap discipline and parity report
 
 Every expected gap is eligible only after its python-bugzilla positive control succeeds and the bzr
-absence matches an exact parser or transport observation. The phase records #676, #681, #682,
-#677, and #678 separately. `docs/dev/python-bugzilla-parity.md` adds one row per stable comparison
-test ID; no row claims parity without a live assertion.
+absence matches an exact parser or transport observation. The #677 positive control is explicitly a
+local client-configuration proof, and its parity row says `surface gap` rather than implying a live
+mutual-TLS exchange. The phase records #676, #681, #682, #677, and #678 separately.
+`docs/dev/python-bugzilla-parity.md` adds one row per stable comparison test ID; no row claims parity
+without a live assertion.
 
 ## Failure handling and cleanup
 
 - Invalid proxy kind, port, PID record, or path fails before a container command is run.
+- A start refuses a live prior PID, replaces stale PID state, and creates a new empty evidence log;
+  the returned log path is the only evidence source for that start.
 - Namespace readiness has a bounded retry count and reports the proxy's sanitized log on failure.
 - Proxy stop is idempotent. A missing process is accepted only after the sidecar confirms it is not
   running; a malformed PID record is a failure.
@@ -88,8 +102,8 @@ test ID; no row claims parity without a live assertion.
   fallback when a phase exits early.
 - Every test resets cache/config files it owns before its positive control, so the persistent named
   home cannot make a fresh run pass from stale state.
-- Raw passwords, tokens, API keys, and Authorization values never enter test names, proxy evidence,
-  terminal output, or the parity report.
+- Raw passwords, tokens, API keys, certificate paths, and Authorization values never enter process
+  argv, test names, proxy evidence, terminal output, or the parity report.
 
 ## Threat model
 
@@ -97,8 +111,8 @@ test ID; no row claims parity without a live assertion.
 
 - The local operator or CI job controls environment overrides and invokes Docker or Podman.
 - The disposable Bugzilla server consumes test credentials and request bodies from both clients.
-- Python-bugzilla consumes generated config files, passwords, API keys, tokens, URLs, and TLS
-  material inside its sidecar.
+- Python-bugzilla consumes mode-0600 adapter request files, generated config files, passwords, API
+  keys, tokens, URLs, and TLS material inside its sidecar.
 - The Red Hat proxy consumes untrusted HTTP headers, query strings, and bodies before forwarding.
 - Proxy scripts and TLS material cross from the host runner into the sidecar through `/work`.
 
@@ -114,6 +128,8 @@ the existing Red Hat proxy from response transformation to bounded request crede
   the original Authorization header is not forwarded alongside the API-key header.
 - Evidence records credential kinds and counts only. Fixture tests search evidence and failure
   output for the known secret sentinels and fail on disclosure.
+- Login, cached-auth, logout, and client-certificate adapter operations read secrets and paths from
+  private request files and serialize only bounded non-secret facts.
 - Staged files stay beneath the mode-0700 comparison directory; secret-bearing files remain mode
   0600. Paths are fixed by the runner rather than derived from server input.
 - Container commands pass data as quoted argv or positional shell parameters; no fixture value is
@@ -132,7 +148,10 @@ malicious local operators, or turn disposable test credentials into production s
 - Proxy self-tests prove Bearer translation, header removal, empty/malformed rejection, credential-
   kind evidence, secret redaction, and preservation of existing response modes.
 - Sidecar fixture tests prove staging, fixed namespace endpoints, alias installation, bounded
-  readiness, idempotent stop, cleanup after failure, and rejection of malformed inputs.
+  readiness, fresh per-start evidence, idempotent stop, cleanup after failure, and rejection of
+  malformed inputs.
+- Adapter fixtures prove private-file token lifecycle operations, password-free cache reuse,
+  library logout, and the network-free client-certificate surface observation.
 - Phase fixture tests prove each positive-control-before-gap transition and stale-gap behavior.
 - `make check-functional-test-ids` validates the new phase and evidence IDs.
 - `make lint` and `make test` keep repository guardrails green.
