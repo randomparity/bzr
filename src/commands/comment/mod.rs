@@ -30,10 +30,19 @@ pub(crate) async fn execute(
 ) -> Result<()> {
     match action {
         CommentAction::List {
-            bug_id,
+            bug_ids,
+            permissive,
             since,
             projection,
-        } => list::handle(*bug_id, since.as_deref(), projection, ctx, w).await,
+        } => {
+            let args = list::ListArgs {
+                bug_ids,
+                permissive: *permissive,
+                since: since.as_deref(),
+                projection,
+            };
+            list::handle(&args, ctx, w).await
+        }
         CommentAction::Add {
             bug_id,
             body,

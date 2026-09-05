@@ -163,3 +163,38 @@ fn projection_for_json_validates() {
     );
     assert_eq!(result.unwrap_err().exit_code(), 7);
 }
+
+#[test]
+fn retain_key_keeps_a_field_an_include_list_omits() {
+    let mut projection =
+        FieldProjection::resolve(Some("id"), None, crate::types::comment::COMMENT_FIELDS).unwrap();
+    assert!(projection.would_drop("bug_id"));
+    projection.retain_key("bug_id");
+    assert!(!projection.would_drop("bug_id"));
+
+    let mut value = serde_json::json!([{ "id": 1, "bug_id": 42, "text": "t" }]);
+    projection.apply(&mut value);
+    assert_eq!(value[0]["id"], 1);
+    assert_eq!(value[0]["bug_id"], 42);
+    assert!(value[0].get("text").is_none());
+}
+
+#[test]
+fn retain_key_keeps_a_field_an_exclude_list_drops() {
+    let mut projection =
+        FieldProjection::resolve(None, Some("bug_id"), crate::types::comment::COMMENT_FIELDS)
+            .unwrap();
+    assert!(projection.would_drop("bug_id"));
+    projection.retain_key("bug_id");
+    assert!(!projection.would_drop("bug_id"));
+
+    let mut value = serde_json::json!([{ "id": 1, "bug_id": 42 }]);
+    projection.apply(&mut value);
+    assert_eq!(value[0]["bug_id"], 42);
+}
+
+#[test]
+fn would_drop_is_false_for_the_identity_projection() {
+    let projection = FieldProjection::none();
+    assert!(!projection.would_drop("bug_id"));
+}

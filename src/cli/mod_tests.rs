@@ -1031,8 +1031,8 @@ fn parse_comment_list() {
     let cli = Cli::try_parse_from(["bzr", "comment", "list", "99"]).unwrap();
     match cli.command {
         Commands::Comment {
-            action: CommentAction::List { bug_id, .. },
-        } => assert_eq!(bug_id, 99),
+            action: CommentAction::List { bug_ids, .. },
+        } => assert_eq!(bug_ids, vec![99]),
         _ => panic!("expected Comment List"),
     }
 }

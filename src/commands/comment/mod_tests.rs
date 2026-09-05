@@ -20,7 +20,8 @@ fn filter_comment_body_empty_input() {
 #[test]
 fn capabilities_are_anonymous_for_read_actions() {
     let list = super::capabilities(&CommentAction::List {
-        bug_id: 42,
+        bug_ids: vec![42],
+        permissive: false,
         since: None,
         projection: crate::cli::ProjectionArgs::default(),
     });
