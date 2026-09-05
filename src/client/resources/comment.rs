@@ -59,12 +59,21 @@ impl BugzillaClient {
         bug_id: u64,
         since: Option<&str>,
     ) -> Result<Vec<Comment>> {
-        self.dispatch_xmlrpc_first(
-            &format!("comment list (bug {bug_id})"),
-            || self.get_comments_since_rest(bug_id, since),
-            || async { self.xmlrpc_client().get_comments_since(bug_id, since).await },
-        )
-        .await
+        let mut comments = self
+            .dispatch_xmlrpc_first(
+                &format!("comment list (bug {bug_id})"),
+                || self.get_comments_since_rest(bug_id, since),
+                || async { self.xmlrpc_client().get_comments_since(bug_id, since).await },
+            )
+            .await?;
+        // Neither transport is trusted to attribute a record: the REST `bugs`
+        // extractor drops the map key, and the flat `{"comments": [...]}`
+        // variant carries no bug context. A server-supplied value wins — it is
+        // trusted unverified, so this closes the absent case, not the wrong one.
+        for comment in &mut comments {
+            comment.bug_id.get_or_insert(bug_id);
+        }
+        Ok(comments)
     }
 
     async fn get_comments_since_rest(
