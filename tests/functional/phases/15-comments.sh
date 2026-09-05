@@ -270,7 +270,8 @@ if [[ -n "$BUG1" ]] && [[ -n "$BUG2" ]]; then
             'all(.[]; keys == ["bug_id", "tags"]) and
              (map(.bug_id) | (index($a) != null) and (index($b) != null))' \
             "$BZR_STDOUT" >/dev/null &&
-        [[ $(awk '/keeping bug_id/ { count++ } END { print count + 0 }' "$BZR_STDERR") -eq 1 ]]; then
+        [[ $(awk '/keeping bug_id/ { count++ } END { print count + 0 }' \
+            "$BZR_STDERR") -eq 1 ]]; then
         test_pass
     else
         test_fail "multi-ID JSON tag projection lost attribution or emitted the notice incorrectly"
@@ -285,7 +286,8 @@ if [[ -n "$BUG1" ]] && [[ -n "$BUG2" ]]; then
             'all(.[]; keys == ["bug_id", "tags"]) and
              (map(.bug_id) | (index($a) != null) and (index($b) != null))' \
             "$BZR_STDOUT" >/dev/null &&
-        [[ $(awk '/keeping bug_id/ { count++ } END { print count + 0 }' "$BZR_STDERR") -eq 1 ]]; then
+        [[ $(awk '/keeping bug_id/ { count++ } END { print count + 0 }' \
+            "$BZR_STDERR") -eq 1 ]]; then
         test_pass
     else
         test_fail "multi-ID NDJSON tag projection lost attribution or emitted the notice incorrectly"
