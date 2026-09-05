@@ -37,6 +37,19 @@ for any record where the server left the field absent, once at the public
 client entry point after transport dispatch. A server-supplied value is never
 overwritten.
 
+Attribution has to survive the projection flags to be worth anything, so on a
+multi-ID call `bug_id` is forced into the resolved include set and out of the
+exclude set, with one stderr line saying so. Otherwise
+`comment list 1 2 3 --json --fields id,creator` returns a merged array with no
+`bug_id` — the documented token-saving form for agents, silently
+unattributable.
+
+The ID list is **not** capped. And a `bugs` map that omits the requested key on
+the XML-RPC path becomes `BzrError::NotFound` rather than an empty comment
+list, so it flows through the loop as an ordinary per-ID failure. The fix goes
+in `extract_comments`, not in the shared `lookup_bug_entry` mapper that other
+resources call.
+
 ## Consequences
 
 - One failure story: a per-bug error is classified and reported the same way
@@ -51,22 +64,30 @@ overwritten.
   cannot tell a bug that failed under `--permissive` from a bug with no
   comments; the failed IDs are on stderr and nowhere else. Without
   `--permissive` the ambiguity cannot arise, because the first failure aborts.
-- One residual the loop does not remove: on XML-RPC, a server that answers
-  `Bug.comments` with a `bugs` map lacking the requested key — rather than
-  faulting — yields an empty comment list rather than an error
-  (`src/xmlrpc/resources/comment.rs`, `lookup_bug_entry` returning `None`).
-  That bug is then indistinguishable from an empty thread with or without
-  `--permissive`. This is the existing single-ID behavior, carried forward
-  unchanged.
+- That uniformity holds for *faulting* errors. One path did not fault: on
+  XML-RPC a server answering `Bug.comments` with a `bugs` map lacking the
+  requested key returned an empty comment list
+  (`src/xmlrpc/resources/comment.rs`, `lookup_bug_entry` returning `None`). At
+  N>1 that is silent data loss — no records, no header, no stderr line, just a
+  short array — so this change makes it `BzrError::NotFound` and it joins the
+  same per-ID failure path. Single-ID XML-RPC behavior changes with it: that
+  response used to print `No comments.` and now exits not-found. A bug that
+  genuinely has an empty thread is unaffected, because Bugzilla returns the key
+  with an empty array for that case.
+- `bug history`, `bug clone`, and `attachment upload --comment-private` share
+  that call path, so they stop treating a missing key as an empty thread too.
 - N bugs cost N requests on every transport. The win the issue asks for — N-1
   process invocations, each of which today re-loads config, resolves
   credentials, detects API mode, and completes a TLS handshake — is captured in
   full; the N-1 HTTP round trips on XML-RPC servers are not.
 - The requests share one connection through reqwest's pool, so the per-request
   cost is a round trip, not a new connection.
-- Latency grows linearly with the ID count. The 100-ID cap borrowed from `bug
-  adjacency` bounds it; a set larger than that is rejected at exit 7 rather
-  than fanning out.
+- Latency grows linearly with the ID count, and nothing bounds it — matching
+  `bug view`, whose `fetch_batch` loops the ID list with no cap.
+- `bug_id` is not excludable on a multi-ID call: `--fields` and
+  `--exclude-fields` cannot remove the field that attributes each record, and a
+  stderr note says when the override fired. Single-ID projection is unchanged,
+  so `--fields id` there still yields exactly one key.
 - A later change may still add XML-RPC batching as an optimization, but it
   would have to reproduce this per-ID failure contract to be adoptable, and
   that is the cost this decision is declining to pay now rather than
@@ -117,6 +138,27 @@ overwritten.
   #699's proposed approach asks for `--permissive`-style per-bug handling by
   name, and one stale ID would otherwise fail an entire triage read — the cost
   the issue exists to remove.
+- **Cap the ID list at 100, matching `bug adjacency`.** verified: `bug view` is
+  the sibling this design follows and has no cap — `src/commands/bug/view.rs`
+  carries no `MAX` constant and `fetch_batch` loops the ID list with no length
+  check — while `bug adjacency`'s cap covers a different shape, several
+  requests *per* ID. Capping here would make two sibling read verbs disagree on
+  maximum arity, so a script working against a 150-ID list with `bug view`
+  would hard-fail on `comment list`.
+- **Let `--fields` / `--exclude-fields` drop `bug_id` like any other key.**
+  verified: `FieldProjection::apply` recurses into an array and retains only
+  the named keys per element, so `comment list 1 2 3 --json --fields id,creator`
+  returns a merged array with no attribution at all, at exit 0 and with no
+  warning — and `docs/bzr-cli.md` ships that projection form as the
+  token-saving shape for agents.
+- **Reject `--fields` together with multiple IDs at exit 7.** judgment: it
+  breaks a currently-working invocation to prevent a problem that retaining one
+  field already prevents.
+- **Leave a missing XML-RPC `bugs` key as an empty comment list.** verified:
+  `extract_comments` returns `Ok(Vec::new())` when `lookup_bug_entry` yields
+  `None`, which at N=1 was merely ambiguous but at N>1 drops a bug from the
+  flat array with no header, no stderr line, and no failure entry — and this
+  change is what introduces N>1.
 - **Backfill `bug_id` inside each transport's extractor.** judgment: three
   guards — REST `bugs` envelope, REST flat envelope, XML-RPC — where the entry
   point needs one, and a fourth path added later would silently skip it.
