@@ -1064,6 +1064,17 @@ run_auth_config_tls_phase_fixture() (
     assert_equals 8 "$PASS_COUNT" "auth/config/TLS pass count"
     assert_equals 0 "$FAIL_COUNT" "auth/config/TLS failure count"
     assert_equals 5 "$GAP_COUNT" "auth/config/TLS gap count"
+    (
+        unset -f r11_tls_control
+        tls_fixture_start() { return 0; }
+        run_bzr_raw() { BZR_EXIT=0; }
+        pybz_proxy_stop() { return 0; }
+        _tls_cleanup() { : >"$COMPARE_EXCHANGE_DIR/tls-cleaned"; }
+        BZ_PORT=8080
+        reset_r11_fixture
+        source "$phase" >/dev/null
+        [[ -e $COMPARE_EXCHANGE_DIR/tls-cleaned ]]
+    )
     reset_r11_fixture
     R11_FIXTURE_CACHED_FAIL=1
     source "$phase" >"$fixture_output"
@@ -1314,14 +1325,12 @@ class _FixtureGroup:
 class _FixtureTokenCache:
     def __init__(self, filename):
         self.filename = filename
-
     def get_value(self, _url):
         if not self.filename or not __import__("os").path.exists(self.filename):
             return None
         with open(self.filename, encoding="utf-8") as source:
             value = source.read()
         return value or None
-
     def set_value(self, _url, value):
         if not self.filename:
             return
@@ -1333,7 +1342,6 @@ class _FixtureSession:
         self._token_cache = token_cache
         self._url = url
         self._session = __import__("types").SimpleNamespace(cert=cert)
-
     def get_auth_params(self):
         token = self._token_cache.get_value(self._url)
         return {"Bugzilla_token": token} if token else {}
@@ -1691,6 +1699,10 @@ run_adapter_fixture() {
         api-key-identity-extra api_key_identity \
         '{"url":"http://identity-proxy.invalid:18080","api_key":"identity-api-secret","username":"identity-user@test.invalid","extra":true}' \
         'unexpected request fields: extra'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        api-key-identity-transport api_key_identity \
+        '{"url":"http://identity-proxy.invalid:18080","api_key":"identity-api-secret","username":"identity-user@test.invalid","transport":"XMLRPC"}' \
+        'auth operation does not accept transport'
     assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
         api-key-identity-auth-failure api_key_identity \
         '{"url":"http://identity-proxy.invalid:18080","api_key":"rejected-api-secret","username":"identity-user@test.invalid"}' \

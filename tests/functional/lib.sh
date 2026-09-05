@@ -447,7 +447,6 @@ pybz_stage_proxy() {
     cp "$source" "$staged" || return 1
     chmod 600 "$staged" || return 1
     printf '/work/compare/%s\n' "$destination"
-    return 0
 }
 _pybz_proxy_pid_alive() {
     local sidecar
@@ -577,7 +576,6 @@ kill -TERM "$1" 2>/dev/null || true' sh "$pid" || return 1
         fi
     fi
     rm -f "$pid_file"
-    return 0
 }
 pybz_redhat_alias_install() {
     if [[ -z ${PYBZ_RUNTIME:-} ]]; then

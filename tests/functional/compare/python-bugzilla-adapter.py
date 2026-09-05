@@ -559,11 +559,8 @@ def _login_operation(_client, request):
     TOKEN_FILE.chmod(0o600)
     return {
         "transport": _transport(client),
-        "result": {
-            "authenticated": True,
-            "restricted": request["restrict_login"],
-            "cache_written": True,
-        },
+        "result": {"authenticated": True, "restricted": request["restrict_login"],
+                   "cache_written": True},
     }
 
 
@@ -600,10 +597,7 @@ def _api_key_identity_operation(_client, request):
     )
     return {
         "transport": _transport(client),
-        "result": {
-            "authenticated": True,
-            "identity_matched": identity_matched,
-        },
+        "result": {"authenticated": True, "identity_matched": identity_matched},
     }
 
 
@@ -695,11 +689,7 @@ LEGACY_OPERATIONS = {
 }
 LOCAL_OPERATIONS = {"component_update_shape"}
 SELF_MANAGED_OPERATIONS = {
-    "login",
-    "cached_auth",
-    "api_key_identity",
-    "logout",
-    "client_certificate_surface",
+    "login", "cached_auth", "api_key_identity", "logout", "client_certificate_surface"
 }
 
 
@@ -754,6 +744,8 @@ def _transport(client):
 
 
 def _requested_transport(request, operation):
+    if operation in SELF_MANAGED_OPERATIONS and "transport" in request:
+        raise AdapterError("auth operation does not accept transport")
     requested = request.pop("transport", None)
     if operation in LOCAL_OPERATIONS:
         if requested is not None:

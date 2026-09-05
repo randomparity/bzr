@@ -499,7 +499,6 @@ def emit_rewrite_evidence(evidence):
 
 
 def prepare_auth_forward(path, headers):
-    """Classify one request credential and translate a non-empty Bearer token."""
     query_key = any(
         name.casefold() == "bugzilla_api_key"
         for name, _value in urllib.parse.parse_qsl(
@@ -535,8 +534,7 @@ def prepare_auth_forward(path, headers):
 
 def emit_auth_evidence(kind):
     if kind is not None:
-        sys.stderr.write(f"auth-kind {kind} count=1\n")
-        sys.stderr.flush()
+        print(f"auth-kind {kind} count=1", file=sys.stderr, flush=True)
 
 
 def make_handler(backend_port):
@@ -658,7 +656,6 @@ class ShapeTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(captured["path"], "/rest/version?Bugzilla_api_key=query-secret")
         self.assertEqual(evidence, "auth-kind query count=1\n")
-        self.assertNotIn("query-secret", evidence)
 
     def test_records_api_key_header_without_exposing_value(self):
         status, captured, evidence = self._credential_round_trip(
@@ -667,7 +664,6 @@ class ShapeTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(captured["headers"]["X-BUGZILLA-API-KEY"], "header-secret")
         self.assertEqual(evidence, "auth-kind header count=1\n")
-        self.assertNotIn("header-secret", evidence)
 
     def test_translates_bearer_without_forwarding_authorization_or_exposing_value(self):
         status, captured, evidence = self._credential_round_trip(
@@ -677,7 +673,6 @@ class ShapeTests(unittest.TestCase):
         self.assertNotIn("Authorization", captured["headers"])
         self.assertEqual(captured["headers"]["X-BUGZILLA-API-KEY"], "bearer-secret")
         self.assertEqual(evidence, "auth-kind bearer count=1\n")
-        self.assertNotIn("bearer-secret", evidence)
 
     def test_rejects_empty_bearer_before_forwarding(self):
         status, captured, evidence = self._credential_round_trip(

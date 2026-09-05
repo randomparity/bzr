@@ -64,6 +64,10 @@ fi
 cleanup() {
     local status=$?
 
+    if ! redhat_shape_stop; then
+        [[ $status -ne 0 ]] || status=1
+    fi
+    _tls_cleanup
     if ! resource_membership_cleanup; then
         [[ $status -ne 0 ]] || status=1
     fi

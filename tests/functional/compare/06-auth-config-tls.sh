@@ -1,5 +1,4 @@
 #!/bin/bash
-# Authentication, bugzillarc, and TLS comparison contracts.
 r11_auth_evidence_is() {
     local expected="$1" log="$2" line count=0
     while IFS= read -r line; do
@@ -21,8 +20,7 @@ r11_expected_bzr_auth_kind() {
     case "$1" in
     bz50 | bz52) printf 'query\n' ;;
     bz53) printf 'header\n' ;;
-    *) return 2 ;;
-    esac
+    *) return 2 ;; esac
 }
 declare -F r11_api_key_control >/dev/null || r11_api_key_control() {
     local expected request output host_ok=0 pybz_ok=0
@@ -79,10 +77,12 @@ r11_write_auth_request() {
     printf '%s\n' "$output"
 }
 r11_auth_control() {
-    local operation="$1" filter="$2" input
+    local operation="$1" filter="$2" input status=0
     input=$(r11_write_auth_request "$operation") || return 1
     r11_adapter_result_is "$operation" "$input" \
-        "$COMPARE_EXCHANGE_DIR/r11-${operation}.output.json" "$filter"
+        "$COMPARE_EXCHANGE_DIR/r11-${operation}.output.json" "$filter" || status=$?
+    rm -f "$input"
+    return "$status"
 }
 declare -F r11_login_control >/dev/null || r11_login_control() {
     rm -f "$COMPARE_EXCHANGE_DIR/python-bugzilla-token"
@@ -90,6 +90,7 @@ declare -F r11_login_control >/dev/null || r11_login_control() {
         '.transport == "REST" and .result == {authenticated:true,cache_written:true,restricted:true}'
 }
 declare -F r11_cached_control >/dev/null || r11_cached_control() {
+    [[ ! -e $COMPARE_EXCHANGE_DIR/r11-login.input.json ]] || return 1
     r11_auth_control cached_auth \
         '.transport == "REST" and .result == {authenticated:true,cache_used:true}'
 }
@@ -120,8 +121,9 @@ declare -F r11_bugzillarc_control >/dev/null || r11_bugzillarc_control() {
     *) return 2 ;;
     esac
 }
-declare -F r11_tls_control >/dev/null || r11_tls_control() {
+declare -F r11_tls_control >/dev/null || r11_tls_control() (
     local cert_dir tls_url host_ok=0 pybz_ok=0
+    trap 'pybz_proxy_stop tls || :; _tls_cleanup' EXIT
     tls_fixture_start "$BZ_PORT" || return 1
     tls_url="https://127.0.0.1:${TLS_PORT}"
     run_bzr_raw --json --server-url "$tls_url" server info </dev/null
@@ -134,13 +136,10 @@ declare -F r11_tls_control >/dev/null || r11_tls_control() {
     [[ $BZR_EXIT -ne 0 ]] || return 1
     run_pybz --nosslverify --bugzilla https://127.0.0.1:18443 info --products
     [[ $BZR_EXIT -eq 0 ]] && pybz_ok=1
-    pybz_proxy_stop tls || return 1
-    _tls_cleanup
     [[ $host_ok -eq 1 && $pybz_ok -eq 1 ]]
-}
+)
 declare -F r11_certificate_control >/dev/null || r11_certificate_control() {
-    local input="$COMPARE_EXCHANGE_DIR/r11-cert.input.json"
-    local output="$COMPARE_EXCHANGE_DIR/r11-cert.output.json"
+    local input="$COMPARE_EXCHANGE_DIR/r11-cert.input.json" output="$COMPARE_EXCHANGE_DIR/r11-cert.output.json"
     printf 'comparison certificate surface\n' >"$COMPARE_EXCHANGE_DIR/r11-client-cert.pem"
     printf '{"certificate":"/work/compare/r11-client-cert.pem"}\n' >"$input"
     chmod 600 "$COMPARE_EXCHANGE_DIR/r11-client-cert.pem" "$input"
