@@ -9,7 +9,16 @@
 
 `bzr comment list 1 2 3` reads the comment threads of all three bugs in one
 invocation. Records stay attributable to their bug in every output format.
-Single-ID behavior — table and JSON — is byte-identical to today.
+
+Single-ID output keeps its shape — a bare `Comment` array under `--json`, the
+same comment blocks in table mode, no bug header, no wrapper. One value inside
+that shape does change, and it is stated here rather than claimed away: on
+deployments that omit `bug_id` (the Bugzilla 5.0.x flat `{"comments": […]}`
+envelope, and XML-RPC responses lacking the field) the backfill below moves
+`bug_id` from `null` to the requested ID. `schemas/comment.json` declares
+`bug_id` a required `integer`, so the previous `null` was already
+schema-invalid; the change is a conformance fix, and it applies to single-ID
+and multi-ID calls alike.
 
 `comment list` is the last multi-ID-shaped read verb still scalar, and it sits
 on `bzr-bulk-triage`'s hot path (`content/skills/bzr-bulk-triage/SKILL.md:60`),
@@ -139,22 +148,56 @@ fault code) is reported on stderr as one line and the loop continues; the
 command exits 0 even if every bug failed. Session-wide failures — transport,
 auth, TLS, deserialization — still bail immediately, in both modes.
 
-Failure lines go to **stderr in every output format**:
+Failure lines go to **stderr in every output format**, one per failed bug,
+prefixed `bug <id>: ` and carrying that error's own `Display`. For a
+nonexistent bug both transports produce `BzrError::Api { code: 101, .. }` — a
+REST Bugzilla error body and an XML-RPC fault map to the same variant
+(`src/xmlrpc/protocol/fault.rs:22`) — so the line reads:
 
 ```text
-bug 999: not found: 999
+bug 999: API error 101: Bug #999 does not exist.
 ```
 
-Failures are not carried in the JSON payload. A flat array of `Comment` records
-has nowhere to put a failure entry, and adding one would be the wrapper this
-design rejected. Routing them to stderr keeps one mechanism across table and
-JSON, keeps stdout a clean comment stream for `jq` and pipelines, and matches
-where ADR-0007 already puts diagnostic output.
+**What this costs, stated rather than assumed:** failures are not carried in
+the JSON payload. A flat array of `Comment` records has nowhere to put a
+failure entry, and adding one would be the wrapper this design rejected. So a
+consumer reading only stdout cannot tell a bug that failed under `--permissive`
+from a bug with no comments — the failed IDs are on stderr and nowhere else.
+Without `--permissive` the ambiguity cannot arise, because the first failure
+aborts. This trade is recorded in ADR-0047's Consequences and stated on the
+`--permissive` row in `docs/bzr-cli.md` and in the reference-skill bullet, so
+an agent consuming the JSON meets it where it reads the flag.
+
+Routing to stderr keeps one mechanism across table and JSON and keeps stdout a
+clean comment stream for `jq` and pipelines. It matches the stdout=data /
+stderr=diagnostics split ADR-0014 records (ADR-0007 decides the
+`{schema_version, data}` envelope and says nothing about streams).
 
 Reusing `is_permissive_bug_view_error()` rather than adding a comment-specific
 predicate is intentional: the per-resource fault codes are `Bug.get`'s and
 apply identically to `Bug.comments`, and one predicate keeps `bug view` and
-`comment list` classifying the same server fault the same way.
+`comment list` classifying the same server fault the same way. An HTTP failure
+whose body is not a Bugzilla error object becomes `BzrError::HttpStatus`, which
+the predicate rejects — so a bare 404 or a proxy error page aborts even under
+`--permissive`, which is the intended behavior for an unclassifiable failure.
+
+### When every bug fails
+
+Under `--permissive` with no bug reachable, the exit code is 0 in both formats
+and stdout differs by format, deliberately:
+
+- **JSON/NDJSON** — the accumulated vector is empty and the single trailing
+  `write_comments` call emits `{"schema_version": "3.0.0", "data": []}`. That
+  is a valid payload a consumer already handles.
+- **Table** — the loop wrote nothing, so a single trailing `write_comments`
+  call with an empty slice emits `No comments.`, the same thing a single ID
+  with an empty thread prints today. The human contract for "nothing to show"
+  does not silently stop applying in multi-ID mode.
+
+The table path tracks whether it has written anything. That flag does two
+jobs: it suppresses the trailing empty-slice call once any bug has been
+written, and it keys the blank-line separator between bugs — so a bug skipped
+at index 0 leaves no stray leading blank line.
 
 ## Output composition
 
@@ -165,7 +208,9 @@ apply identically to `Bug.comments`, and one predicate keeps `bug view` and
 - **Multiple IDs, table** — for each ID in order, write a `Bug #<N>` header,
   then that bug's comments through the existing `write_comments`. Without the
   header a multi-bug table is an undifferentiated wall of `Comment #<n>`
-  blocks with no way to tell whose thread is whose.
+  blocks with no way to tell whose thread is whose. If the loop wrote nothing
+  at all, one trailing empty-slice `write_comments` supplies `No comments.`
+  (see *When every bug fails*).
 - **Multiple IDs, JSON/NDJSON** — accumulate every bug's comments into one
   `Vec<Comment>` in argument order and call `write_comments` once, so the
   payload is a single valid array (and, for NDJSON, one record per line across
@@ -183,13 +228,18 @@ directly testable.
 | Single ID, bug missing | error, unchanged from today | that error's code |
 | Multi-ID, no `--permissive`, one bug fails | abort at that bug | that error's code |
 | Multi-ID, `--permissive`, per-resource failure | stderr line, continue | 0 |
+| Multi-ID, `--permissive`, every bug fails | stderr lines; `[]` (JSON) or `No comments.` (table) | 0 |
+| Multi-ID, `--permissive`, unclassifiable HTTP failure | abort | that error's code |
 | Multi-ID, `--permissive`, transport/auth failure | abort | that error's code |
 | `--permissive` with one ID | rejected before any call | 7 |
 | More than 100 IDs | rejected before any call | 7 |
 | Unknown `--fields` | rejected before any call, unchanged | 7 |
 
 Partial success does not use `BzrError::BatchPartialFailure` (exit 11): failed
-reads change no server state, and `bug view` set the same precedent.
+reads change no server state. `bug view` sets the precedent for the **exit
+code** only — it reports its failures in the payload (a `failed` array under
+`--json`, `Bug #N — UNAVAILABLE` rows in table mode), which is the one place
+this design deliberately diverges from it. See ADR-0047.
 
 ## Testing
 
@@ -201,16 +251,24 @@ reads change no server state, and `bug view` set the same precedent.
 - three IDs, table: one `Bug #<N>` header per bug, in argument order;
 - a bug with zero comments contributes no records to JSON and a header plus
   `No comments.` to the table;
-- `--permissive` with a 404 middle bug: exit 0, stderr names the failed bug,
+- `--permissive` with a middle bug returning a Bugzilla error object
+  (`{"error": true, "code": 101}`): exit 0, stderr names the failed bug,
   stdout holds the other two bugs' comments;
-- without `--permissive` the same 404 aborts and no partial JSON is written;
+- without `--permissive` the same error aborts and no partial JSON is written;
+- `--permissive` with a bug returning a **plain-text** 404 aborts anyway — that
+  is `BzrError::HttpStatus`, which the predicate rejects;
+- every bug failing under `--permissive`: exit 0, `data: []` in JSON and
+  `No comments.` in table, with one stderr line per bug;
 - `--permissive` with one ID exits 7 before any request is made;
 - 101 IDs exits 7 before any request is made;
 - `--since` and `--fields` apply to every bug in a multi-ID call.
 
 **Unit (`src/client/resources/comment_tests.rs`):** a REST response whose
 comment records omit `bug_id` comes back with `bug_id` backfilled from the
-request; a response that supplies a `bug_id` keeps the server's value.
+request; a response that supplies a `bug_id` keeps the server's value. A
+single-ID flat-envelope call is pinned at the command level too, so the
+`null` → requested-ID change named in *Goal* is a tested contract rather than
+a side effect.
 
 **Unit (`src/output/resources/comment_tests.rs`):** `write_comment_bug_header`
 emits the bug number.
@@ -243,6 +301,10 @@ and comments on, so the cases are self-contained —
   `--permissive` must appear there. The `### bzr comment list` section gains the
   multi-ID examples, the `--permissive` row, and the arity change on the
   `<BUG_ID>` row.
+- Both documents state the `--permissive` stdout ambiguity on the flag's own
+  row or bullet: under `--json`, a bug that failed is indistinguishable from a
+  bug with no comments, and the failed IDs are on stderr only. An agent
+  consuming this output meets the caveat where it reads the flag.
 - `content/skills/bzr-reference/reference/commands.md`: the `comment` section
   gains the multi-ID form, the flat-array grouping idiom, and the
   `--permissive` note.
