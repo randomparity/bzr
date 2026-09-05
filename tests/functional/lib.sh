@@ -437,7 +437,6 @@ pybz_stage_proxy() {
         printf 'pybz_stage_proxy: expected a readable repository file and exchange directory\n' >&2
         return 2
     fi
-
     local source="$1" destination="$2" source_dir staged
     source_dir=$(cd "$(dirname "$source")" && pwd -P) || return 1
     if [[ $source_dir != "$SCRIPT_DIR" || ! $destination =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
@@ -450,7 +449,6 @@ pybz_stage_proxy() {
     printf '/work/compare/%s\n' "$destination"
     return 0
 }
-
 _pybz_proxy_pid_alive() {
     local sidecar
     sidecar=$(pybz_sidecar_name) || return 1
@@ -458,7 +456,6 @@ _pybz_proxy_pid_alive() {
     "$PYBZ_RUNTIME" exec "$sidecar" sh -c '# pybz-proxy-alive
 kill -0 "$1" 2>/dev/null' sh "$1"
 }
-
 pybz_proxy_start() {
     if [[ $# -lt 2 || $# -gt 3 || ! $2 =~ ^[0-9]+$ || ${#2} -gt 5 ||
         $2 -lt 1 || $2 -gt 65535 ||
@@ -466,7 +463,6 @@ pybz_proxy_start() {
         printf 'pybz_proxy_start: expected kind, decimal port, and optional certificate directory\n' >&2
         return 2
     fi
-
     local kind="$1" port="$2" cert_dir="${3:-}" script log pid_file old_pid pid pid_temp
     case "$kind" in
     redhat)
@@ -497,7 +493,6 @@ pybz_proxy_start() {
         printf 'pybz_proxy_start: certificate material is missing\n' >&2
         return 1
     fi
-
     log="$COMPARE_EXCHANGE_DIR/${kind}.proxy.log"
     pid_file="$COMPARE_EXCHANGE_DIR/${kind}.proxy.pid"
     if [[ -e $pid_file ]]; then
@@ -512,27 +507,20 @@ pybz_proxy_start() {
         fi
         rm -f "$pid_file"
     fi
-
     local log_temp
     log_temp=$(mktemp "$COMPARE_EXCHANGE_DIR/.${kind}.proxy.log.XXXXXX") || return 1
     chmod 600 "$log_temp" || return 1
     mv "$log_temp" "$log" || return 1
-
     local sidecar
     sidecar=$(pybz_sidecar_name) || return 1
     # shellcheck disable=SC2016 # positional values expand only in the sidecar shell.
     pid=$("$PYBZ_RUNTIME" exec "$sidecar" sh -c '# pybz-proxy-start
 set -eu
-kind=$1
-script=$2
-port=$3
-cert_dir=$4
-log=$5
-if [ "$kind" = tls ]; then
-  python "$script" "$port" 127.0.0.1 80 "/work/$cert_dir/server.crt" \
-    "/work/$cert_dir/server.key" >"$log" 2>&1 &
+if [ "$1" = tls ]; then
+  python "$2" "$3" 127.0.0.1 80 "/work/$4/server.crt" \
+    "/work/$4/server.key" >"$5" 2>&1 &
 else
-  BZR_FUNC_REDHAT_MODE=bearer-auth python "$script" "$port" 80 >"$log" 2>&1 &
+  BZR_FUNC_REDHAT_MODE=bearer-auth python "$2" "$3" 80 >"$5" 2>&1 &
 fi
 printf "%s\n" "$!"' sh "$kind" "$script" "$port" "$cert_dir" \
         "/work/compare/${kind}.proxy.log") || return 1
@@ -544,7 +532,6 @@ printf "%s\n" "$!"' sh "$kind" "$script" "$port" "$cert_dir" \
     printf '%s\n' "$pid" >"$pid_temp"
     chmod 600 "$pid_temp" || return 1
     mv "$pid_temp" "$pid_file" || return 1
-
     local attempt=0
     while [[ $attempt -lt 30 ]]; do
         if "$PYBZ_RUNTIME" exec "$sidecar" python -c \
@@ -560,14 +547,12 @@ printf "%s\n" "$!"' sh "$kind" "$script" "$port" "$cert_dir" \
     pybz_proxy_stop "$kind" || true
     return 1
 }
-
 pybz_proxy_stop() {
     if [[ $# -ne 1 || $1 != tls && $1 != redhat || -z ${PYBZ_RUNTIME:-} ||
         ! -d ${COMPARE_EXCHANGE_DIR:-} ]]; then
         printf 'pybz_proxy_stop: expected tls or redhat with an active sidecar\n' >&2
         return 2
     fi
-
     local kind="$1" pid_file="$COMPARE_EXCHANGE_DIR/${1}.proxy.pid" pid sidecar attempt
     [[ -e $pid_file ]] || return 0
     IFS= read -r pid <"$pid_file" || true
@@ -594,7 +579,6 @@ kill -TERM "$1" 2>/dev/null || true' sh "$pid" || return 1
     rm -f "$pid_file"
     return 0
 }
-
 pybz_redhat_alias_install() {
     if [[ -z ${PYBZ_RUNTIME:-} ]]; then
         printf 'pybz_redhat_alias_install: expected an active sidecar\n' >&2
@@ -606,7 +590,6 @@ pybz_redhat_alias_install() {
 grep -Eq "^[[:space:]]*127\\.0\\.0\\.1[[:space:]]+bugzilla\\.redhat\\.com([[:space:]]|$)" \
   /etc/hosts || printf "127.0.0.1 bugzilla.redhat.com\\n" >>/etc/hosts'
 }
-
 _run_pybz_command() {
     local command="$1"
     local sidecar
@@ -632,22 +615,16 @@ run_pybz_adapter() {
 }
 
 pybz_write_api_key_identity_request() (
-    if [[ $# -ne 4 ]]; then
+    if [[ $# -ne 4 || ! ${1:-} =~ ^[a-z0-9][a-z0-9-]*$ ||
+        ! -d ${COMPARE_EXCHANGE_DIR:-} ]]; then
         printf 'pybz_write_api_key_identity_request: expected safe name, URL, API key, and username\n' >&2
         return 2
     fi
-    if [[ ! $1 =~ ^[a-z0-9][a-z0-9-]*$ || ! -d ${COMPARE_EXCHANGE_DIR:-} ]]; then
-        printf 'pybz_write_api_key_identity_request: expected safe name, URL, API key, and username\n' >&2
-        return 2
-    fi
-
     local name="$1" url="$2" api_key="$3" username="$4"
     local output="$COMPARE_EXCHANGE_DIR/${name}.pybz.input.json"
-    local url_source="$COMPARE_EXCHANGE_DIR/.api-key-identity.url.source"
+    local url_source="$COMPARE_EXCHANGE_DIR/.api-key-identity.url.source" status=0
     local key_source="$COMPARE_EXCHANGE_DIR/.api-key-identity.key.source"
     local username_source="$COMPARE_EXCHANGE_DIR/.api-key-identity.username.source"
-    local status=0
-
     umask 077
     trap 'rm -f -- "$url_source" "$key_source" "$username_source" || :' EXIT
     printf '%s' "$url" >"$url_source"
@@ -663,7 +640,6 @@ pybz_write_api_key_identity_request() (
     chmod 600 "$output"
     printf '%s\n' "$output"
 )
-
 # Shared mechanics for resource comparison phases.
 RESOURCE_GAP_ELIGIBLE=0
 RESOURCE_GAP_FILE=""

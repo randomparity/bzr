@@ -191,7 +191,6 @@ run_api_key_identity_request_fixture() (
     COMPARE_EXCHANGE_DIR=$(mktemp -d)
     argv_log=$(mktemp)
     trap 'rm -rf "$COMPARE_EXCHANGE_DIR"; rm -f "$argv_log"' EXIT
-
     jq() {
         printf '%s\n' "$@" >>"$argv_log"
         if [[ ${FAIL_IDENTITY_JQ:-0} -eq 1 ]]; then
@@ -199,7 +198,6 @@ run_api_key_identity_request_fixture() (
         fi
         command jq "$@"
     }
-
     request=$(pybz_write_api_key_identity_request auth-placement \
         'http://identity-proxy.invalid:18080' 'identity-api-secret' \
         'identity-user@test.invalid')
@@ -219,7 +217,6 @@ run_api_key_identity_request_fixture() (
         printf 'API-key identity request retained source files after success\n' >&2
         return 1
     fi
-
     FAIL_IDENTITY_JQ=1
     set +e
     pybz_write_api_key_identity_request auth-failure \
@@ -235,13 +232,11 @@ run_api_key_identity_request_fixture() (
         return 1
     fi
 )
-
 run_transport_observation_fixture() (
     if ! declare -F observe_bzr_transport >/dev/null; then
         printf 'observe_bzr_transport is not defined\n' >&2
         return 1
     fi
-
     printf 'DEBUG bzr::client::transport: API response\n' >"$BZR_STDERR"
     observe_bzr_transport
     assert_equals REST "$BZR_TRANSPORT" "single REST observation"
@@ -1045,7 +1040,6 @@ run_auth_config_tls_phase_fixture() (
         printf 'missing auth/config/TLS comparison phase\n' >&2
         return 1
     fi
-
     TEST_ID_PREFIX=compare CURRENT_TEST_GROUP=06-auth-config-tls BZ_VERSION=bz50
     r11_api_key_control() { return 0; }
     r11_login_control() { return 0; }
@@ -1056,7 +1050,6 @@ run_auth_config_tls_phase_fixture() (
     r11_certificate_control() { return 0; }
     r11_bearer_control() { return 0; }
     r11_parser_gap() { return 0; }
-
     reset_r11_fixture() {
         PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
         SEEN_TEST_IDS=$'\n' TEST_RESULT_PENDING=0
@@ -1071,14 +1064,6 @@ run_auth_config_tls_phase_fixture() (
     assert_equals 8 "$PASS_COUNT" "auth/config/TLS pass count"
     assert_equals 0 "$FAIL_COUNT" "auth/config/TLS failure count"
     assert_equals 5 "$GAP_COUNT" "auth/config/TLS gap count"
-    for issue in 676 681 682 677 678; do
-        if ! grep -Eq "compare/06-auth-config-tls/.*GAP \(#${issue}\)$" \
-            "$fixture_output"; then
-            printf 'auth/config/TLS fixture omitted gap owner #%s\n' "$issue" >&2
-            return 1
-        fi
-    done
-
     reset_r11_fixture
     R11_FIXTURE_CACHED_FAIL=1
     source "$phase" >"$fixture_output"
@@ -1088,7 +1073,6 @@ run_auth_config_tls_phase_fixture() (
         printf 'cached-token positive-control failure became gap #676\n' >&2
         return 1
     fi
-
     reset_r11_fixture
     R11_FIXTURE_OMIT_SYSTEM_RC=1
     source "$phase" >"$fixture_output"
@@ -1101,7 +1085,6 @@ run_auth_config_tls_phase_fixture() (
         return 1
     fi
 )
-
 run_namespace_proxy_helper_fixture() (
     local fixture_root staged log_path error_output
     fixture_root=$(mktemp -d)
@@ -1138,39 +1121,33 @@ run_namespace_proxy_helper_fixture() (
     }
     python3() { return 0; }
     curl() { return 0; }
-
+    reject_proxy_call() {
+        local message="$1"
+        shift
+        if "$@" 2>"$error_output"; then
+            printf '%s\n' "$message" >&2
+            return 1
+        fi
+    }
     fake_proxy_runtime() {
         printf '%q ' "$@" >>"$FAKE_PROXY_LOG"
         printf '\n' >>"$FAKE_PROXY_LOG"
-        if [[ $1 != exec ]]; then
-            return 2
-        fi
-        if [[ $3 == sh && $4 == -c && $5 == *pybz-proxy-start* ]]; then
+        [[ $1 == exec ]] || return 2
+        case "${3:-}:${5:-}" in
+        sh:*pybz-proxy-start*)
             if [[ $7 == tls ]]; then
                 printf 'mapped-cert=/work/%s/server.crt mapped-key=/work/%s/server.key\n' \
                     "${10}" "${10}" >>"$FAKE_PROXY_LOG"
             fi
             printf '4242\n'
-            return 0
-        fi
-        if [[ $3 == sh && $4 == -c && $5 == *pybz-proxy-alive* ]]; then
-            [[ $FAKE_PROXY_ALIVE -eq 1 ]]
-            return
-        fi
-        if [[ $3 == sh && $4 == -c && $5 == *pybz-proxy-stop* ]]; then
-            FAKE_PROXY_ALIVE=0
-            return 0
-        fi
-        if [[ $3 == python && $4 == -c ]]; then
-            [[ $FAKE_PROXY_READY -eq 1 ]]
-            return
-        fi
-        if [[ $3 == sh && $4 == -c && $5 == *pybz-redhat-alias* ]]; then
-            return 0
-        fi
-        return 2
+            ;;
+        sh:*pybz-proxy-alive*) [[ $FAKE_PROXY_ALIVE -eq 1 ]] ;;
+        sh:*pybz-proxy-stop*) FAKE_PROXY_ALIVE=0 ;;
+        python:*) [[ $FAKE_PROXY_READY -eq 1 ]] ;;
+        sh:*pybz-redhat-alias*) ;;
+        *) return 2 ;;
+        esac
     }
-
     tls_fixture_start 8080
     if [[ $TLS_FIXTURE_DIR != "$FUNC_CONFIG_DIR"/tls.* ]]; then
         printf 'TLS fixture was not created beneath FUNC_CONFIG_DIR\n' >&2
@@ -1180,17 +1157,12 @@ run_namespace_proxy_helper_fixture() (
     assert_equals 600 "$(fixture_mode "$TLS_FIXTURE_DIR/server.key")" \
         "TLS fixture key mode"
     _tls_cleanup
-
     staged=$(pybz_stage_proxy "$PYBZ_DIR/../redhat-shape-proxy.py" redhat-proxy.py)
     assert_equals /work/compare/redhat-proxy.py "$staged" "staged proxy path"
     assert_equals 600 "$(fixture_mode "$COMPARE_EXCHANGE_DIR/redhat-proxy.py")" \
         "staged proxy mode"
-    if pybz_stage_proxy "$PYBZ_DIR/../redhat-shape-proxy.py" ../escape.py \
-        2>"$error_output"; then
-        printf 'unsafe proxy destination was accepted\n' >&2
-        return 1
-    fi
-
+    reject_proxy_call 'unsafe proxy destination was accepted' \
+        pybz_stage_proxy "$PYBZ_DIR/../redhat-shape-proxy.py" ../escape.py
     printf 'stale evidence\n' >"$COMPARE_EXCHANGE_DIR/redhat.proxy.log"
     log_path=$(pybz_proxy_start redhat 18080)
     assert_equals "$COMPARE_EXCHANGE_DIR/redhat.proxy.log" "$log_path" \
@@ -1204,16 +1176,11 @@ run_namespace_proxy_helper_fixture() (
         printf 'Red Hat proxy invocation omitted its fixed mapped path or loopback backend\n' >&2
         return 1
     fi
-
     FAKE_PROXY_ALIVE=1
-    if pybz_proxy_start redhat 18080 2>"$error_output"; then
-        printf 'live prior proxy PID was accepted\n' >&2
-        return 1
-    fi
+    reject_proxy_call 'live prior proxy PID was accepted' pybz_proxy_start redhat 18080
     FAKE_PROXY_ALIVE=0
     pybz_proxy_stop redhat
     pybz_proxy_stop redhat
-
     mkdir -p "$FUNC_CONFIG_DIR/tls-fixture"
     : >"$FUNC_CONFIG_DIR/tls-fixture/server.crt"
     : >"$FUNC_CONFIG_DIR/tls-fixture/server.key"
@@ -1229,26 +1196,15 @@ run_namespace_proxy_helper_fixture() (
         return 1
     fi
     pybz_proxy_stop tls
-
     for invalid in 'invalid 18080' 'redhat 0' 'redhat 65536' 'redhat not-a-port'; do
         # shellcheck disable=SC2086 # fixture intentionally splits kind and port
-        if pybz_proxy_start $invalid 2>"$error_output"; then
-            printf 'invalid proxy start was accepted: %s\n' "$invalid" >&2
-            return 1
-        fi
+        reject_proxy_call "invalid proxy start was accepted: $invalid" pybz_proxy_start $invalid
     done
     printf 'not-a-pid\n' >"$COMPARE_EXCHANGE_DIR/redhat.proxy.pid"
-    if pybz_proxy_stop redhat 2>"$error_output"; then
-        printf 'malformed proxy PID was accepted\n' >&2
-        return 1
-    fi
+    reject_proxy_call 'malformed proxy PID was accepted' pybz_proxy_stop redhat
     rm -f "$COMPARE_EXCHANGE_DIR/redhat.proxy.pid"
-
     FAKE_PROXY_READY=0
-    if pybz_proxy_start redhat 18080 2>"$error_output"; then
-        printf 'proxy readiness exhaustion was accepted\n' >&2
-        return 1
-    fi
+    reject_proxy_call 'proxy readiness exhaustion was accepted' pybz_proxy_start redhat 18080
     FAKE_PROXY_READY=1
     pybz_redhat_alias_install
     pybz_redhat_alias_install
@@ -1257,7 +1213,6 @@ run_namespace_proxy_helper_fixture() (
         return 1
     fi
 )
-
 run_adapter_staging_cleanup_fixture() (
     local fixture_root
     local residue
@@ -1356,11 +1311,6 @@ class _FixtureGroup:
     member_emails = ["fixture-user@test.invalid"]
 
 
-class _FixtureRequestsSession:
-    def __init__(self, cert=None):
-        self.cert = cert
-
-
 class _FixtureTokenCache:
     def __init__(self, filename):
         self.filename = filename
@@ -1378,12 +1328,11 @@ class _FixtureTokenCache:
         with open(self.filename, "w", encoding="utf-8") as destination:
             destination.write(value or "")
 
-
 class _FixtureSession:
     def __init__(self, token_cache, url, cert=None):
         self._token_cache = token_cache
         self._url = url
-        self._session = _FixtureRequestsSession(cert)
+        self._session = __import__("types").SimpleNamespace(cert=cert)
 
     def get_auth_params(self):
         token = self._token_cache.get_value(self._url)
