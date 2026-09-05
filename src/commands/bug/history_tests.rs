@@ -34,6 +34,7 @@ fn comment(id: u64, creator: &str, creation_time: &str) -> Comment {
         count: Some(id),
         is_private: Some(false),
         attachment_id: None,
+        tags: vec![],
     }
 }
 

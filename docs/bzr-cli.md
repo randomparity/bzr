@@ -127,7 +127,7 @@ Valid field names per verb:
 
 | Verb | Field names |
 |------|-------------|
-| `comment list` | `id`, `bug_id`, `text`, `creator`, `creation_time`, `count`, `is_private`, `attachment_id` |
+| `comment list` | `id`, `bug_id`, `text`, `creator`, `creation_time`, `count`, `is_private`, `attachment_id`, `tags` |
 | `attachment list` | `id`, `bug_id`, `file_name`, `summary`, `content_type`, `creator`, `creation_time`, `last_change_time`, `size`, `is_obsolete`, `is_private`, `is_patch`, `flags`, `data` |
 | `product list` / `product view` | `id`, `name`, `description`, `is_active`, `components`, `versions`, `milestones` |
 | `component list` / `component view` | `id`, `name`, `description`, `is_active`, `default_assignee` |
@@ -444,7 +444,7 @@ bzr bug list --version 9.4 --version 9.5 --op-sys Linux
 ```
 
 `platform` is the canonical Bugzilla hardware-field name for search, bug
-objects, create, update, and clone. Schema 3.0.0 publishes and accepts only the
+objects, create, update, and clone. Schema 3.0.1 publishes and accepts only the
 canonical `platform` spelling.
 
 ### `bzr bug view`
@@ -659,11 +659,11 @@ table always includes the fixed fields `ID`, `SUMMARY`, `STATUS`, `RESOLUTION`,
 `BLOCKS`, and `DEPENDS ON`; the two adjacency columns are complete,
 comma-separated ID lists.
 
-Under `--json`, the usual `3.0.0` envelope contains a closed result object:
+Under `--json`, the usual `3.0.1` envelope contains a closed result object:
 
 ```json
 {
-  "schema_version": "3.0.0",
+  "schema_version": "3.0.1",
   "data": {
     "requests": [
       {"requested": "00123", "bug_id": 123},
@@ -1149,7 +1149,7 @@ bzr comment list 12345 12346 --permissive
 bzr comment list 12345 --since 2025-06-01
 bzr --json comment list 12345
 bzr --json comment list 12345 12346 | jq '.data | group_by(.bug_id)'
-bzr --json comment list 12345 --fields id,creator,creation_time   # tag/index view, fewer tokens
+bzr --json comment list 12345 --fields id,tags                  # tag/index view, fewer tokens
 ```
 
 | Option | Required | Description |
@@ -1163,7 +1163,8 @@ bzr --json comment list 12345 --fields id,creator,creation_time   # tag/index vi
 Multi-ID `--json` output is **one flat array**, not a `{bugs, failed}` wrapper:
 each record carries its own `bug_id`, so group with
 `jq '.data | group_by(.bug_id)'`. Table output separates the bugs with a
-`Bug #N` header. Single-ID output keeps its shape, though `bug_id` is now
+`Bug #N` header and shows a `Tags:` line before the body when a comment has
+tags. Single-ID output keeps its shape, though `bug_id` is now
 always populated -- it was `null` on servers that omit the field. When every
 bug fails under `--permissive`, the result is `data: []` under `--json`, a
 single `No comments.` line in table mode, and empty stdout under
@@ -2460,7 +2461,7 @@ Every pretty `--json` response is wrapped in a stable envelope:
 
 ```json
 {
-  "schema_version": "3.0.0",
+  "schema_version": "3.0.1",
   "data": <the command's payload>
 }
 ```
@@ -2475,7 +2476,7 @@ bzr --json schema | jq -r '.schema_version'   # the contract version itself
 ```
 
 `--json` error output carries the version too, beside an `error` object:
-`{"schema_version":"3.0.0","error":{"type":...,"message":...,"exit_code":...}}`.
+`{"schema_version":"3.0.1","error":{"type":...,"message":...,"exit_code":...}}`.
 
 Two outputs are deliberately **not** enveloped:
 

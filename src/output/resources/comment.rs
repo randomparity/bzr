@@ -7,6 +7,18 @@ use crate::types::comment::Comment;
 use crate::types::output::OutputFormat;
 use crate::validation::fields::FieldProjection;
 
+fn escape_table_tag(tag: &str) -> String {
+    let mut escaped = String::with_capacity(tag.len());
+    for character in tag.chars() {
+        if character.is_control() {
+            escaped.extend(character.escape_default());
+        } else {
+            escaped.push(character);
+        }
+    }
+    escaped
+}
+
 pub fn write_comments<W: Write + ?Sized>(
     comments: &[Comment],
     format: OutputFormat,
@@ -32,6 +44,15 @@ pub fn write_comments<W: Write + ?Sized>(
             );
             if c.is_private.unwrap_or(false) {
                 let _ = writeln!(out, "  {}", "[PRIVATE]".red());
+            }
+            if !c.tags.is_empty() {
+                let tags = c
+                    .tags
+                    .iter()
+                    .map(|tag| escape_table_tag(tag))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let _ = writeln!(out, "  {} {tags}", "Tags:".bold());
             }
             let _ = writeln!(out);
             for line in c.text.as_deref().unwrap_or("").lines() {

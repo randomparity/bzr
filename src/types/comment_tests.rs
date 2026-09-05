@@ -7,12 +7,27 @@ fn comment_deserializes_minimal() {
     let json = r#"{"id": 1}"#;
     let comment: Comment = serde_json::from_str(json).unwrap();
     assert_eq!(comment.id, 1);
+    assert!(comment.tags.is_empty());
 
     let serialized = serde_json::to_value(&comment).unwrap();
     assert_eq!(serialized["bug_id"], serde_json::Value::Null);
     assert_eq!(serialized["text"], serde_json::Value::Null);
     assert_eq!(serialized["count"], serde_json::Value::Null);
     assert_eq!(serialized["is_private"], serde_json::Value::Null);
+    assert_eq!(serialized["tags"], serde_json::json!([]));
+}
+
+#[test]
+fn comment_deserializes_tags() {
+    let json = r#"{"id": 5, "tags": ["needs-info", "follow-up"]}"#;
+    let comment: Comment = serde_json::from_str(json).unwrap();
+    assert_eq!(comment.tags, vec!["needs-info", "follow-up"]);
+}
+
+#[test]
+fn comment_rejects_wrong_shaped_tags() {
+    let json = r#"{"id": 5, "tags": "needs-info"}"#;
+    assert!(serde_json::from_str::<Comment>(json).is_err());
 }
 
 #[test]
@@ -106,6 +121,7 @@ fn comment_fields_matches_serialized_keys() {
         count: Some(0),
         is_private: Some(false),
         attachment_id: Some(3),
+        tags: vec![],
     };
     let value = serde_json::to_value(&c).unwrap();
     let serialized: std::collections::BTreeSet<String> =

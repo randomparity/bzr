@@ -132,6 +132,7 @@ fn scalar_constraints_match(schema: &Value, value: &Value) -> bool {
         Some("array") => value.is_array(),
         Some("string") => value.is_string(),
         Some("integer") => value.as_i64().is_some() || value.as_u64().is_some(),
+        Some("boolean") => value.is_boolean(),
         Some("null") => value.is_null(),
         Some(_) => false,
         None => true,
@@ -513,9 +514,53 @@ fn comment_conforms() {
         "id": 1, "bug_id": 2, "text": "hi", "creator": "a@b.c",
         "creation_time": "2026-01-01T00:00:00Z", "count": 0,
         "is_private": false, "attachment_id": null,
+        "tags": ["needs-info", "follow-up"],
     }))
     .unwrap();
     assert_conforms("comment", &to_value(&comment));
+}
+
+#[test]
+fn comment_schema_accepts_tags() {
+    let comment = json!({
+        "id": 1, "bug_id": 2, "text": "hi", "creator": "a@b.c",
+        "creation_time": "2026-01-01T00:00:00Z", "count": 0,
+        "is_private": false, "attachment_id": null,
+        "tags": ["needs-info", "follow-up"],
+    });
+    assert!(schema_accepts("comment", &comment));
+}
+
+#[test]
+fn comment_schema_requires_tags() {
+    let comment = json!({
+        "id": 1, "bug_id": 2, "text": "hi", "creator": "a@b.c",
+        "creation_time": "2026-01-01T00:00:00Z", "count": 0,
+        "is_private": false, "attachment_id": null,
+    });
+    assert!(!schema_accepts("comment", &comment));
+}
+
+#[test]
+fn comment_schema_rejects_non_array_tags() {
+    let comment = json!({
+        "id": 1, "bug_id": 2, "text": "hi", "creator": "a@b.c",
+        "creation_time": "2026-01-01T00:00:00Z", "count": 0,
+        "is_private": false, "attachment_id": null,
+        "tags": "needs-info",
+    });
+    assert!(!schema_accepts("comment", &comment));
+}
+
+#[test]
+fn comment_schema_rejects_non_string_tag() {
+    let comment = json!({
+        "id": 1, "bug_id": 2, "text": "hi", "creator": "a@b.c",
+        "creation_time": "2026-01-01T00:00:00Z", "count": 0,
+        "is_private": false, "attachment_id": null,
+        "tags": ["needs-info", 7],
+    });
+    assert!(!schema_accepts("comment", &comment));
 }
 
 #[test]
