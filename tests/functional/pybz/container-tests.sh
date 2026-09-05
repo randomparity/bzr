@@ -161,7 +161,7 @@ run_sidecar_wrapper_fixture() (
     BZ_VERSION=bz50 PYBZ_RUNTIME=fake_wrapper_runtime
     fake_wrapper_runtime() {
         printf '%s\n' "${*:3}" >"$invoked"
-        printf '{"schema_version":"3.0.0","data":{"fixed":true}}\n'
+        printf '{"schema_version":"3.0.1","data":{"fixed":true}}\n'
         printf 'fixed stderr\n' >&2
         [[ $3 == bugzilla ]] && return 17
         return 19
@@ -170,7 +170,7 @@ run_sidecar_wrapper_fixture() (
     run_pybz info
     assert_equals 'bugzilla info' "$(<"$invoked")" "fixed CLI command"
     assert_equals $'{\n  "fixed": true\n}' "$(<"$BZR_STDOUT")" "CLI projected stdout"
-    assert_equals '{"schema_version":"3.0.0","data":{"fixed":true}}' \
+    assert_equals '{"schema_version":"3.0.1","data":{"fixed":true}}' \
         "$(<"$BZR_STDOUT_RAW")" "CLI raw stdout"
     assert_equals 'fixed stderr' "$(<"$BZR_STDERR")" "CLI stderr"
     assert_equals 17 "$BZR_EXIT" "CLI exit"
@@ -180,7 +180,7 @@ run_sidecar_wrapper_fixture() (
         'python /work/compare/python-bugzilla-adapter.py view /work/compare/in.json /work/compare/out.json' \
         "$(<"$invoked")" "fixed adapter command"
     assert_equals $'{\n  "fixed": true\n}' "$(<"$BZR_STDOUT")" "adapter projected stdout"
-    assert_equals '{"schema_version":"3.0.0","data":{"fixed":true}}' \
+    assert_equals '{"schema_version":"3.0.1","data":{"fixed":true}}' \
         "$(<"$BZR_STDOUT_RAW")" "adapter raw stdout"
     assert_equals 'fixed stderr' "$(<"$BZR_STDERR")" "adapter stderr"
     assert_equals 19 "$BZR_EXIT" "adapter exit"

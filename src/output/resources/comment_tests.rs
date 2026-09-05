@@ -2,6 +2,7 @@
 
 use super::write_comments;
 use crate::types::{Comment, OutputFormat};
+use crate::validation::fields::FieldProjection;
 
 fn make_comment(count: u64, text: &str) -> Comment {
     Comment {
@@ -18,13 +19,16 @@ fn make_comment(count: u64, text: &str) -> Comment {
 }
 
 fn capture(format: OutputFormat, comments: &[Comment]) -> String {
+    capture_projected(format, comments, &FieldProjection::none())
+}
+
+fn capture_projected(
+    format: OutputFormat,
+    comments: &[Comment],
+    projection: &FieldProjection,
+) -> String {
     let mut buf = Vec::new();
-    write_comments(
-        comments,
-        format,
-        &crate::validation::fields::FieldProjection::none(),
-        &mut buf,
-    );
+    write_comments(comments, format, projection, &mut buf);
     String::from_utf8(buf).unwrap()
 }
 
@@ -84,6 +88,17 @@ fn write_comments_table_renders_comment_fields() {
 }
 
 #[test]
+fn write_comments_table_renders_tags() {
+    let mut tagged = make_comment(2, "body");
+    tagged.tags = vec!["needs-info".into(), "reviewed".into()];
+    let tagged_output = capture(OutputFormat::Table, &[tagged]);
+    assert!(tagged_output.contains("2025-02-01T08:00:00Z)\n  Tags: needs-info, reviewed\n\n  body"));
+
+    let untagged_output = capture(OutputFormat::Table, &[make_comment(2, "body")]);
+    assert!(!untagged_output.contains("Tags:"));
+}
+
+#[test]
 fn write_comments_table_handles_missing_creator_and_unicode() {
     let comments = vec![Comment {
         id: 1,
@@ -104,12 +119,57 @@ fn write_comments_table_handles_missing_creator_and_unicode() {
 
 #[test]
 fn write_comments_json_one_comment_via_write() {
-    let comments = vec![make_comment(7, "json body")];
+    let mut comment = make_comment(7, "json body");
+    comment.tags = vec!["needs-info".into(), "reviewed".into()];
+    let comments = vec![comment];
     let output = capture(OutputFormat::Json, &comments);
     let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["count"], 7);
     assert_eq!(parsed[0]["text"], "json body");
     assert_eq!(parsed[0]["bug_id"], 42);
+    assert_eq!(
+        parsed[0]["tags"],
+        serde_json::json!(["needs-info", "reviewed"])
+    );
+}
+
+#[test]
+fn write_comments_ndjson_includes_tags() {
+    let mut comment = make_comment(7, "ndjson body");
+    comment.tags = vec!["needs-info".into(), "reviewed".into()];
+    let output = capture(OutputFormat::Ndjson, &[comment]);
+    assert_eq!(output.lines().count(), 1);
+    let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+    assert_eq!(
+        parsed["tags"],
+        serde_json::json!(["needs-info", "reviewed"])
+    );
+}
+
+#[test]
+fn write_comments_json_projects_tags() {
+    let mut comment = make_comment(7, "json body");
+    comment.tags = vec!["needs-info".into(), "reviewed".into()];
+    let projection = FieldProjection::resolve(Some("tags"), None, &["tags"]).unwrap();
+    let output = capture_projected(OutputFormat::Json, &[comment], &projection);
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
+    assert_eq!(
+        parsed,
+        serde_json::json!([{"tags": ["needs-info", "reviewed"]}])
+    );
+}
+
+#[test]
+fn write_comments_ndjson_projects_tags() {
+    let mut comment = make_comment(7, "ndjson body");
+    comment.tags = vec!["needs-info".into(), "reviewed".into()];
+    let projection = FieldProjection::resolve(Some("tags"), None, &["tags"]).unwrap();
+    let output = capture_projected(OutputFormat::Ndjson, &[comment], &projection);
+    assert_eq!(output.lines().count(), 1);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(output.trim()).unwrap(),
+        serde_json::json!({"tags": ["needs-info", "reviewed"]})
+    );
 }
 
 #[test]

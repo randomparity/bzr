@@ -33,6 +33,9 @@ pub fn write_comments<W: Write + ?Sized>(
             if c.is_private.unwrap_or(false) {
                 let _ = writeln!(out, "  {}", "[PRIVATE]".red());
             }
+            if !c.tags.is_empty() {
+                let _ = writeln!(out, "  {} {}", "Tags:".bold(), c.tags.join(", "));
+            }
             let _ = writeln!(out);
             for line in c.text.as_deref().unwrap_or("").lines() {
                 let _ = writeln!(out, "  {line}");
