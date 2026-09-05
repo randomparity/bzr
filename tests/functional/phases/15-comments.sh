@@ -145,8 +145,16 @@ else test_skip "no BUG1 or second bug"; fi
 test_begin "credentialless-comment-list-multi-id" "credentialless multi-ID comment list"
 if [[ -n "$BUG1" ]] && [[ -n "$_MULTI_BUG" ]]; then
     run_bzr_raw --json --server public comment list "$BUG1" "$_MULTI_BUG"
-    if assert_success && jq -e 'all(.[]; .bug_id != null)' "$BZR_STDOUT" >/dev/null; then
+    # Gate on both bugs being represented, not just on every record having a
+    # bug_id: `all` over an empty array is vacuously true, and a silently
+    # dropped second bug would leave every remaining record well-formed.
+    if assert_success &&
+        jq -e --argjson a "$BUG1" --argjson b "$_MULTI_BUG" \
+            'map(.bug_id) | (index($a) != null) and (index($b) != null)' \
+            "$BZR_STDOUT" >/dev/null; then
         test_pass
+    else
+        test_fail "credentialless multi-ID did not return both bugs"
     fi
 else test_skip "no BUG1 or second bug"; fi
 
