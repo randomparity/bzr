@@ -1227,22 +1227,71 @@ class _FixtureGroup:
     member_emails = ["fixture-user@test.invalid"]
 
 
+class _FixtureRequestsSession:
+    def __init__(self, cert=None):
+        self.cert = cert
+
+
+class _FixtureTokenCache:
+    def __init__(self, filename):
+        self.filename = filename
+
+    def get_value(self, _url):
+        if not self.filename or not __import__("os").path.exists(self.filename):
+            return None
+        with open(self.filename, encoding="utf-8") as source:
+            value = source.read()
+        return value or None
+
+    def set_value(self, _url, value):
+        if not self.filename:
+            return
+        with open(self.filename, "w", encoding="utf-8") as destination:
+            destination.write(value or "")
+
+
+class _FixtureSession:
+    def __init__(self, token_cache, url, cert=None):
+        self._token_cache = token_cache
+        self._url = url
+        self._session = _FixtureRequestsSession(cert)
+
+    def get_auth_params(self):
+        token = self._token_cache.get_value(self._url)
+        return {"Bugzilla_token": token} if token else {}
+
+
 class Bugzilla:
     def __init__(
         self,
         url,
+        user=None,
+        password=None,
+        tokenfile=-1,
+        configpaths=-1,
         api_key=None,
+        cert=None,
         use_creds=True,
         force_rest=False,
         force_xmlrpc=False,
+        **_kwargs,
     ):
-        if (
+        auth_fixture = api_key is None and isinstance(tokenfile, str)
+        if not auth_fixture and url is not None and (
             url != "http://127.0.0.1"
             or api_key != "fixture-secret"
             or use_creds
             or (force_rest and force_xmlrpc)
         ):
             raise RuntimeError("unexpected constructor arguments")
+        self.url = url or ""
+        self.user = user or ""
+        self.password = password or ""
+        self.cert = cert
+        self._tokencache = _FixtureTokenCache(
+            tokenfile if isinstance(tokenfile, str) else None
+        )
+        self._session = _FixtureSession(self._tokencache, self.url, cert)
         self._backend = (
             _UnknownBackend()
             if __import__("os").environ.get("FIXTURE_UNKNOWN_BACKEND") == "1"
@@ -1252,6 +1301,25 @@ class Bugzilla:
             if force_rest
             else _BackendXMLRPC()
         )
+
+    def login(self, user=None, password=None, restrict_login=None):
+        if user != "fixture-user@test.invalid" or password != "login-secret":
+            raise RuntimeError("unexpected login credentials")
+        if restrict_login is not True:
+            raise RuntimeError("restricted login was not requested")
+        self._tokencache.set_value(self.url, "fixture-token")
+        return {"id": 601, "token": "fixture-token"}
+
+    def logout(self):
+        return None
+
+    def connect(self, url):
+        self.url = url
+        backend_class, fixed_url = self._get_backend_class(url)
+        self.url = fixed_url
+        self._session = _FixtureSession(self._tokencache, self.url, self.cert)
+        self._backend = backend_class(self.url, self._session)
+        self._backend.bugzilla_version()
 
     def build_createbug(self, **params):
         return {"builder": "create", **params}
@@ -1510,6 +1578,45 @@ run_adapter_fixture() {
 
     "$runtime" exec "$sidecar" python -m py_compile \
         /work/compare/python-bugzilla-adapter.py
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" auth-login login \
+        '{"url":"http://127.0.0.1","username":"fixture-user@test.invalid","password":"login-secret","restrict_login":true}' \
+        '{"result":{"authenticated":true,"cache_written":true,"restricted":true},"transport":"REST"}'
+    rm -f "$config_dir/compare/auth-login.input.json"
+    assert_equals 600 \
+        "$("$runtime" exec "$sidecar" stat -c '%a' /work/compare/python-bugzilla-token)" \
+        "adapter token cache mode"
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" auth-cached cached_auth \
+        '{"url":"http://127.0.0.1","username":"fixture-user@test.invalid"}' \
+        '{"result":{"authenticated":true,"cache_used":true},"transport":"REST"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" auth-logout logout \
+        '{"url":"http://127.0.0.1"}' \
+        '{"result":{"cache_cleared":true,"logged_out":true},"transport":"REST"}'
+    printf 'dummy certificate\n' >"$config_dir/compare/client-cert.pem"
+    chmod 600 "$config_dir/compare/client-cert.pem"
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" client-cert \
+        client_certificate_surface \
+        '{"certificate":"/work/compare/client-cert.pem"}' \
+        '{"result":{"configured":true},"transport":null}'
+    printf '%s\n' \
+        '{"url":"http://127.0.0.1","username":"fixture-user@test.invalid","password":"login-secret","restrict_login":true}' \
+        >"$config_dir/compare/public-auth.input.json"
+    chmod 644 "$config_dir/compare/public-auth.input.json"
+    if "$runtime" exec -e PYTHONPATH=/work/adapter-fixture "$sidecar" \
+        python /work/compare/python-bugzilla-adapter.py login \
+        /work/compare/public-auth.input.json /work/compare/public-auth.output.json \
+        2>"$error_output"; then
+        printf 'adapter accepted a public auth request file\n' >&2
+        return 1
+    fi
+    if ! grep -Fq 'input file must not be accessible by group or others' "$error_output"; then
+        printf 'public auth request rejection omitted its diagnostic\n' >&2
+        return 1
+    fi
+    if grep -R -E 'login-secret|dummy certificate|/work/compare/client-cert.pem' \
+        "$config_dir/compare"/*.output.json "$error_output"; then
+        printf 'auth adapter output exposed a secret or certificate path\n' >&2
+        return 1
+    fi
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" create create \
         '{"api_key":"fixture-secret","params":{"product":"Widget","summary":"create"}}' \
         '{"result":{"id":101,"request":{"builder":"create","product":"Widget","summary":"create"}},"transport":"XMLRPC"}'
