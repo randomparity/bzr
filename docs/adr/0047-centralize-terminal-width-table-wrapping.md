@@ -21,6 +21,8 @@ Add exact dependency `terminal_size = "=0.4.4"`. Resolve the optional table widt
 `main.rs` owns the real stdout destination, store it in `Writers`, and pass it explicitly only to
 the resource writers that build grids. `Writers::new` retains a `None` default for library and test
 buffers; an explicit constructor supplies a width without process-global environment mutation.
+Resolution runs only after output-format selection and only for `OutputFormat::Table`; JSON and
+NDJSON never read the override, query the terminal, or emit width diagnostics.
 
 The stdout-bound resolver reads a positive `BZR_TABLE_WIDTH` value first. Otherwise it queries the
 stdout handle with `terminal_size_of`; unsupported platforms or failed queries produce no width.
@@ -35,9 +37,10 @@ not consult the width resolver.
 `BZR_TABLE_WIDTH` is deliberately bzr-specific and is honored even when stdout is redirected, so
 functional tests can request the same layout without a PTY. Invalid, zero, or out-of-range values
 are ignored with a warning before normal stdout detection. Before applying `Width::wrap`, the
-finalizer clamps the requested width to the default grid's minimum of one display cell plus two
-padding cells per column and one separator per boundary: `4 * columns + 1`. This prevents tabled
-0.21.0's zero-content-width behavior from erasing headers and values.
+finalizer clamps the requested width to the default grid's minimum of two display cells plus two
+padding cells per column and one separator per boundary: `5 * columns + 1`. Two content cells are
+required because tabled 0.21.0 replaces a width-two scalar with U+FFFD when allocated one cell; the
+floor preserves width-one and width-two scalars while preventing zero-width erasure.
 
 ## Consequences
 
@@ -46,8 +49,8 @@ padding cells per column and one separator per boundary: `4 * columns + 1`. This
 - The explicit override becomes a documented environment contract and a functional-test seam.
 - The exact dependency adds platform implementations for Unix and Windows; unsupported platforms
   compile with an unbounded fallback.
-- Very narrow widths are raised to the content-preserving structural minimum, so the valid grid may
-  exceed the requested width rather than erase selected values.
+- Very narrow widths are raised to the width-two-scalar-preserving structural minimum, so the valid
+  grid may exceed the requested width rather than erase selected values.
 
 ## Considered & rejected
 

@@ -27,7 +27,8 @@ unchanged.
 5. Existing summary and description truncation limits remain unchanged. This change wraps the
    aggregate table; it does not redefine which list fields are abbreviated.
 6. `--json` and `--output ndjson`, detail/label text, errors, and progress output must not consult
-   or change because of table width.
+   or change because of table width. The process boundary must skip override parsing, warnings, and
+   terminal detection entirely for JSON-family formats.
 7. Unit tests must inject width directly into the renderer or pure resolver rather than depend on
    the ambient terminal. A functional test must invoke real `bzr` table output with
    `BZR_TABLE_WIDTH` and prove every emitted grid line respects the requested width for a width
@@ -36,7 +37,9 @@ unchanged.
 ## Architecture
 
 `src/output/writers.rs` owns `TableWidth`, parsing an optional `OsStr`, and stdout-specific
-detection. `main.rs` resolves it before locking stdout and constructs `Writers` with that value.
+detection. After `resolve_format`, `main.rs` invokes that resolver only for `OutputFormat::Table`,
+then locks stdout and constructs `Writers` with the value. JSON and NDJSON construct width-free
+writers without reading `BZR_TABLE_WIDTH` or querying the terminal.
 `Writers::new` defaults to no width for library callers and captured tests; tests that need a width
 construct `Writers` with one directly. The copied width is passed only through command/resource
 functions that render grids.
@@ -52,7 +55,7 @@ the same finalizer. Resource code remains responsible only for headers and cell 
 The process flow is:
 
 ```text
-main: BZR_TABLE_WIDTH or stdout size -> Writers.table_width
+main(table only): BZR_TABLE_WIDTH or stdout size -> Writers.table_width
                                                |
 records -> Builder -> Table -> shared finalizer(width) -> optional Width::wrap -> writer
 ```
@@ -70,12 +73,13 @@ function. That prevents an interactive stderr or stdin from making redirected st
 terminal. Unix and Windows use the dependency's handle-specific implementation. Other platforms
 return `None` behind a local `cfg` fallback.
 
-Before `Width::wrap`, the renderer computes `4 * table.count_columns() + 1`: one display cell and
+Before `Width::wrap`, the renderer computes `5 * table.count_columns() + 1`: two display cells and
 two default-padding cells per column, plus every vertical boundary. It clamps the supplied width to
-that structural minimum. This avoids tabled 0.21.0's behavior of wrapping cells to zero content
-width and emitting empty headers/values. If the terminal is narrower, the renderer preserves all
-columns and at least one display cell from every non-empty value, accepting the minimum-width
-overflow. It never drops selected columns or silently empties cells.
+that structural minimum. This avoids tabled 0.21.0's zero-content erasure and its replacement of a
+width-two scalar by U+FFFD when only one content cell is available. If the terminal is narrower, the
+renderer preserves all columns and individual width-one or width-two scalars, accepting the
+minimum-width overflow. It never drops selected columns or silently replaces a scalar solely
+because the requested table is below the structural floor.
 
 ## Public contract
 
@@ -121,13 +125,18 @@ does not alter terminal escape handling because these grid cells contain no ANSI
   out-of-range, detected zero, invalid Unicode on Unix, captured-writer default `None`, and direct
   injected width without environment mutation.
 - Renderer unit tests cover unbounded byte compatibility, a bounded ASCII row, word wrapping, and
-  Unicode display width. Each line is checked against the injected width.
+  Unicode display width. An exact-floor regression asserts the original width-two scalar remains,
+  not merely a non-empty cell. Each line is checked against the injected viable width.
 - Bug resource tests cover list, links, and both adjacency grids through the common finalizer,
   including non-empty cells at the structural minimum for a many-column table.
 - Existing resource tests protect non-terminal snapshots because `CapturedIo::writers()` constructs
   `Writers` with no width regardless of the process stdout TTY.
 - `tests/functional/phases/17-global-options.sh` runs a real bug-list table with a fixed override and
-  asserts that all lines are within the requested width and the long summary wraps inside the grid.
+  an ASCII-only fixture under `LC_ALL=C`; byte length then equals display-cell width, so `awk` can
+  assert every line is within the requested width and the long summary wraps inside the grid. Wide
+  Unicode remains covered by Rust unit tests.
+- The same functional phase invokes JSON and NDJSON with an invalid override and asserts their
+  stdout remains valid and stderr contains no table-width warning, proving the format gate.
 - Verification runs focused tests, `make lint`, `make test`, and `make functional-test` before
   shipping. Cross-platform compilation remains covered by CI's Linux, macOS, Windows, aarch64, and
   powerpc64le jobs.

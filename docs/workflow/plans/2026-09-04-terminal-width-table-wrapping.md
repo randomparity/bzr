@@ -6,7 +6,7 @@ changing redirected defaults or JSON-family output.
 **Architecture:** `main` resolves width for its real stdout once and stores it in `Writers`;
 captured/library writers default to no width and can inject one directly. Affected commands pass the
 copied option into their resource grid writers. `output::formatting` owns the only completed-table
-write path, including a content-preserving structural clamp. Generic resource tables already enter
+write path, including a width-two-scalar-preserving structural clamp. Generic resource tables already enter
 through `write_table_records`; bespoke bug grids will call the same finalizer. The design is governed by
 [ADR 0047](../../adr/0047-centralize-terminal-width-table-wrapping.md) and the
 [specification](../specs/2026-09-04-terminal-width-table-wrapping-design.md).
@@ -30,7 +30,9 @@ formatter, and bug-resource tests, one functional case, dependency metadata, and
   stdout detection. It overrides detection even with redirected stdout.
 - Width is resolved from `OsStr` once for the real stdout destination and carried explicitly;
   captured writers default to `None` and unit tests never mutate the width environment variable.
-- Requested widths are clamped to `4 * column_count + 1`, retaining one display cell, two padding
+- Resolution runs only for `OutputFormat::Table` after format selection. JSON and NDJSON skip
+  environment parsing, terminal detection, and width warnings.
+- Requested widths are clamped to `5 * column_count + 1`, retaining two display cells, two padding
   cells per column, and every boundary; narrower grids may exceed the requested width.
 - Existing 72-character summary and 60-character description truncation remain unchanged.
 - JSON, NDJSON, detail/label text, error output, progress output, and persisted configuration stay
@@ -46,7 +48,8 @@ formatter, and bug-resource tests, one functional case, dependency metadata, and
 ## File map
 
 - Modify `Cargo.toml` and `Cargo.lock`: exact-pin terminal-size support.
-- Modify `src/main.rs`: resolve table width at the stdout-owning boundary.
+- Modify `src/main.rs` and `src/main_tests.rs`: resolve table width at the stdout-owning boundary
+  only for table format and prove JSON-family formats skip the resolver.
 - Modify `src/output/writers.rs` and `src/output/writers_tests.rs`: `OsStr` parsing, terminal
   detection, stored width, and captured/injected constructors.
 - Modify `src/output/formatting.rs`: shared width-clamped table finalization.
@@ -74,7 +77,7 @@ formatter, and bug-resource tests, one functional case, dependency metadata, and
 - Extend `Writers::new` to retain its no-width default, add a constructor/builder taking
   `TableWidth`, and add a copied `table_width() -> Option<usize>` getter.
 - Add `pub(super) fn write_table<W: Write + ?Sized>(table: Table, width: Option<usize>, out: &mut W)`;
-  it clamps to `4 * table.count_columns() + 1` before `Width::wrap`.
+  it clamps to `5 * table.count_columns() + 1` before `Width::wrap`.
 - Extend `write_table_records` with one copied `Option<usize>` argument and delegate its completed
   table plus that width to `write_table`; all other parameters and record behavior remain unchanged.
 
@@ -87,6 +90,9 @@ formatter, and bug-resource tests, one functional case, dependency metadata, and
 - Mode: focused-test — captured writers default to no width while a direct injected writer retains
   its value, independent of process stdout; new `writers_table_width_*` cases fail red because
   `Writers` carries no metadata; green command: `make test-one T=writers_table_width_`.
+- Mode: focused-test — JSON and NDJSON skip width resolution, including warnings for invalid
+  `BZR_TABLE_WIDTH`; a new main-boundary format-gate helper test fails red because no gate exists;
+  green command: `make test-one T=table_width_for_format_`.
 - Mode: focused-test — bounded/unbounded and Unicode rendering in new `write_table_*` cases; before
   implementation the injected writer is absent and oversized lines remain oversized; green command:
   `make test-one T=write_table_` with every rendered line at or below the requested viable width.
@@ -102,14 +108,14 @@ formatter, and bug-resource tests, one functional case, dependency metadata, and
 2. Add writer-context tests for captured default, direct injection, and a cfg-Unix invalid-byte
    `OsStr` whose warning is observed with `TracingCapture`; run the two writer-focused commands and
    observe missing API failures.
-3. Add finalizer tests that build long ASCII/Unicode tables, assert line widths, and prove headers
-   and cell content remain present below the structural minimum; run `make test-one T=write_table_`
-   and observe unresolved function failures.
+3. Add finalizer tests that build long ASCII/Unicode tables, assert line widths, and prove the exact
+   width-two scalar remains at the structural floor; run `make test-one T=write_table_` and observe
+   unresolved function failures.
 4. Exact-pin `terminal_size = "=0.4.4"` in `Cargo.toml` and run `cargo update -p terminal_size
    --precise 0.4.4`; expect `Cargo.lock` to contain terminal_size 0.4.4 and its platform dependencies.
-5. Implement the `OsStr` resolver, cfg-gated stdout detection, stored `TableWidth`, main-boundary
-   construction, structural clamp, and `Width::wrap` finalizer. Make `write_table_records` accept and
-   delegate the explicit option.
+5. Implement the `OsStr` resolver, cfg-gated stdout detection, stored `TableWidth`, table-only
+   main-boundary format gate, structural clamp, and `Width::wrap` finalizer. Make
+   `write_table_records` accept and delegate the explicit option.
 6. Run the focused commands from Verification and expect all matching tests to pass.
 7. Commit as `feat(output): carry terminal width with writers` after `cargo fmt -- --check` and
    `cargo clippy --all-targets --features test-helpers -- -D warnings` pass.
@@ -167,6 +173,9 @@ formatter, and bug-resource tests, one functional case, dependency metadata, and
 - Mode: focused-test — real `bzr bug list --output table` wraps a long server-backed summary and
   every output line stays within a viable requested width; before implementation at least one line
   exceeds the width; green command: `make functional-test` with the new semantic case passing.
+- Mode: focused-test — invalid `BZR_TABLE_WIDTH` cannot affect JSON or NDJSON output or stderr;
+  before the format gate an invalid value emits a warning, while the implemented gate leaves stderr
+  unchanged; green command: `make functional-test` with both JSON-family cases passing.
 - Mode: focused-test — shell structure and semantic test IDs remain valid; malformed or duplicate
   test additions fail the checks; green commands: `make check-functional-test-ids` and
   `make check-shell`.
@@ -176,17 +185,19 @@ formatter, and bug-resource tests, one functional case, dependency metadata, and
 
 **Steps**
 
-1. Add a functional case that creates or reuses a long-summary bug, invokes
-   `BZR_TABLE_WIDTH=60 run_bzr_raw --output table bug list` with a unique selector, and checks both a
-   wrapped continuation and that no emitted line exceeds 60 display characters; run the phase via
-   `make functional-test` and observe the pre-implementation width assertion fail.
-2. After Tasks 1–2 are green, rerun `make functional-test`; expect the case and full default-version
+1. Add a functional case with an ASCII-only long-summary bug. Under `LC_ALL=C`, invoke
+   `BZR_TABLE_WIDTH=60 run_bzr_raw --output table bug list` with a unique selector, use
+   `awk 'length($0) > 60 { exit 1 }'` so bytes equal display cells, and assert a wrapped continuation;
+   run the phase via `make functional-test` and observe the pre-implementation width assertion fail.
+2. Add JSON and NDJSON cases with an invalid override; assert valid unchanged stdout and empty
+   stderr, so an unconditional resolver fails before implementation.
+3. After Tasks 1–2 are green, rerun `make functional-test`; expect the cases and full default-version
    functional suite to pass.
-3. Document `BZR_TABLE_WIDTH` precedence, valid range, table-only effect, and explicit redirected
+4. Document `BZR_TABLE_WIDTH` precedence, valid range, table-only effect, and explicit redirected
    behavior in `docs/bzr-cli.md`.
-4. Run `make check-functional-test-ids`, `make check-shell`, `make lint`, and `make test`; expect all
+5. Run `make check-functional-test-ids`, `make check-shell`, `make lint`, and `make test`; expect all
    commands to exit 0.
-5. Re-read the complete diff for unchanged JSON contracts and no remaining direct table write,
+6. Re-read the complete diff for unchanged JSON contracts and no remaining direct table write,
    then commit as `feat(cli): add explicit table width control`.
 
 ## Rollback and cleanup
