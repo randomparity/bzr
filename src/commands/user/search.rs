@@ -22,8 +22,12 @@ pub(super) async fn handle(
     let detail_level = user_detail_level(details);
     let users = client.search_users(query, detail_level).await?;
     match detail_level {
-        UserDetailLevel::Basic => write_users(&users, ctx.format(), &projection, w.out),
-        UserDetailLevel::Detailed => write_users_detailed(&users, ctx.format(), &projection, w.out),
+        UserDetailLevel::Basic => {
+            write_users(&users, ctx.format(), &projection, w.table_width(), w.out);
+        }
+        UserDetailLevel::Detailed => {
+            write_users_detailed(&users, ctx.format(), &projection, w.table_width(), w.out);
+        }
     }
     Ok(())
 }

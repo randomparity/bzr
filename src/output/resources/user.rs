@@ -78,6 +78,7 @@ pub fn write_users<W: Write + ?Sized>(
     users: &[BugzillaUser],
     format: OutputFormat,
     projection: &FieldProjection,
+    table_width: Option<usize>,
     out: &mut W,
 ) {
     write_formatted_projected(users, format, projection, out, |users, out| {
@@ -88,6 +89,7 @@ pub fn write_users<W: Write + ?Sized>(
                 headers: USER_HEADERS,
             },
             basic_record,
+            table_width,
             out,
         );
     });
@@ -97,6 +99,7 @@ pub fn write_users_detailed<W: Write + ?Sized>(
     users: &[BugzillaUser],
     format: OutputFormat,
     projection: &FieldProjection,
+    table_width: Option<usize>,
     out: &mut W,
 ) {
     write_formatted_projected(users, format, projection, out, |users, out| {
@@ -107,6 +110,7 @@ pub fn write_users_detailed<W: Write + ?Sized>(
                 headers: DETAILED_USER_HEADERS,
             },
             detailed_record,
+            table_width,
             out,
         );
     });

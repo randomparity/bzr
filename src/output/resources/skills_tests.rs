@@ -31,7 +31,7 @@ fn install_result(project: Option<&str>) -> SkillsInstallResult {
 
 fn render(result: &SkillsInstallResult, format: OutputFormat) -> String {
     let mut out = Vec::new();
-    write_skills_install(result, format, &mut out);
+    write_skills_install(result, format, None, &mut out);
     String::from_utf8(out).unwrap()
 }
 

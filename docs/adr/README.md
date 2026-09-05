@@ -44,3 +44,4 @@ rejected.
 | [0044](0044-python-bugzilla-comparison-sidecar.md) | Run python-bugzilla as a network-namespace sidecar | Accepted |
 | [0045](0045-observe-comparison-transport-from-debug-events.md) | Observe comparison transport from request-boundary debug events | Accepted |
 | [0046](0046-share-python-bugzilla-comparison-adapter.md) | Share one fixed python-bugzilla comparison adapter | Accepted |
+| [0047](0047-centralize-terminal-width-table-wrapping.md) | Centralize terminal-width table wrapping | Accepted |

@@ -30,6 +30,7 @@ pub(crate) struct SkillsInstallResult {
 pub(crate) fn write_skills_install<W: Write + ?Sized>(
     result: &SkillsInstallResult,
     format: OutputFormat,
+    table_width: Option<usize>,
     out: &mut W,
 ) {
     write_formatted(result, format, out, |result, out| {
@@ -39,7 +40,7 @@ pub(crate) fn write_skills_install<W: Write + ?Sized>(
                 rows.push(vec![skill.clone(), destination.path.clone()]);
             }
         }
-        write_table_records(&["Skill", "Destination"], rows, out);
+        write_table_records(&["Skill", "Destination"], rows, table_width, out);
     });
 }
 

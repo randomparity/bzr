@@ -43,6 +43,7 @@ fn write_components_table_lists_rows() {
         &items,
         OutputFormat::Table,
         &FieldProjection::none(),
+        None,
         &mut buf,
     );
     let out = String::from_utf8(buf).unwrap();
@@ -59,6 +60,7 @@ fn write_components_table_empty_message() {
         &items,
         OutputFormat::Table,
         &FieldProjection::none(),
+        None,
         &mut buf,
     );
     assert!(String::from_utf8(buf)
@@ -74,6 +76,7 @@ fn write_components_json_is_array() {
         &items,
         OutputFormat::Json,
         &FieldProjection::none(),
+        None,
         &mut buf,
     );
     let parsed: serde_json::Value =

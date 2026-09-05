@@ -18,7 +18,13 @@ pub(super) async fn handle(
     )?;
     let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
     let product = client.get_product(product).await?;
-    write_components(&product.components, ctx.format(), &projection, w.out);
+    write_components(
+        &product.components,
+        ctx.format(),
+        &projection,
+        w.table_width(),
+        w.out,
+    );
     Ok(())
 }
 

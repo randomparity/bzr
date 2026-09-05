@@ -7,7 +7,8 @@ use tabled::builder::Builder;
 
 use crate::output::formatting::{
     colorize_status, disable_color_for_tests, render_flags_inline, shorten_email, truncate,
-    write_divider, write_field, write_formatted, write_json_family, SUMMARY_TRUNCATE_WIDTH,
+    write_divider, write_field, write_formatted, write_json_family, write_table,
+    SUMMARY_TRUNCATE_WIDTH,
 };
 use crate::types::bug::{
     apply_exclude, canonical_excludes, canonical_field_list, default_selected_fields,
@@ -143,10 +144,15 @@ fn render_builtin_field(field: BugField, bug: &Bug) -> String {
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "separate output streams are an established resource-writer boundary"
+)]
 pub fn write_bugs<W: Write + ?Sized, E: Write + ?Sized>(
     bugs: &[Bug],
     spec: ColumnSpec<'_>,
     format: OutputFormat,
+    width: Option<usize>,
     out: &mut W,
     err: &mut E,
 ) {
@@ -170,7 +176,7 @@ pub fn write_bugs<W: Write + ?Sized, E: Write + ?Sized>(
                         .map(|field| render_selected_field(*field, bug)),
                 );
             }
-            let _ = writeln!(out, "{}", builder.build());
+            write_table(builder.build(), width, out);
         }
     }
 }
@@ -434,7 +440,12 @@ pub fn write_history_json<W: Write + ?Sized>(
 /// table mode prints a fixed six-column grid. An empty slice renders nothing in
 /// every mode — the command prints the "no related bugs" line so it can name the
 /// root id.
-pub fn write_bug_links<W: Write + ?Sized>(links: &[BugLink], format: OutputFormat, out: &mut W) {
+pub fn write_bug_links<W: Write + ?Sized>(
+    links: &[BugLink],
+    format: OutputFormat,
+    width: Option<usize>,
+    out: &mut W,
+) {
     write_formatted(links, format, out, |links, out| {
         if links.is_empty() {
             return;
@@ -454,7 +465,7 @@ pub fn write_bug_links<W: Write + ?Sized>(links: &[BugLink], format: OutputForma
                     .unwrap_or_default(),
             ]);
         }
-        let _ = writeln!(out, "{}", builder.build());
+        write_table(builder.build(), width, out);
     });
 }
 
@@ -462,13 +473,14 @@ pub fn write_bug_links<W: Write + ?Sized>(links: &[BugLink], format: OutputForma
 pub fn write_bug_adjacency<W: Write + ?Sized>(
     result: &mut BugAdjacencyResult,
     format: OutputFormat,
+    width: Option<usize>,
     out: &mut W,
 ) {
     disable_color_for_tests();
     normalize_bug_adjacency(result);
     match format {
         OutputFormat::Json | OutputFormat::Ndjson => write_json_family(result, format, out),
-        OutputFormat::Table => write_bug_adjacency_table(result, out),
+        OutputFormat::Table => write_bug_adjacency_table(result, width, out),
     }
 }
 
@@ -481,7 +493,11 @@ fn normalize_bug_adjacency(result: &mut BugAdjacencyResult) {
     }
 }
 
-fn write_bug_adjacency_table(result: &BugAdjacencyResult, out: &mut (impl Write + ?Sized)) {
+fn write_bug_adjacency_table(
+    result: &BugAdjacencyResult,
+    width: Option<usize>,
+    out: &mut (impl Write + ?Sized),
+) {
     let _ = writeln!(out, "Requests");
     let mut requests = Builder::default();
     requests.push_record(["REQUESTED", "RESULT"]);
@@ -494,7 +510,7 @@ fn write_bug_adjacency_table(result: &BugAdjacencyResult, out: &mut (impl Write 
         };
         requests.push_record([requested.clone(), outcome]);
     }
-    let _ = writeln!(out, "{}", requests.build());
+    write_table(requests.build(), width, out);
 
     let _ = writeln!(out, "\nCanonical bugs");
     let mut bugs = Builder::default();
@@ -526,7 +542,7 @@ fn write_bug_adjacency_table(result: &BugAdjacencyResult, out: &mut (impl Write 
             join_ids(&bug.depends_on),
         ]);
     }
-    let _ = writeln!(out, "{}", bugs.build());
+    write_table(bugs.build(), width, out);
 }
 
 fn format_adjacency_error(error: BugAdjacencyError) -> String {
