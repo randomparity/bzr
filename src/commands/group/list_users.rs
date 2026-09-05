@@ -25,7 +25,7 @@ pub(super) async fn handle(
         UserDetailLevel::Basic => write_users,
         UserDetailLevel::Detailed => write_users_detailed,
     };
-    write(&users, ctx.format(), &projection, w.out);
+    write(&users, ctx.format(), &projection, w.table_width(), w.out);
     Ok(())
 }
 

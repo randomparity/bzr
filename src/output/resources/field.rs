@@ -34,12 +34,14 @@ pub fn write_field_values<W: Write + ?Sized>(
     values: &[FieldValue],
     format: OutputFormat,
     projection: &FieldProjection,
+    table_width: Option<usize>,
     out: &mut W,
 ) {
     write_formatted_projected(values, format, projection, out, |values, out| {
         write_table_records(
             FIELD_VALUE_HEADERS,
             values.iter().map(field_value_record),
+            table_width,
             out,
         );
     });
@@ -54,6 +56,7 @@ struct FieldAliasRow {
 pub fn write_field_aliases<W: Write + ?Sized>(
     aliases: &[(&'static str, &'static str)],
     format: OutputFormat,
+    table_width: Option<usize>,
     out: &mut W,
 ) {
     let rows: Vec<FieldAliasRow> = aliases
@@ -65,6 +68,7 @@ pub fn write_field_aliases<W: Write + ?Sized>(
             FIELD_ALIAS_HEADERS,
             rows.iter()
                 .map(|row| vec![row.alias.to_string(), row.api_name.to_string()]),
+            table_width,
             out,
         );
     });

@@ -131,6 +131,7 @@ fn capture_users(format: OutputFormat, users: &[BugzillaUser]) -> String {
         users,
         format,
         &crate::validation::fields::FieldProjection::none(),
+        None,
         &mut buf,
     );
     String::from_utf8(buf).unwrap()
@@ -142,6 +143,7 @@ fn capture_users_detailed(format: OutputFormat, users: &[BugzillaUser]) -> Strin
         users,
         format,
         &crate::validation::fields::FieldProjection::none(),
+        None,
         &mut buf,
     );
     String::from_utf8(buf).unwrap()

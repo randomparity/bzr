@@ -136,7 +136,7 @@ where
         home: resolved_home,
     })?;
     let result = install_result(args.agent, &scope, outcome.destinations);
-    write_skills_install(&result, ctx.format(), w.out);
+    write_skills_install(&result, ctx.format(), w.table_width(), w.out);
     for warning in outcome.warnings {
         let _ = writeln!(w.err, "{warning}");
     }

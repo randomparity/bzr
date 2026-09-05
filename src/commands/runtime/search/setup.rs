@@ -76,7 +76,7 @@ pub(crate) fn write_bug_page(
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) {
-    write_bugs(&page.bugs, spec, format, w.out, w.err);
+    write_bugs(&page.bugs, spec, format, w.table_width(), w.out, w.err);
     write_truncation_note(page, window.limit, window.offset, format, w);
 }
 

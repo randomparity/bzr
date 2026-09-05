@@ -13,7 +13,7 @@ pub(crate) async fn execute(
     let format = ctx.format();
     match action {
         FieldAction::Aliases => {
-            write_field_aliases(FIELD_ALIASES, format, w.out);
+            write_field_aliases(FIELD_ALIASES, format, w.table_width(), w.out);
             return Ok(());
         }
         FieldAction::List { name, projection } => {
@@ -29,7 +29,7 @@ pub(crate) async fn execute(
             if values.is_empty() && format == OutputFormat::Table {
                 let _ = writeln!(w.out, "No values for field '{name}'.");
             } else {
-                write_field_values(&values, format, &projection, w.out);
+                write_field_values(&values, format, &projection, w.table_width(), w.out);
             }
         }
     }

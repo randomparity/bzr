@@ -19,7 +19,7 @@ pub(super) async fn handle(
     )?;
     let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
     let products = client.list_products_by_type(list_type).await?;
-    write_products(&products, ctx.format(), &projection, w.out);
+    write_products(&products, ctx.format(), &projection, w.table_width(), w.out);
     Ok(())
 }
 

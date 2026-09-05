@@ -167,7 +167,7 @@ fn projected_resource_pattern_trims_each_ndjson_element() {
         &proj,
         &mut buf,
         |items, out| {
-            write_records_or_empty(items, spec, |_| vec!["x".to_string()], out);
+            write_records_or_empty(items, spec, |_| vec!["x".to_string()], None, out);
         },
     );
     assert_eq!(
@@ -184,8 +184,122 @@ fn write_records_or_empty_prints_empty_message() {
         empty_msg: "none here",
         headers: &["ID"],
     };
-    write_records_or_empty(&items, spec, |_| vec!["x".to_string()], &mut buf);
+    write_records_or_empty(&items, spec, |_| vec!["x".to_string()], None, &mut buf);
     assert_eq!(String::from_utf8(buf).unwrap().trim(), "none here");
+}
+
+#[test]
+fn write_records_or_empty_populated_table_remains_unbounded_by_default() {
+    let items = ["a very long value"];
+    let mut buf = Vec::new();
+    let spec = TableSpec {
+        empty_msg: "none here",
+        headers: &["Value"],
+    };
+
+    write_records_or_empty(
+        &items,
+        spec,
+        |item| vec![(*item).to_string()],
+        None,
+        &mut buf,
+    );
+
+    assert_eq!(
+        String::from_utf8(buf).unwrap(),
+        "+-------------------+\n| Value             |\n+-------------------+\n| a very long value |\n+-------------------+\n"
+    );
+}
+
+fn table(headers: &[&str], rows: &[&[&str]]) -> tabled::Table {
+    let mut builder = tabled::builder::Builder::default();
+    builder.push_record(headers.iter().copied());
+    for row in rows {
+        builder.push_record(row.iter().copied());
+    }
+    builder.build()
+}
+
+fn display_width(line: &str) -> usize {
+    line.chars()
+        .map(|character| match character {
+            '\u{1100}'..='\u{115F}'
+            | '\u{2E80}'..='\u{A4CF}'
+            | '\u{AC00}'..='\u{D7A3}'
+            | '\u{F900}'..='\u{FAFF}'
+            | '\u{FE10}'..='\u{FE19}'
+            | '\u{FE30}'..='\u{FE6F}'
+            | '\u{FF00}'..='\u{FF60}'
+            | '\u{FFE0}'..='\u{FFE6}' => 2,
+            _ => 1,
+        })
+        .sum()
+}
+
+#[test]
+fn write_table_unbounded_preserves_existing_table_bytes() {
+    let expected = format!("{}\n", table(&["Name", "State"], &[&["long enough", "OK"]]));
+    let mut buf = Vec::new();
+
+    write_table(
+        table(&["Name", "State"], &[&["long enough", "OK"]]),
+        None,
+        &mut buf,
+    );
+
+    assert_eq!(String::from_utf8(buf).unwrap(), expected);
+}
+
+#[test]
+fn write_table_wraps_ascii_lines_to_injected_width() {
+    let mut buf = Vec::new();
+    write_table(
+        table(
+            &["Description", "State"],
+            &[&["a long sequence of words that must wrap", "OK"]],
+        ),
+        Some(24),
+        &mut buf,
+    );
+
+    let output = String::from_utf8(buf).unwrap();
+    assert!(output.contains("must"));
+    assert!(output.lines().all(|line| display_width(line) <= 24));
+}
+
+#[test]
+fn write_table_wraps_unicode_lines_to_injected_display_width() {
+    let mut buf = Vec::new();
+    write_table(
+        table(&["City", "State"], &[&["東京市場東京市場", "OK"]]),
+        Some(20),
+        &mut buf,
+    );
+
+    let output = String::from_utf8(buf).unwrap();
+    assert!(output.contains("東京"));
+    assert!(output.lines().all(|line| display_width(line) <= 20));
+}
+
+#[test]
+fn write_table_clamps_to_structural_floor_without_replacing_width_two_scalar() {
+    let mut buf = Vec::new();
+    write_table(
+        table(
+            &["Description", "State"],
+            &[&[
+                "a very long ASCII value that should surrender width first",
+                "東",
+            ]],
+        ),
+        Some(1),
+        &mut buf,
+    );
+
+    let output = String::from_utf8(buf).unwrap();
+    assert!(output.contains('東'));
+    assert!(!output.contains('�'));
+    assert!(output.lines().all(|line| display_width(line) <= 11));
 }
 
 // ── OutputFormat parsing ─────────────────────────────────────────

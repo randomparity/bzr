@@ -30,6 +30,7 @@ pub fn write_classifications<W: Write + ?Sized>(
     items: &[Classification],
     format: OutputFormat,
     projection: &FieldProjection,
+    table_width: Option<usize>,
     out: &mut W,
 ) {
     write_formatted_projected(items, format, projection, out, |items, out| {
@@ -40,6 +41,7 @@ pub fn write_classifications<W: Write + ?Sized>(
                 headers: CLASSIFICATION_HEADERS,
             },
             classification_record,
+            table_width,
             out,
         );
     });

@@ -13,7 +13,7 @@ fn write_disabled_classifications(
     w: &mut Writers<'_>,
 ) {
     if format.is_json_family() {
-        write_classifications(&[], format, projection, w.out);
+        write_classifications(&[], format, projection, w.table_width(), w.out);
         let _ = writeln!(w.err, "{DISABLED_NOTE}");
     } else {
         let _ = writeln!(w.out, "{DISABLED_NOTE}");
@@ -58,7 +58,13 @@ pub(crate) async fn execute(
             if disabled {
                 let _ = writeln!(w.err, "{DISABLED_NOTE}");
             }
-            write_classifications(&classifications, format, &projection, w.out);
+            write_classifications(
+                &classifications,
+                format,
+                &projection,
+                w.table_width(),
+                w.out,
+            );
         }
         ClassificationAction::View { name, projection } => {
             let projection = crate::validation::fields::projection_for(
