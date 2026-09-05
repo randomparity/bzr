@@ -264,19 +264,24 @@ BZR_EXIT=0
 BZR_TRANSPORT=""
 PYBZ_RUNTIME=""
 
+# Match the outer record, with the default tracing timestamp or the fixtures' bare prefix.
+# Spell out digit widths because older mawk does not support interval expressions.
+BZR_TRACING_PREFIX_RE='^([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T'
+BZR_TRACING_PREFIX_RE+='[0-9][0-9]:[0-9][0-9]:[0-9][0-9][.]'
+BZR_TRACING_PREFIX_RE+='[0-9][0-9][0-9][0-9][0-9][0-9]Z[[:space:]]+)?DEBUG[[:space:]]+'
+BZR_REST_BOUNDARY_RE="${BZR_TRACING_PREFIX_RE}bzr::client::transport: "
+BZR_REST_BOUNDARY_RE+='(strict )?API response([[:space:]]|$)'
+BZR_XMLRPC_BOUNDARY_RE="${BZR_TRACING_PREFIX_RE}bzr::xmlrpc::protocol::client: "
+BZR_XMLRPC_BOUNDARY_RE+='XML-RPC call([[:space:]]|$)'
+
 # Assigns public state read by sourced comparison phases.
 # shellcheck disable=SC2034
 observe_bzr_transport() {
     local counts rest_count xmlrpc_count
 
     BZR_TRANSPORT=""
-    if ! counts=$(awk '
-        BEGIN {
-            rest_re = "(^|[[:space:]])DEBUG[[:space:]]+bzr::client::transport: " \
-                "(strict )?API response([[:space:]]|$)"
-            xmlrpc_re = "(^|[[:space:]])DEBUG[[:space:]]+" \
-                "bzr::xmlrpc::protocol::client: XML-RPC call([[:space:]]|$)"
-        }
+    if ! counts=$(awk -v rest_re="$BZR_REST_BOUNDARY_RE" \
+        -v xmlrpc_re="$BZR_XMLRPC_BOUNDARY_RE" '
         $0 ~ rest_re { rest += 1 }
         $0 ~ xmlrpc_re { xmlrpc += 1 }
         END { print rest + 0, xmlrpc + 0 }

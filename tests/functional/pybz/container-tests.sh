@@ -225,6 +225,28 @@ run_transport_observation_fixture() (
         fi
     done
 
+    for prefix in '' '2026-09-05T12:34:56.123456Z '; do
+        for event in 'bzr::client::transport: API response' \
+            'bzr::client::transport: strict API response' \
+            'bzr::xmlrpc::protocol::client: XML-RPC call'; do
+            printf '%sDEBUG %s status=200\n' "$prefix" "$event" >"$BZR_STDERR"
+            observe_bzr_transport
+            case "$event" in
+            *XML-RPC*) assert_equals XMLRPC "$BZR_TRANSPORT" "outer XML-RPC record" ;;
+            *) assert_equals REST "$BZR_TRANSPORT" "outer REST record" ;;
+            esac
+            for level in INFO DEBUG; do
+                printf '%s%s unrelated::target: DEBUG %s\n' \
+                    "$prefix" "$level" "$event" >"$BZR_STDERR"
+                if observe_bzr_transport; then
+                    printf 'nested transport record was accepted: %s\n' "$event" >&2
+                    return 1
+                fi
+                assert_equals '' "$BZR_TRANSPORT" "rejected nested record clears observation"
+            done
+        done
+    done
+
     : >"$BZR_STDERR"
     if observe_bzr_transport; then
         printf 'missing transport observation was accepted\n' >&2
@@ -429,8 +451,17 @@ run_lifecycle_phase_fixture() (
         BZR_EXIT="$exit_code"
         [[ $exit_code -eq 0 ]] || return 0
         if [[ ${LIFECYCLE_BZR_CALL_NAME:-} == update-options-bzr-request ]]; then
+            # Record-shaped message text must not make a local-only operation look dispatched.
+            printf '%s\n' 'INFO unrelated::target: DEBUG bzr::client::transport: API response' \
+                >"$BZR_STDERR"
+            printf '%s %s\n' '2026-09-05T12:34:56.123456Z DEBUG unrelated::target:' \
+                'DEBUG bzr::xmlrpc::protocol::client: XML-RPC call' >>"$BZR_STDERR"
             if [[ ${LIFECYCLE_NO_DISPATCH_EVENT:-0} -eq 1 ]]; then
-                printf 'DEBUG bzr::client::transport: API response\n' >"$BZR_STDERR"
+                printf 'DEBUG bzr::client::transport: API response\n' >>"$BZR_STDERR"
+            fi
+            if [[ ${LIFECYCLE_NO_DISPATCH_XMLRPC_EVENT:-0} -eq 1 ]]; then
+                printf '%s %s\n' '2026-09-05T12:34:56.123456Z' \
+                    'DEBUG bzr::xmlrpc::protocol::client: XML-RPC call' >>"$BZR_STDERR"
             fi
             return 0
         fi
@@ -809,7 +840,8 @@ run_lifecycle_phase_fixture() (
             control_failures=$((control_failures + 1))
         fi
     done
-    for control in LIFECYCLE_NO_DISPATCH_EVENT LIFECYCLE_INVALID_NO_DISPATCH_RESULT \
+    for control in LIFECYCLE_NO_DISPATCH_EVENT LIFECYCLE_NO_DISPATCH_XMLRPC_EVENT \
+        LIFECYCLE_INVALID_NO_DISPATCH_RESULT \
         LIFECYCLE_INVALID_NO_DISPATCH_SHAPE; do
         if ! run_gap_ineligible_control "$control" update-options \
             'comment tags and minor update'; then
@@ -2497,6 +2529,12 @@ run_container_fixture() (
     trap 'cleanup_container_fixture "$runtime" "$donor" "$config_dir"' EXIT
 
     "$runtime" build -t "$fixture_image" -f "$PYBZ_DIR/Containerfile" "$PYBZ_DIR"
+    # Exercise the same records with the sidecar's Linux awk as with the host's awk.
+    "$runtime" run --rm --volume "$PYBZ_DIR/..:/work:ro" "$fixture_image" bash -euc "
+        source /work/lib.sh
+        $(declare -f assert_equals run_transport_observation_fixture)
+        run_transport_observation_fixture
+    "
     package_version=$("$runtime" run --rm "$fixture_image" python -c \
         'from importlib.metadata import version; print(version("python-bugzilla"))')
     assert_equals 3.3.0 "$package_version" "python-bugzilla version"
