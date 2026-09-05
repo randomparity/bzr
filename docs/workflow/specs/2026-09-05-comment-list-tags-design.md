@@ -77,10 +77,11 @@ and NDJSON through the existing command/projection paths.
 
 Functional coverage tags a created comment, reads it through both `--api rest` and
 `--api xmlrpc`, asserts each tag array, projects `--fields tags`, and checks the restored help
-claim. An NDJSON case asserts the full and projected record shapes. A new `--server public
-comment list` case proves every credentialless result has an array-valued `tags` key without
-claiming that anonymous visibility matches authenticated visibility. The full supported-version
-functional suite runs these arms on all three Bugzilla images.
+claim. A table case asserts the exact tag line immediately before the blank line and tagged
+comment body. An NDJSON case asserts the full and projected record shapes. A new `--server
+public comment list` case proves every credentialless result has an array-valued `tags` key
+without claiming that anonymous visibility matches authenticated visibility. The full
+supported-version functional suite runs these arms on all three Bugzilla images.
 
 ## Guardrails and architecture context
 
