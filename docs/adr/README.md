@@ -43,8 +43,9 @@ rejected.
 | [0043](0043-stabilize-test-tracing-callsite-interest.md) | Keep a sentinel tracing dispatch alive in tests | Accepted |
 | [0044](0044-python-bugzilla-comparison-sidecar.md) | Run python-bugzilla as a network-namespace sidecar | Accepted |
 | [0045](0045-observe-comparison-transport-from-debug-events.md) | Observe comparison transport from request-boundary debug events | Accepted |
-| [0046](0046-share-python-bugzilla-comparison-adapter.md) | Share one fixed python-bugzilla comparison adapter | Accepted |
+| [0046](0046-share-python-bugzilla-comparison-adapter.md) | Share one fixed python-bugzilla comparison adapter | Superseded |
 | [0047](0047-centralize-terminal-width-table-wrapping.md) | Centralize terminal-width table wrapping | Accepted |
 | [0048](0048-comment-tags-are-always-present-arrays.md) | Comment tags are always-present arrays | Accepted |
 | [0049](0049-comment-list-client-side-multi-id-loop.md) | Fetch multi-ID comment sets with a client-side loop | Accepted |
 | [0050](0050-run-comparison-proxies-in-sidecar-namespace.md) | Run comparison proxies in the sidecar namespace | Accepted |
+| [0051](0051-share-adapter-with-bounded-local-proofs.md) | Share one adapter with bounded local proofs | Accepted |

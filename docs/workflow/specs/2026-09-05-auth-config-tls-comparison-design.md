@@ -7,9 +7,11 @@ Bugzilla 5.0, 5.2, and 5.3 containers. It changes functional comparison fixtures
 documentation only. It does not add production authentication, configuration-import, Bearer, or
 client-certificate behavior to bzr.
 
-The design extends [ADR 0044](../../adr/0044-python-bugzilla-comparison-sidecar.md) and follows
-[ADR 0050](../../adr/0050-run-comparison-proxies-in-sidecar-namespace.md). The operator selected
-proxy processes inside the existing sidecar's shared Bugzilla network namespace.
+The design extends [ADR 0044](../../adr/0044-python-bugzilla-comparison-sidecar.md), follows
+[ADR 0050](../../adr/0050-run-comparison-proxies-in-sidecar-namespace.md), and uses
+[ADR 0051](../../adr/0051-share-adapter-with-bounded-local-proofs.md) for its library-only proof.
+The operator selected proxy processes inside the existing sidecar's shared Bugzilla network
+namespace.
 
 ## Architecture
 

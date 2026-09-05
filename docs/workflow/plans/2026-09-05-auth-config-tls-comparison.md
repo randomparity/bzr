@@ -83,7 +83,7 @@ Interfaces:
 
 - Add `pybz_stage_proxy <source> <destination-name>`; it accepts a repository-owned readable file
   and a basename destination, copies it mode 0600 below `COMPARE_EXCHANGE_DIR`, and returns its
-  `/work/<destination-name>` path.
+  `/work/compare/<destination-name>` path.
 - Add `pybz_proxy_start <tls|redhat> <listen-port> [cert-relative-dir]`; it validates the fixed kind
   and decimal port, rejects a live prior PID, removes stale PID state, atomically creates a new
   mode-0600 evidence log, launches the staged program with backend `127.0.0.1:80`, and proves
@@ -99,7 +99,8 @@ Verification:
 - Mode: focused-test — staging, argv, validation, readiness, alias, PID handling, and cleanup;
   extend `tests/functional/pybz/container-tests.sh` with a fake runtime recording each invocation.
   The red run is `bash tests/functional/pybz/container-tests.sh` failing on the first missing helper;
-  the green command is the same script with every fixture ending successfully.
+  the green command is the same script with every fixture ending successfully. Exact assertions
+  require host `COMPARE_EXCHANGE_DIR/<name>` to map to container `/work/compare/<name>`.
 - Mode: focused-test — TLS material visibility; add a fixture that creates a mode-0600 certificate
   tree beneath `FUNC_CONFIG_DIR`, maps it to `/work`, and proves the generated namespace command
   references only the mapped path. The same fixture command is red before implementation and green
@@ -129,9 +130,11 @@ Interfaces:
 
 - Extend `python-bugzilla-adapter.py` with `login`, `cached_auth`, `logout`, and
   `client_certificate_surface` operations.
-- Each operation accepts one path beneath `/work` to a mode-0600 JSON request, validates its exact
-  allowed keys and value types, and returns a mode-0600 result containing only booleans and bounded
-  non-secret identifiers.
+- Preserve ADR 0051's fixed local-proof registry: only `client_certificate_surface` is local in this
+  task; login, cached auth, and logout must report real REST or XML-RPC transport.
+- Each operation accepts one direct-child path beneath `/work/compare` to a mode-0600 JSON request,
+  validates its exact allowed keys and value types, and returns a mode-0600 result containing only
+  booleans and bounded non-secret identifiers.
 - `login` accepts URL, username, password, and restrict-login; `cached_auth` accepts URL and username
   but no password; `logout` accepts URL and invalidates the cached token; the certificate operation
   accepts a dummy certificate path and reports only whether the constructed session retained it.
@@ -152,9 +155,8 @@ Verification:
 Steps:
 
 1. Add adapter fixture cases and controlled failures before changing the operation registry.
-2. Implement strict private-request loading with `/work` direct-child confinement, regular-file and
-   mode-0600 checks, exact-key validation, and bounded strings. Reuse the existing JSON result path
-   contract rather than stdout for results.
+2. Reuse the existing `/work/compare` direct-child confinement, regular-file and mode-0600 checks,
+   exact-key validation, and JSON result path contract; add the bounded auth-specific fields.
 3. Implement token lifecycle operations through the pinned python-bugzilla library. Construct a new
    client per operation so `cached_auth` proves persisted cache behavior rather than object reuse.
 4. Implement the local certificate operation without issuing a network request and return only
