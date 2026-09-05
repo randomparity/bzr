@@ -27,9 +27,11 @@ acceptance or persisted outcome. Adding another local proof requires a compariso
 exercise the surface against the repository's live server fixture, plus focused adapter fixtures
 that prove no network call occurs.
 
-Login, cached-auth, and logout are network operations. They read credentials from private request
-files, construct a new client per operation, and serialize no password, token, API key, certificate
-path, or upstream exception text.
+Login, cached-auth, logout, and API-key identity are network operations. They read credentials from
+private request files, construct a new client per operation, and serialize no password, token, API
+key, username, URL, certificate path, or upstream exception text. API-key identity accepts its proxy
+URL, API key, and username through that boundary, performs a real user lookup through the proxy,
+and reports only whether authentication succeeded and the returned identity matched.
 
 ## Consequences
 

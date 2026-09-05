@@ -10,9 +10,10 @@ markers.
 Tech stack: Bash functional harness, Python 3 stdlib proxy fixtures, Docker/Podman, jq, openssl,
 python-bugzilla 3.3.0, and Markdown parity documentation.
 
-Expected implementation size: 400–650 changed lines (L) — derived from proxy/helper fixtures,
-private-file adapter operations, one multi-contract comparison phase, runner wiring, and parity
-rows.
+Expected implementation size: 850–1100 net changed lines (XL) — revised after Tasks 1–3 measured
+712 net changed lines and the build-time checkpoint established that the live API-key comparison
+requires one additional private-file network adapter operation. The remaining allowance covers
+that operation, one multi-contract comparison phase, runner wiring, and parity rows.
 
 ## Global constraints
 
@@ -169,6 +170,41 @@ Steps:
 Acceptance: passwords and tokens never enter process argv or emitted JSON, logout uses the library
 surface absent from the CLI, and certificate evidence is explicitly configuration-only.
 
+## Task 3a: Add the authorized API-key identity operation
+
+Interfaces:
+
+- Extend `python-bugzilla-adapter.py` with network operation `api_key_identity`.
+- Accept exactly URL, API key, and username through the existing direct-child, mode-0600 JSON
+  request-file boundary; accept none of those values through argv or stdin.
+- Construct the pinned REST client at the supplied namespace-proxy URL, perform a real user lookup,
+  and return only `authenticated` and `identity_matched` booleans with observed REST transport.
+- Do not return URL, username, API key, user fields, or upstream exception text.
+
+Verification:
+
+- Mode: focused-test — extend adapter fixtures in `container-tests.sh` with a fake network backend
+  that requires the API key, records the identity lookup, and returns a matching user. Assert exact
+  request keys, non-null REST transport, true booleans, and absence of every secret sentinel from
+  result and failure output. The red command is
+  `bash tests/functional/pybz/container-tests.sh` failing on the unknown `api_key_identity`
+  operation; the green command is the same script with all adapter cases passing.
+
+Steps:
+
+1. Add the focused adapter fixture and controlled wrong-mode, extra-key, failed-auth, and
+   mismatched-identity cases before changing the operation registry.
+2. Reuse the adapter's existing request confinement, permission, exact-key, safe-error, transport,
+   and result-file machinery.
+3. Construct a new forced-REST client from the private URL and API key, call the pinned library's
+   user lookup with the private username, and reduce the result to the two booleans.
+4. Run `bash tests/functional/pybz/container-tests.sh`; expect all adapter fixtures and secret scans
+   to pass.
+5. Commit as `test(functional): observe python-bugzilla API-key identity`.
+
+Acceptance: the operation proves a real proxy-observed authenticated lookup, null transport cannot
+pass, and no credential, selector, URL, returned user data, or upstream exception is emitted.
+
 ## Task 4: Add the R11 comparison phase and parity rows
 
 Interfaces:
@@ -176,7 +212,8 @@ Interfaces:
 - Create phase `06-auth-config-tls` and register it after `05-products-components`.
 - Use existing `test_begin`, `test_pass`, `test_fail`, `expect_gap`, `run_bzr`, `run_pybz`, and
   `run_pybz_adapter`.
-- Consume Task 1's exact evidence lines, Task 2's URLs/helpers, and Task 3's adapter operations.
+- Consume Task 1's exact evidence lines, Task 2's URLs/helpers, Task 3's lifecycle operations, and
+  Task 3a's `api_key_identity` operation.
 - Produce stable IDs for API-key placement, restricted login, cached token, logout, bugzillarc
   precedence/default/section, nosslverify, token transport gap, login-command gap, bugzillarc-import
   gap, client-certificate surface gap, and Bearer gap.
@@ -200,7 +237,8 @@ Steps:
 1. Add phase fixtures for each live contract and five gap owners. Include stale-home and stale-log
    controls, secret-sentinel scans, unsupported-version handling, an omitted-`/etc` precedence
    fault, and a forced positive-control failure.
-2. Implement `06-auth-config-tls.sh`: reset owned sidecar state; run API-key observations; prove
+2. Implement `06-auth-config-tls.sh`: reset owned sidecar state; run API-key observations through
+   the private-file `api_key_identity` operation; prove
    login/restricted/cache/logout via private adapter request files; copy the staged system
    bugzillarc to the sidecar's `/etc`, write both home-path files, and prove their precedence; start
    the namespace TLS proxy and prove default rejection plus `--nosslverify` success; install the Red

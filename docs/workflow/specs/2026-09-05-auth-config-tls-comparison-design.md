@@ -45,6 +45,13 @@ and no record may contain another kind or the API-key value. Each emitted reques
 `count=1`. The expected query/header split is derived from the live clients and fixed by fixture
 tests before the real multi-version run is accepted.
 
+The shared adapter's networked `api_key_identity` operation receives exactly `url`, `api_key`, and
+`username` in a private mode-0600 request file. It constructs the pinned client at that proxy URL,
+performs a real user lookup for the selector, and returns only `authenticated` and
+`identity_matched` booleans plus the adapter's observed transport. URL, username, API key, returned
+user fields, and upstream exception text are never serialized. This operation is not a local proof:
+null transport is invalid, and its fixture must observe the proxy request.
+
 ### Token login and cache
 
 The shared python-bugzilla adapter gains `login`, `cached_auth`, and `logout` operations because the
@@ -132,8 +139,10 @@ the existing Red Hat proxy from response transformation to bounded request crede
   the original Authorization header is not forwarded alongside the API-key header.
 - Evidence records credential kinds and counts only. Fixture tests search evidence and failure
   output for the known secret sentinels and fail on disclosure.
-- Login, cached-auth, logout, and client-certificate adapter operations read secrets and paths from
-  private request files and serialize only bounded non-secret facts.
+- Login, cached-auth, logout, API-key identity, and client-certificate adapter operations read
+  secrets, selectors, URLs, and paths from private request files and serialize only bounded
+  non-secret facts. The identity operation validates exact input keys and emits booleans rather
+  than returned user data.
 - Staged files stay beneath the mode-0700 comparison directory; secret-bearing files remain mode
   0600. Paths are fixed by the runner rather than derived from server input.
 - Container commands pass data as quoted argv or positional shell parameters; no fixture value is
@@ -155,7 +164,8 @@ malicious local operators, or turn disposable test credentials into production s
   readiness, fresh per-start evidence, idempotent stop, cleanup after failure, and rejection of
   malformed inputs.
 - Adapter fixtures prove private-file token lifecycle operations, password-free cache reuse,
-  library logout, and the network-free client-certificate surface observation.
+  library logout, a proxy-observed API-key identity lookup, secret-free identity results, and the
+  network-free client-certificate surface observation.
 - Phase fixture tests prove each positive-control-before-gap transition and stale-gap behavior.
 - `make check-functional-test-ids` validates the new phase and evidence IDs.
 - `make lint` and `make test` keep repository guardrails green.
