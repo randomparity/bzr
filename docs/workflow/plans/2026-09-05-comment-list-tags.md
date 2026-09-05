@@ -162,8 +162,9 @@ version pin updates.
 
 **Interfaces**
 
-- Consumes the existing `COMMENT_ID` produced by `comment-add-first`, `run_bzr`, and JSON
-  assertion helpers in `tests/functional/phases/15-comments.sh`.
+- Consumes the existing `COMMENT_ID` produced by `comment-add-first`, `run_bzr` for enveloped
+  JSON, `run_bzr_raw` for NDJSON, and assertion helpers in
+  `tests/functional/phases/15-comments.sh`.
 - Produces functional cases for help truth, REST and XML-RPC full JSON tags, JSON and NDJSON
   `--fields tags`, an empty tag after removal, and a credentialless array-shape read.
 - No later implementation task depends on this task; it is the end-to-end proof.
@@ -183,11 +184,14 @@ version pin updates.
    `comment list "$BUG1"` once with `--api rest` and once with `--api xmlrpc`; select the entry
    with `COMMENT_ID` and assert its `.tags` equals `["important"]` in both responses. Run the
    projection with `--fields tags` and assert the projected object has exactly the `tags` key
-   and the same value. Repeat the full and projected assertions with `--output ndjson`,
-   selecting the matching line by comment ID. Run `--server public comment list "$BUG1"` and
-   assert every returned comment has an array-valued `tags` key, without asserting anonymous
-   semantic parity with the authenticated result. After removal, assert the tagged comment
-   emits `tags: []`.
+   and the same value. For NDJSON, use `run_bzr_raw --api rest --output ndjson`: on the full
+   response, slurp the lines and assert `any(.[]; .id == $COMMENT_ID and .tags ==
+   ["important"])`; on the `--fields tags` response, assert `all(.[]; keys == ["tags"])` and
+   that exactly one record equals `{"tags":["important"]}`. This unique tag identifies the
+   projected target without requiring an excluded `id`. Run `--server public comment list
+   "$BUG1"` and assert every returned comment has an array-valued `tags` key, without asserting
+   anonymous semantic parity with the authenticated result. After removal, assert the tagged
+   comment emits `tags: []`.
 2. Verify the new functional assertion bites: temporarily change its expected tag to a value
    the fixture never writes, run `make functional-test`, and retain the phase-15 failure.
    Restore the assertion and rerun; expect every default-version case green.
