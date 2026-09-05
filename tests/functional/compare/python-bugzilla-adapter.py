@@ -11,12 +11,13 @@ import urllib.parse
 from xmlrpc.client import DateTime
 from pathlib import Path
 
-from bugzilla import Bugzilla
+from bugzilla import Bugzilla, BugzillaError
 
 
 SERVER_URL = "http://127.0.0.1"
 WORK_ROOT = Path("/work/compare")
 TOKEN_FILE = WORK_ROOT / "python-bugzilla-token"
+STALE_TOKEN_FILE = WORK_ROOT / "python-bugzilla-stale-token"
 
 
 class AdapterError(Exception):
@@ -527,23 +528,15 @@ def _component_update_shape(_client, request):
 def _required_url(request):
     value = _required_text(request, "url", 2048)
     parsed = urllib.parse.urlsplit(value)
-    if (
-        parsed.scheme not in {"http", "https"}
-        or not parsed.netloc
-        or parsed.username
-        or parsed.password
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or any(
+        (parsed.username, parsed.password)
     ):
         raise AdapterError("url must be an HTTP(S) URL without embedded credentials")
     return value
 
 
-def _auth_client(url):
-    return Bugzilla(
-        url,
-        tokenfile=str(TOKEN_FILE),
-        configpaths=[],
-        force_rest=True,
-    )
+def _auth_client(url, token_file=TOKEN_FILE):
+    return Bugzilla(url, tokenfile=str(token_file), configpaths=[], force_rest=True)
 
 
 def _login_operation(_client, request):
@@ -557,11 +550,9 @@ def _login_operation(_client, request):
     if not result or not client._tokencache.get_value(client.url):
         raise AdapterError("python-bugzilla did not cache a login token")
     TOKEN_FILE.chmod(0o600)
-    return {
-        "transport": _transport(client),
-        "result": {"authenticated": True, "restricted": request["restrict_login"],
-                   "cache_written": True},
-    }
+    result = {"authenticated": True, "restricted": request["restrict_login"],
+              "cache_written": True}
+    return {"transport": _transport(client), "result": result}
 
 
 def _cached_auth_operation(_client, request):
@@ -572,10 +563,8 @@ def _cached_auth_operation(_client, request):
     user = client.getuser(_required_text(request, "username", 320))
     if user is None:
         raise AdapterError("cached authentication did not identify the user")
-    return {
-        "transport": _transport(client),
-        "result": {"authenticated": True, "cache_used": True},
-    }
+    return {"transport": _transport(client),
+            "result": {"authenticated": True, "cache_used": True}}
 
 
 def _api_key_identity_operation(_client, request):
@@ -583,39 +572,43 @@ def _api_key_identity_operation(_client, request):
     url = _required_url(request)
     api_key = _required_text(request, "api_key", 4096)
     username = _required_text(request, "username", 320)
-    client = Bugzilla(
-        url,
-        api_key=api_key,
-        use_creds=False,
-        force_rest=True,
-    )
+    client = Bugzilla(url, api_key=api_key, use_creds=False, force_rest=True)
     user = client.getuser(username)
     if user is None:
         raise AdapterError("API-key authentication did not identify a user")
     identity_matched = any(
         getattr(user, attribute, None) == username for attribute in ("email", "name")
     )
-    return {
-        "transport": _transport(client),
-        "result": {"authenticated": True, "identity_matched": identity_matched},
-    }
+    return {"transport": _transport(client),
+            "result": {"authenticated": True, "identity_matched": identity_matched}}
 
 
 def _logout_operation(_client, request):
-    _validate_keys(request, ("url",))
-    client = _auth_client(_required_url(request))
-    if "Bugzilla_token" not in client._session.get_auth_params():
+    _validate_keys(request, ("url", "username"))
+    url = _required_url(request)
+    client = _auth_client(url)
+    token = client._session.get_auth_params().get("Bugzilla_token")
+    if not token:
         raise AdapterError("python-bugzilla did not load a cached token")
     transport = _transport(client)
-    client.logout()
-    client._tokencache.set_value(client.url, None)
-    cache_cleared = client._tokencache.get_value(client.url) is None
-    if not cache_cleared:
+    stale_client = _auth_client(url, STALE_TOKEN_FILE)
+    stale_client._tokencache.set_value(url, token)
+    STALE_TOKEN_FILE.chmod(0o600)
+    try:
+        client.logout()
+        try:
+            stale_client.getuser(_required_text(request, "username", 320))
+        except BugzillaError:
+            pass
+        else:
+            raise AdapterError("python-bugzilla logout left the token valid")
+    finally:
+        STALE_TOKEN_FILE.unlink(missing_ok=True)
+        client._tokencache.set_value(url, None)
+    if client._tokencache.get_value(url) is not None:
         raise AdapterError("python-bugzilla did not clear the cached token")
-    return {
-        "transport": transport,
-        "result": {"logged_out": True, "cache_cleared": True},
-    }
+    return {"transport": transport,
+            "result": {"logged_out": True, "cache_cleared": True}}
 
 
 class _CertificateProbeBackend:

@@ -31,7 +31,7 @@ This report tracks bzr against python-bugzilla 3.3.0 using stable comparison tes
 | Product catalogues | `bzr product list --type` | parity | `compare/05-products-components/product-catalogues` |
 | Component create | `bzr component create`, `bzr component view` | parity | `compare/05-products-components/component-create` |
 | Red Hat component update | `bzr component update` | expected gap (#675) | `compare/05-products-components/component-update-redhat` |
-| API-key placement by server version | `bzr whoami` | parity | `compare/06-auth-config-tls/api-key-placement` |
+| API-key placement by server version | `bzr whoami` | bz50/bz52: both query; bz53: bzr header, python-bugzilla query | `compare/06-auth-config-tls/api-key-placement` |
 | Restricted password login | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/restricted-login` |
 | Cached login token reuse | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/cached-token` |
 | Logout token invalidation | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/logout` |

@@ -3,10 +3,10 @@ r11_auth_evidence_is() {
     local expected="$1" log="$2" line count=0
     while IFS= read -r line; do
         [[ $line != *"$BZR_COMPARE_API_KEY"* ]] || return 1
-        if [[ $line == auth-kind\ * ]]; then
+        [[ $line != auth-kind\ * ]] || {
             [[ $line == "auth-kind $expected count=1" ]] || return 1
             count=$((count + 1))
-        fi
+        }
     done <"$log"
     [[ $count -gt 0 ]]
 }
@@ -16,21 +16,17 @@ r11_adapter_result_is() {
         "/work/compare/${output##*/}"
     [[ $BZR_EXIT -eq 0 && -r $output ]] && jq -e "$filter" "$output" >/dev/null
 }
-r11_expected_bzr_auth_kind() {
-    case "$1" in
+r11_expected_bzr_auth_kind() { case "$1" in
     bz50 | bz52) printf 'query\n' ;;
     bz53) printf 'header\n' ;;
-    *) return 2 ;; esac
-}
+    *) return 2 ;; esac }
 declare -F r11_api_key_control >/dev/null || r11_api_key_control() {
     local expected request output host_ok=0 pybz_ok=0
     expected=$(r11_expected_bzr_auth_kind "$BZ_VERSION") || return 1
     BZR_FUNC_REDHAT_MODE=bearer-auth redhat_shape_start "$BZ_PORT" || return 1
     run_bzr config set-server r11-auth --url "http://127.0.0.1:${REDHAT_SHAPE_PORT}" \
         --api-key-env BZR_COMPARE_API_KEY --email "$COMPARE_ADMIN_EMAIL"
-    if [[ $BZR_EXIT -eq 0 ]]; then
-        run_bzr --server r11-auth whoami
-    fi
+    [[ $BZR_EXIT -ne 0 ]] || run_bzr --server r11-auth whoami
     redhat_shape_stop || return 1
     BZR_FUNC_REDHAT_MODE=bearer-auth redhat_shape_start "$BZ_PORT" || return 1
     run_bzr --server r11-auth whoami
@@ -66,11 +62,10 @@ r11_write_auth_request() {
         printf '{"url":"http://127.0.0.1","username":"%s","password":"%s","restrict_login":true}\n' \
             "$COMPARE_ADMIN_EMAIL" "$COMPARE_ADMIN_PASSWORD" >"$output"
         ;;
-    cached_auth)
+    cached_auth | logout)
         printf '{"url":"http://127.0.0.1","username":"%s"}\n' \
             "$COMPARE_ADMIN_EMAIL" >"$output"
         ;;
-    logout) printf '{"url":"http://127.0.0.1"}\n' >"$output" ;;
     *) return 2 ;;
     esac
     chmod 600 "$output"
@@ -84,18 +79,15 @@ r11_auth_control() {
     rm -f "$input"
     return "$status"
 }
-declare -F r11_login_control >/dev/null || r11_login_control() {
-    rm -f "$COMPARE_EXCHANGE_DIR/python-bugzilla-token"
+declare -F r11_login_control >/dev/null || r11_login_control() { rm -f "$COMPARE_EXCHANGE_DIR/python-bugzilla-token"
     r11_auth_control login \
         '.transport == "REST" and .result == {authenticated:true,cache_written:true,restricted:true}'
 }
-declare -F r11_cached_control >/dev/null || r11_cached_control() {
-    [[ ! -e $COMPARE_EXCHANGE_DIR/r11-login.input.json ]] || return 1
+declare -F r11_cached_control >/dev/null || r11_cached_control() { [[ ! -e $COMPARE_EXCHANGE_DIR/r11-login.input.json ]] || return 1
     r11_auth_control cached_auth \
         '.transport == "REST" and .result == {authenticated:true,cache_used:true}'
 }
-declare -F r11_logout_control >/dev/null || r11_logout_control() {
-    r11_auth_control logout \
+declare -F r11_logout_control >/dev/null || r11_logout_control() { r11_auth_control logout \
         '.transport == "REST" and .result == {cache_cleared:true,logged_out:true}'
 }
 declare -F r11_bugzillarc_control >/dev/null || r11_bugzillarc_control() {
@@ -108,16 +100,27 @@ declare -F r11_bugzillarc_control >/dev/null || r11_bugzillarc_control() {
     printf '[DEFAULT]\nurl=http://127.0.0.1\n[127.0.0.1]\nuser=config\n[fixture.invalid/rest]\nuser=substring\n' \
         >"$COMPARE_EXCHANGE_DIR/r11-config.rc"
     chmod 600 "$COMPARE_EXCHANGE_DIR"/r11-*.rc
-    # shellcheck disable=SC2016 # HOME expands in the sidecar shell.
-    "$PYBZ_RUNTIME" exec "$sidecar" sh -c \
-        'mkdir -p "$HOME/.config/python-bugzilla"; cp /work/compare/r11-system.rc /etc/bugzillarc; cp /work/compare/r11-home.rc "$HOME/.bugzillarc"; cp /work/compare/r11-config.rc "$HOME/.config/python-bugzilla/bugzillarc"'
-    "$PYBZ_RUNTIME" exec "$sidecar" python -c \
-        'import json; from bugzilla import Bugzilla; b=Bugzilla(None); print(json.dumps({"url":b.get_rcfile_default_url(),"precedence":b._rcfile.parse("http://127.0.0.1").get("user"),"substring":b._rcfile.parse("http://fixture.invalid/rest/bug").get("user")}))' \
-        >"$output"
+    "$PYBZ_RUNTIME" exec -e R11_FIXTURE_OMIT_SYSTEM_RC="${R11_FIXTURE_OMIT_SYSTEM_RC:-0}" \
+        "$sidecar" python -c '
+import json, os, pathlib, shutil
+from bugzilla import Bugzilla
+home = pathlib.Path.home(); root = pathlib.Path("/work/compare")
+destinations = [pathlib.Path("/etc/bugzillarc"), home / ".bugzillarc", home / ".config/python-bugzilla/bugzillarc"]
+sources = [root / "r11-system.rc", root / "r11-home.rc", root / "r11-config.rc"]
+for destination in destinations: destination.unlink(missing_ok=True)
+destinations[2].parent.mkdir(parents=True, exist_ok=True)
+for index, (source, destination) in enumerate(zip(sources, destinations)):
+    if index or os.environ.get("R11_FIXTURE_OMIT_SYSTEM_RC") != "1":
+        shutil.copyfile(source, destination)
+    client = Bugzilla(None)
+    print(json.dumps({"url": client.get_rcfile_default_url(),
+        "precedence": client._rcfile.parse("http://127.0.0.1").get("user"),
+        "substring": client._rcfile.parse("http://fixture.invalid/rest/bug").get("user")}))
+' >"$output"
     case "$aspect" in
-    precedence) jq -e '.precedence == "config"' "$output" >/dev/null ;;
-    default) jq -e '.url == "http://127.0.0.1"' "$output" >/dev/null ;;
-    substring) jq -e '.substring == "substring"' "$output" >/dev/null ;;
+    precedence) jq -s -e 'map(.precedence) == ["system","home","config"]' "$output" >/dev/null ;;
+    default) jq -s -e '.[2].url == "http://127.0.0.1"' "$output" >/dev/null ;;
+    substring) jq -s -e '.[2].substring == "substring"' "$output" >/dev/null ;;
     *) return 2 ;;
     esac
 }
@@ -185,13 +188,8 @@ declare -F r11_parser_gap >/dev/null || r11_parser_gap() {
     esac
 }
 r11_pass_test() { if "$@"; then test_pass; else test_fail "positive control failed"; fi; }
-r11_gap_test() {
-    local issue="$1" gap="$2"
-    shift 2
-    if ! "$@"; then
-        test_fail "positive control failed"
-        return
-    fi
+r11_gap_test() { local issue="$1" gap="$2"; shift 2
+    "$@" || { test_fail "positive control failed"; return; }
     if r11_parser_gap "$gap"; then
         test_fail "controlled bzr surface is absent"
         expect_gap "$issue"

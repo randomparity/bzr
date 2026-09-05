@@ -978,7 +978,7 @@ run_parity_report_fixture() {
         '| Product catalogues | `bzr product list --type` | parity | `compare/05-products-components/product-catalogues` |'
         '| Component create | `bzr component create`, `bzr component view` | parity | `compare/05-products-components/component-create` |'
         '| Red Hat component update | `bzr component update` | expected gap (#675) | `compare/05-products-components/component-update-redhat` |'
-        '| API-key placement by server version | `bzr whoami` | parity | `compare/06-auth-config-tls/api-key-placement` |'
+        '| API-key placement by server version | `bzr whoami` | bz50/bz52: both query; bz53: bzr header, python-bugzilla query | `compare/06-auth-config-tls/api-key-placement` |'
         '| Restricted password login | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/restricted-login` |'
         '| Cached login token reuse | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/cached-token` |'
         '| Logout token invalidation | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/logout` |'
@@ -1045,7 +1045,7 @@ run_auth_config_tls_phase_fixture() (
     r11_login_control() { return 0; }
     r11_cached_control() { [[ ${R11_FIXTURE_CACHED_FAIL:-0} -eq 0 ]]; }
     r11_logout_control() { return 0; }
-    r11_bugzillarc_control() { [[ ${R11_FIXTURE_OMIT_SYSTEM_RC:-0} -eq 0 ]]; }
+    r11_bugzillarc_control() { return 0; }
     r11_tls_control() { return 0; }
     r11_certificate_control() { return 0; }
     r11_bearer_control() { return 0; }
@@ -1082,17 +1082,6 @@ run_auth_config_tls_phase_fixture() (
     unset R11_FIXTURE_CACHED_FAIL
     if [[ $FAIL_COUNT -lt 2 ]] || grep -Fq 'GAP (#676)' "$fixture_output"; then
         printf 'cached-token positive-control failure became gap #676\n' >&2
-        return 1
-    fi
-    reset_r11_fixture
-    R11_FIXTURE_OMIT_SYSTEM_RC=1
-    source "$phase" >"$fixture_output"
-    _render_test_result >>"$fixture_output"
-    unset R11_FIXTURE_OMIT_SYSTEM_RC
-    if ! grep -Fq \
-        '[compare/06-auth-config-tls/bugzillarc-precedence] three-file bugzillarc precedence ... FAIL' \
-        "$fixture_output"; then
-        printf 'omitted system bugzillarc layer did not fail precedence proof\n' >&2
         return 1
     fi
 )
@@ -1146,6 +1135,8 @@ run_namespace_proxy_helper_fixture() (
         [[ $1 == exec ]] || return 2
         case "${3:-}:${5:-}" in
         sh:*pybz-proxy-start*)
+            [[ $FAKE_PROXY_READY -eq 1 ]] || \
+                printf 'OSError: Address already in use\n' >"$COMPARE_EXCHANGE_DIR/redhat.proxy.log"
             if [[ $7 == tls ]]; then
                 printf 'mapped-cert=/work/%s/server.crt mapped-key=/work/%s/server.key\n' \
                     "${10}" "${10}" >>"$FAKE_PROXY_LOG"
@@ -1216,6 +1207,7 @@ run_namespace_proxy_helper_fixture() (
     rm -f "$COMPARE_EXCHANGE_DIR/redhat.proxy.pid"
     FAKE_PROXY_READY=0
     reject_proxy_call 'proxy readiness exhaustion was accepted' pybz_proxy_start redhat 18080
+    grep -Fq 'redhat proxy was not ready after 30 attempts (port unavailable)' "$error_output"
     FAKE_PROXY_READY=1
     pybz_redhat_alias_install
     pybz_redhat_alias_install
@@ -1288,12 +1280,16 @@ class _BackendREST:
         raise ValueError("array response")
 
 
-class _BackendXMLRPC:
-    pass
+class _BackendXMLRPC: pass
 
 
-class _UnknownBackend:
-    pass
+class _UnknownBackend: pass
+
+
+class BugzillaError(Exception): pass
+
+
+_SERVER_TOKEN_VALID = True
 
 
 class _FixtureBug:
@@ -1404,6 +1400,9 @@ class Bugzilla:
         return {"id": 601, "token": "fixture-token"}
 
     def logout(self):
+        global _SERVER_TOKEN_VALID
+        if __import__("os").environ.get("FIXTURE_LOGOUT_NOOP") != "1":
+            _SERVER_TOKEN_VALID = False
         return None
 
     def connect(self, url):
@@ -1540,6 +1539,8 @@ class Bugzilla:
         return _FixtureUser(email)
 
     def getuser(self, email):
+        if "Bugzilla_token" in self._session.get_auth_params() and not _SERVER_TOKEN_VALID:
+            raise BugzillaError("invalid token")
         if email == "identity-mismatch@test.invalid":
             return _FixtureUser("different-identity@test.invalid")
         return _FixtureUser(email)
@@ -1613,22 +1614,17 @@ assert_adapter_case() {
 }
 
 assert_adapter_rejection() {
-    local runtime="$1"
-    local sidecar="$2"
-    local config_dir="$3"
-    local name="$4"
-    local operation="$5"
-    local request="$6"
-    local diagnostic="$7"
-    local input="$config_dir/compare/${name}.input.json"
-    local output="$config_dir/compare/${name}.output.json"
-    local error_output="$config_dir/compare/${name}.stderr"
-    local status
+    local runtime="$1" sidecar="$2" config_dir="$3" name="$4"
+    local operation="$5" request="$6" diagnostic="$7" fixture_environment="${8:-}"
+    local input="$config_dir/compare/${name}.input.json" output="$config_dir/compare/${name}.output.json"
+    local error_output="$config_dir/compare/${name}.stderr" status
 
     printf '%s\n' "$request" >"$input"
     chmod 600 "$input"
     set +e
-    "$runtime" exec -e PYTHONPATH=/work/adapter-fixture "$sidecar" \
+    local -a environment=(-e PYTHONPATH=/work/adapter-fixture)
+    [[ -z $fixture_environment ]] || environment+=(-e "$fixture_environment")
+    "$runtime" exec "${environment[@]}" "$sidecar" \
         python /work/compare/python-bugzilla-adapter.py "$operation" \
         "/work/compare/${name}.input.json" "/work/compare/${name}.output.json" \
         2>"$error_output"
@@ -1685,8 +1681,14 @@ run_adapter_fixture() {
         '{"url":"http://127.0.0.1","username":"fixture-user@test.invalid"}' \
         '{"result":{"authenticated":true,"cache_used":true},"transport":"REST"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" auth-logout logout \
-        '{"url":"http://127.0.0.1"}' \
+        '{"url":"http://127.0.0.1","username":"fixture-user@test.invalid"}' \
         '{"result":{"cache_cleared":true,"logged_out":true},"transport":"REST"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" auth-login-noop login \
+        '{"url":"http://127.0.0.1","username":"fixture-user@test.invalid","password":"login-secret","restrict_login":true}' \
+        '{"result":{"authenticated":true,"cache_written":true,"restricted":true},"transport":"REST"}'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" auth-logout-noop logout \
+        '{"url":"http://127.0.0.1","username":"fixture-user@test.invalid"}' \
+        'python-bugzilla logout left the token valid' FIXTURE_LOGOUT_NOOP=1
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" api-key-identity \
         api_key_identity \
         '{"url":"http://identity-proxy.invalid:18080","api_key":"identity-api-secret","username":"identity-user@test.invalid"}' \

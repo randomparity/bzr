@@ -542,7 +542,14 @@ printf "%s\n" "$!"' sh "$kind" "$script" "$port" "$cert_dir" \
         sleep 1
         attempt=$((attempt + 1))
     done
-    printf 'pybz_proxy_start: %s proxy was not ready after 30 attempts\n' "$kind" >&2
+    local diagnostic='no startup detail'
+    if grep -Fq 'Address already in use' "$log"; then
+        diagnostic='port unavailable'
+    elif [[ -s $log ]]; then
+        diagnostic='proxy exited during startup'
+    fi
+    printf 'pybz_proxy_start: %s proxy was not ready after 30 attempts (%s)\n' \
+        "$kind" "$diagnostic" >&2
     pybz_proxy_stop "$kind" || true
     return 1
 }
