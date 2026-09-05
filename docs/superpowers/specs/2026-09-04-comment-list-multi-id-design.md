@@ -67,8 +67,9 @@ it:
 `get_comments_since` therefore backfills `bug_id` from its own `bug_id`
 parameter for any record where the server left it absent, once, at the public
 client entry point after transport dispatch. A server-supplied value is never
-overwritten: the server is the authority on what a record actually belongs to,
-and a divergence is evidence worth surfacing rather than erasing.
+overwritten — it is trusted unverified. Nothing compares it against the
+requested ID, so attribution is only as good as the server's own labelling: the
+backfill closes the absent case, not the wrong one.
 
 Doing this at the entry point rather than inside each transport's extractor is
 deliberate — one fix covering REST, XML-RPC, and the Hybrid fallback, instead
@@ -88,8 +89,11 @@ resolved include set and removed from the exclude set after `projection_for`
 returns, and one line goes to stderr saying so:
 
 ```text
---fields: keeping bug_id; it is what attributes each comment to its bug
+keeping bug_id; it is what attributes each comment to its bug
 ```
+
+The note carries no flag prefix: it fires for `--exclude-fields bug_id` too,
+and naming `--fields` there would report a flag the operator never passed.
 
 This is the operator's decision, and it is the cheapest of the options: it
 breaks no currently-working invocation, and it follows `bug view`'s established
@@ -242,9 +246,17 @@ Two consequences, both authorized rather than incidental:
 Under `--permissive` with no bug reachable, the exit code is 0 in both formats
 and stdout differs by format, deliberately:
 
-- **JSON/NDJSON** — the accumulated vector is empty and the single trailing
+- **JSON** — the accumulated vector is empty and the single trailing
   `write_comments` call emits `{"schema_version": "3.0.0", "data": []}`. That
   is a valid payload a consumer already handles.
+- **NDJSON** — stdout is byte-for-byte **empty**. NDJSON carries no envelope
+  (`SCHEMA_VERSION` is "Present in `--json` output only",
+  `src/output/mod.rs:6-9`) and `write_ndjson` emits one line per element, so an
+  empty array emits nothing. An NDJSON consumer therefore cannot distinguish
+  "every bug failed" from "every bug has an empty thread" from "the command
+  produced nothing" by any means on stdout; it must read stderr, or drop
+  `--permissive` and let the first failure abort. This is stated on the
+  `--permissive` row in `docs/bzr-cli.md` and in the reference-skill bullet.
 - **Table** — the loop wrote nothing, so a single trailing `write_comments`
   call with an empty slice emits `No comments.`, the same thing a single ID
   with an empty thread prints today. The human contract for "nothing to show"
@@ -284,7 +296,7 @@ directly testable.
 | Single ID, bug missing | error, unchanged from today | that error's code |
 | Multi-ID, no `--permissive`, one bug fails | abort at that bug | that error's code |
 | Multi-ID, `--permissive`, per-resource failure | stderr line, continue | 0 |
-| Multi-ID, `--permissive`, every bug fails | stderr lines; `[]` (JSON) or `No comments.` (table) | 0 |
+| Multi-ID, `--permissive`, every bug fails | stderr lines; `data: []` (JSON), `No comments.` (table), **empty stdout** (ndjson) | 0 |
 | Multi-ID, `--permissive`, unclassifiable HTTP failure | abort | that error's code |
 | Multi-ID, `--permissive`, transport/auth failure | abort | that error's code |
 | `--permissive` with one ID | rejected before any call | 7 |
@@ -331,13 +343,23 @@ with a `bugs` map that omits the requested key yields
 `BzrError::NotFound`, not an empty vector; a map carrying the key with an
 empty `comments` array still yields `Ok(vec![])`.
 
-**Unit (multi-ID over XML-RPC, `src/commands/comment/list_tests.rs`):** using
-`test_client_xmlrpc` — already imported by
-`src/client/resources/comment_tests.rs` — a two-bug call where the second bug's
-key is missing aborts by default and, under `--permissive`, exits 0 with a
-stderr line naming that bug and the first bug's comments on stdout. No unit
-test in the design's first draft exercised XML-RPC at all; every one ran
-through `test_client`, which is `ApiMode::Rest`.
+**Unit (multi-ID over XML-RPC, `src/commands/comment/list_tests.rs`):** a
+two-bug call where the second bug's key is missing aborts by default and, under
+`--permissive`, exits 0 with a stderr line naming that bug and the first bug's
+comments on stdout.
+
+The transport is selected through the context, not through a client:
+`CommandContext::new(None, format, Some(ApiMode::XmlRpc))`
+(`src/commands/runtime/invocation/context.rs:27` takes `api` as its third
+argument), against a wiremock `POST` on `/xmlrpc.cgi`. `test_client_xmlrpc`
+cannot serve these tests — it returns a `BugzillaClient`, and the handler builds
+its own through `connect_and_configure`, which has no injection point.
+`setup_test_env()` pins `api_mode = "rest"` in the config it writes, so the
+context override is what reaches the XML-RPC path. This is the same selection
+`bzr --api hybrid comment list` uses functionally at `15-comments.sh:106`.
+
+No unit test in the design's earlier drafts exercised XML-RPC at all; every one
+ran through `setup_test_env`, which is `ApiMode::Rest`.
 
 **Unit (`src/client/resources/comment_tests.rs`):** a REST response whose
 comment records omit `bug_id` comes back with `bug_id` backfilled from the
@@ -404,8 +426,9 @@ authenticated read that already accepts a caller-supplied bug ID and already
 sends it on the same authenticated connection. The diff widens an existing
 entry point's arity without changing who may call it, touches no
 authn/authz/tenancy logic, handles no secret, adds no dependency, and parses
-only responses the existing extractors already parse. The one new bound — the
-100-ID cap — narrows fan-out rather than widening it. `$detect-evil` still runs
+only responses the existing extractors already parse. Fan-out is unbounded and
+sequential — one round trip per requested ID on a pooled connection — matching
+`bug view`, so this change adds no bound and removes none. `$detect-evil` still runs
 against the branch diff at review time.
 
 ## AI surfaces
