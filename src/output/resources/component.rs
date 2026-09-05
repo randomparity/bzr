@@ -33,6 +33,7 @@ pub fn write_components<W: Write + ?Sized>(
     items: &[Component],
     format: OutputFormat,
     projection: &FieldProjection,
+    table_width: Option<usize>,
     out: &mut W,
 ) {
     write_formatted_projected(items, format, projection, out, |items, out| {
@@ -43,6 +44,7 @@ pub fn write_components<W: Write + ?Sized>(
                 headers: COMPONENT_HEADERS,
             },
             component_record,
+            table_width,
             out,
         );
     });

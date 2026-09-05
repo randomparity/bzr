@@ -6,6 +6,7 @@ use tracing_subscriber::EnvFilter;
 
 use bzr::cli::Cli;
 use bzr::error::{self, BzrError};
+use bzr::output::writers::{detected_stdout_width, resolve_table_width, TableWidth};
 use bzr::types::OutputFormat;
 
 // Mutation testing: `main` is the binary entry point. Defeating body-level
@@ -48,11 +49,19 @@ async fn main() -> ExitCode {
         suppress_stdout();
     }
 
+    let table_width = table_width_for_format(format, || {
+        resolve_table_width(
+            std::env::var_os("BZR_TABLE_WIDTH").as_deref(),
+            detected_stdout_width(),
+        )
+    });
+
     let stdout = std::io::stdout();
     let stderr = std::io::stderr();
     let mut out = stdout.lock();
     let mut err = stderr.lock();
-    let mut writers = bzr::output::writers::Writers::new(&mut out, &mut err);
+    let mut writers =
+        bzr::output::writers::Writers::with_table_width(&mut out, &mut err, table_width);
 
     if let Err(e) = bzr::dispatch(&cli, format, &mut writers).await {
         bzr::output::progress::error_event(
@@ -66,6 +75,16 @@ async fn main() -> ExitCode {
     }
 
     ExitCode::SUCCESS
+}
+
+fn table_width_for_format(
+    format: OutputFormat,
+    resolve: impl FnOnce() -> TableWidth,
+) -> TableWidth {
+    match format {
+        OutputFormat::Table => resolve(),
+        OutputFormat::Json | OutputFormat::Ndjson => TableWidth::default(),
+    }
 }
 
 /// Convert a `BzrError` exit code (1-13) to a `std::process::ExitCode`.

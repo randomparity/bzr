@@ -99,6 +99,7 @@ pub fn write_products<W: Write + ?Sized>(
     products: &[Product],
     format: OutputFormat,
     projection: &FieldProjection,
+    table_width: Option<usize>,
     out: &mut W,
 ) {
     write_formatted_projected(products, format, projection, out, |products, out| {
@@ -109,6 +110,7 @@ pub fn write_products<W: Write + ?Sized>(
                 headers: PRODUCT_HEADERS,
             },
             product_record,
+            table_width,
             out,
         );
     });

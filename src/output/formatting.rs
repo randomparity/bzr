@@ -3,6 +3,8 @@ use std::io::Write;
 use colored::{ColoredString, Colorize};
 use serde::Serialize;
 use tabled::builder::Builder;
+use tabled::settings::{peaker::PriorityMax, Width};
+use tabled::Table;
 
 use crate::types::flag::Flag;
 use crate::types::output::OutputFormat;
@@ -133,9 +135,18 @@ pub(super) fn write_formatted_projected<T, W>(
     }
 }
 
+pub(super) fn write_table<W: Write + ?Sized>(mut table: Table, width: Option<usize>, out: &mut W) {
+    if let Some(width) = width {
+        let minimum_width = 5 * table.count_columns() + 1;
+        table.with(Width::wrap(width.max(minimum_width)).priority(PriorityMax::right()));
+    }
+    let _ = writeln!(out, "{table}");
+}
+
 pub(super) fn write_table_records<W: Write + ?Sized>(
     headers: &[&str],
     rows: impl IntoIterator<Item = Vec<String>>,
+    width: Option<usize>,
     out: &mut W,
 ) {
     let mut builder = Builder::default();
@@ -143,7 +154,7 @@ pub(super) fn write_table_records<W: Write + ?Sized>(
     for row in rows {
         builder.push_record(row);
     }
-    let _ = writeln!(out, "{}", builder.build());
+    write_table(builder.build(), width, out);
 }
 
 #[derive(Clone, Copy)]
@@ -159,6 +170,7 @@ pub(super) fn write_records_or_empty<T, W>(
     items: &[T],
     table: TableSpec<'_>,
     to_record: impl Fn(&T) -> Vec<String>,
+    width: Option<usize>,
     out: &mut W,
 ) where
     W: Write + ?Sized,
@@ -167,7 +179,7 @@ pub(super) fn write_records_or_empty<T, W>(
         let _ = writeln!(out, "{}", table.empty_msg);
         return;
     }
-    write_table_records(table.headers, items.iter().map(to_record), out);
+    write_table_records(table.headers, items.iter().map(to_record), width, out);
 }
 
 // ── Detail-field helpers ────────────────────────────────────────────

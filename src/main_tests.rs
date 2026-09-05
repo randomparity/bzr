@@ -157,6 +157,32 @@ fn resolve_format_falls_back_to_tty_detection() {
 }
 
 #[test]
+fn table_width_for_format_skips_resolver_for_json_family() {
+    use std::cell::Cell;
+
+    let called = Cell::new(false);
+    let width = table_width_for_format(OutputFormat::Json, || {
+        called.set(true);
+        bzr::output::writers::resolve_table_width(None, Some(80))
+    });
+
+    assert_eq!(width, bzr::output::writers::TableWidth::default());
+    assert!(!called.get());
+}
+
+#[test]
+fn table_width_for_format_resolves_table_output() {
+    let width = table_width_for_format(OutputFormat::Table, || {
+        bzr::output::writers::resolve_table_width(None, Some(80))
+    });
+
+    assert_eq!(
+        width,
+        bzr::output::writers::resolve_table_width(None, Some(80))
+    );
+}
+
+#[test]
 fn exit_code_maps_known_error_to_exit_code() {
     // Spot-check that exit_code() produces an ExitCode for an in-range value.
     // The ExitCode type is opaque, so we only verify the call succeeds.

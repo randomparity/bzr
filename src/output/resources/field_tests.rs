@@ -9,6 +9,7 @@ fn capture_values(format: OutputFormat, values: &[FieldValue]) -> String {
         values,
         format,
         &crate::validation::fields::FieldProjection::none(),
+        None,
         &mut buf,
     );
     String::from_utf8(buf).unwrap()
@@ -16,7 +17,7 @@ fn capture_values(format: OutputFormat, values: &[FieldValue]) -> String {
 
 fn capture_aliases(format: OutputFormat, aliases: &[(&'static str, &'static str)]) -> String {
     let mut buf = Vec::new();
-    write_field_aliases(aliases, format, &mut buf);
+    write_field_aliases(aliases, format, None, &mut buf);
     String::from_utf8(buf).unwrap()
 }
 
