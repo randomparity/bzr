@@ -51,6 +51,7 @@ pub(super) async fn handle(
     let table = matches!(ctx.format(), OutputFormat::Table);
     let mut collected: Vec<Comment> = Vec::new();
     let mut wrote_any = false;
+    let mut skipped = 0_usize;
     for &bug_id in bug_ids {
         let fetched = match client
             .get_comments_since(bug_id, canonical_since.as_deref())
@@ -58,6 +59,7 @@ pub(super) async fn handle(
         {
             Ok(comments) => comments,
             Err(e) if permissive && e.is_permissive_bug_view_error() => {
+                skipped += 1;
                 let _ = writeln!(w.err, "bug {bug_id}: {e}");
                 continue;
             }
@@ -86,6 +88,13 @@ pub(super) async fn handle(
         }
     } else {
         write_comments(&collected, ctx.format(), &projection, w.out);
+    }
+    if skipped > 0 {
+        // One line a wrapper can grep, so "every bug failed" is distinguishable
+        // from "nothing to show" -- the payload cannot carry that, and under
+        // ndjson an all-failed run writes nothing to stdout at all.
+        let total = bug_ids.len();
+        let _ = writeln!(w.err, "{skipped} of {total} bugs could not be read");
     }
     Ok(())
 }

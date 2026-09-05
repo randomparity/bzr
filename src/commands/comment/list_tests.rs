@@ -429,6 +429,12 @@ async fn permissive_with_every_bug_failing_emits_empty_stdout_in_ndjson() {
         "ndjson stdout should be empty, got: {out:?}"
     );
     assert!(err.contains("98") && err.contains("99"), "stderr: {err}");
+    // stdout carries nothing at all here, so this line is the only signal that
+    // the run failed rather than found nothing.
+    assert!(
+        err.contains("2 of 2 bugs could not be read"),
+        "stderr: {err}"
+    );
 }
 
 #[tokio::test]
