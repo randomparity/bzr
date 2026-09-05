@@ -983,6 +983,19 @@ run_parity_report_fixture() {
         '| Product catalogues | `bzr product list --type` | parity | `compare/05-products-components/product-catalogues` |'
         '| Component create | `bzr component create`, `bzr component view` | parity | `compare/05-products-components/component-create` |'
         '| Red Hat component update | `bzr component update` | expected gap (#675) | `compare/05-products-components/component-update-redhat` |'
+        '| API-key placement by server version | `bzr whoami` | parity | `compare/06-auth-config-tls/api-key-placement` |'
+        '| Restricted password login | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/restricted-login` |'
+        '| Cached login token reuse | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/cached-token` |'
+        '| Logout token invalidation | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/logout` |'
+        '| bugzillarc three-file precedence | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/bugzillarc-precedence` |'
+        '| bugzillarc default URL | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/bugzillarc-default-url` |'
+        '| bugzillarc URL-substring section | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/bugzillarc-substring-section` |'
+        '| Disable TLS verification | `--server-tls-insecure` | parity | `compare/06-auth-config-tls/nosslverify` |'
+        '| Login-token request transport | no equivalent | expected gap (#676) | `compare/06-auth-config-tls/token-transport-gap` |'
+        '| Login and logout commands | no equivalent | expected gap (#681) | `compare/06-auth-config-tls/login-command-gap` |'
+        '| bugzillarc import | no equivalent | expected gap (#682) | `compare/06-auth-config-tls/bugzillarc-import-gap` |'
+        '| Client certificate configuration | no equivalent | surface gap (#677) | `compare/06-auth-config-tls/client-certificate-surface-gap` |'
+        '| Red Hat Bearer API-key transport | no equivalent | expected gap (#678) | `compare/06-auth-config-tls/bearer-gap` |'
     )
 
     for row in "${rows[@]}"; do
@@ -1021,6 +1034,69 @@ run_sidecar_stop_failure_fixture() (
         return 1
     fi
     assert_equals fake_runtime "$PYBZ_RUNTIME" "failed sidecar ownership"
+)
+
+run_auth_config_tls_phase_fixture() (
+    local phase="$PYBZ_DIR/../compare/06-auth-config-tls.sh" fixture_output
+    COMPARE_EXCHANGE_DIR=$(mktemp -d)
+    fixture_output=$(mktemp)
+    trap 'rm -rf "$COMPARE_EXCHANGE_DIR"; rm -f "$fixture_output"' EXIT
+    if [[ ! -r $phase ]]; then
+        printf 'missing auth/config/TLS comparison phase\n' >&2
+        return 1
+    fi
+
+    TEST_ID_PREFIX=compare CURRENT_TEST_GROUP=06-auth-config-tls BZ_VERSION=bz50
+    r11_api_key_control() { return 0; }
+    r11_login_control() { return 0; }
+    r11_cached_control() { [[ ${R11_FIXTURE_CACHED_FAIL:-0} -eq 0 ]]; }
+    r11_logout_control() { return 0; }
+    r11_bugzillarc_control() { [[ ${R11_FIXTURE_OMIT_SYSTEM_RC:-0} -eq 0 ]]; }
+    r11_tls_control() { return 0; }
+    r11_certificate_control() { return 0; }
+    r11_bearer_control() { return 0; }
+    r11_parser_gap() { return 0; }
+
+    reset_r11_fixture() {
+        PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
+        SEEN_TEST_IDS=$'\n' TEST_RESULT_PENDING=0
+        : >"$fixture_output"
+    }
+    reset_r11_fixture
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    assert_equals 8 "$PASS_COUNT" "auth/config/TLS pass count"
+    assert_equals 0 "$FAIL_COUNT" "auth/config/TLS failure count"
+    assert_equals 5 "$GAP_COUNT" "auth/config/TLS gap count"
+    for issue in 676 681 682 677 678; do
+        if ! grep -Eq "compare/06-auth-config-tls/.*GAP \(#${issue}\)$" \
+            "$fixture_output"; then
+            printf 'auth/config/TLS fixture omitted gap owner #%s\n' "$issue" >&2
+            return 1
+        fi
+    done
+
+    reset_r11_fixture
+    R11_FIXTURE_CACHED_FAIL=1
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    unset R11_FIXTURE_CACHED_FAIL
+    if [[ $FAIL_COUNT -lt 2 ]] || grep -Fq 'GAP (#676)' "$fixture_output"; then
+        printf 'cached-token positive-control failure became gap #676\n' >&2
+        return 1
+    fi
+
+    reset_r11_fixture
+    R11_FIXTURE_OMIT_SYSTEM_RC=1
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    unset R11_FIXTURE_OMIT_SYSTEM_RC
+    if ! grep -Fq \
+        '[compare/06-auth-config-tls/bugzillarc-precedence] three-file bugzillarc precedence ... FAIL' \
+        "$fixture_output"; then
+        printf 'omitted system bugzillarc layer did not fail precedence proof\n' >&2
+        return 1
+    fi
 )
 
 run_namespace_proxy_helper_fixture() (
@@ -2935,6 +3011,7 @@ run_sidecar_wrapper_fixture
 run_transport_observation_fixture
 run_lifecycle_phase_fixture
 run_api_key_identity_request_fixture
+run_auth_config_tls_phase_fixture
 run_parity_report_fixture
 run_sidecar_stop_failure_fixture
 run_namespace_proxy_helper_fixture

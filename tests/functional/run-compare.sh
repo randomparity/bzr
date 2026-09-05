@@ -90,6 +90,7 @@ trap cleanup EXIT
 COMPARE_EXCHANGE_DIR="$FUNC_CONFIG_DIR/compare"
 mkdir -p "$COMPARE_EXCHANGE_DIR"
 COMPARE_ADMIN_EMAIL="admin@test.bzr"
+COMPARE_ADMIN_PASSWORD="FuncTest1!"
 BZR_COMPARE_API_KEY="FuncTest0123456789abcdef0123456789abcdef"
 _compare_adapter="$SCRIPT_DIR/compare/python-bugzilla-adapter.py"
 if [[ ! -r $_compare_adapter ]]; then
@@ -105,7 +106,8 @@ fi
 pybz_stage_proxy "$SCRIPT_DIR/tls-proxy.py" tls-proxy.py >/dev/null
 pybz_stage_proxy "$SCRIPT_DIR/redhat-shape-proxy.py" redhat-proxy.py >/dev/null
 export XDG_CONFIG_HOME="$FUNC_CONFIG_DIR"
-export BZ_URL BZR_BIN COMPARE_EXCHANGE_DIR COMPARE_ADMIN_EMAIL BZR_COMPARE_API_KEY
+export BZ_URL BZR_BIN COMPARE_EXCHANGE_DIR COMPARE_ADMIN_EMAIL COMPARE_ADMIN_PASSWORD
+export BZR_COMPARE_API_KEY
 CURRENT_TEST_GROUP=""
 _compare_runtime="${_compare_runtime:-}"
 
@@ -128,7 +130,8 @@ for _phase in \
     02-comments \
     03-attachments \
     04-users-groups \
-    05-products-components; do
+    05-products-components \
+    06-auth-config-tls; do
     if [[ $_phase == 03-attachments ]]; then
         seed_comparison_attachment_flag_type
     fi
