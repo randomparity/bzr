@@ -37,7 +37,7 @@ where reading N bugs costs N process invocations.
 
 Multi-ID `--json` emits **one flat array of `Comment` records**, in argument
 order, each carrying its existing `bug_id`. Consumers group with
-`jq 'group_by(.bug_id)'`.
+`jq '.data | group_by(.bug_id)'`.
 
 This is not a new published shape. `comment list` already emits
 `{"schema_version": "3.0.0", "data": [<Comment>, ...]}`; multi-ID produces the
@@ -74,27 +74,45 @@ Doing this at the entry point rather than inside each transport's extractor is
 deliberate — one fix covering REST, XML-RPC, and the Hybrid fallback, instead
 of one guard per path.
 
+### `bug_id` survives the projection flags on a multi-ID call
+
+`FieldProjection::apply` recurses into an array and retains only the named keys
+per element, so `comment list 1 2 3 --json --fields id,creator` would return a
+merged array with no `bug_id` at all — attribution silently gone, exit 0, no
+warning. That form is not hypothetical: `docs/bzr-cli.md` ships
+`--fields id,creator,creation_time` as the token-saving shape for agents and a
+functional test already exercises its single-ID version.
+
+So whenever more than one bug ID is requested, `bug_id` is forced into the
+resolved include set and removed from the exclude set after `projection_for`
+returns, and one line goes to stderr saying so:
+
+```text
+--fields: keeping bug_id; it is what attributes each comment to its bug
+```
+
+This is the operator's decision, and it is the cheapest of the options: it
+breaks no currently-working invocation, and it follows `bug view`'s established
+habit of doing the sensible thing and warning on stderr. Rejected: rejecting
+the flag combination at exit 7, accepting the loss with documentation, and
+switching to a `{bugs, failed}` wrapper.
+
+Single-ID calls are untouched — one bug's comments need no attribution field to
+stay attributable, so `--fields id` still projects to exactly one key there.
+
 ## Transport strategy: loop on both
 
 Both transports fetch one bug per call, via the existing per-bug
 `client.get_comments_since(bug_id, since)`. XML-RPC's native `Bug.comments`
-`ids` array is **not** used for batching. See
-[ADR-0047](../../adr/0047-comment-list-client-side-multi-id-loop.md) for the
-decision and its rejected alternatives; the summary is:
+`ids` array is **not** used for batching.
+[ADR-0047](../../adr/0047-comment-list-client-side-multi-id-loop.md) is the
+record: it carries the decision, its grounds, and its five rejected
+alternatives, and this spec does not restate them.
 
-- REST cannot batch at all. Bugzilla's REST comment resource is
-  `bug/{id_or_alias}/comment` with a single path segment and no `ids` query
-  parameter, so a REST loop is forced regardless.
-- Batching only on XML-RPC would make the same command's per-ID failure
-  behavior depend on which transport the server exposes. `bug view` rejected
-  server-side multi-ID batching for exactly this reason: it "silently drops
-  inaccessible IDs and would lose per-ID error detail."
-- The win the issue actually asks for is N-1 *process invocations* — config
-  load, credential resolution, API-mode detection, TLS handshake — not N-1 HTTP
-  round trips. A client-side loop captures that win in full, and reqwest's
-  connection pool keeps the N requests on one connection.
-- Looping keeps `dispatch_xmlrpc_first`'s Hybrid REST fallback at per-bug
-  granularity, which is where it already operates today.
+The one fact the rest of this spec depends on: every requested bug costs one
+call on every transport, so the loop's failure handling below is per bug, and
+`dispatch_xmlrpc_first`'s Hybrid REST fallback keeps operating at per-bug
+granularity as it does today.
 
 ## CLI surface
 
@@ -122,20 +140,26 @@ aliases, and `Bug.comments` / the REST comment route are ID-keyed.
 
 ### Input validation
 
-Checked at handler entry, before any network call, all exit 7
+One condition is checked at handler entry, before any network call, and exits 7
 (`BzrError::InputValidation`):
 
 | Condition | Message |
 |---|---|
-| more than 100 IDs | `comment list accepts at most 100 bug ids` |
 | `--permissive` with exactly one ID | `--permissive only meaningful with multiple bug ids` |
 
-The 100-ID cap matches `bug adjacency`'s `MAX_REQUESTS`
-(`src/commands/bug/adjacency.rs:13`). Each ID is one round trip, so an
-unbounded list is an unbounded fan-out; the cap is the same number the sibling
-verb already teaches. Duplicate IDs are not rejected or deduplicated — `bug
-view` fetches and prints duplicates as given, and matching that is cheaper than
-a rule users would have to learn.
+**There is no cap on the number of IDs.** An earlier draft borrowed
+`bug adjacency`'s `MAX_REQUESTS = 100`; the operator removed it. `bug view` is
+the sibling this design follows, and it loops client-side per ID with no bound
+(`src/commands/bug/view.rs`, `fetch_batch` — no `MAX` constant, no length
+check). `bug adjacency`'s cap covers a different shape: it fans out several
+requests *per* ID. Capping `comment list` would newly introduce a disagreement
+between two sibling read verbs — a script that works against a 150-ID list with
+`bug view` would hard-fail on `comment list` — and it buys no protection the
+sequential loop does not already have.
+
+Duplicate IDs are not rejected or deduplicated — `bug view` fetches and prints
+duplicates as given, and matching that is cheaper than a rule users would have
+to learn.
 
 ## Per-bug failure handling
 
@@ -180,6 +204,38 @@ apply identically to `Bug.comments`, and one predicate keeps `bug view` and
 whose body is not a Bugzilla error object becomes `BzrError::HttpStatus`, which
 the predicate rejects — so a bare 404 or a proxy error page aborts even under
 `--permissive`, which is the intended behavior for an unclassifiable failure.
+
+### A missing `bugs` key on XML-RPC becomes a per-ID failure
+
+`extract_comments` (`src/xmlrpc/resources/comment.rs`) currently returns
+`Ok(Vec::new())` when `lookup_bug_entry` finds no entry for the requested bug.
+At N=1 that surfaces as `No comments.` — ambiguous but scoped to the one bug
+the operator asked about. At N>1 it is silent data loss: the bug contributes no
+records to the flat array, gets no table header, and produces no stderr line,
+so a caller cannot tell that bug 43 was dropped from `comment list 42 43 44`.
+
+This change is what introduces N>1, so that path is this feature's error
+handling rather than adjacent breakage. A missing key now yields
+`BzrError::NotFound { resource: "bug", id }`, which
+`is_permissive_bug_view_error()` already admits, so it flows through the loop
+exactly as a REST-side per-ID failure does: aborts by default, one stderr line
+and continue under `--permissive`.
+
+The fix goes in `extract_comments`, not in the shared `lookup_bug_entry`
+mapper — other XML-RPC resources call that helper and their semantics are not
+in scope here.
+
+Two consequences, both authorized rather than incidental:
+
+- Single-ID XML-RPC behavior changes: a server answering with a `bugs` map that
+  omits the requested key previously printed `No comments.` and now exits with
+  a not-found error. Conflating "I have no record of that bug" with "that bug
+  has zero comments" is the defect being removed. A bug that exists with an
+  empty thread is unaffected — Bugzilla returns
+  `{bugs: {"42": {comments: []}}}` for that, key present.
+- The same call path is shared by `bug history`, `bug clone`, and
+  `attachment upload --comment-private`, so those commands also stop treating a
+  missing key as an empty thread.
 
 ### When every bug fails
 
@@ -232,7 +288,7 @@ directly testable.
 | Multi-ID, `--permissive`, unclassifiable HTTP failure | abort | that error's code |
 | Multi-ID, `--permissive`, transport/auth failure | abort | that error's code |
 | `--permissive` with one ID | rejected before any call | 7 |
-| More than 100 IDs | rejected before any call | 7 |
+| XML-RPC `bugs` map omits the requested key | per-ID failure (`NotFound`), same as any other | that error's code, or 0 under `--permissive` |
 | Unknown `--fields` | rejected before any call, unchanged | 7 |
 
 Partial success does not use `BzrError::BatchPartialFailure` (exit 11): failed
@@ -260,8 +316,28 @@ this design deliberately diverges from it. See ADR-0047.
 - every bug failing under `--permissive`: exit 0, `data: []` in JSON and
   `No comments.` in table, with one stderr line per bug;
 - `--permissive` with one ID exits 7 before any request is made;
-- 101 IDs exits 7 before any request is made;
-- `--since` and `--fields` apply to every bug in a multi-ID call.
+- `--since` is threaded into every iteration, not just the first — mount each
+  bug's path with a `new_since` query-param matcher and `.expect(1)`, so an
+  unthreaded value fails the mock expectation;
+- `--fields` applies to every bug, **and `bug_id` survives it** on a multi-ID
+  call: `--fields id` yields rows with `id` and `bug_id`, and stderr carries
+  the retention note. `--exclude-fields bug_id` on a multi-ID call keeps it
+  too;
+- `--fields id` on a **single**-ID call still yields exactly one key, with no
+  retention note — the override is multi-ID only.
+
+**Unit (`src/xmlrpc/resources/comment_tests.rs`):** `Bug.comments` answering
+with a `bugs` map that omits the requested key yields
+`BzrError::NotFound`, not an empty vector; a map carrying the key with an
+empty `comments` array still yields `Ok(vec![])`.
+
+**Unit (multi-ID over XML-RPC, `src/commands/comment/list_tests.rs`):** using
+`test_client_xmlrpc` — already imported by
+`src/client/resources/comment_tests.rs` — a two-bug call where the second bug's
+key is missing aborts by default and, under `--permissive`, exits 0 with a
+stderr line naming that bug and the first bug's comments on stdout. No unit
+test in the design's first draft exercised XML-RPC at all; every one ran
+through `test_client`, which is `ApiMode::Rest`.
 
 **Unit (`src/client/resources/comment_tests.rs`):** a REST response whose
 comment records omit `bug_id` comes back with `bug_id` backfilled from the
@@ -274,8 +350,11 @@ a side effect.
 emits the bug number.
 
 **Unit (`src/cli/comment_tests.rs`):** `comment list 1 2 3` parses to three
-IDs; a non-numeric ID is a `ValueValidation` clap error; zero IDs is a clap
-error.
+IDs and `--permissive` binds. The file's existing
+`parse_comment_list_requires_bug_id` and
+`parse_comment_list_rejects_non_numeric_bug_id` already pin the arity floor and
+the value-parse failure; they must keep passing unchanged rather than being
+duplicated.
 
 **Functional (`tests/functional/phases/15-comments.sh`):** against a real
 container, using `$BUG1` plus a second bug the phase creates with `make_bug`
@@ -285,10 +364,12 @@ and comments on, so the cases are self-contained —
   distinct, and matching the requested IDs;
 - multi-ID table shows a `Bug #<id>` header for each bug;
 - `--permissive` with one real and one nonexistent ID exits 0 and still returns
-  the real bug's comments;
+  the real bug's comments — asserted as **both** "every returned record belongs
+  to the real bug" **and** "at least one record came back", since a `jq all`
+  over an empty array is vacuously true;
 - the same pair without `--permissive` exits non-zero;
 - `--permissive` with a single ID exits 7;
-- 101 IDs exits 7;
+- multi-ID with `--fields id` keeps `bug_id` in every record;
 - the credentialless path runs the multi-ID JSON case through
   `run_bzr_raw --json --server public`, the anonymous-server pattern
   `08-bugs.sh:108` already uses.
@@ -305,9 +386,13 @@ and comments on, so the cases are self-contained —
   row or bullet: under `--json`, a bug that failed is indistinguishable from a
   bug with no comments, and the failed IDs are on stderr only. An agent
   consuming this output meets the caveat where it reads the flag.
+- Both documents state, on the `--fields` row or bullet, that `bug_id` is
+  retained on a multi-ID call regardless of the projection flags, and why.
 - `content/skills/bzr-reference/reference/commands.md`: the `comment` section
-  gains the multi-ID form, the flat-array grouping idiom, and the
-  `--permissive` note.
+  gains the multi-ID form, the flat-array grouping idiom
+  (`jq '.data | group_by(.bug_id)'` — the payload is enveloped, so the array
+  lives at `.data`, matching how `bug view` is already documented), the
+  `--permissive` note, and the `bug_id` retention rule.
 - `src/cli/comment.rs` doc comment: describes multi-ID behavior. It must not
   reintroduce a `tags` claim — PR #701 removed a false one, and the field does
   not exist yet (issue #700).
