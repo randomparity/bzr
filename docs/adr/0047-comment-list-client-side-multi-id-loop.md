@@ -102,7 +102,7 @@ all-failed run writes nothing to stdout at all.
   (exit 2), with different stderr text. Exit codes are a published contract
   here, so that is a change rather than a no-op. The same shift applies on
   **REST**, not only XML-RPC: `{"bugs": {}}` used to surface as `Deserialize`
-  (exit 9) and is now `NotFound` (exit 2). REST-only deployments — the ones
+  (exit 8) and is now `NotFound` (exit 2). REST-only deployments — the ones
   with no `xmlrpc.cgi` at all — are otherwise the readers most likely to
   conclude they are unaffected.
 - The keyed REST lookup also repairs a misattribution that predates this

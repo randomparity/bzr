@@ -254,7 +254,7 @@ Two consequences, both authorized rather than incidental:
   exit code from 10 (`DataIntegrity`, reached after an empty comment list) to 2,
   with different stderr text — a change, not a no-op, since exit codes are a
   published contract. The shift is not XML-RPC-only: on REST, `{"bugs": {}}`
-  moves from `Deserialize` (exit 9) to `NotFound` (exit 2) for the same three
+  moves from `Deserialize` (exit 8) to `NotFound` (exit 2) for the same three
   callers.
 
 ### When every bug fails

@@ -90,13 +90,17 @@ if [[ -n "$BUG1" ]] && [[ -n "$_MULTI_BUG" ]]; then
     # $BUG1 is a low single-digit id while $_MULTI_BUG is two digits, so a bare
     # "Bug #1" would be satisfied by "Bug #13" -- the second bug's header
     # passing the first bug's assertion, which is the regression this catches.
+    # assert_success and assert_stdout_contains each call test_fail themselves,
+    # so the count gate gets its own branch: an `else` on the whole chain would
+    # report a second FAIL for a failure already named.
     if assert_success &&
         assert_stdout_contains "^Bug #$BUG1\$" &&
-        assert_stdout_contains "^Bug #$_MULTI_BUG\$" &&
-        [[ $(grep -c '^Bug #' "$BZR_STDOUT") -eq 2 ]]; then
-        test_pass
-    else
-        test_fail "expected exactly two anchored Bug # headers"
+        assert_stdout_contains "^Bug #$_MULTI_BUG\$"; then
+        if [[ $(grep -c '^Bug #' "$BZR_STDOUT") -eq 2 ]]; then
+            test_pass
+        else
+            test_fail "expected exactly two Bug # headers"
+        fi
     fi
 else test_skip "no BUG1 or second bug"; fi
 
