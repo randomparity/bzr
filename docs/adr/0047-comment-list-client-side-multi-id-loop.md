@@ -74,8 +74,21 @@ resources call.
   response used to print `No comments.` and now exits not-found. A bug that
   genuinely has an empty thread is unaffected, because Bugzilla returns the key
   with an empty array for that case.
-- `bug history`, `bug clone`, and `attachment upload --comment-private` share
-  that call path, so they stop treating a missing key as an empty thread too.
+- On Hybrid, that `NotFound` is **not** a transport failure, so
+  `dispatch_xmlrpc_first` does not fall back to REST for it
+  (`is_transport_failure` admits only `Http`, `HttpStatus`, and `XmlRpc`, and
+  its own doc comment names `NotFound` as non-retriable). A bug the REST route
+  could have served is reported not-found when XML-RPC omits its key. The
+  "one failure story" bullet above is about how a failure is *classified and
+  reported*, not about which transports get consulted.
+- Three other commands share that call path, and the change lands differently
+  on each: `bug clone` goes from cloning without a description to aborting at
+  exit 6, since it propagates the error with `?` — a new hard-failure mode on a
+  mutating command, and the consequence most worth knowing; `bug history` goes
+  from a silent empty correlation set to a warned one, which it already handles;
+  `attachment upload --comment-private` is unaffected in outcome, because it
+  already produced a `DataIntegrity` error when it could not locate the
+  comment.
 - N bugs cost N requests on every transport. The win the issue asks for — N-1
   process invocations, each of which today re-loads config, resolves
   credentials, detects API mode, and completes a TLS handshake — is captured in
@@ -122,9 +135,8 @@ resources call.
   would make the two sibling read verbs disagree about what `--permissive`
   means.
 - **Fetch the bugs concurrently.** judgment: it multiplies load against a
-  shared Bugzilla instance for a read a triage operator runs interactively, and
-  buys latency the 100-ID cap already bounds. `bug view`'s multi-ID path is
-  sequential for the same reason.
+  shared Bugzilla instance for a read a triage operator runs interactively.
+  `bug view`'s multi-ID path is sequential for the same reason.
 - **Report per-bug failures in the payload, via a `{comments, failed}` wrapper
   like `bug view`'s.** verified: `comment list --json` already publishes
   `{"schema_version": "3.0.0", "data": [<Comment>, …]}`
