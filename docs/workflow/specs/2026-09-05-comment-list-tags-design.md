@@ -49,7 +49,12 @@ and body:
 ```
 
 Input order is preserved and tags are joined with `, `. Untagged comments omit the metadata
-line. Private marking and comment body formatting do not change.
+line. Unicode control characters in tag values are rendered as visible Rust-style escapes (for
+example, `\n`, `\r`, and `\u{1b}`), keeping the metadata on one terminal-safe line while
+preserving printable Unicode. Private marking and comment body formatting do not change.
+
+JSON and NDJSON retain the raw tag strings; their normal JSON encoding escapes control bytes on
+the wire, and decoding restores the server-provided values without table-specific escaping.
 
 The `comment list` long help again says the printed fields include tags. The CLI reference
 adds tags to the command description/example so documentation matches the executable.

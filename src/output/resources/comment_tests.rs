@@ -99,6 +99,25 @@ fn write_comments_table_renders_tags() {
 }
 
 #[test]
+fn write_comments_table_escapes_tag_controls() {
+    let mut comment = make_comment(2, "body");
+    comment.tags = vec![
+        "line\nbreak".into(),
+        "carriage\rreturn".into(),
+        "escape\u{1b}[2J".into(),
+        "café".into(),
+    ];
+
+    let output = capture(OutputFormat::Table, &[comment]);
+
+    assert!(output
+        .contains("  Tags: line\\nbreak, carriage\\rreturn, escape\\u{1b}[2J, café\n\n  body"));
+    assert!(!output.contains("line\nbreak"));
+    assert!(!output.contains("carriage\rreturn"));
+    assert!(!output.contains('\u{1b}'));
+}
+
+#[test]
 fn write_comments_table_handles_missing_creator_and_unicode() {
     let comments = vec![Comment {
         id: 1,
@@ -131,6 +150,23 @@ fn write_comments_json_one_comment_via_write() {
         parsed[0]["tags"],
         serde_json::json!(["needs-info", "reviewed"])
     );
+}
+
+#[test]
+fn write_comments_json_preserves_raw_tag_controls() {
+    let raw_tags = vec![
+        "line\nbreak".to_string(),
+        "carriage\rreturn".to_string(),
+        "escape\u{1b}[2J".to_string(),
+        "café".to_string(),
+    ];
+    let mut comment = make_comment(7, "json body");
+    comment.tags.clone_from(&raw_tags);
+
+    let output = capture(OutputFormat::Json, &[comment]);
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
+
+    assert_eq!(parsed[0]["tags"], serde_json::json!(raw_tags));
 }
 
 #[test]

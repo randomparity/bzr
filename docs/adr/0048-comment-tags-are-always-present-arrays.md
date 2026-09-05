@@ -26,7 +26,10 @@ JSON and NDJSON always serialize `tags`, including `[]`; `COMMENT_FIELDS` includ
 so projection can select or exclude it. Single-ID `--fields tags` emits only that field;
 multi-ID calls continue to retain `bug_id` beside it under ADR 0049's attribution contract.
 Table output adds `Tags: <comma-separated values>` only for non-empty tag sets, avoiding an
-empty label on every untagged comment.
+empty label on every untagged comment. At that table-rendering boundary, Unicode control
+characters are made visible with Rust-style escapes while printable Unicode, tag order, and all
+other spelling are preserved. JSON and NDJSON keep the raw tag strings and rely only on normal
+JSON encoding, so decoding restores the original values.
 
 Publish `tags` as a required array of strings in `schemas/comment.json`. This is an additive
 payload change under ADR 0007, so advance `SCHEMA_VERSION` from `3.0.0` to `3.0.1` and update
@@ -40,6 +43,8 @@ output, so `[]` means that no tags were present in the returned payload; it does
 an untagged comment from tags omitted by server visibility policy. XML-RPC follows the existing
 optional-array tolerance used elsewhere in its resource mappers. Existing consumers that reject
 unknown JSON keys can use the schema version to detect the additive contract revision.
+Control-bearing tags cannot inject terminal instructions or additional table lines; consumers of
+JSON and NDJSON still receive their original values after decoding.
 
 ## Considered & rejected
 
