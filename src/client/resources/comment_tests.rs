@@ -498,3 +498,51 @@ async fn get_comments_since_rest_propagates_attachment_id() {
     assert_eq!(comments.len(), 1);
     assert_eq!(comments[0].attachment_id, Some(99));
 }
+
+#[tokio::test]
+async fn get_comments_since_backfills_absent_bug_id() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "comments": [{
+                "id": 1,
+                "text": "flat envelope, no bug_id",
+                "creator": "user@test.com",
+                "creation_time": "2025-01-01T00:00:00Z",
+                "is_private": false,
+                "count": 0
+            }]
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let comments = client.get_comments_since(42, None).await.unwrap();
+    assert_eq!(comments.len(), 1);
+    assert_eq!(comments[0].bug_id, Some(42));
+}
+
+#[tokio::test]
+async fn get_comments_since_preserves_server_bug_id() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": { "42": { "comments": [{
+                "id": 1,
+                "bug_id": 7,
+                "text": "server says 7",
+                "creator": "user@test.com",
+                "creation_time": "2025-01-01T00:00:00Z",
+                "is_private": false,
+                "count": 0
+            }]}}
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let comments = client.get_comments_since(42, None).await.unwrap();
+    assert_eq!(comments[0].bug_id, Some(7));
+}
