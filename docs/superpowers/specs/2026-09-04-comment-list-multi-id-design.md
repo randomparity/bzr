@@ -183,7 +183,14 @@ REST Bugzilla error body and an XML-RPC fault map to the same variant
 (`src/xmlrpc/protocol/fault.rs:22`) — so the line reads:
 
 ```text
-bug 999: API error 101: Bug #999 does not exist.
+bug 999: Bugzilla API error: Bug #999 does not exist. (code 101)
+```
+
+A trailing line then reports the total, so an all-failed run is distinguishable
+from one that found nothing:
+
+```text
+2 of 2 bugs could not be read
 ```
 
 **What this costs, stated rather than assumed:** failures are not carried in
@@ -240,12 +247,13 @@ Two consequences, both authorized rather than incidental:
 - Three other commands share that call path, and the change lands differently
   on each. `bug clone` propagates the error with `?`
   (`src/commands/bug/clone.rs:137`), so it goes from cloning without a
-  description to aborting at exit 6 — a new hard-failure mode on a mutating
-  command, and the consequence most worth knowing. `bug history` goes from a
-  silent empty correlation set to a warned one, which it already handles.
-  `attachment upload --comment-private` is unaffected in outcome, since it
-  already produced a `DataIntegrity` error when it could not locate the
-  comment.
+  description to aborting at **exit 2** (`EXIT_CODE_NOT_FOUND`) — a new
+  hard-failure mode on a mutating command, and the consequence most worth
+  knowing. `bug history` goes from a silent empty correlation set to a warned
+  one, which it already handles. `attachment upload --comment-private` changes
+  exit code from 10 (`DataIntegrity`, reached after an empty comment list) to 2,
+  with different stderr text — a change, not a no-op, since exit codes are a
+  published contract.
 
 ### When every bug fails
 

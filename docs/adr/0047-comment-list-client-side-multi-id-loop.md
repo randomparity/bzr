@@ -44,11 +44,20 @@ exclude set, with one stderr line saying so. Otherwise
 `bug_id` — the documented token-saving form for agents, silently
 unattributable.
 
-The ID list is **not** capped. And a `bugs` map that omits the requested key on
-the XML-RPC path becomes `BzrError::NotFound` rather than an empty comment
-list, so it flows through the loop as an ordinary per-ID failure. The fix goes
-in `extract_comments`, not in the shared `lookup_bug_entry` mapper that other
-resources call.
+The ID list is **not** capped. And on **both** transports a response that does
+not carry the requested bug's entry becomes `BzrError::NotFound` rather than an
+empty comment list, so it flows through the loop as an ordinary per-ID failure:
+on XML-RPC in `extract_comments` (not in the shared `lookup_bug_entry` mapper
+other resources call), and on REST by looking the `bugs` map up **by the
+requested key** instead of taking whichever key came first. Taking the first key
+would relabel another bug's comments as this one's — attribution the flat array
+cannot detect, and the same ID-equality rule ADR-0024 already sets for
+`bug adjacency`.
+
+Under `--permissive`, a trailing stderr line reports how many of the requested
+bugs could not be read, so an all-failed run is distinguishable from one that
+found nothing — the payload cannot carry that, and under `--output ndjson` an
+all-failed run writes nothing to stdout at all.
 
 ## Consequences
 
@@ -82,13 +91,16 @@ resources call.
   "one failure story" bullet above is about how a failure is *classified and
   reported*, not about which transports get consulted.
 - Three other commands share that call path, and the change lands differently
-  on each: `bug clone` goes from cloning without a description to aborting at
-  exit 6, since it propagates the error with `?` — a new hard-failure mode on a
-  mutating command, and the consequence most worth knowing; `bug history` goes
-  from a silent empty correlation set to a warned one, which it already handles;
-  `attachment upload --comment-private` is unaffected in outcome, because it
-  already produced a `DataIntegrity` error when it could not locate the
-  comment.
+  on each. `bug clone` propagates the error with `?`
+  (`src/commands/bug/clone.rs:137`), so it goes from cloning without a
+  description to aborting at **exit 2** (`EXIT_CODE_NOT_FOUND`) — a new
+  hard-failure mode on a mutating command, and the consequence most worth
+  knowing. `bug history` goes from a silent empty correlation set to a warned
+  one, which it already handles. `attachment upload --comment-private` changes
+  exit code: it used to fall through to a `DataIntegrity` error (exit 10) when
+  the comment could not be located, and now fails earlier with `NotFound`
+  (exit 2), with different stderr text. Exit codes are a published contract
+  here, so that is a change rather than a no-op.
 - N bugs cost N requests on every transport. The win the issue asks for — N-1
   process invocations, each of which today re-loads config, resolves
   credentials, detects API mode, and completes a TLS handshake — is captured in
