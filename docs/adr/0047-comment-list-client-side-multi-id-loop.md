@@ -40,8 +40,24 @@ overwritten.
 ## Consequences
 
 - One failure story: a per-bug error is classified and reported the same way
-  whichever transport served it, and `--permissive` behaves identically on
+  whichever transport served it. An XML-RPC fault becomes
+  `BzrError::Api { code }` (`src/xmlrpc/protocol/fault.rs:22`) and a REST
+  Bugzilla error body becomes the same variant, so
+  `is_permissive_bug_view_error` — which admits `NotFound` and `Api` with codes
+  100/101/102 — classifies both alike and `--permissive` behaves identically on
   REST, XML-RPC, and Hybrid.
+- Per-bug failures are reported on stderr, one line each, and the `--json`
+  payload stays a bare `Comment` array. So a consumer reading only stdout
+  cannot tell a bug that failed under `--permissive` from a bug with no
+  comments; the failed IDs are on stderr and nowhere else. Without
+  `--permissive` the ambiguity cannot arise, because the first failure aborts.
+- One residual the loop does not remove: on XML-RPC, a server that answers
+  `Bug.comments` with a `bugs` map lacking the requested key — rather than
+  faulting — yields an empty comment list rather than an error
+  (`src/xmlrpc/resources/comment.rs`, `lookup_bug_entry` returning `None`).
+  That bug is then indistinguishable from an empty thread with or without
+  `--permissive`. This is the existing single-ID behavior, carried forward
+  unchanged.
 - N bugs cost N requests on every transport. The win the issue asks for — N-1
   process invocations, each of which today re-loads config, resolves
   credentials, detects API mode, and completes a TLS handshake — is captured in
@@ -55,9 +71,17 @@ overwritten.
   would have to reproduce this per-ID failure contract to be adoptable, and
   that is the cost this decision is declining to pay now rather than
   foreclosing.
-- The backfill makes `bug_id` reliable for every consumer of
-  `get_comments_since`, including the existing single-ID path and
-  `attachment upload --comment-private`, not just the new multi-ID one.
+- The backfill changes single-ID `--json` output on the deployments that omit
+  the field: `bug_id` moves from `null` to the requested ID on the Bugzilla
+  5.0.x flat `{"comments": […]}` envelope and on XML-RPC responses that leave
+  it out. That is a fix, not a regression — `schemas/comment.json` declares
+  `bug_id` as a required `integer`, so the previous `null` was already
+  schema-invalid — but it is a visible change to a published payload and is
+  documented rather than claimed away.
+- No existing consumer of `get_comments_since` reads `bug_id`
+  (`attachment upload --comment-private` matches on `attachment_id`,
+  `bug history` on creator plus creation time, `bug clone` on `count == 0`), so
+  the backfill's effect today is confined to `comment list` output.
 
 ## Considered & rejected
 
@@ -80,6 +104,19 @@ overwritten.
   shared Bugzilla instance for a read a triage operator runs interactively, and
   buys latency the 100-ID cap already bounds. `bug view`'s multi-ID path is
   sequential for the same reason.
+- **Report per-bug failures in the payload, via a `{comments, failed}` wrapper
+  like `bug view`'s.** verified: `comment list --json` already publishes
+  `{"schema_version": "3.0.0", "data": [<Comment>, …]}`
+  (`src/output/mod.rs:10`, `src/output/formatting.rs`), so a wrapper replaces
+  `.data[]` with `.data.comments[]` — a breaking change to a shipped contract,
+  for attribution `Comment.bug_id` already carries. The wrapper exists on
+  `bug view` because `Bug` has no field naming the requested ID; `Comment`
+  does.
+- **Drop `--permissive` and always abort on the first per-bug failure.**
+  judgment: it removes the stdout ambiguity above at no code cost, but issue
+  #699's proposed approach asks for `--permissive`-style per-bug handling by
+  name, and one stale ID would otherwise fail an entire triage read — the cost
+  the issue exists to remove.
 - **Backfill `bug_id` inside each transport's extractor.** judgment: three
   guards — REST `bugs` envelope, REST flat envelope, XML-RPC — where the entry
   point needs one, and a fourth path added later would silently skip it.
