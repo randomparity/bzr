@@ -122,9 +122,17 @@ async fn xmlrpc_get_comments_since_serializes_new_since() {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     let mock = MockServer::start().await;
+    // The bug's key is present with an empty `comments` array — a real empty
+    // thread. A `bugs` map with no entry for the bug means "no record of it"
+    // and is `NotFound` since #699, which would mask what this test asserts:
+    // that `new_since` reaches the request body.
     let empty_response = r#"<?xml version="1.0"?>
 <methodResponse><params><param><value><struct>
-  <member><name>bugs</name><value><struct></struct></value></member>
+  <member><name>bugs</name><value><struct>
+    <member><name>42</name><value><struct>
+      <member><name>comments</name><value><array><data></data></array></value></member>
+    </struct></value></member>
+  </struct></value></member>
 </struct></value></param></params></methodResponse>"#;
 
     Mock::given(method("POST"))
@@ -142,5 +150,70 @@ async fn xmlrpc_get_comments_since_serializes_new_since() {
         .get_comments_since(42, Some("2026-01-01T00:00:00Z"))
         .await
         .unwrap();
+    assert!(comments.is_empty());
+}
+
+/// A response whose `bugs` map carries no entry for the requested bug is the
+/// server saying it has no record of it, not that the thread is empty. Before
+/// #699 this returned `Ok(vec![])`, which at N>1 dropped the bug from the flat
+/// array with no header, no stderr line, and no failure entry.
+#[tokio::test]
+async fn xmlrpc_missing_bugs_key_is_not_found() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock = MockServer::start().await;
+    let response_xml = r#"<?xml version="1.0"?>
+<methodResponse><params><param><value><struct>
+  <member><name>bugs</name><value><struct>
+    <member><name>7</name><value><struct>
+      <member><name>comments</name><value><array><data></data></array></value></member>
+    </struct></value></member>
+  </struct></value></member>
+</struct></value></param></params></methodResponse>"#;
+
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(response_xml))
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(reqwest::Client::new(), &mock.uri(), Some("test-key"));
+    let err = client.get_comments_since(42, None).await.unwrap_err();
+
+    assert!(
+        matches!(&err, BzrError::NotFound { resource, id } if *resource == "bug" && id == "42"),
+        "expected NotFound for bug 42, got: {err:?}"
+    );
+    // The loop in `comment list` relies on this classification to skip the bug
+    // under `--permissive` instead of bailing the whole call.
+    assert!(err.is_permissive_bug_view_error());
+}
+
+/// The boundary that keeps a genuinely empty thread working: Bugzilla returns
+/// the key with an empty `comments` array for a bug that simply has none.
+#[tokio::test]
+async fn xmlrpc_present_key_with_empty_comments_is_still_ok() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock = MockServer::start().await;
+    let response_xml = r#"<?xml version="1.0"?>
+<methodResponse><params><param><value><struct>
+  <member><name>bugs</name><value><struct>
+    <member><name>42</name><value><struct>
+      <member><name>comments</name><value><array><data></data></array></value></member>
+    </struct></value></member>
+  </struct></value></member>
+</struct></value></param></params></methodResponse>"#;
+
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(response_xml))
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(reqwest::Client::new(), &mock.uri(), Some("test-key"));
+    let comments = client.get_comments_since(42, None).await.unwrap();
     assert!(comments.is_empty());
 }

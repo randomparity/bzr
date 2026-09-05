@@ -28,8 +28,15 @@ impl XmlRpcClient {
 }
 
 fn extract_comments(response: &Value, bug_id: u64) -> Result<Vec<Comment>> {
+    // No entry for this bug is the server saying it has no record of it, not
+    // that the bug has zero comments — Bugzilla returns the key with an empty
+    // array for that. Conflating them drops the bug silently, which is
+    // invisible once the caller requests several (issue #699).
     let Some(bug_entry) = lookup_bug_entry(response, bug_id)? else {
-        return Ok(Vec::new());
+        return Err(BzrError::NotFound {
+            resource: "bug",
+            id: bug_id.to_string(),
+        });
     };
 
     let entry_struct = bug_entry
