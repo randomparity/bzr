@@ -319,14 +319,36 @@ fn bug_table_width_adjacency_requests_wrap_to_the_injected_width() {
 }
 
 #[test]
-fn bug_table_width_adjacency_canonical_bugs_wrap_to_the_injected_width() {
-    let output =
-        capture_bug_adjacency_with_width(OutputFormat::Table, sample_adjacency(), Some(70));
+fn bug_table_width_adjacency_canonical_bugs_keep_each_value_at_structural_floor() {
+    let result = BugAdjacencyResult {
+        requests: vec![],
+        bugs: vec![BugAdjacencyBug {
+            id: 42,
+            summary: Some("su".into()),
+            status: Some("st".into()),
+            resolution: Some("re".into()),
+            product: Some("pr".into()),
+            version: Some(vec!["ve".into()]),
+            assigned_to: Some("as".into()),
+            last_change_time: Some("lt".into()),
+            target_milestone: Some("tm".into()),
+            blocks: vec![11],
+            depends_on: vec![22],
+        }],
+    };
+    let output = capture_bug_adjacency_with_width(OutputFormat::Table, result, Some(1));
     let canonical_bugs = output.split("\nCanonical bugs").nth(1).unwrap();
 
-    assert!(canonical_bugs.contains("ID") && canonical_bugs.contains("123"));
+    for value in [
+        "42", "su", "st", "re", "pr", "ve", "as", "lt", "tm", "11", "22",
+    ] {
+        assert!(
+            canonical_bugs.contains(value),
+            "missing {value}:\n{canonical_bugs}"
+        );
+    }
     assert!(
-        canonical_bugs.lines().all(|line| line.len() <= 70),
+        canonical_bugs.lines().all(|line| line.len() <= 56),
         "{canonical_bugs}"
     );
 }

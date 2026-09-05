@@ -289,7 +289,7 @@ fn write_table_clamps_to_structural_floor_without_replacing_width_two_scalar() {
             &["Description", "State"],
             &[&[
                 "a very long ASCII value that should surrender width first",
-                "OK",
+                "東",
             ]],
         ),
         Some(1),
@@ -297,7 +297,7 @@ fn write_table_clamps_to_structural_floor_without_replacing_width_two_scalar() {
     );
 
     let output = String::from_utf8(buf).unwrap();
-    assert!(output.contains("OK"));
+    assert!(output.contains('東'));
     assert!(!output.contains('�'));
     assert!(output.lines().all(|line| display_width(line) <= 11));
 }
