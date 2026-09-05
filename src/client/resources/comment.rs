@@ -6,11 +6,6 @@ use crate::error::Result;
 use crate::types::comment::{AddCommentParams, Comment, UpdateCommentTagsParams};
 
 #[derive(Deserialize)]
-struct CommentResponse {
-    bugs: std::collections::HashMap<String, CommentBugEntry>,
-}
-
-#[derive(Deserialize)]
 struct CommentBugEntry {
     comments: Vec<Comment>,
 }
@@ -20,25 +15,6 @@ struct CommentBugEntry {
 #[derive(Deserialize)]
 struct FlatCommentsResponse {
     comments: Vec<Comment>,
-}
-
-fn extract_bugs_comment_envelope(value: &serde_json::Value) -> Result<Vec<Comment>> {
-    let resp = CommentResponse::deserialize(value).map_err(|e| {
-        crate::error::BzrError::Deserialize(format!("comments `bugs` envelope: {e}"))
-    })?;
-    // Treat a structurally empty `bugs` map as a non-match so try_envelopes
-    // falls through to the flat extractor. `bugs: {"42": {"comments": []}}`
-    // (bug acknowledged, no comments) is a legitimate empty result and still
-    // returns Ok(vec![]).
-    resp.bugs
-        .into_values()
-        .next()
-        .map(|e| e.comments)
-        .ok_or_else(|| {
-            crate::error::BzrError::Deserialize(
-                "comments `bugs` envelope: empty top-level map".into(),
-            )
-        })
 }
 
 fn extract_flat_comment_envelope(value: &serde_json::Value) -> Result<Vec<Comment>> {
@@ -66,10 +42,10 @@ impl BugzillaClient {
                 || async { self.xmlrpc_client().get_comments_since(bug_id, since).await },
             )
             .await?;
-        // Neither transport is trusted to attribute a record: the REST `bugs`
-        // extractor drops the map key, and the flat `{"comments": [...]}`
-        // variant carries no bug context. A server-supplied value wins — it is
-        // trusted unverified, so this closes the absent case, not the wrong one.
+        // The flat `{"comments": [...]}` envelope carries no bug context, and
+        // XML-RPC may omit the field, so a record can arrive unattributed. A
+        // server-supplied value wins; the keyed lookup above is what rules out
+        // another bug's records reaching this point mislabelled.
         for comment in &mut comments {
             comment.bug_id.get_or_insert(bug_id);
         }
@@ -95,13 +71,46 @@ impl BugzillaClient {
         } else {
             self.get_json_value(&path_str).await?
         };
-        Self::try_envelopes(
-            &value,
-            &[
-                ("bugs", extract_bugs_comment_envelope),
-                ("comments", extract_flat_comment_envelope),
-            ],
-        )
+        Self::extract_comments_for(&value, bug_id)
+    }
+
+    /// Pull one bug's comments out of a REST response.
+    ///
+    /// The `bugs` map is keyed by bug ID, and the requested key is the only
+    /// correct entry: taking whichever key happened to come first would label
+    /// another bug's comments as this one's, which multi-ID output has no way
+    /// to detect. ADR-0024 sets the same ID-equality rule for `bug adjacency`.
+    fn extract_comments_for(value: &serde_json::Value, bug_id: u64) -> Result<Vec<Comment>> {
+        let bugs = value.get("bugs");
+        if let Some(entry) = bugs.and_then(|b| b.get(bug_id.to_string())) {
+            return CommentBugEntry::deserialize(entry)
+                .map(|e| e.comments)
+                .map_err(|e| {
+                    crate::error::BzrError::Deserialize(format!("comments `bugs` envelope: {e}"))
+                });
+        }
+        // No entry for this bug. A populated flat `comments` array is still a
+        // valid answer on some Bugzilla 5.0.x deployments (issue #135), so try
+        // it before concluding anything.
+        let flat = Self::try_envelopes(value, &[("comments", extract_flat_comment_envelope)]);
+        match flat {
+            Ok(comments) => Ok(comments),
+            // A `bugs` map that answered without this bug's key is the server
+            // saying it has no record of it -- the same condition the XML-RPC
+            // path reports, and one `--permissive` can skip per bug. Without a
+            // `bugs` map at all the envelope is simply unrecognised, which is a
+            // parse failure and must not be masked as a missing bug.
+            Err(e) => {
+                if bugs.is_some() {
+                    Err(crate::error::BzrError::NotFound {
+                        resource: "bug",
+                        id: bug_id.to_string(),
+                    })
+                } else {
+                    Err(e)
+                }
+            }
+        }
     }
 
     pub async fn update_comment_tags(

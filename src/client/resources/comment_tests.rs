@@ -546,3 +546,69 @@ async fn get_comments_since_preserves_server_bug_id() {
     let comments = client.get_comments_since(42, None).await.unwrap();
     assert_eq!(comments[0].bug_id, Some(7));
 }
+
+/// The `bugs` map is keyed by bug ID. A response keyed for a different bug is
+/// not this bug's comments, and silently relabelling them is the attribution
+/// failure multi-ID output cannot detect.
+#[tokio::test]
+async fn get_comments_since_rejects_a_mismatched_bugs_key() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/44/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": { "7": { "comments": [{
+                "id": 3, "bug_id": 7, "text": "wrongkey",
+                "creator": "u@t", "creation_time": "2025-01-01T00:00:00Z",
+                "is_private": false, "count": 0
+            }]}}
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_comments_since(44, None).await.unwrap_err();
+    assert!(
+        matches!(&err, crate::error::BzrError::NotFound { resource, id }
+            if *resource == "bug" && id == "44"),
+        "expected NotFound for bug 44, got: {err:?}"
+    );
+    assert!(err.is_permissive_bug_view_error());
+}
+
+/// `{"bugs": {}}` with no flat fallback is the server answering without this
+/// bug — a per-resource failure `--permissive` can skip, not a parse error that
+/// discards every bug already fetched.
+#[tokio::test]
+async fn get_comments_since_empty_bugs_map_is_not_found() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/97/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({ "bugs": {} })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_comments_since(97, None).await.unwrap_err();
+    assert!(err.is_permissive_bug_view_error(), "got: {err:?}");
+}
+
+/// An envelope with neither key is malformed, and must stay a parse error
+/// rather than being masked as a missing bug.
+#[tokio::test]
+async fn get_comments_since_unknown_envelope_stays_a_parse_error() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({ "unexpected": 1 })),
+        )
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_comments_since(42, None).await.unwrap_err();
+    assert!(
+        matches!(&err, crate::error::BzrError::Deserialize(_)),
+        "an unrecognised envelope must not be masked as NotFound, got: {err:?}"
+    );
+}
