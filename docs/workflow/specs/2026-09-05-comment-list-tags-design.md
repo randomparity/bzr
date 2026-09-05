@@ -72,14 +72,15 @@ must advance in the same change; no other schema shape changes.
 Focused type tests prove present and absent REST-shaped values, wrong-shaped REST rejection,
 field-list drift, and always-present serialization. XML-RPC mapper tests prove non-empty tags,
 absence, non-array-to-empty behavior, and filtering of non-string array members. Writer tests
-prove the non-empty table line, omission for empty tags, JSON `tags`, and `--fields tags`
-through the existing command/projection tests.
+prove the non-empty table line, omission for empty tags, and full/projected `tags` in both JSON
+and NDJSON through the existing command/projection paths.
 
 Functional coverage tags a created comment, reads it through both `--api rest` and
 `--api xmlrpc`, asserts each tag array, projects `--fields tags`, and checks the restored help
-claim. A new `--server public comment list` case proves every credentialless result has an
-array-valued `tags` key. The full supported-version functional suite runs these arms on all
-three Bugzilla images.
+claim. An NDJSON case asserts the full and projected record shapes. A new `--server public
+comment list` case proves every credentialless result has an array-valued `tags` key without
+claiming that anonymous visibility matches authenticated visibility. The full supported-version
+functional suite runs these arms on all three Bugzilla images.
 
 ## Guardrails and architecture context
 

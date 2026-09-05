@@ -32,11 +32,12 @@ its pinned consumers and examples.
 
 ## Consequences
 
-Comment list consumers can observe the state written by comment-tag operations without an
-extra request. Missing server fields remain compatible and become an empty collection in
-output. XML-RPC follows the existing optional-array tolerance used elsewhere in its resource
-mappers. Existing consumers that reject unknown JSON keys can use the schema version to
-detect the additive contract revision.
+Comment list consumers can observe tag state included in the server's returned payload without
+an extra request. Missing server fields remain compatible and become an empty collection in
+output, so `[]` means that no tags were present in the returned payload; it does not distinguish
+an untagged comment from tags omitted by server visibility policy. XML-RPC follows the existing
+optional-array tolerance used elsewhere in its resource mappers. Existing consumers that reject
+unknown JSON keys can use the schema version to detect the additive contract revision.
 
 ## Considered & rejected
 

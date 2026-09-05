@@ -7,7 +7,7 @@ list operation; normalize omitted tags to an empty array and preserve server ord
 Tech stack: Rust 2021, serde/serde_json, the existing XML-RPC protocol adapter, clap, JSON
 Schema draft 2020-12, Bash functional tests, and real Bugzilla containers.
 
-Expected implementation size: 110–170 changed lines (M) — derived from three small runtime
+Expected implementation size: 120–190 changed lines (M) — derived from three small runtime
 edits, focused fixtures/assertions, one schema property, documentation, and mechanical schema
 version pin updates.
 
@@ -58,7 +58,8 @@ version pin updates.
 - Consumes `Comment` in `src/types/comment.rs` and
   `get_str_array(&BTreeMap<String, Value>, &str) -> Vec<String>` from
   `src/xmlrpc/resources/mappers.rs`.
-- Produces `pub tags: Vec<String>` and adds the literal `"tags"` to `COMMENT_FIELDS`.
+- Produces `pub tags: Vec<String>`, adds the literal `"tags"` to `COMMENT_FIELDS`, and adds the
+  required string-array property to the closed comment schema.
 - Later tasks rely on `Comment.tags` always serializing and omitted input defaulting to `[]`.
 
 **Verification**
@@ -76,17 +77,22 @@ version pin updates.
   `comment_fields_matches_serialized_keys` must fail after the field is added but before
   `COMMENT_FIELDS` changes; `make test-one T=comment_fields_matches_serialized_keys` passes
   after registration.
+- Mode: focused-test — closed JSON schema. Add `comment_schema_accepts_tags` using a raw
+  comment value with non-empty `tags`; `make test-one T=comment_schema_accepts_tags` fails
+  because the closed schema rejects the undeclared key, then passes after the schema update.
 
 **Steps**
 
-1. In `src/types/comment_tests.rs`, assert a minimal comment has `comment.tags.is_empty()` and
+1. In `src/commands/schema_tests.rs`, add the raw-value schema test described above and retain
+   its expected red result while the production and existing test literals are still unchanged.
+2. In `src/types/comment_tests.rs`, assert a minimal comment has `comment.tags.is_empty()` and
    serializes `"tags": []`; add a present-array case that preserves
    `vec!["needs-info", "follow-up"]` and a wrong-shaped REST case that fails deserialization.
    Add `tags: vec![]` to all direct `Comment` fixtures in
    `src/types/comment_tests.rs`, `src/output/resources/comment_tests.rs`, and
    `src/commands/bug/history_tests.rs`. Run the named type test and retain the expected red
    compile failure.
-2. In `src/types/comment.rs`, add:
+3. In `src/types/comment.rs`, add:
 
    ```rust
    #[serde(default)]
@@ -95,16 +101,17 @@ version pin updates.
 
    Add `"tags"` to `COMMENT_FIELDS`. At the same time, import `get_str_array` in
    `src/xmlrpc/resources/comment.rs` and initialize `tags: get_str_array(m, "tags")` so the
-   exhaustive production literal remains buildable. Run the named type/projection commands;
-   expect pass.
-3. In `src/xmlrpc/resources/comment_tests.rs`, add a `tags` XML-RPC member containing
+   exhaustive production literal remains buildable. Add the required `tags` string-array
+   property to `schemas/comment.json`, add non-empty tags to the maximal conformance sample,
+   then run the named type, projection, and schema commands; expect pass.
+4. In `src/xmlrpc/resources/comment_tests.rs`, add a `tags` XML-RPC member containing
    `needs-info` and `follow-up` to the full-response fixture and assert exact order. Add the
    absent-field test, a non-array-to-empty case, and a mixed-array case proving non-string
    members are discarded. Because the mapper implementation landed in step 2 to keep the
    crate compilable, verify these tests bite by temporarily replacing `get_str_array` with an
    empty vector, observe the full-response assertion fail, then restore it. Run
    `make test-one T=xmlrpc_get_comments_since`; expect all matching tests pass.
-4. Run `make test-one T=comment_`; expect every matching comment unit test passes. Commit as
+5. Run `make test-one T=comment_`; expect every matching comment unit test passes. Commit as
    `feat(comment): carry tags through comment responses`.
 
 ## Task 2: Publish and present the additive contract
@@ -112,19 +119,17 @@ version pin updates.
 **Interfaces**
 
 - Consumes `Comment.tags` and the existing `write_formatted_projected` serialization path.
-- Produces the table line `  Tags: {c.tags.join(", ")}`, required schema property `tags`,
-  and schema version `3.0.1` in every live version consumer.
+- Produces the table line `  Tags: {c.tags.join(", ")}`, JSON/NDJSON writer assertions, and
+  schema version `3.0.1` in every live version consumer.
 - Task 3 relies on the writer, projection allowlist, help text, and versioned JSON envelope.
 
 **Verification**
 
-- Mode: focused-test — table/JSON presentation. Add
+- Mode: focused-test — table/JSON-family presentation. Add
   `write_comments_table_renders_tags`, assert untagged output omits `Tags:`, and extend the
-  JSON writer test; `make test-one T=write_comments_table_renders_tags` is red before the
-  writer edit and green after it.
-- Mode: focused-test — closed JSON schema. Add tags to the maximal comment sample and schema
-  property; `make test-one T=comment_conforms` is red after only the sample changes and green
-  after `schemas/comment.json` changes.
+  JSON and NDJSON writer tests for full and projected tags; the named table test is red before
+  the writer edit and green after it, while the JSON-family assertions pass through the shared
+  projection path.
 - Mode: focused-test — additive version pin. Rename the exact adjacency version test to
   `write_bug_adjacency_json_uses_schema_version_3_0_1`, change its expected literal first,
   and run `make test-one T=write_bug_adjacency_json_uses_schema_version_3_0_1`; it is red
@@ -142,26 +147,14 @@ version pin updates.
    ```
 
    Run the named writer test; expect pass.
-2. Add `"tags": ["needs-info"]` to the comment conformance sample and run its test; retain
-   the expected schema-drift failure. Add this property to `schemas/comment.json` and append
-   `"tags"` to its required list:
-
-   ```json
-   "tags": {
-     "type": "array",
-     "items": { "type": "string" }
-   }
-   ```
-
-   Run `make test-one T=comment_conforms`; expect pass.
-3. Restore `tags` in the printed-field sentence in `src/cli/comment.rs`. In the comment-list
+2. Restore `tags` in the printed-field sentence in `src/cli/comment.rs`. In the comment-list
    section of `docs/bzr-cli.md`, state that table output includes tags and add a
    `--fields id,tags` JSON example. Do not change tag mutation/search semantics.
-4. Change `src/output/mod.rs::SCHEMA_VERSION` and the current exact `3.0.0` pins enumerated in
+3. Change `src/output/mod.rs::SCHEMA_VERSION` and the current exact `3.0.0` pins enumerated in
    the file map to `3.0.1`; rename version-specific test identifiers. Use one focused `rg`
    check to ensure no live (non-historical) `3.0.0` pin remains. Run the named Rust version
    test and `BZR_BIN="$PWD/target/debug/bzr" sh agent-skills/tests/run.sh`; expect pass.
-5. Run `make test-one T=comment_`, then `make lint` and `make test`; expect green. Commit as
+4. Run `make test-one T=comment_`, then `make lint` and `make test`; expect green. Commit as
    `feat(comment): show tags in list output` so the compiled artifact change enters release
    notes.
 
@@ -171,16 +164,16 @@ version pin updates.
 
 - Consumes the existing `COMMENT_ID` produced by `comment-add-first`, `run_bzr`, and JSON
   assertion helpers in `tests/functional/phases/15-comments.sh`.
-- Produces functional cases for help truth, REST and XML-RPC full JSON tags, `--fields tags`,
-  an empty tag after removal, and a credentialless array-shape read.
+- Produces functional cases for help truth, REST and XML-RPC full JSON tags, JSON and NDJSON
+  `--fields tags`, an empty tag after removal, and a credentialless array-shape read.
 - No later implementation task depends on this task; it is the end-to-end proof.
 
 **Verification**
 
 - Mode: focused-test — live tag round trip and projection. Extend phase 15 so the added tag is
-  read through explicit REST and XML-RPC modes before removal, and add a credentialless list
-  read. A pre-implementation `make functional-test` must fail the new JSON tag assertion;
-  after Tasks 1–2 it passes on the default image.
+  read through explicit REST and XML-RPC modes before removal, read as full/projected NDJSON,
+  and add a credentialless list read. A pre-implementation `make functional-test` must fail
+  the new tag assertion; after Tasks 1–2 it passes on the default image.
 - Mode: focused-test — supported-version behavior. `make functional-test-all` must report
   bz50, bz52, and bz53 passed.
 
@@ -190,9 +183,11 @@ version pin updates.
    `comment list "$BUG1"` once with `--api rest` and once with `--api xmlrpc`; select the entry
    with `COMMENT_ID` and assert its `.tags` equals `["important"]` in both responses. Run the
    projection with `--fields tags` and assert the projected object has exactly the `tags` key
-   and the same value. Run `--server public comment list "$BUG1"` and assert every returned
-   comment has an array-valued `tags` key. After removal, assert the tagged comment emits
-   `tags: []`.
+   and the same value. Repeat the full and projected assertions with `--output ndjson`,
+   selecting the matching line by comment ID. Run `--server public comment list "$BUG1"` and
+   assert every returned comment has an array-valued `tags` key, without asserting anonymous
+   semantic parity with the authenticated result. After removal, assert the tagged comment
+   emits `tags: []`.
 2. Verify the new functional assertion bites: temporarily change its expected tag to a value
    the fixture never writes, run `make functional-test`, and retain the phase-15 failure.
    Restore the assertion and rerun; expect every default-version case green.
