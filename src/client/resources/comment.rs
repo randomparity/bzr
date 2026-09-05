@@ -78,39 +78,48 @@ impl BugzillaClient {
     ///
     /// The `bugs` map is keyed by bug ID, and the requested key is the only
     /// correct entry: taking whichever key happened to come first would label
-    /// another bug's comments as this one's, which multi-ID output has no way
-    /// to detect. ADR-0024 sets the same ID-equality rule for `bug adjacency`.
+    /// another bug's comments as this one's, which the flat multi-ID array has
+    /// no way to detect. ADR-0024 sets the same ID-equality rule for
+    /// `bug adjacency`.
     fn extract_comments_for(value: &serde_json::Value, bug_id: u64) -> Result<Vec<Comment>> {
-        let bugs = value.get("bugs");
-        if let Some(entry) = bugs.and_then(|b| b.get(bug_id.to_string())) {
+        let Some(bugs) = value.get("bugs") else {
+            // No `bugs` key at all: the flat `{"comments": [...]}` envelope is
+            // the only shape left, and its error is the right diagnosis when it
+            // does not match (issue #135).
+            return Self::try_envelopes(value, &[("comments", extract_flat_comment_envelope)]);
+        };
+        let Some(bugs) = bugs.as_object() else {
+            // Present but not a map. That is a broken envelope, and reporting it
+            // as a missing bug would tell the operator the bug does not exist.
+            return Err(crate::error::BzrError::Deserialize(
+                "comments `bugs` envelope: expected an object keyed by bug ID".into(),
+            ));
+        };
+        if let Some(entry) = bugs.get(&bug_id.to_string()) {
             return CommentBugEntry::deserialize(entry)
                 .map(|e| e.comments)
                 .map_err(|e| {
                     crate::error::BzrError::Deserialize(format!("comments `bugs` envelope: {e}"))
                 });
         }
-        // No entry for this bug. A populated flat `comments` array is still a
-        // valid answer on some Bugzilla 5.0.x deployments (issue #135), so try
-        // it before concluding anything.
-        let flat = Self::try_envelopes(value, &[("comments", extract_flat_comment_envelope)]);
-        match flat {
-            Ok(comments) => Ok(comments),
-            // A `bugs` map that answered without this bug's key is the server
-            // saying it has no record of it -- the same condition the XML-RPC
-            // path reports, and one `--permissive` can skip per bug. Without a
-            // `bugs` map at all the envelope is simply unrecognised, which is a
-            // parse failure and must not be masked as a missing bug.
-            Err(e) => {
-                if bugs.is_some() {
-                    Err(crate::error::BzrError::NotFound {
-                        resource: "bug",
-                        id: bug_id.to_string(),
-                    })
-                } else {
-                    Err(e)
-                }
+        // The map answered without this bug. Only an *empty* map means the
+        // server keyed nothing at all, which is where a flat `comments` array
+        // may still carry the thread. A map keyed for other bugs is a specific
+        // answer about different bugs, and those records must never be
+        // relabelled as this one's by the caller's backfill.
+        if bugs.is_empty() {
+            if let Ok(comments) =
+                Self::try_envelopes(value, &[("comments", extract_flat_comment_envelope)])
+            {
+                return Ok(comments);
             }
         }
+        // The server answered and has no record of this bug: a per-resource
+        // failure the multi-ID loop can skip under `--permissive`.
+        Err(crate::error::BzrError::NotFound {
+            resource: "bug",
+            id: bug_id.to_string(),
+        })
     }
 
     pub async fn update_comment_tags(

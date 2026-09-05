@@ -612,3 +612,62 @@ async fn get_comments_since_unknown_envelope_stays_a_parse_error() {
         "an unrecognised envelope must not be masked as NotFound, got: {err:?}"
     );
 }
+
+/// A `bugs` key that is not a map is a broken envelope. Reporting it as a
+/// missing bug would tell the operator the bug does not exist, and under
+/// `--permissive` would be swallowed at exit 0.
+#[tokio::test]
+async fn get_comments_since_non_object_bugs_stays_a_parse_error() {
+    for body in [
+        serde_json::json!({ "bugs": serde_json::Value::Null }),
+        serde_json::json!({ "bugs": [] }),
+        serde_json::json!({ "bugs": "whatever" }),
+    ] {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/rest/bug/42/comment"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(body.clone()))
+            .mount(&mock)
+            .await;
+
+        let client = test_client(&mock.uri());
+        let err = client.get_comments_since(42, None).await.unwrap_err();
+        assert!(
+            matches!(&err, crate::error::BzrError::Deserialize(_)),
+            "a malformed `bugs` value must not be masked as NotFound ({body}): {err:?}"
+        );
+    }
+}
+
+/// A `bugs` map keyed for another bug is the server answering specifically, and
+/// about a different bug. The flat array must not be used as a fallback there:
+/// its records carry no bug context, so the caller's backfill would stamp them
+/// with whichever ID was requested — once per requested ID.
+#[tokio::test]
+async fn get_comments_since_other_keyed_bugs_map_does_not_fall_back_to_flat() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": { "7": { "comments": [{
+                "id": 3, "bug_id": 7, "text": "other bug",
+                "creator": "u@t", "creation_time": "2025-01-01T00:00:00Z",
+                "is_private": false, "count": 0
+            }]}},
+            "comments": [{
+                "id": 9, "text": "flat array record",
+                "creator": "u@t", "creation_time": "2025-01-01T00:00:00Z",
+                "is_private": false, "count": 0
+            }]
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_comments_since(42, None).await.unwrap_err();
+    assert!(
+        matches!(&err, crate::error::BzrError::NotFound { resource, id }
+            if *resource == "bug" && id == "42"),
+        "expected NotFound rather than another bug's or the flat array's records: {err:?}"
+    );
+}
