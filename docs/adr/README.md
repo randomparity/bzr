@@ -43,3 +43,4 @@ rejected.
 | [0043](0043-stabilize-test-tracing-callsite-interest.md) | Keep a sentinel tracing dispatch alive in tests | Accepted |
 | [0044](0044-python-bugzilla-comparison-sidecar.md) | Run python-bugzilla as a network-namespace sidecar | Accepted |
 | [0045](0045-observe-comparison-transport-from-debug-events.md) | Observe comparison transport from request-boundary debug events | Accepted |
+| [0046](0046-share-python-bugzilla-comparison-adapter.md) | Share one fixed python-bugzilla comparison adapter | Accepted |

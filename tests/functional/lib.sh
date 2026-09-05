@@ -448,7 +448,229 @@ _run_pybz_command() {
 run_pybz() { _run_pybz_command bugzilla "$@"; }
 
 run_pybz_adapter() {
-    _run_pybz_command python /work/compare/bug-lifecycle.py "$@"
+    _run_pybz_command python /work/compare/python-bugzilla-adapter.py "$@"
+}
+
+# Shared mechanics for resource comparison phases.
+RESOURCE_GAP_ELIGIBLE=0
+RESOURCE_GAP_FILE=""
+RESOURCE_SERVER="compare-resource"
+RESOURCE_MEMBERSHIPS=""
+
+resource_init() {
+    if [[ ! -d ${COMPARE_EXCHANGE_DIR:-} ]]; then
+        printf 'resource_init: COMPARE_EXCHANGE_DIR must name a directory\n' >&2
+        return 2
+    fi
+    run_bzr config set-server "$RESOURCE_SERVER" --url "$BZ_URL" \
+        --api-key-env BZR_COMPARE_API_KEY --email "$COMPARE_ADMIN_EMAIL" \
+        --auth-method query_param
+    if [[ $BZR_EXIT -ne 0 ]]; then
+        printf 'resource_init: could not configure matching query-parameter auth\n' >&2
+        return 1
+    fi
+    RESOURCE_GAP_ELIGIBLE=0
+    RESOURCE_GAP_FILE="$COMPARE_EXCHANGE_DIR/.resource-gap-eligible"
+    RESOURCE_MEMBERSHIPS=""
+}
+
+resource_membership_record() {
+    local user="$1" group="$2" entry
+
+    entry="$user"$'\t'"$group"
+    if [[ $'\n'${RESOURCE_MEMBERSHIPS}$'\n' != *$'\n'"$entry"$'\n'* ]]; then
+        RESOURCE_MEMBERSHIPS="${RESOURCE_MEMBERSHIPS:+${RESOURCE_MEMBERSHIPS}$'\n'}$entry"
+    fi
+}
+
+resource_membership_clear() {
+    local user="$1" group="$2" entry candidate
+    local remaining=""
+
+    entry="$user"$'\t'"$group"
+    while IFS= read -r candidate; do
+        if [[ -n $candidate && $candidate != "$entry" ]]; then
+            remaining="${remaining:+${remaining}$'\n'}$candidate"
+        fi
+    done <<<"$RESOURCE_MEMBERSHIPS"
+    RESOURCE_MEMBERSHIPS="$remaining"
+}
+
+resource_membership_cleanup() {
+    local entry user group status=0
+
+    while IFS= read -r entry; do
+        [[ -n $entry ]] || continue
+        IFS=$'\t' read -r user group <<<"$entry"
+        run_bzr --server "$RESOURCE_SERVER" group remove-user --group "$group" --user "$user"
+        if [[ $BZR_EXIT -ne 0 ]]; then
+            printf 'could not clean comparison membership for %s in %s\n' "$user" "$group" >&2
+            status=1
+        fi
+    done <<<"$RESOURCE_MEMBERSHIPS"
+    RESOURCE_MEMBERSHIPS=""
+    return "$status"
+}
+
+resource_name_is_safe() {
+    [[ $1 =~ ^[a-z0-9][a-z0-9-]*$ ]]
+}
+
+resource_capture_bzr() {
+    local name="$1"
+
+    cp "$BZR_STDOUT" "$COMPARE_EXCHANGE_DIR/${name}.bzr.stdout.json"
+    cp "$BZR_STDOUT_RAW" "$COMPARE_EXCHANGE_DIR/${name}.bzr.raw"
+    cp "$BZR_STDERR" "$COMPARE_EXCHANGE_DIR/${name}.bzr.stderr"
+    printf '%s\n' "$BZR_EXIT" >"$COMPARE_EXCHANGE_DIR/${name}.bzr.exit"
+}
+
+resource_bzr() {
+    local name="$1" api="$2" expected_transport="$3"
+    shift 3
+
+    if ! resource_name_is_safe "$name"; then
+        test_fail "invalid resource capture name"
+        return 1
+    fi
+    RUST_LOG=bzr=debug run_bzr --server "$RESOURCE_SERVER" --api "$api" "$@"
+    resource_capture_bzr "$name"
+    if [[ $BZR_EXIT -ne 0 ]]; then
+        test_fail "bzr $name failed with exit $BZR_EXIT"
+        return 1
+    fi
+    if ! jq -e . "$BZR_STDOUT" >/dev/null; then
+        test_fail "bzr $name returned invalid JSON evidence"
+        return 1
+    fi
+    if ! observe_bzr_transport || [[ $BZR_TRANSPORT != "$expected_transport" ]]; then
+        test_fail "bzr $name did not prove $expected_transport transport"
+        return 1
+    fi
+    printf '%s\n' "$BZR_TRANSPORT" >"$COMPARE_EXCHANGE_DIR/${name}.bzr.transport"
+}
+
+resource_pybz() {
+    local name="$1" operation="$2" payload="$3" expected_transport="$4"
+    local input output transport_filter
+
+    if ! resource_name_is_safe "$name"; then
+        test_fail "invalid resource capture name"
+        return 1
+    fi
+    input="$COMPARE_EXCHANGE_DIR/${name}.pybz.input.json"
+    output="$COMPARE_EXCHANGE_DIR/${name}.pybz.output.json"
+    if ! jq -ecn --arg api_key "$BZR_COMPARE_API_KEY" --argjson payload "$payload" \
+        '$payload | select(type == "object") | . + {api_key:$api_key}' >"$input"; then
+        test_fail "python-bugzilla $name request is invalid"
+        return 1
+    fi
+    chmod 600 "$input"
+    run_pybz_adapter "$operation" "/work/compare/${input##*/}" \
+        "/work/compare/${output##*/}"
+    cp "$BZR_STDOUT" "$COMPARE_EXCHANGE_DIR/${name}.pybz.stdout"
+    cp "$BZR_STDOUT_RAW" "$COMPARE_EXCHANGE_DIR/${name}.pybz.raw"
+    cp "$BZR_STDERR" "$COMPARE_EXCHANGE_DIR/${name}.pybz.stderr"
+    printf '%s\n' "$BZR_EXIT" >"$COMPARE_EXCHANGE_DIR/${name}.pybz.exit"
+    if [[ $expected_transport == LOCAL ]]; then
+        transport_filter='.transport == null'
+    else
+        transport_filter=".transport == \$expected"
+    fi
+    if [[ $BZR_EXIT -ne 0 || ! -r $output ]] ||
+        ! jq -e --arg expected "$expected_transport" \
+            "type == \"object\" and (keys | sort) == [\"result\",\"transport\"] and
+             ($transport_filter)" "$output" >/dev/null; then
+        test_fail "python-bugzilla $name failed to prove $expected_transport transport"
+        return 1
+    fi
+    jq '.result' "$output" >"$COMPARE_EXCHANGE_DIR/${name}.pybz.result.json"
+    jq -r '.transport // "LOCAL"' "$output" \
+        >"$COMPARE_EXCHANGE_DIR/${name}.pybz.transport"
+}
+
+resource_positive_id() {
+    local path="$1" expression="$2"
+
+    jq -er "$expression | select(type == \"number\" and floor == . and . > 0)" "$path"
+}
+
+resource_require_positive_id() {
+    local path="$1" expression="$2" label="$3"
+
+    if ! resource_positive_id "$path" "$expression" >/dev/null; then
+        test_fail "$label returned an invalid ID"
+        return 1
+    fi
+}
+
+resource_equal() {
+    local name="$1" left="$2" right="$3"
+
+    if ! diff -u "$left" "$right" >"$COMPARE_EXCHANGE_DIR/${name}.diff"; then
+        test_fail "normalized $name differs"
+        return 1
+    fi
+}
+
+resource_gap_reset() {
+    RESOURCE_GAP_ELIGIBLE=0
+    rm -f "$RESOURCE_GAP_FILE"
+}
+
+resource_gap_allow() {
+    RESOURCE_GAP_ELIGIBLE=1
+    : >"$RESOURCE_GAP_FILE"
+}
+
+resource_expect_gap() {
+    local issue="$1"
+
+    if [[ $LAST_TEST_RESULT == PASS ]] ||
+        [[ $RESOURCE_GAP_ELIGIBLE -eq 1 && -f $RESOURCE_GAP_FILE ]]; then
+        expect_gap "$issue"
+    fi
+}
+
+seed_comparison_attachment_flag_type() {
+    local sql_file="$COMPARE_EXCHANGE_DIR/attachment-flag.sql"
+    local result status=0
+
+    printf '%s\n' \
+        "INSERT INTO flagtypes (name, description, target_type, is_active," \
+        "  is_requestable, is_requesteeble, is_multiplicable, sortkey)" \
+        "SELECT 'bzr_compare_attachment_review'," \
+        "  'bzr python-bugzilla comparison attachment flag', 'a', 1, 1, 1, 1, 30" \
+        "WHERE NOT EXISTS (SELECT 1 FROM flagtypes" \
+        "  WHERE name = 'bzr_compare_attachment_review' AND target_type = 'a');" \
+        "INSERT INTO flaginclusions (type_id, product_id, component_id)" \
+        "SELECT id, NULL, NULL FROM flagtypes" \
+        "WHERE name = 'bzr_compare_attachment_review' AND target_type = 'a'" \
+        "  AND NOT EXISTS (SELECT 1 FROM flaginclusions" \
+        "    WHERE flaginclusions.type_id = flagtypes.id" \
+        "      AND flaginclusions.product_id IS NULL" \
+        "      AND flaginclusions.component_id IS NULL);" \
+        "SELECT" \
+        "  (SELECT COUNT(*) FROM flagtypes" \
+        "    WHERE name = 'bzr_compare_attachment_review'" \
+        "      AND target_type = 'a') AS flag_type_count," \
+        "  (SELECT COUNT(*) FROM flaginclusions" \
+        "    JOIN flagtypes ON flagtypes.id = flaginclusions.type_id" \
+        "    WHERE flagtypes.name = 'bzr_compare_attachment_review'" \
+        "      AND flagtypes.target_type = 'a'" \
+        "      AND flaginclusions.product_id IS NULL" \
+        "      AND flaginclusions.component_id IS NULL)" \
+        "    AS unrestricted_inclusion_count;" >"$sql_file"
+    chmod 600 "$sql_file"
+    if ! result=$(run_bugzilla_sql_file "$sql_file"); then
+        printf 'could not seed comparison attachment flag type\n' >&2
+        status=1
+    elif [[ ${result##*$'\n'} != $'1\t1' ]]; then
+        printf 'comparison attachment flag type readback was not exactly one type and inclusion\n' >&2
+        status=1
+    fi
+    rm -f "$sql_file"
+    return "$status"
 }
 
 # ── Assertions ───────────────────────────────────────────────────────
