@@ -85,7 +85,7 @@ else test_skip "no BUG1 or second bug"; fi
 
 test_begin "comment-list-multi-id-table-headers" "comment list multi-ID table headers"
 if [[ -n "$BUG1" ]] && [[ -n "$_MULTI_BUG" ]]; then
-    run_bzr_raw comment list "$BUG1" "$_MULTI_BUG"
+    run_bzr_raw --output table comment list "$BUG1" "$_MULTI_BUG"
     if assert_success &&
         assert_stdout_contains "Bug #$BUG1" &&
         assert_stdout_contains "Bug #$_MULTI_BUG"; then
@@ -95,8 +95,11 @@ else test_skip "no BUG1 or second bug"; fi
 
 test_begin "comment-list-single-id-has-no-bug-header" "comment list single ID keeps its shape"
 if [[ -n "$BUG1" ]]; then
-    run_bzr_raw comment list "$BUG1"
-    if assert_success && assert_stdout_not_contains "Bug #"; then test_pass; fi
+    run_bzr_raw --output table comment list "$BUG1"
+    if assert_success && assert_stdout_contains "Comment #" &&
+        assert_stdout_not_contains "Bug #"; then
+        test_pass
+    fi
 else test_skip "no BUG1"; fi
 
 test_begin "comment-list-multi-id-permissive-skips-missing" "comment list --permissive skips a missing bug"
