@@ -97,10 +97,6 @@ lifecycle_bzr_xmlrpc_gap() {
 
 lifecycle_bzr_no_dispatch() {
     local name="$1"
-    local boundary_re
-    boundary_re='(^|[[:space:]])DEBUG[[:space:]]+bzr::client::transport: (strict )?API response'
-    boundary_re+='([[:space:]]|$)|(^|[[:space:]])DEBUG[[:space:]]+'
-    boundary_re+='bzr::xmlrpc::protocol::client: XML-RPC call([[:space:]]|$)'
     # shellcheck disable=SC2034 # The controlled run_bzr fixture reads this dynamic-scope value.
     local LIFECYCLE_BZR_CALL_NAME="$name"
     shift
@@ -114,7 +110,7 @@ lifecycle_bzr_no_dispatch() {
         test_fail "bzr $name failed with exit $BZR_EXIT"
         return 1
     fi
-    grep -Eq "$boundary_re" "$BZR_STDERR"
+    grep -Eq "$BZR_REST_BOUNDARY_RE|$BZR_XMLRPC_BOUNDARY_RE" "$BZR_STDERR"
     local event_status=$?
     if [[ $event_status -eq 0 ]]; then
         test_fail "bzr $name unexpectedly exercised a client request boundary"
