@@ -177,7 +177,7 @@ run_sidecar_wrapper_fixture() (
 
     run_pybz_adapter view /work/compare/in.json /work/compare/out.json
     assert_equals \
-        'python /work/compare/bug-lifecycle.py view /work/compare/in.json /work/compare/out.json' \
+        'python /work/compare/python-bugzilla-adapter.py view /work/compare/in.json /work/compare/out.json' \
         "$(<"$invoked")" "fixed adapter command"
     assert_equals $'{\n  "fixed": true\n}' "$(<"$BZR_STDOUT")" "adapter projected stdout"
     assert_equals '{"schema_version":"3.0.0","data":{"fixed":true}}' \
@@ -885,6 +885,22 @@ run_parity_report_fixture() {
         '| Comment tags and minor update | `bzr bug update --comment-tag --minor-update` | expected gap (#672) | `compare/01-bug-lifecycle/update-options` |'
         '| Whiteboard match types | `bzr bug list --status-whiteboard-type` | expected gap (#679) | `compare/01-bug-lifecycle/query-match-types` |'
         '| Personal bug tags | `bzr bug tag`, `bzr bug list --tag` | expected gap (#680) | `compare/01-bug-lifecycle/bug-tags` |'
+        '| Public comments | `bzr comment add`, `bzr comment list` | parity | `compare/02-comments/public-comments` |'
+        '| Private comments over REST | `bzr comment add --private`, `bzr comment list` | parity | `compare/02-comments/private-comments-rest` |'
+        '| Private comments over XML-RPC | `bzr comment add --private`, `bzr comment list` | parity | `compare/02-comments/private-comments-xmlrpc` |'
+        '| Attachment upload metadata and comment | `bzr attachment upload`, `bzr attachment list`, `bzr comment list` | parity | `compare/03-attachments/upload-metadata-comment` |'
+        '| Attachment download content | `bzr attachment download` | parity | `compare/03-attachments/download-content` |'
+        '| Attachment flags | `bzr attachment update --flag` | parity | `compare/03-attachments/attachment-flags` |'
+        '| Private attachments over REST | `bzr attachment list/view/download` | parity | `compare/03-attachments/private-attachments-rest` |'
+        '| Private attachments over XML-RPC | `bzr attachment list/view/download` | parity | `compare/03-attachments/private-attachments-xmlrpc` |'
+        '| Multi-bug attachment upload | `bzr attachment upload` | expected gap (#674) | `compare/03-attachments/multi-bug-upload` |'
+        '| Ignore obsolete attachments | `bzr attachment download --bug --ignore-obsolete` | expected gap (#674) | `compare/03-attachments/ignore-obsolete` |'
+        '| User create, get, and search | `bzr user create`, `bzr user search` | parity | `compare/04-users-groups/user-create-get-search` |'
+        '| Group get and list | `bzr group view` | parity | `compare/04-users-groups/group-get-and-list` |'
+        '| Membership add and remove | `bzr group add-user/remove-user`, `bzr user search` | parity | `compare/04-users-groups/membership-add-remove` |'
+        '| Product catalogues | `bzr product list --type` | parity | `compare/05-products-components/product-catalogues` |'
+        '| Component create | `bzr component create`, `bzr component view` | parity | `compare/05-products-components/component-create` |'
+        '| Red Hat component update | `bzr component update` | expected gap (#675) | `compare/05-products-components/component-update-redhat` |'
     )
 
     for row in "${rows[@]}"; do
@@ -952,7 +968,7 @@ run_adapter_staging_cleanup_fixture() (
         printf '%s\n' "$path"
     }
     cp() {
-        if [[ ${2:-} == "$residue/compare/bug-lifecycle.py" ]]; then
+        if [[ ${2:-} == "$residue/compare/python-bugzilla-adapter.py" ]]; then
             return 1
         fi
         command cp "$@"
@@ -1005,6 +1021,24 @@ class _FixtureBug:
         return self._data
 
 
+class _FixtureUser:
+    def __init__(self, email):
+        self.userid = 601
+        self.email = email
+        self.name = email
+        self.real_name = "Fixture User"
+        self.can_login = True
+        self.groupnames = ["editbugs"]
+
+
+class _FixtureGroup:
+    groupid = 701
+    name = "editbugs"
+    description = "Can edit bugs"
+    is_active = True
+    member_emails = ["fixture-user@test.invalid"]
+
+
 class Bugzilla:
     def __init__(
         self,
@@ -1045,7 +1079,10 @@ class Bugzilla:
 
     def build_update(self, **params):
         if "comment" in params:
-            params["comment"] = {"comment": params["comment"]}
+            comment = {"comment": params.pop("comment")}
+            if params.pop("comment_private", False):
+                comment["is_private"] = True
+            params["comment"] = comment
         return {"builder": "update", **params}
 
     def update_bugs(self, ids, update):
@@ -1097,6 +1134,109 @@ class Bugzilla:
 
     def update_tags(self, ids, tags_add=None, tags_remove=None):
         return {"ids": ids, "add": tags_add, "remove": tags_remove}
+
+    def attachfile(self, ids, source, summary, **kwargs):
+        with open(source, "rb") as attachment:
+            data = attachment.read().decode("utf-8")
+        return 451 if ids == [41] and data == "fixture attachment\n" else 0
+
+    def get_attachments(
+        self, ids, attachment_ids, include_fields=None, exclude_fields=None
+    ):
+        if include_fields is not None:
+            raise RuntimeError("unexpected attachment include_fields")
+        if exclude_fields is None and ids:
+            current_name = "../outside.txt" if ids == [42] else "current.txt"
+            return {
+                "bugs": {
+                    str(ids[0]): [
+                        {"id": 451, "file_name": "obsolete.txt", "is_obsolete": 1},
+                        {"id": 452, "file_name": current_name, "is_obsolete": 0},
+                    ]
+                }
+            }
+        if exclude_fields != ["data"]:
+            raise RuntimeError("attachment metadata must exclude data")
+        return {
+            "bugs": ids,
+            "attachment_ids": attachment_ids,
+            "attachments": {"451": {"id": 451}},
+        }
+
+    def openattachment(self, attachment_id):
+        from io import BytesIO
+
+        if attachment_id != 451:
+            raise RuntimeError("fixture upstream attachment detail")
+        return BytesIO(b"fixture attachment\n")
+
+    def openattachment_data(self, attachment):
+        from io import BytesIO
+
+        stream = BytesIO(b"fixture attachment\n")
+        stream.name = attachment["file_name"]
+        return stream
+
+    def updateattachmentflags(self, bug_id, attachment_id, flag_name, **kwargs):
+        return {
+            "bug_id": bug_id,
+            "attachment_id": attachment_id,
+            "flag_name": flag_name,
+            **kwargs,
+        }
+
+    def createuser(self, email, name="", password=""):
+        if not password:
+            raise RuntimeError("fixture upstream password detail")
+        return _FixtureUser(email)
+
+    def getuser(self, email):
+        return _FixtureUser(email)
+
+    def searchusers(self, pattern):
+        return [_FixtureUser(pattern)]
+
+    def updateperms(self, user, action, groups):
+        return {"user": user, "action": action, "groups": groups}
+
+    def getgroup(self, name, membership=False):
+        return _FixtureGroup()
+
+    def getgroups(self, names, membership=False):
+        return [_FixtureGroup()]
+
+    def product_get(self, ptype=None, names=None):
+        return [{"id": 801, "name": ptype or names[0]}]
+
+    def addcomponent(self, data):
+        return {"id": 901, "request": data}
+PY
+    cat >"$fixture_dir/bugzilla/_cli.py" <<'PY'
+import os
+
+
+def open_without_clobber(name, mode):
+    stem, extension = os.path.splitext(name)
+    candidate = name
+    suffix = 0
+    while True:
+        try:
+            descriptor = os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+            return os.fdopen(descriptor, mode)
+        except FileExistsError:
+            suffix += 1
+            candidate = f"{stem}-{suffix}{extension}"
+
+
+def _do_get_attach(client, options):
+    attachments = client.get_attachments(options.getall, None)["bugs"]
+    for values in attachments.values():
+        for attachment in values:
+            if options.ignore_obsolete and attachment.get("is_obsolete") == 1:
+                continue
+            source = client.openattachment_data(attachment)
+            with open_without_clobber(source.name, "wb") as destination:
+                destination.write(source.read())
 PY
 }
 
@@ -1108,41 +1248,80 @@ assert_adapter_case() {
     local operation="$5"
     local request="$6"
     local expected="$7"
-    local input="$config_dir/${name}.input.json"
-    local output="$config_dir/${name}.output.json"
+    local input="$config_dir/compare/${name}.input.json"
+    local output="$config_dir/compare/${name}.output.json"
     local actual
 
     printf '%s\n' "$request" >"$input"
     chmod 600 "$input"
     "$runtime" exec -e PYTHONPATH=/work/adapter-fixture "$sidecar" \
-        python /work/bug-lifecycle.py "$operation" "/work/${name}.input.json" \
-        "/work/${name}.output.json"
-    if ! jq -e '.transport | type == "string" and length > 0' "$output" >/dev/null; then
-        printf 'adapter case %s omitted transport\n' "$name" >&2
-        return 1
-    fi
+        python /work/compare/python-bugzilla-adapter.py "$operation" \
+        "/work/compare/${name}.input.json" "/work/compare/${name}.output.json"
     actual=$(jq -cS . "$output")
     assert_equals "$expected" "$actual" "adapter $name result"
+}
+
+assert_adapter_rejection() {
+    local runtime="$1"
+    local sidecar="$2"
+    local config_dir="$3"
+    local name="$4"
+    local operation="$5"
+    local request="$6"
+    local diagnostic="$7"
+    local input="$config_dir/compare/${name}.input.json"
+    local output="$config_dir/compare/${name}.output.json"
+    local error_output="$config_dir/compare/${name}.stderr"
+    local status
+
+    printf '%s\n' "$request" >"$input"
+    chmod 600 "$input"
+    set +e
+    "$runtime" exec -e PYTHONPATH=/work/adapter-fixture "$sidecar" \
+        python /work/compare/python-bugzilla-adapter.py "$operation" \
+        "/work/compare/${name}.input.json" "/work/compare/${name}.output.json" \
+        2>"$error_output"
+    status=$?
+    set -e
+    assert_equals 1 "$status" "adapter $name rejection status"
+    if ! grep -Fq "$diagnostic" "$error_output"; then
+        printf 'adapter rejection %s omitted diagnostic: %s\n' "$name" "$diagnostic" >&2
+        return 1
+    fi
+    if grep -Eq 'fixture-secret|/work/compare|fixture upstream' "$error_output"; then
+        printf 'adapter rejection %s leaked private failure detail\n' "$name" >&2
+        return 1
+    fi
+    if [[ -e $output ]]; then
+        printf 'adapter rejection %s created an output file\n' "$name" >&2
+        return 1
+    fi
 }
 
 run_adapter_fixture() {
     local runtime="$1"
     local sidecar="$2"
     local config_dir="$3"
-    local adapter="$PYBZ_DIR/../compare/bug-lifecycle.py"
+    local adapter="$PYBZ_DIR/../compare/python-bugzilla-adapter.py"
     local error_output="$config_dir/adapter-error.stderr"
-    local invalid_input="$config_dir/invalid-id.input.json"
+    local invalid_input="$config_dir/compare/invalid-id.input.json"
+    local local_input="$config_dir/compare/component-update-local.input.json"
+    local local_output="$config_dir/compare/component-update-local.output.json"
     local invalid_status
 
     if [[ ! -r $adapter ]]; then
-        printf 'python-bugzilla lifecycle adapter is missing: %s\n' "$adapter" >&2
+        printf 'python-bugzilla comparison adapter is missing: %s\n' "$adapter" >&2
         return 1
     fi
-    cp "$adapter" "$config_dir/bug-lifecycle.py"
-    chmod 600 "$config_dir/bug-lifecycle.py"
+    mkdir -p "$config_dir/compare"
+    cp "$adapter" "$config_dir/compare/python-bugzilla-adapter.py"
+    chmod 600 "$config_dir/compare/python-bugzilla-adapter.py"
+    printf 'fixture attachment\n' >"$config_dir/compare/attachment.txt"
+    chmod 600 "$config_dir/compare/attachment.txt"
     write_fake_bugzilla_module "$config_dir/adapter-fixture"
 
-    "$runtime" exec "$sidecar" python -m py_compile /work/bug-lifecycle.py
+    "$runtime" exec "$sidecar" python -m py_compile \
+        /work/compare/python-bugzilla-adapter.py
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" create create \
         '{"api_key":"fixture-secret","params":{"product":"Widget","summary":"create"}}' \
         '{"result":{"id":101,"request":{"builder":"create","product":"Widget","summary":"create"}},"transport":"XMLRPC"}'
@@ -1179,10 +1358,146 @@ run_adapter_fixture() {
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" bug-tags bug_tags \
         '{"api_key":"fixture-secret","bug_id":36,"tag":"probe"}' \
         '{"result":{"bugs":[{"id":201,"request":{"builder":"query","tags":["probe"]}}],"update":{"add":["probe"],"ids":[36],"remove":null}},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" comment-add comment_add \
+        '{"api_key":"fixture-secret","transport":"REST","bug_id":41,"text":"hello","is_private":true}' \
+        '{"result":{"ids":[41],"update":{"builder":"update","comment":{"comment":"hello","is_private":true}}},"transport":"REST"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" comment-list comment_list \
+        '{"api_key":"fixture-secret","transport":"XMLRPC","bug_id":41}' \
+        '{"result":{"bugs":{"41":{"comments":[{"id":350,"tags":[],"text":"tagged comment"}]}}},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" attachment-upload attachment_upload \
+        '{"api_key":"fixture-secret","transport":"REST","bug_ids":[41],"source":"/work/compare/attachment.txt","summary":"Fixture","file_name":"attachment.txt","content_type":"text/plain","comment":"uploaded","is_private":false}' \
+        '{"result":{"attachment_ids":[451]},"transport":"REST"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" attachment-list attachment_list \
+        '{"api_key":"fixture-secret","transport":"REST","bug_ids":[41]}' \
+        '{"result":{"attachment_ids":null,"attachments":{"451":{"id":451}},"bugs":[41]},"transport":"REST"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" attachment-get attachment_get \
+        '{"api_key":"fixture-secret","transport":"XMLRPC","attachment_ids":[451]}' \
+        '{"result":{"attachment_ids":[451],"attachments":{"451":{"id":451}},"bugs":null},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" attachment-download attachment_download \
+        '{"api_key":"fixture-secret","transport":"REST","attachment_id":451,"destination":"/work/compare/download.txt"}' \
+        '{"result":{"attachment_id":451,"bytes":19},"transport":"REST"}'
+    assert_equals 'fixture attachment' "$(<"$config_dir/compare/download.txt")" \
+        "adapter attachment download bytes"
+    assert_equals 600 \
+        "$("$runtime" exec "$sidecar" stat -c '%a' /work/compare/download.txt)" \
+        "adapter attachment download mode"
+    mkdir -p "$config_dir/compare/cli-download"
+    printf 'sentinel\n' >"$config_dir/compare/cli-download/current.txt"
+    chmod 600 "$config_dir/compare/cli-download/current.txt"
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" attachment-cli-download \
+        attachment_cli_download_bug \
+        '{"api_key":"fixture-secret","transport":"REST","bug_id":41,"destination":"/work/compare/cli-download","ignore_obsolete":true}' \
+        '{"result":{"bug_id":41,"files":["current-1.txt"]},"transport":"REST"}'
+    assert_equals 'sentinel' \
+        "$(<"$config_dir/compare/cli-download/current.txt")" \
+        "adapter CLI attachment collision sentinel"
+    assert_equals 'fixture attachment' \
+        "$(<"$config_dir/compare/cli-download/current-1.txt")" \
+        "adapter CLI attachment download bytes"
+    assert_equals 700 \
+        "$("$runtime" exec "$sidecar" stat -c '%a' /work/compare/cli-download)" \
+        "adapter CLI attachment directory mode"
+    assert_equals 600 \
+        "$("$runtime" exec "$sidecar" stat -c '%a' /work/compare/cli-download/current-1.txt)" \
+        "adapter CLI attachment file mode"
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" attachment-cli-unsafe \
+        attachment_cli_download_bug \
+        '{"api_key":"fixture-secret","transport":"REST","bug_id":42,"destination":"/work/compare/cli-unsafe","ignore_obsolete":true}' \
+        'python-bugzilla returned an unsafe attachment name'
+    if [[ -e $config_dir/compare/outside.txt ]]; then
+        printf 'unsafe CLI attachment escaped its destination\n' >&2
+        return 1
+    fi
+    ln -s cli-download "$config_dir/compare/cli-link"
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" attachment-cli-symlink \
+        attachment_cli_download_bug \
+        '{"api_key":"fixture-secret","transport":"REST","bug_id":41,"destination":"/work/compare/cli-link","ignore_obsolete":true}' \
+        'destination path must not be a symlink'
+    printf 'not a directory\n' >"$config_dir/compare/cli-file"
+    chmod 600 "$config_dir/compare/cli-file"
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" attachment-cli-file \
+        attachment_cli_download_bug \
+        '{"api_key":"fixture-secret","transport":"REST","bug_id":41,"destination":"/work/compare/cli-file","ignore_obsolete":true}' \
+        'destination must be a non-symlink directory'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" attachment-flag attachment_flag \
+        '{"api_key":"fixture-secret","transport":"XMLRPC","bug_id":41,"attachment_id":451,"flag_name":"review","status":"?","requestee":"reviewer@test.invalid"}' \
+        '{"result":{"attachment_id":451,"bug_id":41,"flag_name":"review","requestee":"reviewer@test.invalid","status":"?"},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" user-create user_create \
+        '{"api_key":"fixture-secret","email":"fixture-user@test.invalid","name":"Fixture User","password":"secret"}' \
+        '{"result":{"can_login":true,"email":"fixture-user@test.invalid","groups":["editbugs"],"id":601,"name":"fixture-user@test.invalid","real_name":"Fixture User"},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" user-get user_get \
+        '{"api_key":"fixture-secret","email":"fixture-user@test.invalid"}' \
+        '{"result":{"can_login":true,"email":"fixture-user@test.invalid","groups":["editbugs"],"id":601,"name":"fixture-user@test.invalid","real_name":"Fixture User"},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" user-search user_search \
+        '{"api_key":"fixture-secret","pattern":"fixture-user@test.invalid"}' \
+        '{"result":[{"can_login":true,"email":"fixture-user@test.invalid","groups":["editbugs"],"id":601,"name":"fixture-user@test.invalid","real_name":"Fixture User"}],"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" user-groups user_groups \
+        '{"api_key":"fixture-secret","email":"fixture-user@test.invalid","action":"add","groups":["editbugs"]}' \
+        '{"result":{"action":"add","groups":["editbugs"],"user":"fixture-user@test.invalid"},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" group-get group_get \
+        '{"api_key":"fixture-secret","name":"editbugs","membership":true}' \
+        '{"result":{"description":"Can edit bugs","id":701,"is_active":true,"members":["fixture-user@test.invalid"],"name":"editbugs"},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" group-list group_list \
+        '{"api_key":"fixture-secret","names":["editbugs"],"membership":true}' \
+        '{"result":[{"description":"Can edit bugs","id":701,"is_active":true,"members":["fixture-user@test.invalid"],"name":"editbugs"}],"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" product-catalogue product_catalogue \
+        '{"api_key":"fixture-secret","catalogue":"enterable"}' \
+        '{"result":[{"id":801,"name":"enterable"}],"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" component-add component_add \
+        '{"api_key":"fixture-secret","params":{"product":"Widget","name":"Core","description":"Core component","default_assignee":"admin@test.invalid"}}' \
+        '{"result":{"id":901,"request":{"default_assignee":"admin@test.invalid","description":"Core component","name":"Core","product":"Widget"}},"transport":"XMLRPC"}'
+
+    printf '%s\n' \
+        '{"api_key":"fixture-secret","params":{"product":"Widget","component":"Core","initialowner":"admin@test.invalid","description":"Updated"}}' \
+        >"$local_input"
+    chmod 600 "$local_input"
+    "$runtime" exec "$sidecar" python /work/compare/python-bugzilla-adapter.py \
+        component_update_shape /work/compare/component-update-local.input.json \
+        /work/compare/component-update-local.output.json
+    assert_equals \
+        '{"result":{"request":{"names":[{"component":"Core","product":"Widget"}],"updates":{"default_assignee":"admin@test.invalid","description":"Updated"}}},"transport":null}' \
+        "$(jq -cS . "$local_output")" "adapter local component-update shape"
+
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" invalid-transport \
+        comment_list \
+        '{"api_key":"fixture-secret","transport":"hybrid","bug_id":41}' \
+        'transport must be REST or XMLRPC'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" unknown-key \
+        user_get \
+        '{"api_key":"fixture-secret","email":"fixture-user@test.invalid","extra":true}' \
+        'unexpected request fields: extra'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" outside-attachment \
+        attachment_upload \
+        '{"api_key":"fixture-secret","bug_ids":[41],"source":"/work/outside.txt","summary":"Fixture","file_name":"attachment.txt","content_type":"text/plain","comment":"uploaded","is_private":false}' \
+        'source path is outside the exchange directory'
+    ln -s attachment.txt "$config_dir/compare/attachment-link.txt"
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" symlink-attachment \
+        attachment_upload \
+        '{"api_key":"fixture-secret","bug_ids":[41],"source":"/work/compare/attachment-link.txt","summary":"Fixture","file_name":"attachment.txt","content_type":"text/plain","comment":"uploaded","is_private":false}' \
+        'source path must not be a symlink'
+    cp "$config_dir/compare/attachment.txt" "$config_dir/compare/public-attachment.txt"
+    chmod 644 "$config_dir/compare/public-attachment.txt"
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" public-attachment \
+        attachment_upload \
+        '{"api_key":"fixture-secret","bug_ids":[41],"source":"/work/compare/public-attachment.txt","summary":"Fixture","file_name":"attachment.txt","content_type":"text/plain","comment":"uploaded","is_private":false}' \
+        'source file mode must be 0600'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" upstream-error \
+        attachment_download \
+        '{"api_key":"fixture-secret","attachment_id":999,"destination":"/work/compare/upstream.txt"}' \
+        'operation failed (RuntimeError)'
+    printf 'sentinel\n' >"$config_dir/compare/sentinel.txt"
+    ln -s sentinel.txt "$config_dir/compare/output-link.txt"
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" output-symlink \
+        attachment_download \
+        '{"api_key":"fixture-secret","attachment_id":451,"destination":"/work/compare/output-link.txt"}' \
+        'destination path must not be a symlink'
+    assert_equals sentinel "$(<"$config_dir/compare/sentinel.txt")" \
+        "adapter output symlink sentinel"
 
     if "$runtime" exec -e PYTHONPATH=/work/adapter-fixture -e FIXTURE_UNKNOWN_BACKEND=1 \
-        "$sidecar" python /work/bug-lifecycle.py create /work/create.input.json \
-        /work/unknown-backend.output.json 2>"$error_output"; then
+        "$sidecar" python /work/compare/python-bugzilla-adapter.py create \
+        /work/compare/create.input.json /work/compare/unknown-backend.output.json \
+        2>"$error_output"; then
         printf 'adapter accepted an unknown backend class\n' >&2
         return 1
     fi
@@ -1195,8 +1510,9 @@ run_adapter_fixture() {
     chmod 600 "$invalid_input"
     set +e
     "$runtime" exec -e PYTHONPATH=/work/adapter-fixture "$sidecar" \
-        python /work/bug-lifecycle.py view /work/invalid-id.input.json \
-        /work/invalid-id.output.json 2>"$error_output"
+        python /work/compare/python-bugzilla-adapter.py view \
+        /work/compare/invalid-id.input.json /work/compare/invalid-id.output.json \
+        2>"$error_output"
     invalid_status=$?
     set -e
     assert_equals 1 "$invalid_status" "invalid adapter ID status"
@@ -1204,23 +1520,942 @@ run_adapter_fixture() {
         printf 'adapter error leaked the API key\n' >&2
         return 1
     fi
-    if ! grep -Fq '/work/invalid-id.input.json' "$error_output"; then
-        printf 'adapter error omitted the input path\n' >&2
+    if grep -Fq '/work/compare/invalid-id.input.json' "$error_output"; then
+        printf 'adapter error leaked the input path\n' >&2
         return 1
     fi
     if "$runtime" exec -e PYTHONPATH=/work/adapter-fixture "$sidecar" \
-        python /work/bug-lifecycle.py unsupported /work/invalid-id.input.json \
-        /work/unsupported.output.json 2>"$error_output"; then
+        python /work/compare/python-bugzilla-adapter.py unsupported \
+        /work/compare/invalid-id.input.json /work/compare/unsupported.output.json \
+        2>"$error_output"; then
         printf 'adapter accepted an unsupported operation\n' >&2
         return 1
     fi
     if "$runtime" exec -e PYTHONPATH=/work/adapter-fixture "$sidecar" \
-        python /work/bug-lifecycle.py view /work/invalid-id.input.json \
+        python /work/compare/python-bugzilla-adapter.py view \
+        /work/compare/invalid-id.input.json \
         2>"$error_output"; then
         printf 'adapter accepted an incomplete argument list\n' >&2
         return 1
     fi
 }
+
+run_comment_phase_fixture() (
+    local phase="$PYBZ_DIR/../compare/02-comments.sh"
+    local fixture_output
+    local counter_file
+
+    if [[ ! -r $phase ]] || ! declare -F resource_init >/dev/null; then
+        printf 'missing resource helper or comment comparison phase\n' >&2
+        return 1
+    fi
+
+    COMPARE_EXCHANGE_DIR=$(mktemp -d)
+    fixture_output=$(mktemp)
+    counter_file="$COMPARE_EXCHANGE_DIR/fixture-next-id"
+    trap 'rm -rf "$COMPARE_EXCHANGE_DIR"; rm -f "$fixture_output"' EXIT
+    printf '100\n' >"$counter_file"
+    TEST_ID_PREFIX=compare CURRENT_TEST_GROUP=02-comments BZ_VERSION=bz50
+    BZ_URL=http://127.0.0.1 BZR_COMPARE_API_KEY=fixture-secret
+    COMPARE_ADMIN_EMAIL=admin@test.bzr
+
+    reset_comment_fixture() {
+        PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
+        SEEN_TEST_IDS=$'\n' TEST_RESULT_PENDING=0 RESOURCE_GAP_ELIGIBLE=0
+        rm -f "$COMPARE_EXCHANGE_DIR"/fixture-comment-*.json
+        printf '100\n' >"$counter_file"
+        : >"$fixture_output"
+    }
+    comment_fixture_transport() {
+        local api="$1"
+        if [[ $api == xmlrpc ]]; then
+            printf 'DEBUG bzr::xmlrpc::protocol::client: XML-RPC call\n'
+        else
+            printf 'DEBUG bzr::client::transport: API response\n'
+        fi
+    }
+    run_bzr() {
+        local args=("$@") api=rest command='' id='' text='' private=false index next
+        local state
+        BZR_EXIT=0
+        for ((index = 0; index < ${#args[@]}; index++)); do
+            next=$((index + 1))
+            case ${args[index]} in
+            --api) api=${args[next]} ;;
+            --body) text=${args[next]} ;;
+            --private) private=true ;;
+            bug)
+                [[ ${args[next]:-} == create ]] && command=bug-create
+                ;;
+            comment)
+                if [[ ${args[next]:-} == add ]]; then
+                    command='comment-add'
+                    id=${args[index + 2]}
+                elif [[ ${args[next]:-} == list ]]; then
+                    command='comment-list'
+                    id=${args[index + 2]}
+                fi
+                ;;
+            config)
+                [[ ${args[next]:-} == set-server ]] && command=config-set-server
+                ;;
+            esac
+        done
+        case $command in
+        config-set-server)
+            if [[ ${COMMENT_CONFIG_FAILURE:-0} -eq 1 ]]; then
+                BZR_EXIT=1
+            else
+                RESOURCE_QUERY_AUTH_CONFIGURED=1
+                printf '{}\n' >"$BZR_STDOUT"
+            fi
+            ;;
+        bug-create)
+            if [[ ${COMMENT_CREATE_FAILURE:-0} -eq 1 ]]; then
+                printf 'controlled bug create failure\n' >"$BZR_STDERR"
+                BZR_EXIT=1
+            elif [[ ${COMMENT_CREATE_NONPOSITIVE_ID:-0} -eq 1 ]]; then
+                printf '{"id":0}\n' >"$BZR_STDOUT"
+            else
+                id=$(<"$counter_file")
+                printf '%s\n' "$((id + 1))" >"$counter_file"
+                jq -cn --argjson id "$id" '{id:$id}' >"$BZR_STDOUT"
+            fi
+            ;;
+        comment-add)
+            state="$COMPARE_EXCHANGE_DIR/fixture-comment-${id}.json"
+            jq -cn --arg text "$text" --argjson private "$private" \
+                '{id:350,text:$text,is_private:$private}' >"$state"
+            printf '{"id":350}\n' >"$BZR_STDOUT"
+            ;;
+        comment-list)
+            state="$COMPARE_EXCHANGE_DIR/fixture-comment-${id}.json"
+            if [[ ${RESOURCE_QUERY_AUTH_CONFIGURED:-0} -ne 1 && $api == rest && -r $state ]] &&
+                jq -e '.is_private == true' "$state" >/dev/null; then
+                printf '[]\n' >"$BZR_STDOUT"
+            elif [[ -r $state ]]; then
+                jq -s '.' "$state" >"$BZR_STDOUT"
+            else
+                printf '[]\n' >"$BZR_STDOUT"
+            fi
+            ;;
+        *) return 2 ;;
+        esac
+        cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
+        if [[ ${COMMENT_TRANSPORT_MISSING:-0} -eq 1 && $command == comment-list ]]; then
+            : >"$BZR_STDERR"
+        else
+            comment_fixture_transport "$api" >"$BZR_STDERR"
+        fi
+    }
+    run_pybz_adapter() {
+        local operation="$1" input_name="${2##*/}" output_name="${3##*/}"
+        local input="$COMPARE_EXCHANGE_DIR/$input_name"
+        local output="$COMPARE_EXCHANGE_DIR/$output_name"
+        local transport id state comment
+        transport=$(jq -r '.transport' "$input")
+        id=$(jq -r '.bug_id' "$input")
+        state="$COMPARE_EXCHANGE_DIR/fixture-comment-${id}.json"
+        case $operation in
+        comment_add)
+            jq '{id:351,text:.text,is_private:.is_private}' "$input" >"$state"
+            jq -cn --arg transport "$transport" \
+                '{transport:$transport,result:{ids:[351]}}' >"$output"
+            ;;
+        comment_list)
+            if [[ ${COMMENT_MISSING_RECORD:-0} -eq 1 ]]; then
+                comment='null'
+            else
+                comment=$(<"$state")
+                if [[ ${COMMENT_PRIVACY_FLIPPED:-0} -eq 1 ]] &&
+                    jq -e '.is_private == true' "$state" >/dev/null; then
+                    comment=$(jq '.is_private = false' "$state")
+                fi
+            fi
+            jq -cn --arg transport "$transport" --argjson id "$id" \
+                --argjson comment "$comment" \
+                '{transport:$transport,result:{bugs:{($id|tostring):
+                  {comments:(if $comment == null then [] else [$comment] end)}}}}' >"$output"
+            ;;
+        *) return 2 ;;
+        esac
+        : >"$BZR_STDOUT"
+        : >"$BZR_STDOUT_RAW"
+        : >"$BZR_STDERR"
+        BZR_EXIT=0
+    }
+    run_comment_control() {
+        local flag="$1" slug="$2"
+        reset_comment_fixture
+        printf -v "$flag" 1
+        source "$phase" >"$fixture_output"
+        _render_test_result >>"$fixture_output"
+        unset "$flag"
+        if [[ $FAIL_COUNT -eq 0 ]] ||
+            ! grep -Fq "[compare/02-comments/${slug}]" "$fixture_output"; then
+            printf 'comment control %s unexpectedly passed\n' "$flag" >&2
+            return 1
+        fi
+        printf 'controlled red: comments %s=1\n' "$flag"
+    }
+
+    COMMENT_CONFIG_FAILURE=1
+    if resource_init; then
+        printf 'resource_init accepted a failed comparison-server setup\n' >&2
+        return 1
+    fi
+    unset COMMENT_CONFIG_FAILURE
+    resource_init
+    reset_comment_fixture
+    # shellcheck source=tests/functional/compare/02-comments.sh
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    assert_equals 3 "$PASS_COUNT" "comment comparison pass count"
+    assert_equals 0 "$FAIL_COUNT" "comment comparison fail count"
+    for slug in public-comments private-comments-rest private-comments-xmlrpc; do
+        if ! grep -Fq "[compare/02-comments/${slug}]" "$fixture_output"; then
+            printf 'comment phase omitted stable ID: %s\n' "$slug" >&2
+            return 1
+        fi
+    done
+    run_comment_control COMMENT_MISSING_RECORD public-comments
+    run_comment_control COMMENT_PRIVACY_FLIPPED private-comments-rest
+    run_comment_control COMMENT_TRANSPORT_MISSING public-comments
+    run_comment_control COMMENT_CREATE_FAILURE public-comments
+    run_comment_control COMMENT_CREATE_NONPOSITIVE_ID public-comments
+    reset_comment_fixture
+    RESOURCE_QUERY_AUTH_CONFIGURED=0
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    if [[ $FAIL_COUNT -eq 0 ]] ||
+        ! grep -Fq '[compare/02-comments/private-comments-rest]' "$fixture_output"; then
+        printf 'comment query-auth omission unexpectedly passed\n' >&2
+        return 1
+    fi
+    printf 'controlled red: comments query-parameter auth omitted\n'
+)
+
+run_attachment_phase_fixture() (
+    local phase="$PYBZ_DIR/../compare/03-attachments.sh"
+    local fixture_output
+    local next_bug next_bzr_attachment next_pybz_attachment
+
+    if [[ ! -r $phase ]]; then
+        printf 'missing attachment comparison phase\n' >&2
+        return 1
+    fi
+    COMPARE_EXCHANGE_DIR=$(mktemp -d)
+    fixture_output=$(mktemp)
+    trap 'rm -rf "$COMPARE_EXCHANGE_DIR"; rm -f "$fixture_output"' EXIT
+    TEST_ID_PREFIX=compare CURRENT_TEST_GROUP=03-attachments BZ_VERSION=bz50
+    RESOURCE_SERVER=compare-resource
+
+    eval "$(declare -f expect_gap | sed '1s/expect_gap/attachment_fixture_expect_gap/')"
+    expect_gap() {
+        local issue="$1"
+
+        if [[ ${ATTACHMENT_GAP_OWNER_FAULT:-0} -eq 1 ]]; then
+            issue=999
+        fi
+        attachment_fixture_expect_gap "$issue"
+    }
+
+    reset_attachment_fixture() {
+        PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
+        SEEN_TEST_IDS=$'\n' TEST_RESULT_PENDING=0 GAP_APPLIED=0
+        RESOURCE_GAP_ELIGIBLE=0
+        RESOURCE_GAP_FILE="$COMPARE_EXCHANGE_DIR/.resource-gap-eligible"
+        next_bug=100 next_bzr_attachment=200 next_pybz_attachment=300
+        : >"$fixture_output"
+    }
+    attachment_fixture_write_bzr() {
+        local name="$1" payload="$2"
+        printf '%s\n' "$payload" >"$COMPARE_EXCHANGE_DIR/${name}.bzr.stdout.json"
+        printf '%s\n' "$payload" >"$BZR_STDOUT"
+        cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
+        printf 'DEBUG bzr::client::transport: API response\n' >"$BZR_STDERR"
+        BZR_EXIT=0
+    }
+    resource_bzr() {
+        local name="$1" api="$2" transport="$3" command id out summary private=false path
+        shift 3
+        command="$*"
+        if [[ ${ATTACHMENT_TRANSPORT_FAULT:-0} -eq 1 &&
+            $name == private-xmlrpc-bzr-list ]]; then
+            test_fail "controlled attachment transport failure"
+            return 1
+        fi
+        if [[ ${ATTACHMENT_DOWNLOAD_COMMAND_FAILURE:-0} -eq 1 &&
+            $name == public-bzr-download ]]; then
+            test_fail "controlled attachment download command failure"
+            return 1
+        fi
+        case $command in
+        "bug create "*)
+            attachment_fixture_write_bzr "$name" "{\"id\":$next_bug}"
+            next_bug=$((next_bug + 1))
+            ;;
+        "attachment upload "*)
+            attachment_fixture_write_bzr "$name" "{\"id\":$next_bzr_attachment}"
+            next_bzr_attachment=$((next_bzr_attachment + 1))
+            ;;
+        "attachment list "*)
+            case $name in
+            public-*) summary="$ATTACHMENT_STEM public" ;;
+            private-rest-*) summary="$ATTACHMENT_STEM private-rest"; private=true ;;
+            private-xmlrpc-*) summary="$ATTACHMENT_STEM private-xmlrpc"; private=true ;;
+            esac
+            id="$ATTACHMENT_BZR_ID"
+            jq -cn --argjson id "$id" --arg summary "$summary" \
+                --argjson private "$private" \
+                '[{id:$id,file_name:"attachment-source.txt",summary:$summary,
+                   content_type:"text/plain",is_private:$private,is_obsolete:false,flags:[]}]' \
+                >"$COMPARE_EXCHANGE_DIR/fixture-payload.json"
+            attachment_fixture_write_bzr "$name" \
+                "$(<"$COMPARE_EXCHANGE_DIR/fixture-payload.json")"
+            ;;
+        "comment list "*)
+            attachment_fixture_write_bzr "$name" \
+                "[{\"text\":\"Created attachment\\n\\n$_ATTACH_PUBLIC_COMMENT\"}]"
+            ;;
+        "attachment view "*)
+            if [[ $name == flag-* ]]; then
+                jq -cn --argjson id "$ATTACHMENT_BZR_ID" \
+                    '{id:$id,flags:[{name:"bzr_compare_attachment_review",status:"?"}]}' \
+                    >"$COMPARE_EXCHANGE_DIR/fixture-payload.json"
+                attachment_fixture_write_bzr "$name" \
+                    "$(<"$COMPARE_EXCHANGE_DIR/fixture-payload.json")"
+            else
+                attachment_fixture_write_bzr "$name" \
+                    "{\"id\":$ATTACHMENT_BZR_ID,\"is_private\":true,\"flags\":[]}"
+            fi
+            ;;
+        "attachment download "*)
+            path=''
+            while [[ $# -gt 0 ]]; do
+                case $1 in
+                --out) path="$2"; shift 2 ;;
+                --out-dir)
+                    path="$2/$ATTACHMENT_BZR_BUG_ID/${ATTACHMENT_BZR_ID}.attachment-source.txt"
+                    shift 2
+                    ;;
+                *) shift ;;
+                esac
+            done
+            mkdir -p "${path%/*}"
+            cp "$ATTACHMENT_SOURCE" "$path"
+            if [[ $name == public-bzr-bulk ]]; then
+                jq -cn --argjson id "$ATTACHMENT_BZR_ID" --arg path "$path" \
+                    '{bug_results:[{files:[{attachment_id:$id,path:$path}]}]}' \
+                    >"$COMPARE_EXCHANGE_DIR/fixture-payload.json"
+                attachment_fixture_write_bzr "$name" \
+                    "$(<"$COMPARE_EXCHANGE_DIR/fixture-payload.json")"
+            else
+                attachment_fixture_write_bzr "$name" '{}'
+            fi
+            ;;
+        "attachment update "*) attachment_fixture_write_bzr "$name" '{}' ;;
+        *)
+            test_fail "unhandled bzr attachment fixture command"
+            return 1
+            ;;
+        esac
+        if [[ $transport == XMLRPC ]]; then
+            printf 'DEBUG bzr::xmlrpc::protocol::client: XML-RPC call\n' >"$BZR_STDERR"
+        fi
+    }
+    resource_pybz() {
+        local name="$1" operation="$2" payload="$3" transport="$4"
+        local result id bug_id summary private=false destination count
+        if [[ ${ATTACHMENT_MULTI_COMMAND_FAILURE:-0} -eq 1 &&
+            $name == multi-pybz-upload ]] ||
+            [[ ${ATTACHMENT_OBSOLETE_COMMAND_FAILURE:-0} -eq 1 &&
+                $name == obsolete-pybz-download ]]; then
+            test_fail "controlled attachment command failure"
+            return 1
+        fi
+        case $operation in
+        attachment_upload)
+            count=$(jq '.bug_ids | length' <<<"$payload")
+            if [[ $count -eq 2 ]]; then
+                result='{"attachment_ids":[901,902]}'
+            else
+                id=$next_pybz_attachment
+                next_pybz_attachment=$((next_pybz_attachment + 1))
+                result="{\"attachment_ids\":[$id]}"
+            fi
+            ;;
+        attachment_list)
+            bug_id=$(jq -r '.bug_ids[0]' <<<"$payload")
+            case $name in
+            public-*) summary="$ATTACHMENT_STEM public" ;;
+            private-rest-*) summary="$ATTACHMENT_STEM private-rest"; private=true ;;
+            private-xmlrpc-*) summary="$ATTACHMENT_STEM private-xmlrpc"; private=true ;;
+            obsolete-*) summary="$ATTACHMENT_STEM public" ;;
+            esac
+            id="$ATTACHMENT_PYBZ_ID"
+            [[ ${ATTACHMENT_METADATA_FAULT:-0} -eq 1 && $name == public-* ]] && summary=wrong
+            [[ ${ATTACHMENT_PRIVACY_FAULT:-0} -eq 1 && $name == private-rest-* ]] && private=false
+            if [[ $name == obsolete-* ]]; then
+                result="{\"bugs\":{\"$bug_id\":[{\"id\":$id,\"is_obsolete\":true}]}}"
+            else
+                result=$(jq -cn --arg bug_id "$bug_id" --argjson id "$id" \
+                    --arg summary "$summary" --argjson private "$private" \
+                    '{bugs:{($bug_id):[{id:$id,file_name:"attachment-source.txt",
+                      summary:$summary,content_type:"text/plain",is_private:$private,
+                      is_obsolete:false}]}}')
+            fi
+            ;;
+        comment_list)
+            bug_id=$(jq -r '.bug_id' <<<"$payload")
+            summary="$_ATTACH_PUBLIC_COMMENT"
+            [[ ${ATTACHMENT_COMMENT_FAULT:-0} -eq 1 ]] && summary=wrong
+            result=$(jq -cn --arg bug_id "$bug_id" \
+                --arg text "Created attachment"$'\n\n'"$summary" \
+                '{bugs:{($bug_id):{comments:[{text:$text}]}}}')
+            ;;
+        attachment_download)
+            id=$(jq -r '.attachment_id' <<<"$payload")
+            destination="$COMPARE_EXCHANGE_DIR/$(jq -r '.destination | split("/")[-1]' \
+                <<<"$payload")"
+            if [[ ${ATTACHMENT_DIGEST_FAULT:-0} -eq 1 ]]; then
+                printf 'wrong bytes\n' >"$destination"
+            else
+                cp "$ATTACHMENT_SOURCE" "$destination"
+            fi
+            result="{\"attachment_id\":$id,\"bytes\":1}"
+            ;;
+        attachment_cli_download_bug)
+            result='{"bug_id":100,"files":["attachment-source.txt"]}'
+            ;;
+        attachment_flag) result='{}' ;;
+        attachment_get)
+            id=$(jq -r '.attachment_ids[0]' <<<"$payload")
+            if [[ $name == flag-* ]]; then
+                if [[ ${ATTACHMENT_FLAG_FAULT:-0} -eq 1 ]]; then
+                    result="{\"attachments\":{\"$id\":{\"id\":$id,\"flags\":[]}}}"
+                else
+                    local requestee=null
+                    [[ ${ATTACHMENT_FLAG_EQUALITY_FAULT:-0} -eq 1 ]] &&
+                        requestee='"other@test.bzr"'
+                    result=$(jq -cn --arg id "$id" \
+                        --argjson requestee "$requestee" \
+                        '{attachments:{($id):{id:($id|tonumber),
+                          flags:[{name:"bzr_compare_attachment_review",status:"?",
+                            requestee:$requestee}]}}}')
+                fi
+            else
+                result="{\"attachments\":{\"$id\":{\"id\":$id,\"is_private\":true}}}"
+            fi
+            ;;
+        *)
+            test_fail "unhandled python-bugzilla attachment fixture operation"
+            return 1
+            ;;
+        esac
+        printf '%s\n' "$result" >"$COMPARE_EXCHANGE_DIR/${name}.pybz.result.json"
+        if [[ $transport == XMLRPC ]]; then
+            printf 'XMLRPC\n' >"$COMPARE_EXCHANGE_DIR/${name}.pybz.transport"
+        else
+            printf 'REST\n' >"$COMPARE_EXCHANGE_DIR/${name}.pybz.transport"
+        fi
+    }
+    run_bzr() {
+        local command="$*" diagnostic usage
+        : >"$BZR_STDOUT"
+        cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
+        if [[ ${ATTACHMENT_GAP_STALE:-0} -eq 1 ]]; then
+            BZR_EXIT=0
+            : >"$BZR_STDERR"
+            return
+        fi
+        if [[ $command == *'attachment upload'* ]]; then
+            diagnostic="error: unexpected argument '$ATTACHMENT_SOURCE' found"
+            usage='Usage: bzr attachment upload [OPTIONS] <BUG_ID> <FILE>'
+        else
+            diagnostic="error: unexpected argument '--ignore-obsolete' found"
+            usage='Usage: bzr attachment download --bug <BUG_ID> [ID]...'
+        fi
+        [[ ${ATTACHMENT_GAP_WRONG_DIAGNOSTIC:-0} -eq 1 ]] && diagnostic='error: unrelated'
+        printf '%s\n\n%s\n' "$diagnostic" "$usage" >"$BZR_STDERR"
+        BZR_EXIT=2
+    }
+    run_attachment_control() {
+        local flag="$1" slug="$2" expected_failures="${3:-minimum}"
+        reset_attachment_fixture
+        printf -v "$flag" 1
+        source "$phase" >"$fixture_output"
+        _render_test_result >>"$fixture_output"
+        unset "$flag"
+        if [[ $FAIL_COUNT -eq 0 ]] ||
+            [[ $expected_failures != minimum && $FAIL_COUNT -ne $expected_failures ]] ||
+            ! grep -Fq "[compare/03-attachments/${slug}]" "$fixture_output"; then
+            printf 'attachment control %s unexpectedly passed\n' "$flag" >&2
+            return 1
+        fi
+        printf 'controlled red: attachments %s=1\n' "$flag"
+    }
+    attachment_assert_gap_owners() {
+        local slug
+
+        for slug in multi-bug-upload ignore-obsolete; do
+            if ! grep -Eq \
+                "\\[compare/03-attachments/${slug}\\].*GAP \\(#674\\)$" \
+                "$fixture_output"; then
+                printf 'attachment gap %s did not render owner #674\n' "$slug" >&2
+                return 1
+            fi
+        done
+    }
+
+    reset_attachment_fixture
+    # shellcheck source=tests/functional/compare/03-attachments.sh
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    assert_equals 5 "$PASS_COUNT" "attachment comparison pass count"
+    assert_equals 0 "$FAIL_COUNT" "attachment comparison fail count"
+    assert_equals 2 "$GAP_COUNT" "attachment comparison gap count"
+    attachment_assert_gap_owners
+    for slug in upload-metadata-comment download-content attachment-flags \
+        private-attachments-rest private-attachments-xmlrpc multi-bug-upload ignore-obsolete; do
+        if ! grep -Fq "[compare/03-attachments/${slug}]" "$fixture_output"; then
+            printf 'attachment phase omitted stable ID: %s\n' "$slug" >&2
+            return 1
+        fi
+    done
+    run_attachment_control ATTACHMENT_METADATA_FAULT upload-metadata-comment
+    run_attachment_control ATTACHMENT_COMMENT_FAULT upload-metadata-comment
+    run_attachment_control ATTACHMENT_DIGEST_FAULT download-content
+    run_attachment_control ATTACHMENT_FLAG_FAULT attachment-flags
+    run_attachment_control ATTACHMENT_FLAG_EQUALITY_FAULT attachment-flags 1
+    run_attachment_control ATTACHMENT_PRIVACY_FAULT private-attachments-rest
+    run_attachment_control ATTACHMENT_TRANSPORT_FAULT private-attachments-xmlrpc
+    run_attachment_control ATTACHMENT_GAP_WRONG_DIAGNOSTIC multi-bug-upload
+    run_attachment_control ATTACHMENT_GAP_STALE multi-bug-upload
+    run_attachment_control ATTACHMENT_MULTI_COMMAND_FAILURE multi-bug-upload 1
+    run_attachment_control ATTACHMENT_OBSOLETE_COMMAND_FAILURE ignore-obsolete 1
+    reset_attachment_fixture
+    ATTACHMENT_DOWNLOAD_COMMAND_FAILURE=1
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    unset ATTACHMENT_DOWNLOAD_COMMAND_FAILURE
+    assert_equals 1 "$FAIL_COUNT" "attachment download command failure count"
+    if ! grep -Fq '[compare/03-attachments/download-content]' "$fixture_output"; then
+        printf 'attachment download command failure omitted its stable ID\n' >&2
+        return 1
+    fi
+    printf 'controlled red: attachment download command failure counted once\n'
+    reset_attachment_fixture
+    ATTACHMENT_GAP_OWNER_FAULT=1
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    unset ATTACHMENT_GAP_OWNER_FAULT
+    if attachment_assert_gap_owners; then
+        printf 'attachment wrong-owner control unexpectedly passed\n' >&2
+        return 1
+    fi
+    printf 'controlled red: attachments wrong gap owner\n'
+)
+
+run_attachment_seed_fixture() (
+    local seed_dir
+
+    seed_dir=$(mktemp -d)
+    trap 'rm -rf "$seed_dir"' EXIT
+    COMPARE_EXCHANGE_DIR="$seed_dir"
+    run_bugzilla_sql_file() {
+        local sql_file="$1"
+        if [[ ! -r $sql_file ]] ||
+            ! grep -Fq "WHERE NOT EXISTS" "$sql_file" ||
+            ! grep -Fq "flaginclusions.product_id IS NULL" "$sql_file" ||
+            ! grep -Fq "flaginclusions.component_id IS NULL" "$sql_file" ||
+            ! grep -Fq "AS unrestricted_inclusion_count" "$sql_file"; then
+            return 1
+        fi
+        : >"$seed_dir/sql-seen"
+        case ${ATTACHMENT_SEED_MODE:-green} in
+        green) printf 'flag_type_count\tunrestricted_inclusion_count\n1\t1\n' ;;
+        command-failure) return 1 ;;
+        bad-readback) printf 'flag_type_count\tunrestricted_inclusion_count\n0\t0\n' ;;
+        restricted-only) printf 'flag_type_count\tunrestricted_inclusion_count\n1\t0\n' ;;
+        esac
+    }
+
+    seed_comparison_attachment_flag_type
+    if [[ ! -f $seed_dir/sql-seen ]]; then
+        printf 'attachment flag seed did not invoke SQL\n' >&2
+        return 1
+    fi
+    if [[ -e $seed_dir/attachment-flag.sql ]]; then
+        printf 'attachment seed retained its SQL file\n' >&2
+        return 1
+    fi
+    ATTACHMENT_SEED_MODE='command-failure'
+    if seed_comparison_attachment_flag_type; then
+        printf 'attachment seed accepted command failure\n' >&2
+        return 1
+    fi
+    if [[ -e $seed_dir/attachment-flag.sql ]]; then
+        printf 'attachment seed retained SQL after command failure\n' >&2
+        return 1
+    fi
+    ATTACHMENT_SEED_MODE='bad-readback'
+    if seed_comparison_attachment_flag_type; then
+        printf 'attachment seed accepted bad readback\n' >&2
+        return 1
+    fi
+    if [[ -e $seed_dir/attachment-flag.sql ]]; then
+        printf 'attachment seed retained SQL after bad readback\n' >&2
+        return 1
+    fi
+    ATTACHMENT_SEED_MODE='restricted-only'
+    if seed_comparison_attachment_flag_type; then
+        printf 'attachment seed accepted a restricted-only inclusion\n' >&2
+        return 1
+    fi
+    if [[ -e $seed_dir/attachment-flag.sql ]]; then
+        printf 'attachment seed retained SQL after restricted readback\n' >&2
+        return 1
+    fi
+)
+
+run_user_group_phase_fixture() (
+    local phase="$PYBZ_DIR/../compare/04-users-groups.sh"
+    local fixture_output
+
+    COMPARE_EXCHANGE_DIR=$(mktemp -d)
+    fixture_output=$(mktemp)
+    trap 'rm -rf "$COMPARE_EXCHANGE_DIR"; rm -f "$fixture_output"' EXIT
+    TEST_ID_PREFIX=compare CURRENT_TEST_GROUP=04-users-groups BZ_VERSION=bz50
+    RESOURCE_SERVER=compare-resource
+
+    reset_user_group_fixture() {
+        PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
+        SEEN_TEST_IDS=$'\n' TEST_RESULT_PENDING=0 GAP_APPLIED=0
+        RESOURCE_MEMBERSHIPS="" USER_GROUP_BZR_MEMBER=0 USER_GROUP_PYBZ_MEMBER=0
+        USER_GROUP_BZR_TRANSPORTS=""
+        USER_GROUP_PYBZ_TRANSPORTS=""
+        : >"$fixture_output"
+    }
+    user_group_fixture_bzr_output() {
+        printf '%s\n' "$2" >"$COMPARE_EXCHANGE_DIR/${1}.bzr.stdout.json"
+    }
+    resource_bzr() {
+        local name="$1" api="$2" expected_transport="$3" command
+        USER_GROUP_BZR_TRANSPORTS+="${name}:${api}:${expected_transport}"$'\n'
+        shift 3
+        command="$*"
+        case $name in
+        user-bzr-create)
+            if [[ ${USER_GROUP_BZR_USER_ID_FAULT:-0} -eq 1 ]]; then
+                user_group_fixture_bzr_output "$name" '{"id":0}'
+            else
+                user_group_fixture_bzr_output "$name" '{"id":101}'
+            fi
+            ;;
+        user-bzr-search)
+            if [[ ${USER_GROUP_SEARCH_FAULT:-0} -eq 1 ]]; then
+                user_group_fixture_bzr_output "$name" '[]'
+            else
+                user_group_fixture_bzr_output "$name" \
+                    "[{\"name\":\"$USER_GROUP_BZR_EMAIL\",\"real_name\":\"\",\"can_login\":true,\"groups\":[]}]"
+            fi
+            ;;
+        group-bzr-create)
+            if [[ ${USER_GROUP_GROUP_ID_FAULT:-0} -eq 1 ]]; then
+                user_group_fixture_bzr_output "$name" '{"id":0}'
+            else
+                user_group_fixture_bzr_output "$name" '{"id":301}'
+            fi
+            ;;
+        group-bzr-view)
+            user_group_fixture_bzr_output "$name" \
+                "{\"name\":\"$USER_GROUP_FIXTURE\",\"description\":\"$USER_GROUP_DESCRIPTION\",\"is_active\":true}"
+            ;;
+        membership-bzr-add)
+            USER_GROUP_BZR_MEMBER=1
+            user_group_fixture_bzr_output "$name" '{}'
+            ;;
+        membership-bzr-remove)
+            USER_GROUP_BZR_MEMBER=0
+            user_group_fixture_bzr_output "$name" '{}'
+            ;;
+        membership-bzr-read)
+            local email="$USER_GROUP_BZR_EMAIL" groups='[]'
+            [[ ${USER_GROUP_NONMEMBER_FAULT:-0} -eq 1 ]] && email='substitute@test.bzr'
+            [[ $USER_GROUP_BZR_MEMBER -eq 1 ]] && groups="[\"$USER_GROUP_FIXTURE\"]"
+            user_group_fixture_bzr_output "$name" \
+                "[{\"name\":\"$email\",\"real_name\":\"\",\"can_login\":true,\"groups\":$groups}]"
+            ;;
+        *)
+            printf 'unhandled user/group bzr fixture command: %s\n' "$command" >&2
+            return 1
+            ;;
+        esac
+    }
+    resource_pybz() {
+        local name="$1" operation="$2" payload="$3" expected_transport="$4"
+        local result groups='[]'
+        USER_GROUP_PYBZ_TRANSPORTS+="${name}:${expected_transport}"$'\n'
+        if [[ ${USER_GROUP_MEMBERSHIP_COMMAND_FAILURE:-0} -eq 1 &&
+            $name == membership-pybz-remove ]]; then
+            test_fail "controlled membership command failure"
+            return 1
+        fi
+        case $name in
+        user-pybz-create)
+            if [[ ${USER_GROUP_PYBZ_USER_ID_FAULT:-0} -eq 1 ]]; then
+                result="{\"id\":0,\"email\":\"$USER_GROUP_PYBZ_EMAIL\",\"real_name\":\"\",\"can_login\":true,\"groups\":[]}"
+            else
+                result="{\"id\":201,\"email\":\"$USER_GROUP_PYBZ_EMAIL\",\"real_name\":\"\",\"can_login\":true,\"groups\":[]}"
+            fi
+            ;;
+        user-pybz-get)
+            result="{\"id\":201,\"email\":\"$USER_GROUP_PYBZ_EMAIL\",\"real_name\":\"\",\"can_login\":true,\"groups\":[]}"
+            ;;
+        user-pybz-search)
+            result="[{\"id\":201,\"email\":\"$USER_GROUP_PYBZ_EMAIL\",\"real_name\":\"\",\"can_login\":true,\"groups\":[]}]"
+            ;;
+        group-pybz-get)
+            result="{\"name\":\"$USER_GROUP_FIXTURE\",\"description\":\"$USER_GROUP_DESCRIPTION\",\"is_active\":true}"
+            ;;
+        group-pybz-list)
+            result="[{\"name\":\"$USER_GROUP_FIXTURE\",\"description\":\"$USER_GROUP_DESCRIPTION\",\"is_active\":true}]"
+            ;;
+        membership-pybz-add)
+            USER_GROUP_PYBZ_MEMBER=1
+            result='{}'
+            ;;
+        membership-pybz-remove)
+            [[ ${USER_GROUP_RETAIN_FAULT:-0} -eq 1 ]] || USER_GROUP_PYBZ_MEMBER=0
+            result='{}'
+            ;;
+        membership-pybz-read)
+            [[ $USER_GROUP_PYBZ_MEMBER -eq 1 ]] && groups="[\"$USER_GROUP_FIXTURE\"]"
+            result="{\"id\":201,\"email\":\"$USER_GROUP_PYBZ_EMAIL\",\"real_name\":\"\",\"can_login\":true,\"groups\":$groups}"
+            ;;
+        *)
+            printf 'unhandled user/group python fixture operation: %s %s\n' \
+                "$operation" "$payload" >&2
+            return 1
+            ;;
+        esac
+        printf '%s\n' "$result" >"$COMPARE_EXCHANGE_DIR/${name}.pybz.result.json"
+    }
+    run_user_group_control() {
+        local flag="$1" slug="$2"
+        reset_user_group_fixture
+        printf -v "$flag" 1
+        source "$phase" >"$fixture_output"
+        _render_test_result >>"$fixture_output"
+        unset "$flag"
+        if [[ $FAIL_COUNT -ne 1 ]] ||
+            ! grep -Fq "[compare/04-users-groups/${slug}]" "$fixture_output"; then
+            printf 'user/group control %s unexpectedly passed\n' "$flag" >&2
+            return 1
+        fi
+        printf 'controlled red: users/groups %s=1\n' "$flag"
+    }
+
+    reset_user_group_fixture
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    assert_equals 3 "$PASS_COUNT" "user/group comparison pass count"
+    assert_equals 0 "$FAIL_COUNT" "user/group comparison fail count"
+    assert_equals '' "$RESOURCE_MEMBERSHIPS" "user/group cleanup registry"
+    if [[ $USER_GROUP_BZR_TRANSPORTS != *$'group-bzr-view:xmlrpc:XMLRPC\n'* ]]; then
+        printf 'group view did not force XML-RPC transport\n' >&2
+        return 1
+    fi
+    if [[ $USER_GROUP_PYBZ_TRANSPORTS != *$'group-pybz-get:XMLRPC\n'* ||
+        $USER_GROUP_PYBZ_TRANSPORTS != *$'group-pybz-list:XMLRPC\n'* ]]; then
+        printf 'python-bugzilla group reads did not force XML-RPC transport\n' >&2
+        return 1
+    fi
+    run_user_group_control USER_GROUP_SEARCH_FAULT user-create-get-search
+    run_user_group_control USER_GROUP_BZR_USER_ID_FAULT user-create-get-search
+    run_user_group_control USER_GROUP_PYBZ_USER_ID_FAULT user-create-get-search
+    run_user_group_control USER_GROUP_GROUP_ID_FAULT group-get-and-list
+    run_user_group_control USER_GROUP_RETAIN_FAULT membership-add-remove
+    run_user_group_control USER_GROUP_NONMEMBER_FAULT membership-add-remove
+    run_user_group_control USER_GROUP_MEMBERSHIP_COMMAND_FAILURE membership-add-remove
+)
+
+run_membership_cleanup_fixture() (
+    local calls
+
+    calls=$(mktemp)
+    trap 'rm -f "$calls"' EXIT
+    RESOURCE_MEMBERSHIPS=""
+    resource_membership_record first@test.bzr editbugs
+    resource_membership_record second@test.bzr editbugs
+    run_bzr() {
+        printf '%s\n' "$*" >>"$calls"
+        BZR_EXIT=${MEMBERSHIP_CLEANUP_EXIT:-0}
+    }
+    resource_membership_cleanup
+    assert_equals 2 "$(wc -l <"$calls" | tr -d ' ')" "membership cleanup call count"
+    if ! grep -Fxq -- \
+        '--server compare-resource group remove-user --group editbugs --user first@test.bzr' \
+        "$calls"; then
+        printf 'membership cleanup omitted the first exact removal\n' >&2
+        return 1
+    fi
+    resource_membership_record failed@test.bzr editbugs
+    MEMBERSHIP_CLEANUP_EXIT=1
+    if resource_membership_cleanup; then
+        printf 'membership cleanup accepted a removal failure\n' >&2
+        return 1
+    fi
+    printf 'controlled red: membership cleanup failure\n'
+)
+
+run_product_component_phase_fixture() (
+    local phase="$PYBZ_DIR/../compare/05-products-components.sh"
+    local fixture_output
+
+    COMPARE_EXCHANGE_DIR=$(mktemp -d)
+    fixture_output=$(mktemp)
+    trap 'rm -rf "$COMPARE_EXCHANGE_DIR"; rm -f "$fixture_output"' EXIT
+    TEST_ID_PREFIX=compare CURRENT_TEST_GROUP=05-products-components BZ_VERSION=bz50
+    RESOURCE_SERVER=compare-resource
+    COMPARE_ADMIN_EMAIL=admin@test.bzr
+    RESOURCE_GAP_FILE="$COMPARE_EXCHANGE_DIR/.resource-gap-eligible"
+    eval "$(declare -f expect_gap | sed '1s/expect_gap/product_fixture_expect_gap/')"
+    expect_gap() {
+        local issue="$1"
+        [[ ${PRODUCT_GAP_OWNER_FAULT:-0} -eq 1 ]] && issue=999
+        product_fixture_expect_gap "$issue"
+    }
+    reset_product_fixture() {
+        PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
+        SEEN_TEST_IDS=$'\n' TEST_RESULT_PENDING=0 GAP_APPLIED=0
+        RESOURCE_GAP_ELIGIBLE=0
+        rm -f "$RESOURCE_GAP_FILE"
+        : >"$fixture_output"
+    }
+    product_fixture_bzr_output() {
+        printf '%s\n' "$2" >"$COMPARE_EXCHANGE_DIR/${1}.bzr.stdout.json"
+    }
+    resource_bzr() {
+        local name="$1"
+        case $name in
+        catalogue-*-bzr)
+            if [[ ${PRODUCT_CATALOGUE_FAULT:-0} -eq 1 && $name == catalogue-enterable-bzr ]]; then
+                product_fixture_bzr_output "$name" '[{"name":"Other"}]'
+            else
+                product_fixture_bzr_output "$name" '[{"name":"TestProduct"}]'
+            fi
+            ;;
+        component-*-product) product_fixture_bzr_output "$name" '{"id":301}' ;;
+        component-bzr-create)
+            if [[ ${PRODUCT_BZR_COMPONENT_ID_FAULT:-0} -eq 1 ]]; then
+                product_fixture_bzr_output "$name" '{"id":0}'
+            else
+                product_fixture_bzr_output "$name" '{"id":401}'
+            fi
+            ;;
+        component-*-view)
+            local description="$COMPONENT_DESCRIPTION"
+            [[ ${PRODUCT_COMPONENT_FAULT:-0} -eq 1 && $name == component-pybz-view ]] &&
+                description=wrong
+            product_fixture_bzr_output "$name" \
+                "{\"name\":\"$COMPONENT_NAME\",\"description\":\"$description\",\"default_assignee\":\"admin@test.bzr\",\"is_active\":true}"
+            ;;
+        *) return 1 ;;
+        esac
+    }
+    resource_pybz() {
+        local name="$1" operation="$2" result
+        if [[ ${PRODUCT_SHAPE_COMMAND_FAILURE:-0} -eq 1 &&
+            $operation == component_update_shape ]]; then
+            test_fail "controlled component update shape command failure"
+            return 1
+        fi
+        case $operation in
+        product_catalogue) result='[{"name":"TestProduct"}]' ;;
+        component_add)
+            if [[ ${PRODUCT_PYBZ_COMPONENT_ID_FAULT:-0} -eq 1 ]]; then
+                result='{"id":0}'
+            else
+                result='{"id":501}'
+            fi
+            ;;
+        component_update_shape)
+            if [[ ${PRODUCT_SHAPE_FAULT:-0} -eq 1 ]]; then
+                result='{"request":{"names":[],"updates":{}}}'
+            else
+                result=$(jq -cn --arg product "$PRODUCT_PYBZ_NAME" \
+                    --arg component "$COMPONENT_NAME" \
+                    '{request:{names:[{product:$product,component:$component}],
+                      updates:{default_assignee:"admin@test.bzr",
+                        description:"updated comparison component",is_active:false}}}')
+            fi
+            ;;
+        *) return 1 ;;
+        esac
+        printf '%s\n' "$result" >"$COMPARE_EXCHANGE_DIR/${name}.pybz.result.json"
+    }
+    run_bzr() {
+        : >"$BZR_STDOUT"
+        cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
+        if [[ ${PRODUCT_GAP_STALE:-0} -eq 1 ]]; then
+            BZR_EXIT=0
+            : >"$BZR_STDERR"
+        else
+            BZR_EXIT=2
+            local diagnostic="error: unrecognized subcommand 'update'"
+            [[ ${PRODUCT_GAP_WRONG_DIAGNOSTIC:-0} -eq 1 ]] && diagnostic='error: unrelated'
+            printf "%s\n\n%s\n" "$diagnostic" \
+                'Usage: bzr component [OPTIONS] <COMMAND>' >"$BZR_STDERR"
+        fi
+    }
+    product_assert_gap_owner() {
+        grep -Eq \
+            '\[compare/05-products-components/component-update-redhat\].*GAP \(#675\)$' \
+            "$fixture_output"
+    }
+    run_product_control() {
+        local flag="$1" slug="$2"
+        reset_product_fixture
+        printf -v "$flag" 1
+        source "$phase" >"$fixture_output"
+        _render_test_result >>"$fixture_output"
+        unset "$flag"
+        if [[ $FAIL_COUNT -ne 1 ]] ||
+            ! grep -Fq "[compare/05-products-components/${slug}]" "$fixture_output"; then
+            printf 'product/component control %s unexpectedly passed\n' "$flag" >&2
+            return 1
+        fi
+        printf 'controlled red: products/components %s=1\n' "$flag"
+    }
+
+    reset_product_fixture
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    assert_equals 2 "$PASS_COUNT" "product/component comparison pass count"
+    assert_equals 0 "$FAIL_COUNT" "product/component comparison fail count"
+    assert_equals 1 "$GAP_COUNT" "product/component comparison gap count"
+    product_assert_gap_owner
+    run_product_control PRODUCT_CATALOGUE_FAULT product-catalogues
+    run_product_control PRODUCT_COMPONENT_FAULT component-create
+    run_product_control PRODUCT_BZR_COMPONENT_ID_FAULT component-create
+    run_product_control PRODUCT_PYBZ_COMPONENT_ID_FAULT component-create
+    run_product_control PRODUCT_SHAPE_FAULT component-update-redhat
+    run_product_control PRODUCT_SHAPE_COMMAND_FAILURE component-update-redhat
+    run_product_control PRODUCT_GAP_WRONG_DIAGNOSTIC component-update-redhat
+    run_product_control PRODUCT_GAP_STALE component-update-redhat
+    reset_product_fixture
+    PRODUCT_GAP_OWNER_FAULT=1
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    unset PRODUCT_GAP_OWNER_FAULT
+    if product_assert_gap_owner; then
+        printf 'component-update wrong-owner control unexpectedly passed\n' >&2
+        return 1
+    fi
+    printf 'controlled red: products/components wrong gap owner\n'
+)
 
 cleanup_container_fixture() {
     local runtime="$1"
@@ -1325,4 +2560,10 @@ run_lifecycle_phase_fixture
 run_parity_report_fixture
 run_sidecar_stop_failure_fixture
 run_adapter_staging_cleanup_fixture
+run_comment_phase_fixture
+run_attachment_seed_fixture
+run_attachment_phase_fixture
+run_user_group_phase_fixture
+run_membership_cleanup_fixture
+run_product_component_phase_fixture
 run_container_fixture

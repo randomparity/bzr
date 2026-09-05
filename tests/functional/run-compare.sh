@@ -64,6 +64,9 @@ fi
 cleanup() {
     local status=$?
 
+    if ! resource_membership_cleanup; then
+        [[ $status -ne 0 ]] || status=1
+    fi
     if [[ -n "${PYBZ_RUNTIME:-}" ]]; then
         if ! pybz_sidecar_stop "${_compare_runtime:-}"; then
             [[ $status -ne 0 ]] || status=1
@@ -82,14 +85,14 @@ COMPARE_EXCHANGE_DIR="$FUNC_CONFIG_DIR/compare"
 mkdir -p "$COMPARE_EXCHANGE_DIR"
 COMPARE_ADMIN_EMAIL="admin@test.bzr"
 BZR_COMPARE_API_KEY="FuncTest0123456789abcdef0123456789abcdef"
-_compare_adapter="$SCRIPT_DIR/compare/bug-lifecycle.py"
+_compare_adapter="$SCRIPT_DIR/compare/python-bugzilla-adapter.py"
 if [[ ! -r $_compare_adapter ]]; then
     echo "ERROR: comparison adapter is missing or unreadable: $_compare_adapter" >&2
     exit 1
 fi
-cp "$_compare_adapter" "$COMPARE_EXCHANGE_DIR/bug-lifecycle.py"
-chmod 600 "$COMPARE_EXCHANGE_DIR/bug-lifecycle.py"
-if [[ ! -r $COMPARE_EXCHANGE_DIR/bug-lifecycle.py ]]; then
+cp "$_compare_adapter" "$COMPARE_EXCHANGE_DIR/python-bugzilla-adapter.py"
+chmod 600 "$COMPARE_EXCHANGE_DIR/python-bugzilla-adapter.py"
+if [[ ! -r $COMPARE_EXCHANGE_DIR/python-bugzilla-adapter.py ]]; then
     echo "ERROR: comparison adapter staging failed" >&2
     exit 1
 fi
@@ -109,10 +112,18 @@ _compare_container=$(bugzilla_container_name) || {
     exit 1
 }
 pybz_sidecar_start "$_compare_runtime" "$_compare_container"
+resource_init
 
 for _phase in \
     00-products \
-    01-bug-lifecycle; do
+    01-bug-lifecycle \
+    02-comments \
+    03-attachments \
+    04-users-groups \
+    05-products-components; do
+    if [[ $_phase == 03-attachments ]]; then
+        seed_comparison_attachment_flag_type
+    fi
     CURRENT_TEST_GROUP="$_phase"
     source "$SCRIPT_DIR/compare/${_phase}.sh"
     _render_test_result
