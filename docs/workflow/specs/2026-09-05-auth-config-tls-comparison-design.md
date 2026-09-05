@@ -143,6 +143,10 @@ the existing Red Hat proxy from response transformation to bounded request crede
   secrets, selectors, URLs, and paths from private request files and serialize only bounded
   non-secret facts. The identity operation validates exact input keys and emits booleans rather
   than returned user data.
+- The phase writes URL, API key, and username to separate mode-0600 source files with the Bash
+  `printf` builtin, then invokes `jq --rawfile` with only those fixed paths in argv to assemble the
+  mode-0600 adapter request. It removes the source files immediately after assembly. No external
+  process receives any of the three values in argv.
 - Staged files stay beneath the mode-0700 comparison directory; secret-bearing files remain mode
   0600. Paths are fixed by the runner rather than derived from server input.
 - Container commands pass data as quoted argv or positional shell parameters; no fixture value is
@@ -166,6 +170,8 @@ malicious local operators, or turn disposable test credentials into production s
 - Adapter fixtures prove private-file token lifecycle operations, password-free cache reuse,
   library logout, a proxy-observed API-key identity lookup, secret-free identity results, and the
   network-free client-certificate surface observation.
+- An argv-capture fixture wraps every external request-construction and adapter invocation and
+  rejects the API-key, URL, and username sentinels in every recorded argument.
 - Phase fixture tests prove each positive-control-before-gap transition and stale-gap behavior.
 - `make check-functional-test-ids` validates the new phase and evidence IDs.
 - `make lint` and `make test` keep repository guardrails green.

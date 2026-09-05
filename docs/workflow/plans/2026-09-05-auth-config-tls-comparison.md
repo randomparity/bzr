@@ -189,18 +189,27 @@ Verification:
   result and failure output. The red command is
   `bash tests/functional/pybz/container-tests.sh` failing on the unknown `api_key_identity`
   operation; the green command is the same script with all adapter cases passing.
+- Mode: focused-test — wrap `jq` and the fake container runtime with argv recorders while assembling
+  and invoking the identity request. Require the API-key, URL, and username sentinels to be absent
+  from every recorded argument. The same fixture command is red until the request writer uses only
+  fixed private source-file paths.
 
 Steps:
 
 1. Add the focused adapter fixture and controlled wrong-mode, extra-key, failed-auth, and
    mismatched-identity cases before changing the operation registry.
-2. Reuse the adapter's existing request confinement, permission, exact-key, safe-error, transport,
+2. Add a request writer that creates three mode-0600 source files with the Bash `printf` builtin,
+   invokes `jq --rawfile` with only fixed source paths in argv to assemble the mode-0600 request,
+   and removes the source files immediately afterward. Do not adapt the existing `jq --arg`
+   resource helper for this secret-bearing operation.
+3. Reuse the adapter's existing request confinement, permission, exact-key, safe-error, transport,
    and result-file machinery.
-3. Construct a new forced-REST client from the private URL and API key, call the pinned library's
+4. Construct a new forced-REST client from the private URL and API key, call the pinned library's
    user lookup with the private username, and reduce the result to the two booleans.
-4. Run `bash tests/functional/pybz/container-tests.sh`; expect all adapter fixtures and secret scans
+5. Run `bash tests/functional/pybz/container-tests.sh`; expect all adapter fixtures, argv capture,
+   and secret scans
    to pass.
-5. Commit as `test(functional): observe python-bugzilla API-key identity`.
+6. Commit as `test(functional): observe python-bugzilla API-key identity`.
 
 Acceptance: the operation proves a real proxy-observed authenticated lookup, null transport cannot
 pass, and no credential, selector, URL, returned user data, or upstream exception is emitted.
@@ -238,7 +247,8 @@ Steps:
    controls, secret-sentinel scans, unsupported-version handling, an omitted-`/etc` precedence
    fault, and a forced positive-control failure.
 2. Implement `06-auth-config-tls.sh`: reset owned sidecar state; run API-key observations through
-   the private-file `api_key_identity` operation; prove
+   the private-file `api_key_identity` operation, assembling its request only through Task 3a's
+   source-file/`jq --rawfile` writer; prove
    login/restricted/cache/logout via private adapter request files; copy the staged system
    bugzillarc to the sidecar's `/etc`, write both home-path files, and prove their precedence; start
    the namespace TLS proxy and prove default rejection plus `--nosslverify` success; install the Red
