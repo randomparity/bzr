@@ -2529,6 +2529,12 @@ run_container_fixture() (
     trap 'cleanup_container_fixture "$runtime" "$donor" "$config_dir"' EXIT
 
     "$runtime" build -t "$fixture_image" -f "$PYBZ_DIR/Containerfile" "$PYBZ_DIR"
+    # Exercise the same records with the sidecar's Linux awk as with the host's awk.
+    "$runtime" run --rm --volume "$PYBZ_DIR/..:/work:ro" "$fixture_image" bash -euc "
+        source /work/lib.sh
+        $(declare -f assert_equals run_transport_observation_fixture)
+        run_transport_observation_fixture
+    "
     package_version=$("$runtime" run --rm "$fixture_image" python -c \
         'from importlib.metadata import version; print(version("python-bugzilla"))')
     assert_equals 3.3.0 "$package_version" "python-bugzilla version"

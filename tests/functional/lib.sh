@@ -265,8 +265,10 @@ BZR_TRANSPORT=""
 PYBZ_RUNTIME=""
 
 # Match the outer record, with the default tracing timestamp or the fixtures' bare prefix.
-BZR_TRACING_PREFIX_RE='^([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}'
-BZR_TRACING_PREFIX_RE+='[.][0-9]{6}Z[[:space:]]+)?DEBUG[[:space:]]+'
+# Spell out digit widths because older mawk does not support interval expressions.
+BZR_TRACING_PREFIX_RE='^([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T'
+BZR_TRACING_PREFIX_RE+='[0-9][0-9]:[0-9][0-9]:[0-9][0-9][.]'
+BZR_TRACING_PREFIX_RE+='[0-9][0-9][0-9][0-9][0-9][0-9]Z[[:space:]]+)?DEBUG[[:space:]]+'
 BZR_REST_BOUNDARY_RE="${BZR_TRACING_PREFIX_RE}bzr::client::transport: "
 BZR_REST_BOUNDARY_RE+='(strict )?API response([[:space:]]|$)'
 BZR_XMLRPC_BOUNDARY_RE="${BZR_TRACING_PREFIX_RE}bzr::xmlrpc::protocol::client: "
