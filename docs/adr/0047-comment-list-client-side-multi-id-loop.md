@@ -100,7 +100,21 @@ all-failed run writes nothing to stdout at all.
   exit code: it used to fall through to a `DataIntegrity` error (exit 10) when
   the comment could not be located, and now fails earlier with `NotFound`
   (exit 2), with different stderr text. Exit codes are a published contract
-  here, so that is a change rather than a no-op.
+  here, so that is a change rather than a no-op. The same shift applies on
+  **REST**, not only XML-RPC: `{"bugs": {}}` used to surface as `Deserialize`
+  (exit 9) and is now `NotFound` (exit 2). REST-only deployments — the ones
+  with no `xmlrpc.cgi` at all — are otherwise the readers most likely to
+  conclude they are unaffected.
+- The keyed REST lookup also repairs a misattribution that predates this
+  change: `resp.bugs.into_values().next()` returned whichever key came first,
+  so a response keyed for bug 7 answered a request for bug 42 with bug 7's
+  comments. That reached `bug clone`'s description resolution too, not just
+  `comment list`.
+- On a server that mislabels a record, the two output formats disagree: the
+  multi-ID table header is written from the **requested** ID while `bug_id` in
+  the payload carries the **server's**. The design trusts the server's value
+  (see the backfill bullet above), so this is a consequence of that decision
+  rather than a defect to guard against.
 - N bugs cost N requests on every transport. The win the issue asks for — N-1
   process invocations, each of which today re-loads config, resolves
   credentials, detects API mode, and completes a TLS handshake — is captured in

@@ -86,10 +86,17 @@ else test_skip "no BUG1 or second bug"; fi
 test_begin "comment-list-multi-id-table-headers" "comment list multi-ID table headers"
 if [[ -n "$BUG1" ]] && [[ -n "$_MULTI_BUG" ]]; then
     run_bzr_raw --output table comment list "$BUG1" "$_MULTI_BUG"
+    # Anchor to whole lines: assert_stdout_contains is an unanchored grep, and
+    # $BUG1 is a low single-digit id while $_MULTI_BUG is two digits, so a bare
+    # "Bug #1" would be satisfied by "Bug #13" -- the second bug's header
+    # passing the first bug's assertion, which is the regression this catches.
     if assert_success &&
-        assert_stdout_contains "Bug #$BUG1" &&
-        assert_stdout_contains "Bug #$_MULTI_BUG"; then
+        assert_stdout_contains "^Bug #$BUG1\$" &&
+        assert_stdout_contains "^Bug #$_MULTI_BUG\$" &&
+        [[ $(grep -c '^Bug #' "$BZR_STDOUT") -eq 2 ]]; then
         test_pass
+    else
+        test_fail "expected exactly two anchored Bug # headers"
     fi
 else test_skip "no BUG1 or second bug"; fi
 
