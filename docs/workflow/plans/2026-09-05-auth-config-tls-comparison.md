@@ -50,7 +50,8 @@ Interfaces:
   `tests/functional/redhat-shape-proxy.py`.
 - Provide fixture mode `BZR_FUNC_REDHAT_MODE=bearer-auth`.
 - Provide log records `auth-kind query count=1`, `auth-kind header count=1`, and
-  `auth-kind bearer count=1`; later phase code relies on exact whole lines.
+  `auth-kind bearer count=1`; each line describes one request. Later phase code requires one or
+  more exact whole-line records, all of the expected kind and none of another kind.
 
 Verification:
 
@@ -203,7 +204,9 @@ Steps:
    login/restricted/cache/logout via private adapter request files; copy the staged system
    bugzillarc to the sidecar's `/etc`, write both home-path files, and prove their precedence; start
    the namespace TLS proxy and prove default rejection plus `--nosslverify` success; install the Red
-   Hat alias, start the Bearer proxy, and prove translated authentication from the current log.
+   Hat alias, start the Bearer proxy, and prove translated authentication from the current log. For
+   each observation, accept the constructor's mandatory authenticated version probe by requiring
+   one-or-more homogeneous credential-kind records; reject missing or mixed records.
 3. For missing bzr surfaces, use exact parser or transport observations before calling
    `expect_gap` for #676, #681, #682, #677, and #678. Never convert a failed python-bugzilla
    operation or proxy readiness failure into a gap.

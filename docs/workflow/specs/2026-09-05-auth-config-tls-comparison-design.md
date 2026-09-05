@@ -24,8 +24,8 @@ runs in the existing sidecar and reaches Bugzilla or namespace-local proxy proce
 starting the sidecar. `lib.sh` owns fixed-purpose helpers to add the Red Hat alias, start a proxy,
 check readiness from inside the sidecar, read sanitized evidence, and stop a namespace proxy. Each
 start creates a fresh private evidence log after proving no prior PID remains; assertions consume
-that exact path and require one current credential-kind record. The runner's EXIT trap remains the
-final cleanup boundary.
+that exact path and require one or more current credential-kind records, all of the expected kind
+and none of any other kind. The runner's EXIT trap remains the final cleanup boundary.
 
 The Red Hat proxy gains a request transform selected by a `bearer-auth` fixture mode. It accepts a
 non-empty `Authorization: Bearer <value>`, removes that header, forwards the same value as
@@ -38,10 +38,12 @@ choices. Existing response rewrite hooks and modes remain unchanged.
 ### API-key placement
 
 For each supported Bugzilla version, the phase sends an authenticated identity request through a
-credential-observing proxy for each client. The proxy log is the assertion surface: it must contain
-exactly the expected `query`, `header`, or translated `bearer` kind and must not contain the API-key
-value. The expected query/header split is derived from the live clients and fixed by fixture tests
-before the real multi-version run is accepted.
+credential-observing proxy for each client. Client construction may make an authenticated version
+request before the identity request, so the proxy log is the assertion surface: it must contain one
+or more records, every record must have the expected `query`, `header`, or translated `bearer` kind,
+and no record may contain another kind or the API-key value. Each emitted request record retains
+`count=1`. The expected query/header split is derived from the live clients and fixed by fixture
+tests before the real multi-version run is accepted.
 
 ### Token login and cache
 
