@@ -631,6 +631,39 @@ run_pybz_adapter() {
     _run_pybz_command python /work/compare/python-bugzilla-adapter.py "$@"
 }
 
+pybz_write_api_key_identity_request() (
+    if [[ $# -ne 4 ]]; then
+        printf 'pybz_write_api_key_identity_request: expected safe name, URL, API key, and username\n' >&2
+        return 2
+    fi
+    if [[ ! $1 =~ ^[a-z0-9][a-z0-9-]*$ || ! -d ${COMPARE_EXCHANGE_DIR:-} ]]; then
+        printf 'pybz_write_api_key_identity_request: expected safe name, URL, API key, and username\n' >&2
+        return 2
+    fi
+
+    local name="$1" url="$2" api_key="$3" username="$4"
+    local output="$COMPARE_EXCHANGE_DIR/${name}.pybz.input.json"
+    local url_source="$COMPARE_EXCHANGE_DIR/.api-key-identity.url.source"
+    local key_source="$COMPARE_EXCHANGE_DIR/.api-key-identity.key.source"
+    local username_source="$COMPARE_EXCHANGE_DIR/.api-key-identity.username.source"
+    local status=0
+
+    umask 077
+    trap 'rm -f -- "$url_source" "$key_source" "$username_source" || :' EXIT
+    printf '%s' "$url" >"$url_source"
+    printf '%s' "$api_key" >"$key_source"
+    printf '%s' "$username" >"$username_source"
+    jq -ecn --rawfile url "$url_source" --rawfile api_key "$key_source" \
+        --rawfile username "$username_source" \
+        '{url:$url, api_key:$api_key, username:$username}' >"$output" || status=$?
+    if [[ $status -ne 0 ]]; then
+        rm -f -- "$output"
+        return "$status"
+    fi
+    chmod 600 "$output"
+    printf '%s\n' "$output"
+)
+
 # Shared mechanics for resource comparison phases.
 RESOURCE_GAP_ELIGIBLE=0
 RESOURCE_GAP_FILE=""

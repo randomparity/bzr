@@ -581,6 +581,32 @@ def _cached_auth_operation(_client, request):
     }
 
 
+def _api_key_identity_operation(_client, request):
+    _validate_keys(request, ("url", "api_key", "username"))
+    url = _required_url(request)
+    api_key = _required_text(request, "api_key", 4096)
+    username = _required_text(request, "username", 320)
+    client = Bugzilla(
+        url,
+        api_key=api_key,
+        use_creds=False,
+        force_rest=True,
+    )
+    user = client.getuser(username)
+    if user is None:
+        raise AdapterError("API-key authentication did not identify a user")
+    identity_matched = any(
+        getattr(user, attribute, None) == username for attribute in ("email", "name")
+    )
+    return {
+        "transport": _transport(client),
+        "result": {
+            "authenticated": True,
+            "identity_matched": identity_matched,
+        },
+    }
+
+
 def _logout_operation(_client, request):
     _validate_keys(request, ("url",))
     client = _auth_client(_required_url(request))
@@ -650,6 +676,7 @@ OPERATIONS = {
     "component_update_shape": _component_update_shape,
     "login": _login_operation,
     "cached_auth": _cached_auth_operation,
+    "api_key_identity": _api_key_identity_operation,
     "logout": _logout_operation,
     "client_certificate_surface": _client_certificate_surface,
 }
@@ -670,6 +697,7 @@ LOCAL_OPERATIONS = {"component_update_shape"}
 SELF_MANAGED_OPERATIONS = {
     "login",
     "cached_auth",
+    "api_key_identity",
     "logout",
     "client_certificate_surface",
 }

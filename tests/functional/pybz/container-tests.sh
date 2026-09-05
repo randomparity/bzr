@@ -186,6 +186,56 @@ run_sidecar_wrapper_fixture() (
     assert_equals 19 "$BZR_EXIT" "adapter exit"
 )
 
+run_api_key_identity_request_fixture() (
+    local request argv_log status
+    COMPARE_EXCHANGE_DIR=$(mktemp -d)
+    argv_log=$(mktemp)
+    trap 'rm -rf "$COMPARE_EXCHANGE_DIR"; rm -f "$argv_log"' EXIT
+
+    jq() {
+        printf '%s\n' "$@" >>"$argv_log"
+        if [[ ${FAIL_IDENTITY_JQ:-0} -eq 1 ]]; then
+            return 23
+        fi
+        command jq "$@"
+    }
+
+    request=$(pybz_write_api_key_identity_request auth-placement \
+        'http://identity-proxy.invalid:18080' 'identity-api-secret' \
+        'identity-user@test.invalid')
+    assert_equals "$COMPARE_EXCHANGE_DIR/auth-placement.pybz.input.json" "$request" \
+        "API-key identity request path"
+    assert_equals 600 \
+        "$(stat -f '%Lp' "$request" 2>/dev/null || stat -c '%a' "$request")" \
+        "API-key identity request mode"
+    assert_equals \
+        '{"api_key":"identity-api-secret","url":"http://identity-proxy.invalid:18080","username":"identity-user@test.invalid"}' \
+        "$(jq -cS . "$request")" "API-key identity request"
+    if grep -Eq 'identity-api-secret|identity-proxy|identity-user' "$argv_log"; then
+        printf 'API-key identity request value reached external argv\n' >&2
+        return 1
+    fi
+    if compgen -G "$COMPARE_EXCHANGE_DIR/.api-key-identity.*.source" >/dev/null; then
+        printf 'API-key identity request retained source files after success\n' >&2
+        return 1
+    fi
+
+    FAIL_IDENTITY_JQ=1
+    set +e
+    pybz_write_api_key_identity_request auth-failure \
+        'http://failure-proxy.invalid:18081' 'failure-api-secret' \
+        'failure-user@test.invalid' >/dev/null
+    status=$?
+    set -e
+    unset FAIL_IDENTITY_JQ
+    assert_equals 23 "$status" "API-key identity jq failure status"
+    if [[ -e $COMPARE_EXCHANGE_DIR/auth-failure.pybz.input.json ]] ||
+        compgen -G "$COMPARE_EXCHANGE_DIR/.api-key-identity.*.source" >/dev/null; then
+        printf 'API-key identity request retained private files after jq failure\n' >&2
+        return 1
+    fi
+)
+
 run_transport_observation_fixture() (
     if ! declare -F observe_bzr_transport >/dev/null; then
         printf 'observe_bzr_transport is not defined\n' >&2
@@ -1277,7 +1327,14 @@ class Bugzilla:
         **_kwargs,
     ):
         auth_fixture = api_key is None and isinstance(tokenfile, str)
-        if not auth_fixture and url is not None and (
+        identity_fixture = (
+            url == "http://identity-proxy.invalid:18080"
+            and api_key == "identity-api-secret"
+            and not use_creds
+            and force_rest
+            and not force_xmlrpc
+        )
+        if not auth_fixture and not identity_fixture and url is not None and (
             url != "http://127.0.0.1"
             or api_key != "fixture-secret"
             or use_creds
@@ -1447,6 +1504,8 @@ class Bugzilla:
         return _FixtureUser(email)
 
     def getuser(self, email):
+        if email == "identity-mismatch@test.invalid":
+            return _FixtureUser("different-identity@test.invalid")
         return _FixtureUser(email)
 
     def searchusers(self, pattern):
@@ -1544,7 +1603,8 @@ assert_adapter_rejection() {
         printf 'adapter rejection %s omitted diagnostic: %s\n' "$name" "$diagnostic" >&2
         return 1
     fi
-    if grep -Eq 'fixture-secret|/work/compare|fixture upstream' "$error_output"; then
+    if grep -Eq 'fixture-secret|identity-api-secret|rejected-api-secret|identity-user|/work/compare|fixture upstream' \
+        "$error_output"; then
         printf 'adapter rejection %s leaked private failure detail\n' "$name" >&2
         return 1
     fi
@@ -1591,6 +1651,22 @@ run_adapter_fixture() {
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" auth-logout logout \
         '{"url":"http://127.0.0.1"}' \
         '{"result":{"cache_cleared":true,"logged_out":true},"transport":"REST"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" api-key-identity \
+        api_key_identity \
+        '{"url":"http://identity-proxy.invalid:18080","api_key":"identity-api-secret","username":"identity-user@test.invalid"}' \
+        '{"result":{"authenticated":true,"identity_matched":true},"transport":"REST"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" api-key-identity-mismatch \
+        api_key_identity \
+        '{"url":"http://identity-proxy.invalid:18080","api_key":"identity-api-secret","username":"identity-mismatch@test.invalid"}' \
+        '{"result":{"authenticated":true,"identity_matched":false},"transport":"REST"}'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        api-key-identity-extra api_key_identity \
+        '{"url":"http://identity-proxy.invalid:18080","api_key":"identity-api-secret","username":"identity-user@test.invalid","extra":true}' \
+        'unexpected request fields: extra'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        api-key-identity-auth-failure api_key_identity \
+        '{"url":"http://identity-proxy.invalid:18080","api_key":"rejected-api-secret","username":"identity-user@test.invalid"}' \
+        'operation failed (RuntimeError)'
     printf 'dummy certificate\n' >"$config_dir/compare/client-cert.pem"
     chmod 600 "$config_dir/compare/client-cert.pem"
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" client-cert \
@@ -2858,6 +2934,7 @@ run_product_normalization_fixture
 run_sidecar_wrapper_fixture
 run_transport_observation_fixture
 run_lifecycle_phase_fixture
+run_api_key_identity_request_fixture
 run_parity_report_fixture
 run_sidecar_stop_failure_fixture
 run_namespace_proxy_helper_fixture
