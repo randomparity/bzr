@@ -1335,6 +1335,7 @@ class _FixtureTokenCache:
     def set_value(self, _url, value):
         if not self.filename:
             return
+        __import__("os").makedirs(__import__("os").path.dirname(self.filename), exist_ok=True)
         with open(self.filename, "w", encoding="utf-8") as destination:
             destination.write(value or "")
 
@@ -1679,8 +1680,10 @@ run_adapter_fixture() {
         '{"url":"http://127.0.0.1","username":"fixture-user@test.invalid","password":"login-secret","restrict_login":true}' \
         '{"result":{"authenticated":true,"cache_written":true,"restricted":true},"transport":"REST"}'
     rm -f "$config_dir/compare/auth-login.input.json"
+    # shellcheck disable=SC2016 # HOME expands in the sidecar shell.
     assert_equals 600 \
-        "$("$runtime" exec "$sidecar" stat -c '%a' /work/compare/python-bugzilla-token)" \
+        "$("$runtime" exec "$sidecar" sh -c \
+            'stat -c "%a" "$HOME/.cache/bzr-comparison/python-bugzilla-token"')" \
         "adapter token cache mode"
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" auth-cached cached_auth \
         '{"url":"http://127.0.0.1","username":"fixture-user@test.invalid"}' \

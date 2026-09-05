@@ -113,8 +113,9 @@ without a live assertion.
   fallback when a phase exits early.
 - Every test resets cache/config files it owns before its positive control, so the persistent named
   home cannot make a fresh run pass from stale state.
-- Raw passwords, tokens, API keys, certificate paths, and Authorization values never enter process
-  argv, test names, proxy evidence, terminal output, or the parity report.
+- Raw passwords, tokens, API keys, certificate or private-key contents, and Authorization values
+  never enter process argv, test names, proxy evidence, terminal output, or the parity report.
+  Fixed sidecar-local fixture paths may appear in the proxy process argv.
 
 ## Threat model
 

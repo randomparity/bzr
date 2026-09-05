@@ -16,8 +16,9 @@ from bugzilla import Bugzilla, BugzillaError
 
 SERVER_URL = "http://127.0.0.1"
 WORK_ROOT = Path("/work/compare")
-TOKEN_FILE = WORK_ROOT / "python-bugzilla-token"
-STALE_TOKEN_FILE = WORK_ROOT / "python-bugzilla-stale-token"
+TOKEN_ROOT = Path.home() / ".cache/bzr-comparison"
+TOKEN_FILE = TOKEN_ROOT / "python-bugzilla-token"
+STALE_TOKEN_FILE = TOKEN_ROOT / "python-bugzilla-stale-token"
 
 
 class AdapterError(Exception):
@@ -592,9 +593,9 @@ def _logout_operation(_client, request):
         raise AdapterError("python-bugzilla did not load a cached token")
     transport = _transport(client)
     stale_client = _auth_client(url, STALE_TOKEN_FILE)
-    stale_client._tokencache.set_value(url, token)
-    STALE_TOKEN_FILE.chmod(0o600)
     try:
+        stale_client._tokencache.set_value(url, token)
+        STALE_TOKEN_FILE.chmod(0o600)
         client.logout()
         try:
             stale_client.getuser(_required_text(request, "username", 320))
