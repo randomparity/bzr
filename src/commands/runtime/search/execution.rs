@@ -81,7 +81,7 @@ pub(crate) async fn execute(
         w,
     )
     .await?;
-    write_bugs(&page.bugs, spec, format, w.out, w.err);
+    write_bugs(&page.bugs, spec, format, w.table_width(), w.out, w.err);
     crate::commands::runtime::search::paging::write_truncation_note(
         &page,
         plan.params.limit,

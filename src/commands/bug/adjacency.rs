@@ -109,7 +109,7 @@ pub(super) async fn handle(
         requests,
         bugs: bugs.into_values().collect(),
     };
-    write_bug_adjacency(&mut result, format, w.out);
+    write_bug_adjacency(&mut result, format, w.table_width(), w.out);
     Ok(())
 }
 

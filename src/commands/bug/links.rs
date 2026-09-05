@@ -92,7 +92,7 @@ pub(super) async fn handle(
             "stopped at LINKS_MAX_NODES ({LINKS_MAX_NODES}) related bugs; results may be incomplete"
         );
     }
-    write_bug_links(&results, format, w.out);
+    write_bug_links(&results, format, w.table_width(), w.out);
     if results.is_empty() && matches!(format, OutputFormat::Table) {
         let _ = writeln!(w.out, "No related bugs for #{id}.");
     }

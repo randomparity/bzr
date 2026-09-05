@@ -91,7 +91,7 @@ fn capture_bugs(format: OutputFormat, bugs: &[Bug]) -> String {
 fn capture_bugs_spec(format: OutputFormat, bugs: &[Bug], spec: ColumnSpec<'_>) -> (String, String) {
     let mut out = Vec::new();
     let mut err = Vec::new();
-    write_bugs(bugs, spec, format, &mut out, &mut err);
+    write_bugs(bugs, spec, format, None, &mut out, &mut err);
     (
         String::from_utf8(out).unwrap(),
         String::from_utf8(err).unwrap(),
@@ -181,9 +181,17 @@ fn sample_adjacency() -> BugAdjacencyResult {
     }
 }
 
-fn capture_bug_adjacency(format: OutputFormat, mut result: BugAdjacencyResult) -> String {
+fn capture_bug_adjacency(format: OutputFormat, result: BugAdjacencyResult) -> String {
+    capture_bug_adjacency_with_width(format, result, None)
+}
+
+fn capture_bug_adjacency_with_width(
+    format: OutputFormat,
+    mut result: BugAdjacencyResult,
+    width: Option<usize>,
+) -> String {
     let mut buf = Vec::new();
-    write_bug_adjacency(&mut result, format, &mut buf);
+    write_bug_adjacency(&mut result, format, width, &mut buf);
     String::from_utf8(buf).unwrap()
 }
 
@@ -292,11 +300,43 @@ fn write_bug_adjacency_table_has_request_and_canonical_bug_sections() {
 }
 
 #[test]
+fn bug_table_width_adjacency_requests_wrap_to_the_injected_width() {
+    let mut result = BugAdjacencyResult {
+        requests: vec![BugAdjacencyRequest::Success {
+            requested: "a request identifier with enough words to require wrapping".into(),
+            bug_id: 123,
+        }],
+        bugs: vec![],
+    };
+    let mut output = Vec::new();
+
+    write_bug_adjacency(&mut result, OutputFormat::Table, Some(40), &mut output);
+
+    let output = String::from_utf8(output).unwrap();
+    let requests = output.split("\nCanonical bugs").next().unwrap();
+    assert!(requests.contains("a request identifier"));
+    assert!(requests.lines().all(|line| line.len() <= 40), "{requests}");
+}
+
+#[test]
+fn bug_table_width_adjacency_canonical_bugs_wrap_to_the_injected_width() {
+    let output =
+        capture_bug_adjacency_with_width(OutputFormat::Table, sample_adjacency(), Some(70));
+    let canonical_bugs = output.split("\nCanonical bugs").nth(1).unwrap();
+
+    assert!(canonical_bugs.contains("ID") && canonical_bugs.contains("123"));
+    assert!(
+        canonical_bugs.lines().all(|line| line.len() <= 70),
+        "{canonical_bugs}"
+    );
+}
+
+#[test]
 fn write_bug_adjacency_normalizes_edge_arrays_in_place() {
     let mut result = sample_adjacency();
     let mut output = Vec::new();
 
-    write_bug_adjacency(&mut result, OutputFormat::Json, &mut output);
+    write_bug_adjacency(&mut result, OutputFormat::Json, None, &mut output);
 
     assert_eq!(result.bugs[1].blocks, vec![200, 300]);
     assert_eq!(result.bugs[1].depends_on, vec![10, 20]);
@@ -391,6 +431,30 @@ fn write_bugs_table_renders_columns_and_truncates() {
     assert!(output.contains("P1"));
     assert!(output.contains("dev"));
     assert!(output.contains("Login broken"));
+}
+
+#[test]
+fn bug_table_width_list_wraps_to_the_injected_width() {
+    let bugs = vec![make_bug(
+        42,
+        "A long summary with enough words to require table wrapping at this width",
+        "NEW",
+    )];
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+
+    write_bugs(
+        &bugs,
+        ColumnSpec::default(),
+        OutputFormat::Table,
+        Some(40),
+        &mut out,
+        &mut err,
+    );
+
+    let output = String::from_utf8(out).unwrap();
+    assert!(output.contains("ID") && output.contains("42") && output.contains("NEW"));
+    assert!(output.lines().all(|line| line.len() <= 40), "{output}");
 }
 
 #[test]
@@ -1587,7 +1651,7 @@ fn sample_links() -> Vec<BugLink> {
 #[test]
 fn write_bug_links_ndjson_is_one_object_per_line() {
     let mut buf = Vec::new();
-    write_bug_links(&sample_links(), OutputFormat::Ndjson, &mut buf);
+    write_bug_links(&sample_links(), OutputFormat::Ndjson, None, &mut buf);
     let s = String::from_utf8(buf).unwrap();
     assert_eq!(s.lines().count(), 1);
     assert!(s.contains(r#""relation":"depends_on""#) && s.contains(r#""direction":"out""#));
@@ -1596,7 +1660,7 @@ fn write_bug_links_ndjson_is_one_object_per_line() {
 #[test]
 fn write_bug_links_json_is_array() {
     let mut buf = Vec::new();
-    write_bug_links(&sample_links(), OutputFormat::Json, &mut buf);
+    write_bug_links(&sample_links(), OutputFormat::Json, None, &mut buf);
     let v: serde_json::Value =
         crate::test_helpers::json_envelope_data(std::str::from_utf8(&buf).unwrap());
     assert!(v.is_array());
@@ -1606,8 +1670,46 @@ fn write_bug_links_json_is_array() {
 #[test]
 fn write_bug_links_table_has_headers_and_row() {
     let mut buf = Vec::new();
-    write_bug_links(&sample_links(), OutputFormat::Table, &mut buf);
+    write_bug_links(&sample_links(), OutputFormat::Table, None, &mut buf);
     let s = String::from_utf8(buf).unwrap();
     assert!(s.contains("RELATION") && s.contains("DEPTH"));
     assert!(s.contains("depends_on") && s.contains('2'));
+}
+
+#[test]
+fn bug_table_width_links_wrap_to_the_injected_width() {
+    let links = vec![BugLink {
+        summary: Some("A linked bug summary with enough words to require wrapping".into()),
+        ..sample_links().pop().unwrap()
+    }];
+    let mut buf = Vec::new();
+
+    write_bug_links(&links, OutputFormat::Table, Some(40), &mut buf);
+
+    let output = String::from_utf8(buf).unwrap();
+    assert!(output.contains("ID") && output.contains('2') && output.contains("NEW"));
+    assert!(output.lines().all(|line| line.len() <= 40), "{output}");
+}
+
+#[test]
+fn write_bug_links_json_override_preserves_structured_values() {
+    let links = sample_links();
+    let mut json_unbounded = Vec::new();
+    let mut json_bounded = Vec::new();
+    let mut ndjson_unbounded = Vec::new();
+    let mut ndjson_bounded = Vec::new();
+
+    write_bug_links(&links, OutputFormat::Json, None, &mut json_unbounded);
+    write_bug_links(&links, OutputFormat::Json, Some(40), &mut json_bounded);
+    write_bug_links(&links, OutputFormat::Ndjson, None, &mut ndjson_unbounded);
+    write_bug_links(&links, OutputFormat::Ndjson, Some(40), &mut ndjson_bounded);
+
+    assert_eq!(
+        crate::test_helpers::json_envelope_data(std::str::from_utf8(&json_unbounded).unwrap()),
+        crate::test_helpers::json_envelope_data(std::str::from_utf8(&json_bounded).unwrap()),
+    );
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&ndjson_unbounded).unwrap(),
+        serde_json::from_slice::<serde_json::Value>(&ndjson_bounded).unwrap(),
+    );
 }
