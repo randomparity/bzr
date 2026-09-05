@@ -536,6 +536,12 @@ printf "%s\n" "$!"' sh "$kind" "$script" "$port" "$cert_dir" \
         if "$PYBZ_RUNTIME" exec "$sidecar" python -c \
             'import socket,sys; socket.create_connection(("127.0.0.1", int(sys.argv[1])), 1).close()' \
             "$port" >/dev/null 2>&1; then
+            if ! _pybz_proxy_pid_alive "$pid"; then
+                printf 'pybz_proxy_start: %s proxy exited before readiness confirmation\n' \
+                    "$kind" >&2
+                pybz_proxy_stop "$kind" || true
+                return 1
+            fi
             printf '%s\n' "$log"
             return 0
         fi

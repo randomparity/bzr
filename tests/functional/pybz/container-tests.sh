@@ -1166,6 +1166,7 @@ run_namespace_proxy_helper_fixture() (
     reject_proxy_call 'unsafe proxy destination was accepted' \
         pybz_stage_proxy "$PYBZ_DIR/../redhat-shape-proxy.py" ../escape.py
     printf 'stale evidence\n' >"$COMPARE_EXCHANGE_DIR/redhat.proxy.log"
+    FAKE_PROXY_ALIVE=1
     log_path=$(pybz_proxy_start redhat 18080)
     assert_equals "$COMPARE_EXCHANGE_DIR/redhat.proxy.log" "$log_path" \
         "Red Hat evidence path"
@@ -1178,7 +1179,6 @@ run_namespace_proxy_helper_fixture() (
         printf 'Red Hat proxy invocation omitted its fixed mapped path or loopback backend\n' >&2
         return 1
     fi
-    FAKE_PROXY_ALIVE=1
     reject_proxy_call 'live prior proxy PID was accepted' pybz_proxy_start redhat 18080
     FAKE_PROXY_ALIVE=0
     pybz_proxy_stop redhat
@@ -1189,6 +1189,7 @@ run_namespace_proxy_helper_fixture() (
     chmod 600 "$FUNC_CONFIG_DIR/tls-fixture/server.crt" \
         "$FUNC_CONFIG_DIR/tls-fixture/server.key"
     pybz_stage_proxy "$PYBZ_DIR/../tls-proxy.py" tls-proxy.py >/dev/null
+    FAKE_PROXY_ALIVE=1
     log_path=$(pybz_proxy_start tls 18443 tls-fixture)
     assert_equals "$COMPARE_EXCHANGE_DIR/tls.proxy.log" "$log_path" \
         "TLS evidence path"
@@ -1205,6 +1206,10 @@ run_namespace_proxy_helper_fixture() (
     printf 'not-a-pid\n' >"$COMPARE_EXCHANGE_DIR/redhat.proxy.pid"
     reject_proxy_call 'malformed proxy PID was accepted' pybz_proxy_stop redhat
     rm -f "$COMPARE_EXCHANGE_DIR/redhat.proxy.pid"
+    FAKE_PROXY_READY=1
+    reject_proxy_call 'dead launch PID was accepted via unrelated listener' \
+        pybz_proxy_start redhat 18080
+    grep -Fq 'redhat proxy exited before readiness confirmation' "$error_output"
     FAKE_PROXY_READY=0
     reject_proxy_call 'proxy readiness exhaustion was accepted' pybz_proxy_start redhat 18080
     grep -Fq 'redhat proxy was not ready after 30 attempts (port unavailable)' "$error_output"
