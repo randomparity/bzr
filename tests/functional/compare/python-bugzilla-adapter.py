@@ -551,8 +551,11 @@ def _login_operation(_client, request):
     if not result or not client._tokencache.get_value(client.url):
         raise AdapterError("python-bugzilla did not cache a login token")
     TOKEN_FILE.chmod(0o600)
-    result = {"authenticated": True, "restricted": request["restrict_login"],
-              "cache_written": True}
+    result = {
+        "authenticated": True,
+        "restricted": request["restrict_login"],
+        "cache_written": True,
+    }
     return {"transport": _transport(client), "result": result}
 
 
@@ -564,8 +567,10 @@ def _cached_auth_operation(_client, request):
     user = client.getuser(_required_text(request, "username", 320))
     if user is None:
         raise AdapterError("cached authentication did not identify the user")
-    return {"transport": _transport(client),
-            "result": {"authenticated": True, "cache_used": True}}
+    return {
+        "transport": _transport(client),
+        "result": {"authenticated": True, "cache_used": True},
+    }
 
 
 def _api_key_identity_operation(_client, request):
@@ -580,8 +585,10 @@ def _api_key_identity_operation(_client, request):
     identity_matched = any(
         getattr(user, attribute, None) == username for attribute in ("email", "name")
     )
-    return {"transport": _transport(client),
-            "result": {"authenticated": True, "identity_matched": identity_matched}}
+    return {
+        "transport": _transport(client),
+        "result": {"authenticated": True, "identity_matched": identity_matched},
+    }
 
 
 def _logout_operation(_client, request):
@@ -608,8 +615,10 @@ def _logout_operation(_client, request):
         client._tokencache.set_value(url, None)
     if client._tokencache.get_value(url) is not None:
         raise AdapterError("python-bugzilla did not clear the cached token")
-    return {"transport": transport,
-            "result": {"logged_out": True, "cache_cleared": True}}
+    return {
+        "transport": transport,
+        "result": {"logged_out": True, "cache_cleared": True},
+    }
 
 
 class _CertificateProbeBackend:
@@ -683,7 +692,11 @@ LEGACY_OPERATIONS = {
 }
 LOCAL_OPERATIONS = {"component_update_shape"}
 SELF_MANAGED_OPERATIONS = {
-    "login", "cached_auth", "api_key_identity", "logout", "client_certificate_surface"
+    "login",
+    "cached_auth",
+    "api_key_identity",
+    "logout",
+    "client_certificate_surface",
 }
 
 

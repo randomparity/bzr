@@ -16,10 +16,13 @@ r11_adapter_result_is() {
         "/work/compare/${output##*/}"
     [[ $BZR_EXIT -eq 0 && -r $output ]] && jq -e "$filter" "$output" >/dev/null
 }
-r11_expected_bzr_auth_kind() { case "$1" in
+r11_expected_bzr_auth_kind() {
+    case "$1" in
     bz50 | bz52) printf 'query\n' ;;
     bz53) printf 'header\n' ;;
-    *) return 2 ;; esac }
+    *) return 2 ;;
+    esac
+}
 declare -F r11_api_key_control >/dev/null || r11_api_key_control() {
     local expected request output host_ok=0 pybz_ok=0
     expected=$(r11_expected_bzr_auth_kind "$BZ_VERSION") || return 1
@@ -80,15 +83,20 @@ r11_auth_control() {
     return "$status"
 }
 declare -F r11_login_control >/dev/null || r11_login_control() {
+    local filter
+
     pybz_auth_cache_clear || return 1
-    r11_auth_control login \
-        '.transport == "REST" and .result == {authenticated:true,cache_written:true,restricted:true}'
+    filter='.transport == "REST" and '
+    filter+='.result == {authenticated:true,cache_written:true,restricted:true}'
+    r11_auth_control login "$filter"
 }
-declare -F r11_cached_control >/dev/null || r11_cached_control() { [[ ! -e $COMPARE_EXCHANGE_DIR/r11-login.input.json ]] || return 1
+declare -F r11_cached_control >/dev/null || r11_cached_control() {
+    [[ ! -e $COMPARE_EXCHANGE_DIR/r11-login.input.json ]] || return 1
     r11_auth_control cached_auth \
         '.transport == "REST" and .result == {authenticated:true,cache_used:true}'
 }
-declare -F r11_logout_control >/dev/null || r11_logout_control() { r11_auth_control logout \
+declare -F r11_logout_control >/dev/null || r11_logout_control() {
+    r11_auth_control logout \
         '.transport == "REST" and .result == {cache_cleared:true,logged_out:true}'
 }
 declare -F r11_bugzillarc_control >/dev/null || r11_bugzillarc_control() {
@@ -98,17 +106,28 @@ declare -F r11_bugzillarc_control >/dev/null || r11_bugzillarc_control() {
         >"$COMPARE_EXCHANGE_DIR/r11-system.rc"
     printf '[DEFAULT]\nurl=http://home.invalid\n[127.0.0.1]\nuser=home\n' \
         >"$COMPARE_EXCHANGE_DIR/r11-home.rc"
-    printf '[DEFAULT]\nurl=http://127.0.0.1\n[127.0.0.1]\nuser=config\n[fixture.invalid/rest]\nuser=substring\n' \
+    printf '%b' \
+        '[DEFAULT]\nurl=http://127.0.0.1\n[127.0.0.1]\nuser=config\n' \
+        '[fixture.invalid/rest]\nuser=substring\n' \
         >"$COMPARE_EXCHANGE_DIR/r11-config.rc"
     chmod 600 "$COMPARE_EXCHANGE_DIR"/r11-*.rc
     "$PYBZ_RUNTIME" exec -e R11_FIXTURE_OMIT_SYSTEM_RC="${R11_FIXTURE_OMIT_SYSTEM_RC:-0}" \
         "$sidecar" python -c '
-import json, os, pathlib, shutil
+import json
+import os
+import pathlib
+import shutil
 from bugzilla import Bugzilla
-home = pathlib.Path.home(); root = pathlib.Path("/work/compare")
-destinations = [pathlib.Path("/etc/bugzillarc"), home / ".bugzillarc", home / ".config/python-bugzilla/bugzillarc"]
+home = pathlib.Path.home()
+root = pathlib.Path("/work/compare")
+destinations = [
+    pathlib.Path("/etc/bugzillarc"),
+    home / ".bugzillarc",
+    home / ".config/python-bugzilla/bugzillarc",
+]
 sources = [root / "r11-system.rc", root / "r11-home.rc", root / "r11-config.rc"]
-for destination in destinations: destination.unlink(missing_ok=True)
+for destination in destinations:
+    destination.unlink(missing_ok=True)
 destinations[2].parent.mkdir(parents=True, exist_ok=True)
 for index, (source, destination) in enumerate(zip(sources, destinations)):
     if index or os.environ.get("R11_FIXTURE_OMIT_SYSTEM_RC") != "1":
@@ -143,7 +162,8 @@ declare -F r11_tls_control >/dev/null || r11_tls_control() (
     [[ $host_ok -eq 1 && $pybz_ok -eq 1 ]]
 )
 declare -F r11_certificate_control >/dev/null || r11_certificate_control() {
-    local input="$COMPARE_EXCHANGE_DIR/r11-cert.input.json" output="$COMPARE_EXCHANGE_DIR/r11-cert.output.json"
+    local input="$COMPARE_EXCHANGE_DIR/r11-cert.input.json"
+    local output="$COMPARE_EXCHANGE_DIR/r11-cert.output.json"
     printf 'comparison certificate surface\n' >"$COMPARE_EXCHANGE_DIR/r11-client-cert.pem"
     printf '{"certificate":"/work/compare/r11-client-cert.pem"}\n' >"$input"
     chmod 600 "$COMPARE_EXCHANGE_DIR/r11-client-cert.pem" "$input"
@@ -159,18 +179,21 @@ declare -F r11_bearer_control >/dev/null || r11_bearer_control() {
         "$COMPARE_ADMIN_EMAIL") || return 1
     if r11_adapter_result_is api_key_identity "$request" "$output" \
         '.transport == "REST" and .result.authenticated and .result.identity_matched' &&
-        r11_auth_evidence_is bearer "$COMPARE_EXCHANGE_DIR/redhat.proxy.log"; then ok=1; fi
+        r11_auth_evidence_is bearer "$COMPARE_EXCHANGE_DIR/redhat.proxy.log"; then
+        ok=1
+    fi
     pybz_proxy_stop redhat || return 1
     [[ $ok -eq 1 ]]
 }
 declare -F r11_parser_gap >/dev/null || r11_parser_gap() {
-    local kind="$1"
+    local kind="$1" expected
     case "$kind" in
     token | bearer)
         run_bzr config set-server "r11-${kind}-gap" --url "$BZ_URL" \
             --api-key-env BZR_COMPARE_API_KEY --auth-method "$kind"
-        [[ $BZR_EXIT -eq 2 ]] && grep -Fxq \
-            "error: invalid value '$kind' for '--auth-method <AUTH_METHOD>': invalid auth method '$kind': expected 'header', 'query_param', or 'query-param'" "$BZR_STDERR"
+        expected="error: invalid value '$kind' for '--auth-method <AUTH_METHOD>': "
+        expected+="invalid auth method '$kind': expected 'header', 'query_param', or 'query-param'"
+        [[ $BZR_EXIT -eq 2 ]] && grep -Fxq "$expected" "$BZR_STDERR"
         ;;
     login)
         run_bzr auth login
@@ -178,7 +201,8 @@ declare -F r11_parser_gap >/dev/null || r11_parser_gap() {
         ;;
     bugzillarc)
         run_bzr config import-bugzillarc
-        [[ $BZR_EXIT -eq 2 ]] && grep -Fxq "error: unrecognized subcommand 'import-bugzillarc'" "$BZR_STDERR"
+        [[ $BZR_EXIT -eq 2 ]] &&
+            grep -Fxq "error: unrecognized subcommand 'import-bugzillarc'" "$BZR_STDERR"
         ;;
     certificate)
         run_bzr --server-url "$BZ_URL" --server-tls-client-cert fixture.pem server info
@@ -189,8 +213,13 @@ declare -F r11_parser_gap >/dev/null || r11_parser_gap() {
     esac
 }
 r11_pass_test() { if "$@"; then test_pass; else test_fail "positive control failed"; fi; }
-r11_gap_test() { local issue="$1" gap="$2"; shift 2
-    "$@" || { test_fail "positive control failed"; return; }
+r11_gap_test() {
+    local issue="$1" gap="$2"
+    shift 2
+    if ! "$@"; then
+        test_fail "positive control failed"
+        return
+    fi
     if r11_parser_gap "$gap"; then
         test_fail "controlled bzr surface is absent"
         expect_gap "$issue"

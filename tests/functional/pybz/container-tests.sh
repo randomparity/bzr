@@ -1292,13 +1292,16 @@ class _BackendREST:
         raise ValueError("array response")
 
 
-class _BackendXMLRPC: pass
+class _BackendXMLRPC:
+    pass
 
 
-class _UnknownBackend: pass
+class _UnknownBackend:
+    pass
 
 
-class BugzillaError(Exception): pass
+class BugzillaError(Exception):
+    pass
 
 
 _SERVER_TOKEN_VALID = True
@@ -1627,9 +1630,16 @@ assert_adapter_case() {
 }
 
 assert_adapter_rejection() {
-    local runtime="$1" sidecar="$2" config_dir="$3" name="$4"
-    local operation="$5" request="$6" diagnostic="$7" fixture_environment="${8:-}"
-    local input="$config_dir/compare/${name}.input.json" output="$config_dir/compare/${name}.output.json"
+    local runtime="$1"
+    local sidecar="$2"
+    local config_dir="$3"
+    local name="$4"
+    local operation="$5"
+    local request="$6"
+    local diagnostic="$7"
+    local fixture_environment="${8:-}"
+    local input="$config_dir/compare/${name}.input.json"
+    local output="$config_dir/compare/${name}.output.json"
     local error_output="$config_dir/compare/${name}.stderr" status
 
     printf '%s\n' "$request" >"$input"
