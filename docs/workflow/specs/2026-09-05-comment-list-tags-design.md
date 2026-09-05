@@ -8,7 +8,7 @@
 
 ## Outcome and scope
 
-`bzr comment list <id>` will expose comment tags in table, JSON, and NDJSON output. JSON
+`bzr comment list <id>...` will expose comment tags in table, JSON, and NDJSON output. JSON
 projection will accept `tags`, the published comment schema will describe the field, and the
 help/reference text will accurately name it. This completes the existing tag mutation/read
 round trip without adding an endpoint or changing mutation/search behavior.
@@ -33,8 +33,10 @@ a non-array becomes `[]`, and non-string array members are ignored, matching exi
 optional-array compatibility behavior.
 
 `COMMENT_FIELDS` gains `tags`. Because JSON-family writers serialize `Comment` through the
-shared projection path, full output always contains the field and `--fields tags` retains
-only that key.
+shared projection path, full output always contains the field. On a single-ID call,
+`--fields tags` retains only that key. On a multi-ID call, accepted ADR 0049's attribution
+contract continues to force `bug_id` into the result and emit its existing stderr notice, so
+the projected records contain exactly `bug_id` and `tags`.
 
 ## Presentation contract
 
@@ -78,11 +80,12 @@ and NDJSON through the existing command/projection paths.
 Functional coverage tags a created comment, reads it through both `--api rest` and
 `--api xmlrpc`, asserts each tag array, projects `--fields tags`, and checks the restored help
 claim. A table case asserts the exact tag line immediately before the blank line and tagged
-comment body. An NDJSON case asserts the full and projected record shapes. A new `--server
-public comment list` case first requires at least one visible comment, then proves every
-credentialless result has an array-valued `tags` key without claiming that anonymous visibility
-matches authenticated visibility. The full supported-version functional suite runs these arms
-on all three Bugzilla images.
+comment body. NDJSON cases assert the full and projected record shapes. Two-bug JSON and NDJSON
+projection cases prove `bug_id` remains beside `tags` with the existing attribution warning. A
+new `--server public comment list` case first requires at least one visible comment, then proves
+every credentialless result has an array-valued `tags` key without claiming that anonymous
+visibility matches authenticated visibility. The full supported-version functional suite runs
+these arms on all three Bugzilla images.
 
 ## Guardrails and architecture context
 

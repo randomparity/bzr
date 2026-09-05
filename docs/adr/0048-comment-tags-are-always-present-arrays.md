@@ -23,8 +23,10 @@ non-array becomes empty, and non-string array members are ignored. REST uses the
 serde type and gets the same absent-to-empty compatibility behavior.
 
 JSON and NDJSON always serialize `tags`, including `[]`; `COMMENT_FIELDS` includes `tags`,
-so projection can select or exclude it. Table output adds `Tags: <comma-separated values>`
-only for non-empty tag sets, avoiding an empty label on every untagged comment.
+so projection can select or exclude it. Single-ID `--fields tags` emits only that field;
+multi-ID calls continue to retain `bug_id` beside it under ADR 0049's attribution contract.
+Table output adds `Tags: <comma-separated values>` only for non-empty tag sets, avoiding an
+empty label on every untagged comment.
 
 Publish `tags` as a required array of strings in `schemas/comment.json`. This is an additive
 payload change under ADR 0007, so advance `SCHEMA_VERSION` from `3.0.0` to `3.0.1` and update

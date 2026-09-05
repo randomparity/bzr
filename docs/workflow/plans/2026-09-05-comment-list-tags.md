@@ -19,6 +19,8 @@ version pin updates.
   powerpc64le, and s390x; the host architecture is included.
 - `Comment.tags` is `Vec<String>` with `#[serde(default)]`; full JSON/NDJSON always emits
   `tags`, including `[]`.
+- Single-ID `--fields tags` emits only `tags`. Multi-ID projection retains `bug_id` beside
+  `tags` and preserves ADR 0049's existing attribution warning.
 - REST uses the shared serde type. XML-RPC uses the existing
   `get_str_array(&BTreeMap<String, Value>, &str) -> Vec<String>` helper and retains its
   lenient optional-array behavior.
@@ -170,16 +172,17 @@ version pin updates.
   JSON, `run_bzr_raw` for NDJSON, and assertion helpers in
   `tests/functional/phases/15-comments.sh`.
 - Produces functional cases for help truth, the table tag line, REST and XML-RPC full JSON tags,
-  JSON and NDJSON `--fields tags`, an empty tag after removal, and a credentialless array-shape
-  read.
+  single- and multi-ID JSON/NDJSON `--fields tags`, an empty tag after removal, and a
+  credentialless array-shape read.
 - No later implementation task depends on this task; it is the end-to-end proof.
 
 **Verification**
 
 - Mode: focused-test — live tag round trip and projection. Extend phase 15 so the added tag is
   read through table, explicit REST and XML-RPC modes before removal, read as full/projected
-  NDJSON, and add a credentialless list read. A pre-implementation `make functional-test` must
-  fail the new tag assertions; after Tasks 1–2 it passes on the default image.
+  NDJSON, prove the existing multi-ID attribution override, and add a credentialless list read.
+  A pre-implementation `make functional-test` must fail the new tag assertions; after Tasks 1–2
+  it passes on the default image.
 - Mode: focused-test — supported-version behavior. `make functional-test-all` must report
   bz50, bz52, and bz53 passed.
 
@@ -197,10 +200,12 @@ version pin updates.
    `any(.[]; .id == $COMMENT_ID and .tags == ["important"])`; on the `--fields tags` response,
    assert `all(.[]; keys == ["tags"])` and that exactly one record equals
    `{"tags":["important"]}`. This unique tag identifies the projected target without requiring
-   an excluded `id`. Run `--server public comment list "$BUG1"`, first assert the result length
-   is greater than zero, then assert every returned comment has an array-valued `tags` key,
-   without asserting anonymous semantic parity with the authenticated result. After removal,
-   assert the tagged comment emits `tags: []`.
+   an excluded `id`. For both JSON and NDJSON, run `comment list "$BUG1" "$BUG2" --fields tags`,
+   assert every record has exactly `bug_id` and `tags`, assert both bug IDs occur, and assert the
+   existing `keeping bug_id` attribution notice appears once on stderr. Run `--server public
+   comment list "$BUG1"`, first assert the result length is greater than zero, then assert every
+   returned comment has an array-valued `tags` key, without asserting anonymous semantic parity
+   with the authenticated result. After removal, assert the tagged comment emits `tags: []`.
 2. Verify the new functional assertion bites: temporarily change its expected tag to a value
    the fixture never writes, run `make functional-test`, and retain the phase-15 failure.
    Restore the assertion and rerun; expect every default-version case green.
