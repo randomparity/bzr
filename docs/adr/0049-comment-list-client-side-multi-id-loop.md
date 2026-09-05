@@ -1,4 +1,4 @@
-# ADR 0047: `comment list` fetches multi-ID sets with a client-side loop
+# ADR 0049: `comment list` fetches multi-ID sets with a client-side loop
 
 ## Status
 

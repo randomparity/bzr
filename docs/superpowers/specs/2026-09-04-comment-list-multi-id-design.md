@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-04
 **Issue:** [#699](https://github.com/randomparity/bzr/issues/699) (`enhancement`, `area:cli`, `area:agent`)
-**ADR:** [0047](../../adr/0047-comment-list-client-side-multi-id-loop.md)
+**ADR:** [0049](../../adr/0049-comment-list-client-side-multi-id-loop.md)
 **Sibling precedent:** [`2026-05-06-bug-view-multi-id-design.md`](2026-05-06-bug-view-multi-id-design.md)
 
 ## Goal
@@ -109,7 +109,7 @@ stay attributable, so `--fields id` still projects to exactly one key there.
 Both transports fetch one bug per call, via the existing per-bug
 `client.get_comments_since(bug_id, since)`. XML-RPC's native `Bug.comments`
 `ids` array is **not** used for batching.
-[ADR-0047](../../adr/0047-comment-list-client-side-multi-id-loop.md) is the
+[ADR-0049](../../adr/0049-comment-list-client-side-multi-id-loop.md) is the
 record: it carries the decision, its grounds, and its five rejected
 alternatives, and this spec does not restate them.
 
@@ -199,7 +199,7 @@ failure entry, and adding one would be the wrapper this design rejected. So a
 consumer reading only stdout cannot tell a bug that failed under `--permissive`
 from a bug with no comments — the failed IDs are on stderr and nowhere else.
 Without `--permissive` the ambiguity cannot arise, because the first failure
-aborts. This trade is recorded in ADR-0047's Consequences and stated on the
+aborts. This trade is recorded in ADR-0049's Consequences and stated on the
 `--permissive` row in `docs/bzr-cli.md` and in the reference-skill bullet, so
 an agent consuming the JSON meets it where it reads the flag.
 
@@ -323,7 +323,7 @@ Partial success does not use `BzrError::BatchPartialFailure` (exit 11): failed
 reads change no server state. `bug view` sets the precedent for the **exit
 code** only — it reports its failures in the payload (a `failed` array under
 `--json`, `Bug #N — UNAVAILABLE` rows in table mode), which is the one place
-this design deliberately diverges from it. See ADR-0047.
+this design deliberately diverges from it. See ADR-0049.
 
 ## Testing
 
