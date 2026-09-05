@@ -237,9 +237,15 @@ Two consequences, both authorized rather than incidental:
   has zero comments" is the defect being removed. A bug that exists with an
   empty thread is unaffected — Bugzilla returns
   `{bugs: {"42": {comments: []}}}` for that, key present.
-- The same call path is shared by `bug history`, `bug clone`, and
-  `attachment upload --comment-private`, so those commands also stop treating a
-  missing key as an empty thread.
+- Three other commands share that call path, and the change lands differently
+  on each. `bug clone` propagates the error with `?`
+  (`src/commands/bug/clone.rs:137`), so it goes from cloning without a
+  description to aborting at exit 6 — a new hard-failure mode on a mutating
+  command, and the consequence most worth knowing. `bug history` goes from a
+  silent empty correlation set to a warned one, which it already handles.
+  `attachment upload --comment-private` is unaffected in outcome, since it
+  already produced a `DataIntegrity` error when it could not locate the
+  comment.
 
 ### When every bug fails
 
