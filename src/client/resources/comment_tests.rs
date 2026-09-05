@@ -622,6 +622,18 @@ async fn get_comments_since_non_object_bugs_stays_a_parse_error() {
         serde_json::json!({ "bugs": serde_json::Value::Null }),
         serde_json::json!({ "bugs": [] }),
         serde_json::json!({ "bugs": "whatever" }),
+        // The first three bodies also fail the flat extractor, so they stay
+        // `Deserialize` even if this arm fell through to the absent-key path.
+        // This one does not: a well-formed flat array would be returned `Ok`
+        // by any fall-through, so only the non-object arm makes it an error.
+        serde_json::json!({
+            "bugs": serde_json::Value::Null,
+            "comments": [{
+                "id": 1, "text": "x", "creator": "u@t",
+                "creation_time": "2025-01-01T00:00:00Z",
+                "is_private": false, "count": 0
+            }]
+        }),
     ] {
         let mock = MockServer::start().await;
         Mock::given(method("GET"))
