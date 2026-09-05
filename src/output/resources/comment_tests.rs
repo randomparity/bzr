@@ -13,6 +13,7 @@ fn make_comment(count: u64, text: &str) -> Comment {
         count: Some(count),
         is_private: Some(false),
         attachment_id: None,
+        tags: vec![],
     }
 }
 
@@ -93,6 +94,7 @@ fn write_comments_table_handles_missing_creator_and_unicode() {
         count: Some(0),
         is_private: Some(false),
         attachment_id: None,
+        tags: vec![],
     }];
     let output = capture(OutputFormat::Table, &comments);
     assert!(output.contains("unknown"));

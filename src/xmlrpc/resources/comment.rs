@@ -5,8 +5,8 @@ use crate::types::comment::Comment;
 use crate::xmlrpc::protocol::Value;
 use crate::xmlrpc::protocol::XmlRpcClient;
 use crate::xmlrpc::resources::mappers::{
-    get_datetime_str, get_nonempty_str, get_optional_bool_flag, get_str, get_u64, lookup_bug_entry,
-    require_u64, xmlrpc_id,
+    get_datetime_str, get_nonempty_str, get_optional_bool_flag, get_str, get_str_array, get_u64,
+    lookup_bug_entry, require_u64, xmlrpc_id,
 };
 
 impl XmlRpcClient {
@@ -72,6 +72,7 @@ fn value_to_comment(val: &Value) -> Result<Comment> {
         count: get_u64(m, "count"),
         is_private: get_optional_bool_flag(m, "is_private"),
         attachment_id: get_u64(m, "attachment_id"),
+        tags: get_str_array(m, "tags"),
     })
 }
 

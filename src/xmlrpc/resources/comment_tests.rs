@@ -48,6 +48,42 @@ fn comments_without_attachment_id_yields_none() {
     assert_eq!(parsed.attachment_id, None);
 }
 
+#[test]
+fn xmlrpc_get_comments_since_maps_absent_tags_to_empty() {
+    let mut comment = BTreeMap::new();
+    comment.insert("id".into(), Value::Int(1004));
+
+    let parsed = value_to_comment(&Value::Struct(comment)).unwrap();
+    assert!(parsed.tags.is_empty());
+}
+
+#[test]
+fn xmlrpc_get_comments_since_maps_non_array_tags_to_empty() {
+    let mut comment = BTreeMap::new();
+    comment.insert("id".into(), Value::Int(1005));
+    comment.insert("tags".into(), Value::String("needs-info".into()));
+
+    let parsed = value_to_comment(&Value::Struct(comment)).unwrap();
+    assert!(parsed.tags.is_empty());
+}
+
+#[test]
+fn xmlrpc_get_comments_since_discards_non_string_tag_members() {
+    let mut comment = BTreeMap::new();
+    comment.insert("id".into(), Value::Int(1006));
+    comment.insert(
+        "tags".into(),
+        Value::Array(vec![
+            Value::String("needs-info".into()),
+            Value::Int(7),
+            Value::String("follow-up".into()),
+        ]),
+    );
+
+    let parsed = value_to_comment(&Value::Struct(comment)).unwrap();
+    assert_eq!(parsed.tags, vec!["needs-info", "follow-up"]);
+}
+
 #[tokio::test]
 async fn xmlrpc_get_comments_since_parses_full_response() {
     use wiremock::matchers::{body_string_contains, method, path};
@@ -67,6 +103,10 @@ async fn xmlrpc_get_comments_since_parses_full_response() {
           <member><name>creator</name><value><string>alice@test</string></value></member>
           <member><name>creation_time</name><value><dateTime.iso8601>20260101T00:00:00</dateTime.iso8601></value></member>
           <member><name>is_private</name><value><boolean>0</boolean></value></member>
+          <member><name>tags</name><value><array><data>
+            <value><string>needs-info</string></value>
+            <value><string>follow-up</string></value>
+          </data></array></value></member>
         </struct></value>
         <value><struct>
           <member><name>id</name><value><int>1002</int></value></member>
@@ -95,6 +135,7 @@ async fn xmlrpc_get_comments_since_parses_full_response() {
     assert_eq!(comments.len(), 2);
     assert_eq!(comments[0].count, Some(0));
     assert_eq!(comments[0].is_private, Some(false));
+    assert_eq!(comments[0].tags, vec!["needs-info", "follow-up"]);
     assert_eq!(comments[1].count, Some(1));
     assert_eq!(comments[1].is_private, Some(true));
     assert_eq!(comments[1].text.as_deref(), Some("private 1"));

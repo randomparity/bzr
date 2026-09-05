@@ -42,6 +42,8 @@ pub struct Comment {
     /// to identify the just-created comment.
     #[serde(default)]
     pub attachment_id: Option<u64>,
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 /// Serde JSON keys of [`Comment`], for `--fields` / `--exclude-fields`
@@ -55,6 +57,7 @@ pub const COMMENT_FIELDS: &[&str] = &[
     "count",
     "is_private",
     "attachment_id",
+    "tags",
 ];
 
 #[cfg(test)]

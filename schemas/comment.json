@@ -32,6 +32,12 @@
     "attachment_id": {
       "type": ["integer", "null"],
       "minimum": 0
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "required": [
@@ -42,7 +48,8 @@
     "creation_time",
     "count",
     "is_private",
-    "attachment_id"
+    "attachment_id",
+    "tags"
   ],
   "additionalProperties": false
 }
