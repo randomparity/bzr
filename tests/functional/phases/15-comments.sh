@@ -26,8 +26,8 @@ else test_skip "no BUG1"; fi
 test_begin "comment-list-help-matches-output" "comment list --help matches write_comments output"
 run_bzr comment list --help
 if assert_success &&
-    assert_stdout_contains "number, author, creation time, and" &&
-    assert_stdout_not_contains "tags"; then
+    assert_stdout_contains "number, author, creation time, tags," &&
+    assert_stdout_contains "and body in chronological order"; then
     test_pass
 fi
 
@@ -179,6 +179,131 @@ else
     test_skip "no comment ID"
 fi
 
+test_begin "comment-list-table-shows-tags" "comment list table shows tags before the body"
+if [[ -n "$BUG1" ]]; then
+    run_bzr_raw --output table comment list "$BUG1"
+    if assert_success &&
+        awk '
+            $0 == "  Tags: important" {
+                if ((getline blank) <= 0 || blank != "") next
+                if ((getline body) <= 0 || body != "  First test comment") next
+                found = 1
+            }
+            END { exit found ? 0 : 1 }
+        ' "$BZR_STDOUT"; then
+        test_pass
+    else
+        test_fail "tag line was not immediately before the indented tagged comment body"
+    fi
+else test_skip "no BUG1"; fi
+
+test_begin "comment-list-rest-json-shows-tags" "comment list REST JSON shows tags"
+if [[ -n "$BUG1" ]] && [[ -n "${COMMENT_ID:-}" ]] && [[ "$COMMENT_ID" != "null" ]]; then
+    run_bzr --api rest comment list "$BUG1"
+    if assert_success &&
+        jq -e --argjson id "$COMMENT_ID" \
+            'any(.[]; .id == $id and .tags == ["important"])' \
+            "$BZR_STDOUT" >/dev/null; then
+        test_pass
+    else
+        test_fail "REST JSON did not return the tagged comment with its tag"
+    fi
+else test_skip "no BUG1 or comment ID"; fi
+
+test_begin "comment-list-xmlrpc-json-shows-tags" "comment list XML-RPC JSON shows tags"
+if [[ -n "$BUG1" ]] && [[ -n "${COMMENT_ID:-}" ]] && [[ "$COMMENT_ID" != "null" ]]; then
+    run_bzr --api xmlrpc comment list "$BUG1"
+    if assert_success &&
+        jq -e --argjson id "$COMMENT_ID" \
+            'any(.[]; .id == $id and .tags == ["important"])' \
+            "$BZR_STDOUT" >/dev/null; then
+        test_pass
+    else
+        test_fail "XML-RPC JSON did not return the tagged comment with its tag"
+    fi
+else test_skip "no BUG1 or comment ID"; fi
+
+test_begin "comment-list-json-projects-tags" "comment list JSON --fields tags"
+if [[ -n "$BUG1" ]]; then
+    run_bzr comment list "$BUG1" --fields tags
+    if assert_success &&
+        jq -e 'all(.[]; keys == ["tags"]) and
+            any(.[]; . == {"tags":["important"]})' \
+            "$BZR_STDOUT" >/dev/null; then
+        test_pass
+    else
+        test_fail "JSON tag projection did not contain only tags and the tagged comment"
+    fi
+else test_skip "no BUG1"; fi
+
+test_begin "comment-list-ndjson-shows-tags" "comment list full NDJSON shows tags"
+if [[ -n "$BUG1" ]] && [[ -n "${COMMENT_ID:-}" ]] && [[ "$COMMENT_ID" != "null" ]]; then
+    run_bzr_raw --api rest --output ndjson comment list "$BUG1"
+    if assert_success &&
+        jq -se --argjson id "$COMMENT_ID" \
+            'any(.[]; .id == $id and .tags == ["important"])' \
+            "$BZR_STDOUT" >/dev/null; then
+        test_pass
+    else
+        test_fail "full NDJSON did not return the tagged comment with its tag"
+    fi
+else test_skip "no BUG1 or comment ID"; fi
+
+test_begin "comment-list-ndjson-projects-tags" "comment list NDJSON --fields tags"
+if [[ -n "$BUG1" ]]; then
+    run_bzr_raw --api rest --output ndjson comment list "$BUG1" --fields tags
+    if assert_success &&
+        jq -se 'all(.[]; keys == ["tags"]) and
+            ([.[] | select(. == {"tags":["important"]})] | length == 1)' \
+            "$BZR_STDOUT" >/dev/null; then
+        test_pass
+    else
+        test_fail "NDJSON tag projection did not contain exactly one tagged record"
+    fi
+else test_skip "no BUG1"; fi
+
+test_begin "comment-list-multi-id-json-projects-tags" "comment list multi-ID JSON --fields tags"
+if [[ -n "$BUG1" ]] && [[ -n "$BUG2" ]]; then
+    run_bzr comment list "$BUG1" "$BUG2" --fields tags
+    if assert_success &&
+        jq -e --argjson a "$BUG1" --argjson b "$BUG2" \
+            'all(.[]; keys == ["bug_id", "tags"]) and
+             (map(.bug_id) | (index($a) != null) and (index($b) != null))' \
+            "$BZR_STDOUT" >/dev/null &&
+        [[ $(awk '/keeping bug_id/ { count++ } END { print count + 0 }' "$BZR_STDERR") -eq 1 ]]; then
+        test_pass
+    else
+        test_fail "multi-ID JSON tag projection lost attribution or emitted the notice incorrectly"
+    fi
+else test_skip "no BUG1 or BUG2"; fi
+
+test_begin "comment-list-multi-id-ndjson-projects-tags" "comment list multi-ID NDJSON --fields tags"
+if [[ -n "$BUG1" ]] && [[ -n "$BUG2" ]]; then
+    run_bzr_raw --api rest --output ndjson comment list "$BUG1" "$BUG2" --fields tags
+    if assert_success &&
+        jq -se --argjson a "$BUG1" --argjson b "$BUG2" \
+            'all(.[]; keys == ["bug_id", "tags"]) and
+             (map(.bug_id) | (index($a) != null) and (index($b) != null))' \
+            "$BZR_STDOUT" >/dev/null &&
+        [[ $(awk '/keeping bug_id/ { count++ } END { print count + 0 }' "$BZR_STDERR") -eq 1 ]]; then
+        test_pass
+    else
+        test_fail "multi-ID NDJSON tag projection lost attribution or emitted the notice incorrectly"
+    fi
+else test_skip "no BUG1 or BUG2"; fi
+
+test_begin "credentialless-comment-list-tags-are-arrays" "credentialless comment tags are arrays"
+if [[ -n "$BUG1" ]]; then
+    run_bzr --server public comment list "$BUG1"
+    if assert_success &&
+        jq -e 'length > 0 and all(.[]; has("tags") and (.tags | type == "array"))' \
+            "$BZR_STDOUT" >/dev/null; then
+        test_pass
+    else
+        test_fail "credentialless comment list was empty or returned a non-array tags field"
+    fi
+else test_skip "no BUG1"; fi
+
 test_begin "comment-tag-remove" "comment tag --remove"
 if [[ -n "${COMMENT_ID:-}" ]] && [[ "$COMMENT_ID" != "null" ]]; then
     run_bzr comment tag "$COMMENT_ID" --remove important
@@ -186,6 +311,18 @@ if [[ -n "${COMMENT_ID:-}" ]] && [[ "$COMMENT_ID" != "null" ]]; then
 else
     test_skip "no comment ID"
 fi
+
+test_begin "comment-list-json-shows-removed-tag" "comment list JSON shows removed tag as empty"
+if [[ -n "$BUG1" ]] && [[ -n "${COMMENT_ID:-}" ]] && [[ "$COMMENT_ID" != "null" ]]; then
+    run_bzr comment list "$BUG1"
+    if assert_success &&
+        jq -e --argjson id "$COMMENT_ID" 'any(.[]; .id == $id and .tags == [])' \
+            "$BZR_STDOUT" >/dev/null; then
+        test_pass
+    else
+        test_fail "removed tag did not round trip as an empty array"
+    fi
+else test_skip "no BUG1 or comment ID"; fi
 
 test_begin "comment-search-tags" "comment search-tags"
 run_bzr comment search-tags important
