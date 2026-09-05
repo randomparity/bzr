@@ -1065,6 +1065,9 @@ run_auth_config_tls_phase_fixture() (
     reset_r11_fixture
     source "$phase" >"$fixture_output"
     _render_test_result >>"$fixture_output"
+    assert_equals query "$(r11_expected_bzr_auth_kind bz50)" "bz50 auth kind"
+    assert_equals query "$(r11_expected_bzr_auth_kind bz52)" "bz52 auth kind"
+    assert_equals header "$(r11_expected_bzr_auth_kind bz53)" "bz53 auth kind"
     assert_equals 8 "$PASS_COUNT" "auth/config/TLS pass count"
     assert_equals 0 "$FAIL_COUNT" "auth/config/TLS failure count"
     assert_equals 5 "$GAP_COUNT" "auth/config/TLS gap count"

@@ -549,7 +549,7 @@ printf "%s\n" "$!"' sh "$kind" "$script" "$port" "$cert_dir" \
     while [[ $attempt -lt 30 ]]; do
         if "$PYBZ_RUNTIME" exec "$sidecar" python -c \
             'import socket,sys; socket.create_connection(("127.0.0.1", int(sys.argv[1])), 1).close()' \
-            "$port"; then
+            "$port" >/dev/null 2>&1; then
             printf '%s\n' "$log"
             return 0
         fi

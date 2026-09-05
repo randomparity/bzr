@@ -20,14 +20,18 @@ r11_adapter_result_is() {
     [[ $BZR_EXIT -eq 0 && -r $output ]] && jq -e "$filter" "$output" >/dev/null
 }
 
+r11_expected_bzr_auth_kind() {
+    case "$1" in
+    bz50 | bz52) printf 'query\n' ;;
+    bz53) printf 'header\n' ;;
+    *) return 2 ;;
+    esac
+}
+
 if ! declare -F r11_api_key_control >/dev/null; then
     r11_api_key_control() {
         local expected request output host_ok=0 pybz_ok=0
-        case "$BZ_VERSION" in
-        bz50) expected=query ;;
-        bz52 | bz53) expected=header ;;
-        *) return 1 ;;
-        esac
+        expected=$(r11_expected_bzr_auth_kind "$BZ_VERSION") || return 1
         BZR_FUNC_REDHAT_MODE=bearer-auth redhat_shape_start "$BZ_PORT" || return 1
         run_bzr config set-server r11-auth --url "http://127.0.0.1:${REDHAT_SHAPE_PORT}" \
             --api-key-env BZR_COMPARE_API_KEY --email "$COMPARE_ADMIN_EMAIL"
@@ -39,6 +43,9 @@ if ! declare -F r11_api_key_control >/dev/null; then
         run_bzr --server r11-auth whoami
         if [[ $BZR_EXIT -eq 0 ]] && r11_auth_evidence_is "$expected" "$REDHAT_SHAPE_LOG"; then
             host_ok=1
+        else
+            printf 'r11 API-key host evidence expected %s; exit=%s\n' "$expected" "$BZR_EXIT" >&2
+            awk '/^auth-kind / { print "host " $0 }' "$REDHAT_SHAPE_LOG" >&2
         fi
         redhat_shape_stop || return 1
 
@@ -50,6 +57,10 @@ if ! declare -F r11_api_key_control >/dev/null; then
             '.transport == "REST" and .result.authenticated and .result.identity_matched' &&
             r11_auth_evidence_is query "$COMPARE_EXCHANGE_DIR/redhat.proxy.log"; then
             pybz_ok=1
+        else
+            printf 'r11 API-key python-bugzilla evidence expected query; exit=%s\n' "$BZR_EXIT" >&2
+            awk '/^auth-kind / { print "pybz " $0 }' \
+                "$COMPARE_EXCHANGE_DIR/redhat.proxy.log" >&2
         fi
         pybz_proxy_stop redhat || return 1
         [[ $host_ok -eq 1 && $pybz_ok -eq 1 ]]
@@ -139,9 +150,9 @@ if ! declare -F r11_tls_control >/dev/null; then
         [[ $BZR_EXIT -eq 0 ]] && host_ok=1
         cert_dir=${TLS_FIXTURE_DIR#"$FUNC_CONFIG_DIR"/}
         pybz_proxy_start tls 18443 "$cert_dir" >/dev/null || return 1
-        run_pybz --bugzilla https://127.0.0.1:18443 info
+        run_pybz --bugzilla https://127.0.0.1:18443 info --products
         [[ $BZR_EXIT -ne 0 ]] || return 1
-        run_pybz --nosslverify --bugzilla https://127.0.0.1:18443 info
+        run_pybz --nosslverify --bugzilla https://127.0.0.1:18443 info --products
         [[ $BZR_EXIT -eq 0 ]] && pybz_ok=1
         pybz_proxy_stop tls || return 1
         _tls_cleanup
