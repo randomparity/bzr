@@ -18,9 +18,9 @@ live probes on Bugzilla 5.0.6, 5.2, and 5.3.3+ confirmed that both transports in
 ## Decision
 
 Add `tags: Vec<String>` to `Comment` with serde's default for an omitted server field. Map
-the XML-RPC `tags` member as an array of strings, treating absence as an empty array and a
-present non-array or non-string element as a protocol error. REST uses the shared serde type
-and therefore gets the same absent-to-empty compatibility behavior.
+the XML-RPC `tags` member with the existing lenient `get_str_array` helper: absence or a
+non-array becomes empty, and non-string array members are ignored. REST uses the shared
+serde type and gets the same absent-to-empty compatibility behavior.
 
 JSON and NDJSON always serialize `tags`, including `[]`; `COMMENT_FIELDS` includes `tags`,
 so projection can select or exclude it. Table output adds `Tags: <comma-separated values>`
@@ -34,8 +34,8 @@ its pinned consumers and examples.
 
 Comment list consumers can observe the state written by comment-tag operations without an
 extra request. Missing server fields remain compatible and become an empty collection in
-output. Malformed XML-RPC tag values fail at the protocol boundary instead of being silently
-dropped. Existing consumers that reject unknown JSON keys can use the schema version to
+output. XML-RPC follows the existing optional-array tolerance used elsewhere in its resource
+mappers. Existing consumers that reject unknown JSON keys can use the schema version to
 detect the additive contract revision.
 
 ## Considered & rejected
@@ -46,8 +46,9 @@ detect the additive contract revision.
 - **Model tags as `Option<Vec<String>>`.** judgment: this would expose transport omission as
   a second public state even though the requested contract is an array and absence is safely
   represented by `[]`.
-- **Silently discard malformed XML-RPC tag members.** judgment: accepting a present value of
-  the wrong shape would hide server/protocol drift and make REST and XML-RPC behavior differ.
+- **Add tag-specific strict XML-RPC validation.** judgment: issue #700 does not authorize a
+  new protocol-hardening policy, and bypassing the established optional-array mapper would
+  make tags exceptional without evidence that the server requires it.
 - **Print an empty `Tags:` line for every comment.** judgment: it adds visual noise without
   improving the tagged-comment round trip that issue #700 requires.
 - **Keep schema version `3.0.0`.** verified: accepted ADR 0007 defines patch increments for

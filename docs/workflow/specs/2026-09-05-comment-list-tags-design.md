@@ -28,9 +28,9 @@ Native REST and XML-RPC `Bug.comments` responses both returned the tag on Bugzil
 
 `Comment` gains `pub tags: Vec<String>` with `#[serde(default)]`. REST response envelopes
 already deserialize through `Comment`, so an omitted field becomes `[]` and a present JSON
-array is preserved. The XML-RPC mapper reads `tags` as an array and converts every member to
-a string. Absence becomes `[]`; wrong container or element types return `BzrError::XmlRpc`
-with comment/tag context.
+array is preserved. The XML-RPC mapper uses the existing `get_str_array` helper. Absence or
+a non-array becomes `[]`, and non-string array members are ignored, matching existing
+optional-array compatibility behavior.
 
 `COMMENT_FIELDS` gains `tags`. Because JSON-family writers serialize `Comment` through the
 shared projection path, full output always contains the field and `--fields tags` retains
@@ -63,17 +63,16 @@ must advance in the same change; no other schema shape changes.
 
 - Missing REST or XML-RPC `tags` remains accepted and emits `[]`.
 - A REST `tags` value of the wrong JSON shape fails normal serde deserialization.
-- A present XML-RPC `tags` value that is not an array, or contains a non-string member,
-  fails with a contextual XML-RPC error.
+- XML-RPC tag decoding follows the existing lenient optional-string-array mapper.
 - No tag sorting, normalization, or deduplication is introduced; server order and values are
   preserved.
 
 ## Verification
 
 Focused type tests prove present and absent REST-shaped values, field-list drift, and
-always-present serialization. XML-RPC mapper tests prove non-empty tags, absence, malformed
-containers, and malformed members. Writer tests prove the non-empty table line, omission for
-empty tags, JSON `tags`, and `--fields tags` through the existing command/projection tests.
+always-present serialization. XML-RPC mapper tests prove non-empty tags and absence. Writer
+tests prove the non-empty table line, omission for empty tags, JSON `tags`, and
+`--fields tags` through the existing command/projection tests.
 
 Functional coverage tags a created comment, reads it through `comment list --json`, asserts
 the tag array, projects `--fields tags`, and checks the restored help claim. The full
