@@ -45,8 +45,9 @@ construct `Writers` with one directly. The copied width is passed only through c
 functions that render grids.
 
 `src/output/formatting.rs` owns applying a supplied width to a completed `tabled::Table` and writing
-that table. Its explicit-width seam lets layout tests avoid process-terminal assumptions and global
-environment mutation.
+that table. It wraps with `PriorityMax::right()`, shrinking the widest column first. Its
+explicit-width seam lets layout tests avoid process-terminal assumptions and global environment
+mutation.
 
 All generic resource grids already pass through `write_table_records`; it will delegate its built
 table to the finalizer. `src/output/resources/bug.rs` will replace its four direct table writes with
@@ -63,8 +64,8 @@ records -> Builder -> Table -> shared finalizer(width) -> optional Width::wrap -
 ## Width resolution and failures
 
 Resolution order is `BZR_TABLE_WIDTH` then detected stdout width then `None`. The environment is
-read with `std::env::var_os`, and only an `OsStr` that converts to Unicode decimal text and parses to
-a non-zero `u16` is accepted. Invalid Unicode remains an explicit invalid state rather than
+read with `std::env::var_os`. Only an `OsStr` that converts to Unicode decimal text and parses to a
+non-zero `u16` is accepted. Invalid Unicode remains an explicit invalid state rather than
 collapsing to absence. An invalid explicit value does not fail the command: it emits a tracing
 warning and falls back to detection, matching the existing `BZR_TIMEOUT` invalid-value policy.
 
@@ -73,13 +74,16 @@ function. That prevents an interactive stderr or stdin from making redirected st
 terminal. Unix and Windows use the dependency's handle-specific implementation. Other platforms
 return `None` behind a local `cfg` fallback.
 
-Before `Width::wrap`, the renderer computes `5 * table.count_columns() + 1`: two display cells and
-two default-padding cells per column, plus every vertical boundary. It clamps the supplied width to
-that structural minimum. This avoids tabled 0.21.0's zero-content erasure and its replacement of a
-width-two scalar by U+FFFD when only one content cell is available. If the terminal is narrower, the
-renderer preserves all columns and individual width-one or width-two scalars, accepting the
-minimum-width overflow. It never drops selected columns or silently replaces a scalar solely
-because the requested table is below the structural floor.
+Before wrapping, the renderer computes `5 * table.count_columns() + 1`: two display cells and two
+default-padding cells per column, plus every vertical boundary. It clamps the supplied width to that
+structural minimum, then applies `Width::wrap(...).priority(PriorityMax::right())`. The priority
+shrinks the widest column first until the aggregate target is reached. A column whose content begins
+at one or two display cells is therefore not reduced below that natural width while a wider neighbor
+still has cells to surrender; wider columns converge at no less than two content cells. The floor
+and priority together avoid tabled 0.21.0's zero-content erasure and its replacement of a width-two
+scalar by U+FFFD when only one content cell is available. If the terminal is narrower, the renderer
+preserves all columns and individual width-one or width-two scalars, accepting minimum-width
+overflow.
 
 ## Public contract
 
@@ -108,9 +112,9 @@ input is logged without echoing its raw bytes or other environment data and cann
 The local OS is trusted to return a terminal cell count, which the dependency already represents as
 `u16`; zero is treated as absent.
 
-The dependency is exact-pinned at the current 0.4.4 release, recorded in `Cargo.lock`, and checked by
-the repository's native and cross-target CI. It requires Rust 1.71, below this repository's 1.89.0
-floor. Table cells remain ANSI-free, so `tabled`'s `ansi` feature is not enabled.
+The dependency is exact-pinned at the current 0.4.4 release, recorded in `Cargo.lock`, and checked
+by the repository's native and cross-target CI. It requires Rust 1.71, below this repository's
+1.89.0 floor. Table cells remain ANSI-free, so `tabled`'s `ansi` feature is not enabled.
 
 ### Out of scope threats
 
@@ -125,16 +129,17 @@ does not alter terminal escape handling because these grid cells contain no ANSI
   out-of-range, detected zero, invalid Unicode on Unix, captured-writer default `None`, and direct
   injected width without environment mutation.
 - Renderer unit tests cover unbounded byte compatibility, a bounded ASCII row, word wrapping, and
-  Unicode display width. An exact-floor regression asserts the original width-two scalar remains,
-  not merely a non-empty cell. Each line is checked against the injected viable width.
+  Unicode display width. An exact-floor regression places a very long ASCII value beside a
+  width-two scalar and asserts the original scalar remains, not merely a non-empty cell. Each line
+  is checked against the injected viable width.
 - Bug resource tests cover list, links, and both adjacency grids through the common finalizer,
   including non-empty cells at the structural minimum for a many-column table.
 - Existing resource tests protect non-terminal snapshots because `CapturedIo::writers()` constructs
   `Writers` with no width regardless of the process stdout TTY.
-- `tests/functional/phases/17-global-options.sh` runs a real bug-list table with a fixed override and
-  an ASCII-only fixture under `LC_ALL=C`; byte length then equals display-cell width, so `awk` can
-  assert every line is within the requested width and the long summary wraps inside the grid. Wide
-  Unicode remains covered by Rust unit tests.
+- `tests/functional/phases/17-global-options.sh` runs a real bug-list table with a fixed override
+  and an ASCII-only fixture under `LC_ALL=C`; byte length then equals display-cell width, so `awk`
+  can assert every line is within the requested width and the long summary wraps inside the grid.
+  Wide Unicode remains covered by Rust unit tests.
 - The same functional phase invokes JSON and NDJSON with an invalid override and asserts their
   stdout remains valid and stderr contains no table-width warning, proving the format gate.
 - Verification runs focused tests, `make lint`, `make test`, and `make functional-test` before

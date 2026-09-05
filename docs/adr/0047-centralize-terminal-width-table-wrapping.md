@@ -29,6 +29,10 @@ stdout handle with `terminal_size_of`; unsupported platforms or failed queries p
 It accepts `OsStr` so an invalid-Unicode value remains distinguishable from absence, warns, and
 falls back normally. No resolved width preserves today's rendering byte-for-byte.
 
+A resolved width applies `Width::wrap(width).priority(PriorityMax::right())`. Shrinking the widest
+column first is load-bearing: together with the structural floor below, it prevents a short column
+from reaching zero content width while a much wider neighbor still holds surplus cells.
+
 Route the shared record writer and every bespoke bug grid through this renderer. Keep the existing
 72-character summary and 60-character description content limits: they are a separate concise-list
 policy, while this decision bounds the aggregate grid. JSON, NDJSON, and non-grid detail output do
@@ -41,6 +45,8 @@ finalizer clamps the requested width to the default grid's minimum of two displa
 padding cells per column and one separator per boundary: `5 * columns + 1`. Two content cells are
 required because tabled 0.21.0 replaces a width-two scalar with U+FFFD when allocated one cell; the
 floor preserves width-one and width-two scalars while preventing zero-width erasure.
+The finalizer's regression uses deliberately unbalanced columns—a long ASCII value beside a
+width-two scalar—because balanced columns do not exercise the priority invariant.
 
 ## Consequences
 
@@ -63,6 +69,9 @@ floor preserves width-one and width-two scalars while preventing zero-width eras
   resource writers build grids need the copied `Option<usize>`; unrelated output stays unchanged.
 - **Honor `COLUMNS` for redirected output.** judgment: a shell-owned ambient variable would make
   otherwise deterministic pipes change layout; a bzr-specific opt-in states that intent.
+- **Use tabled's default round-robin shrink priority.** verified: tabled 0.21.0 `PriorityNone`
+  shrinks columns in sequence, so an aggregate floor can empty a short column while a wide neighbor
+  remains above the per-column floor.
 - **Drop columns when the grid cannot fit.** judgment: silently omitting selected data violates the
   table-output contract; preserving the smallest valid grid is the safer failure mode.
 - **Do nothing and rely on terminal hard wrapping.** verified: issue #695 records that hard wrapping
