@@ -1,6 +1,7 @@
 # Terminal-width table wrapping design
 
-Issue: [#695](https://github.com/randomparity/bzr/issues/695)  
+Issue: [#695](https://github.com/randomparity/bzr/issues/695)
+
 Decision: [ADR 0047](../../adr/0047-centralize-terminal-width-table-wrapping.md)
 
 ## Goal
