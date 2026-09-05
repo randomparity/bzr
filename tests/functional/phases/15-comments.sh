@@ -57,6 +57,98 @@ if [[ -n "$BUG1" ]]; then
     if assert_exit_code 7; then test_pass; fi
 else test_skip "no BUG1"; fi
 
+# ─ Issue #699: comment list accepts multiple bug IDs ─
+
+test_begin "comment-list-multi-id-fixture" "comment list multi-ID fixture"
+_MULTI_BUG=$(make_bug --product FuncTestProd --component Backend --op-sys Linux \
+    --platform PC --description d --summary "comment multi-id second bug")
+if [[ -n "$_MULTI_BUG" ]]; then
+    run_bzr comment add "$_MULTI_BUG" --body "second bug comment"
+    if assert_success; then test_pass; fi
+else
+    test_fail "could not create the second bug; the multi-ID block cannot run"
+fi
+
+test_begin "comment-list-multi-id-json-flat-array" "comment list multi-ID JSON is one flat array"
+if [[ -n "$BUG1" ]] && [[ -n "$_MULTI_BUG" ]]; then
+    run_bzr comment list "$BUG1" "$_MULTI_BUG"
+    if assert_success &&
+        jq -e --argjson a "$BUG1" --argjson b "$_MULTI_BUG" \
+            'map(.bug_id) | (index($a) != null) and (index($b) != null)' \
+            "$BZR_STDOUT" >/dev/null &&
+        jq -e 'all(.[]; .bug_id != null)' "$BZR_STDOUT" >/dev/null; then
+        test_pass
+    else
+        test_fail "multi-ID JSON did not carry both bug_ids"
+    fi
+else test_skip "no BUG1 or second bug"; fi
+
+test_begin "comment-list-multi-id-table-headers" "comment list multi-ID table headers"
+if [[ -n "$BUG1" ]] && [[ -n "$_MULTI_BUG" ]]; then
+    run_bzr_raw comment list "$BUG1" "$_MULTI_BUG"
+    if assert_success &&
+        assert_stdout_contains "Bug #$BUG1" &&
+        assert_stdout_contains "Bug #$_MULTI_BUG"; then
+        test_pass
+    fi
+else test_skip "no BUG1 or second bug"; fi
+
+test_begin "comment-list-single-id-has-no-bug-header" "comment list single ID keeps its shape"
+if [[ -n "$BUG1" ]]; then
+    run_bzr_raw comment list "$BUG1"
+    if assert_success && assert_stdout_not_contains "Bug #"; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "comment-list-multi-id-permissive-skips-missing" "comment list --permissive skips a missing bug"
+if [[ -n "$BUG1" ]]; then
+    run_bzr comment list "$BUG1" 99999999 --permissive
+    # `all` over an empty array is vacuously true, so the length gate is what
+    # proves the reachable bug's comments actually came back.
+    if assert_success &&
+        jq -e --argjson a "$BUG1" 'all(.[]; .bug_id == $a)' "$BZR_STDOUT" >/dev/null &&
+        jq -e 'length > 0' "$BZR_STDOUT" >/dev/null &&
+        assert_stderr_contains "99999999"; then
+        test_pass
+    fi
+else test_skip "no BUG1"; fi
+
+test_begin "comment-list-multi-id-strict-aborts-on-missing" "comment list without --permissive aborts"
+if [[ -n "$BUG1" ]]; then
+    # Check $BZR_EXIT directly: assert_success calls test_fail on a non-zero
+    # exit, which is the outcome this test wants.
+    run_bzr comment list "$BUG1" 99999999
+    if [[ $BZR_EXIT -ne 0 ]]; then test_pass; else test_fail "strict multi-ID did not abort"; fi
+else test_skip "no BUG1"; fi
+
+test_begin "comment-list-permissive-single-id-exits-7" "comment list --permissive with one ID exits 7"
+if [[ -n "$BUG1" ]]; then
+    run_bzr comment list "$BUG1" --permissive
+    if assert_exit_code 7; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "comment-list-multi-id-fields-keeps-bug-id" "comment list multi-ID --fields keeps bug_id"
+if [[ -n "$BUG1" ]] && [[ -n "$_MULTI_BUG" ]]; then
+    run_bzr comment list "$BUG1" "$_MULTI_BUG" --fields id
+    if assert_success &&
+        jq -e 'all(.[]; has("bug_id") and has("id"))' "$BZR_STDOUT" >/dev/null &&
+        jq -e 'length > 0' "$BZR_STDOUT" >/dev/null &&
+        assert_stderr_contains "keeping bug_id"; then
+        test_pass
+    else
+        test_fail "--fields id dropped bug_id on a multi-ID call"
+    fi
+else test_skip "no BUG1 or second bug"; fi
+
+test_begin "credentialless-comment-list-multi-id" "credentialless multi-ID comment list"
+if [[ -n "$BUG1" ]] && [[ -n "$_MULTI_BUG" ]]; then
+    run_bzr_raw --json --server public comment list "$BUG1" "$_MULTI_BUG"
+    if assert_success && jq -e 'all(.[]; .bug_id != null)' "$BZR_STDOUT" >/dev/null; then
+        test_pass
+    fi
+else test_skip "no BUG1 or second bug"; fi
+
+unset _MULTI_BUG
+
 test_begin "comment-tag-add" "comment tag --add"
 if [[ -n "${COMMENT_ID:-}" ]] && [[ "$COMMENT_ID" != "null" ]]; then
     run_bzr comment tag "$COMMENT_ID" --add important
