@@ -78,6 +78,40 @@ run_bzr_raw --output ndjson bug list --whiteboard "$_NM"
 if assert_success && assert_ndjson_line_count 2; then test_pass; fi
 unset _NM
 
+test_begin "table-width-wraps-and-isolates-json" "BZR_TABLE_WIDTH wraps tables and leaves JSON-family output unchanged"
+_TW_MARK=$(unique_name table-width)
+_TW_SUMMARY="table width fixture has enough ASCII words to force a wrapped continuation in the list grid"
+_TW_BUG=$(make_bug --marker "$_TW_MARK" --product FuncTestProd --component Backend \
+    --op-sys Linux --platform PC --description d --summary "$_TW_SUMMARY")
+_TW_DIR=$(mktemp -d /tmp/bzr-func-table-width.XXXXXX)
+if [[ -n "$_TW_BUG" ]]; then
+    LC_ALL=C BZR_TABLE_WIDTH=60 run_bzr_raw --output table bug list --whiteboard "$_TW_MARK"
+    if assert_success; then
+        if awk 'length($0) > 60 { exit 1 }' "$BZR_STDOUT_RAW" &&
+            awk '/^\|[[:space:]]+\|/ { found = 1 } END { exit !found }' "$BZR_STDOUT_RAW"; then
+            run_bzr_raw --json bug list --whiteboard "$_TW_MARK"
+            cp "$BZR_STDOUT_RAW" "$_TW_DIR/json"
+            BZR_TABLE_WIDTH=invalid run_bzr_raw --json bug list --whiteboard "$_TW_MARK"
+            if assert_success && assert_json '.[] | .id' "$_TW_BUG" && assert_stderr_empty; then
+                if cmp -s "$BZR_STDOUT_RAW" "$_TW_DIR/json"; then
+                    run_bzr_raw --output ndjson bug list --whiteboard "$_TW_MARK"
+                    cp "$BZR_STDOUT_RAW" "$_TW_DIR/ndjson"
+                    BZR_TABLE_WIDTH=invalid run_bzr_raw --output ndjson bug list --whiteboard "$_TW_MARK"
+                    if assert_success && assert_ndjson_line_count 1 && assert_stderr_empty; then
+                        if jq -e --argjson id "$_TW_BUG" 'type == "object" and .id == $id' \
+                            "$BZR_STDOUT_RAW" >/dev/null; then
+                            if cmp -s "$BZR_STDOUT_RAW" "$_TW_DIR/ndjson"; then test_pass
+                            else test_fail "invalid BZR_TABLE_WIDTH changed NDJSON stdout"; fi
+                        else test_fail "invalid BZR_TABLE_WIDTH changed NDJSON structure"; fi
+                    fi
+                else test_fail "invalid BZR_TABLE_WIDTH changed JSON stdout"; fi
+            fi
+        else test_fail "table output did not wrap to 60 columns"; fi
+    fi
+else test_fail "could not create table-width fixture"; fi
+rm -rf "$_TW_DIR"
+unset _TW_MARK _TW_SUMMARY _TW_BUG _TW_DIR
+
 # --dry-run previews a mutation without writing it.
 test_begin "dry-run-bug-create-previews-without-writing" "--dry-run bug create previews without writing"
 _DM="dry$$x${RANDOM}"

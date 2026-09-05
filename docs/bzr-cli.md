@@ -66,6 +66,7 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 | Variable | Description |
 |----------|-------------|
 | `BZR_OUTPUT` | Default output format (`table`, `json`, or `ndjson`). Overridden by `--output` or `--json`. |
+| `BZR_TABLE_WIDTH` | Explicit table width in display cells (decimal 1 through 65,535). Overrides detected stdout width, including when stdout is redirected. Applies only to table output; json and ndjson ignore it. Invalid values warn and fall back to stdout width detection. |
 | `BZR_CONFIG` | Full path to an alternate `config.toml`. Overrides the default config directory; overridden by `--config`. |
 | `BZR_TIMEOUT` | Per-request timeout in seconds. Overridden by `--timeout`; invalid values are ignored with a warning. |
 | `NO_COLOR` | Disable colored output (any value). Supported natively by the `colored` crate. |
