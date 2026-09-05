@@ -68,6 +68,12 @@ cleanup() {
         [[ $status -ne 0 ]] || status=1
     fi
     if [[ -n "${PYBZ_RUNTIME:-}" ]]; then
+        if ! pybz_proxy_stop tls; then
+            [[ $status -ne 0 ]] || status=1
+        fi
+        if ! pybz_proxy_stop redhat; then
+            [[ $status -ne 0 ]] || status=1
+        fi
         if ! pybz_sidecar_stop "${_compare_runtime:-}"; then
             [[ $status -ne 0 ]] || status=1
         fi
@@ -96,6 +102,8 @@ if [[ ! -r $COMPARE_EXCHANGE_DIR/python-bugzilla-adapter.py ]]; then
     echo "ERROR: comparison adapter staging failed" >&2
     exit 1
 fi
+pybz_stage_proxy "$SCRIPT_DIR/tls-proxy.py" tls-proxy.py >/dev/null
+pybz_stage_proxy "$SCRIPT_DIR/redhat-shape-proxy.py" redhat-proxy.py >/dev/null
 export XDG_CONFIG_HOME="$FUNC_CONFIG_DIR"
 export BZ_URL BZR_BIN COMPARE_EXCHANGE_DIR COMPARE_ADMIN_EMAIL BZR_COMPARE_API_KEY
 CURRENT_TEST_GROUP=""

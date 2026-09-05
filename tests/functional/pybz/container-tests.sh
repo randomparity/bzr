@@ -973,6 +973,162 @@ run_sidecar_stop_failure_fixture() (
     assert_equals fake_runtime "$PYBZ_RUNTIME" "failed sidecar ownership"
 )
 
+run_namespace_proxy_helper_fixture() (
+    local fixture_root staged log_path error_output
+    fixture_root=$(mktemp -d)
+    error_output=$(mktemp)
+    trap 'rm -rf "$fixture_root"; rm -f "$error_output"' EXIT
+    FUNC_CONFIG_DIR="$fixture_root"
+    COMPARE_EXCHANGE_DIR="$fixture_root/compare"
+    mkdir -p "$COMPARE_EXCHANGE_DIR"
+    BZ_VERSION=bz50
+    PYBZ_RUNTIME=fake_proxy_runtime
+    FAKE_PROXY_LOG="$fixture_root/runtime.args"
+    FAKE_PROXY_ALIVE=0
+    FAKE_PROXY_READY=1
+    : >"$FAKE_PROXY_LOG"
+    sleep() { :; }
+    fixture_mode() {
+        stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"
+    }
+    openssl() {
+        local previous='' argument
+        case "$1 ${2:-}" in
+        'x509 -in') printf 'fixture-der' ;;
+        'dgst -sha256') command cat ;;
+        'base64 -A') command cat ;;
+        *)
+            for argument in "$@"; do
+                if [[ $previous == -keyout || $previous == -out ]]; then
+                    : >"$argument"
+                fi
+                previous="$argument"
+            done
+            ;;
+        esac
+    }
+    python3() { return 0; }
+    curl() { return 0; }
+
+    fake_proxy_runtime() {
+        printf '%q ' "$@" >>"$FAKE_PROXY_LOG"
+        printf '\n' >>"$FAKE_PROXY_LOG"
+        if [[ $1 != exec ]]; then
+            return 2
+        fi
+        if [[ $3 == sh && $4 == -c && $5 == *pybz-proxy-start* ]]; then
+            if [[ $7 == tls ]]; then
+                printf 'mapped-cert=/work/%s/server.crt mapped-key=/work/%s/server.key\n' \
+                    "${10}" "${10}" >>"$FAKE_PROXY_LOG"
+            fi
+            printf '4242\n'
+            return 0
+        fi
+        if [[ $3 == sh && $4 == -c && $5 == *pybz-proxy-alive* ]]; then
+            [[ $FAKE_PROXY_ALIVE -eq 1 ]]
+            return
+        fi
+        if [[ $3 == sh && $4 == -c && $5 == *pybz-proxy-stop* ]]; then
+            FAKE_PROXY_ALIVE=0
+            return 0
+        fi
+        if [[ $3 == python && $4 == -c ]]; then
+            [[ $FAKE_PROXY_READY -eq 1 ]]
+            return
+        fi
+        if [[ $3 == sh && $4 == -c && $5 == *pybz-redhat-alias* ]]; then
+            return 0
+        fi
+        return 2
+    }
+
+    tls_fixture_start 8080
+    if [[ $TLS_FIXTURE_DIR != "$FUNC_CONFIG_DIR"/tls.* ]]; then
+        printf 'TLS fixture was not created beneath FUNC_CONFIG_DIR\n' >&2
+        return 1
+    fi
+    assert_equals 700 "$(fixture_mode "$TLS_FIXTURE_DIR")" "TLS fixture directory mode"
+    assert_equals 600 "$(fixture_mode "$TLS_FIXTURE_DIR/server.key")" \
+        "TLS fixture key mode"
+    _tls_cleanup
+
+    staged=$(pybz_stage_proxy "$PYBZ_DIR/../redhat-shape-proxy.py" redhat-proxy.py)
+    assert_equals /work/compare/redhat-proxy.py "$staged" "staged proxy path"
+    assert_equals 600 "$(fixture_mode "$COMPARE_EXCHANGE_DIR/redhat-proxy.py")" \
+        "staged proxy mode"
+    if pybz_stage_proxy "$PYBZ_DIR/../redhat-shape-proxy.py" ../escape.py \
+        2>"$error_output"; then
+        printf 'unsafe proxy destination was accepted\n' >&2
+        return 1
+    fi
+
+    printf 'stale evidence\n' >"$COMPARE_EXCHANGE_DIR/redhat.proxy.log"
+    log_path=$(pybz_proxy_start redhat 18080)
+    assert_equals "$COMPARE_EXCHANGE_DIR/redhat.proxy.log" "$log_path" \
+        "Red Hat evidence path"
+    assert_equals '' "$(<"$log_path")" "fresh Red Hat evidence"
+    assert_equals 600 "$(fixture_mode "$log_path")" "Red Hat evidence mode"
+    assert_equals 4242 "$(<"$COMPARE_EXCHANGE_DIR/redhat.proxy.pid")" \
+        "Red Hat proxy PID"
+    if ! grep -Fq '/work/compare/redhat-proxy.py' "$FAKE_PROXY_LOG" ||
+        ! grep -Fq '127.0.0.1' "$FAKE_PROXY_LOG"; then
+        printf 'Red Hat proxy invocation omitted its fixed mapped path or loopback backend\n' >&2
+        return 1
+    fi
+
+    FAKE_PROXY_ALIVE=1
+    if pybz_proxy_start redhat 18080 2>"$error_output"; then
+        printf 'live prior proxy PID was accepted\n' >&2
+        return 1
+    fi
+    FAKE_PROXY_ALIVE=0
+    pybz_proxy_stop redhat
+    pybz_proxy_stop redhat
+
+    mkdir -p "$FUNC_CONFIG_DIR/tls-fixture"
+    : >"$FUNC_CONFIG_DIR/tls-fixture/server.crt"
+    : >"$FUNC_CONFIG_DIR/tls-fixture/server.key"
+    chmod 600 "$FUNC_CONFIG_DIR/tls-fixture/server.crt" \
+        "$FUNC_CONFIG_DIR/tls-fixture/server.key"
+    pybz_stage_proxy "$PYBZ_DIR/../tls-proxy.py" tls-proxy.py >/dev/null
+    log_path=$(pybz_proxy_start tls 18443 tls-fixture)
+    assert_equals "$COMPARE_EXCHANGE_DIR/tls.proxy.log" "$log_path" \
+        "TLS evidence path"
+    if ! grep -Fq '/work/tls-fixture/server.crt' "$FAKE_PROXY_LOG" ||
+        ! grep -Fq '/work/tls-fixture/server.key' "$FAKE_PROXY_LOG"; then
+        printf 'TLS proxy invocation omitted mapped private material\n' >&2
+        return 1
+    fi
+    pybz_proxy_stop tls
+
+    for invalid in 'invalid 18080' 'redhat 0' 'redhat 65536' 'redhat not-a-port'; do
+        # shellcheck disable=SC2086 # fixture intentionally splits kind and port
+        if pybz_proxy_start $invalid 2>"$error_output"; then
+            printf 'invalid proxy start was accepted: %s\n' "$invalid" >&2
+            return 1
+        fi
+    done
+    printf 'not-a-pid\n' >"$COMPARE_EXCHANGE_DIR/redhat.proxy.pid"
+    if pybz_proxy_stop redhat 2>"$error_output"; then
+        printf 'malformed proxy PID was accepted\n' >&2
+        return 1
+    fi
+    rm -f "$COMPARE_EXCHANGE_DIR/redhat.proxy.pid"
+
+    FAKE_PROXY_READY=0
+    if pybz_proxy_start redhat 18080 2>"$error_output"; then
+        printf 'proxy readiness exhaustion was accepted\n' >&2
+        return 1
+    fi
+    FAKE_PROXY_READY=1
+    pybz_redhat_alias_install
+    pybz_redhat_alias_install
+    if grep -Fq fixture-secret "$FAKE_PROXY_LOG"; then
+        printf 'secret sentinel reached proxy runtime argv\n' >&2
+        return 1
+    fi
+)
+
 run_adapter_staging_cleanup_fixture() (
     local fixture_root
     local residue
@@ -2597,6 +2753,7 @@ run_transport_observation_fixture
 run_lifecycle_phase_fixture
 run_parity_report_fixture
 run_sidecar_stop_failure_fixture
+run_namespace_proxy_helper_fixture
 run_adapter_staging_cleanup_fixture
 run_comment_phase_fixture
 run_attachment_seed_fixture
