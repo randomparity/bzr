@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+> **Superseded by [0051](0051-share-adapter-with-bounded-local-proofs.md)** (2026-09-05)
 
 ## Context
 

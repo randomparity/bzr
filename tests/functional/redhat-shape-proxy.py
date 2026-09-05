@@ -7,8 +7,10 @@ same request metadata and response bytes and returns ``(bytes, evidence)``.
 Evidence is emitted after all matching hooks, preserving registry order.
 """
 
+import contextlib
 import http.client
 import http.server
+import io
 import json
 import os
 import re
@@ -496,6 +498,45 @@ def emit_rewrite_evidence(evidence):
         sys.stderr.flush()
 
 
+def prepare_auth_forward(path, headers):
+    query_key = any(
+        name.casefold() == "bugzilla_api_key"
+        for name, _value in urllib.parse.parse_qsl(
+            urllib.parse.urlsplit(path).query, keep_blank_values=True
+        )
+    )
+    api_key_header = next(
+        (key for key in headers if key.casefold() == "x-bugzilla-api-key"), None
+    )
+    authorization = next(
+        (key for key in headers if key.casefold() == "authorization"), None
+    )
+    bearer_value = None
+    if authorization is not None:
+        scheme, separator, value = headers[authorization].partition(" ")
+        if scheme.casefold() != "bearer" or not separator or not value.strip():
+            raise ValueError("invalid bearer credential")
+        bearer_value = value
+
+    kinds = (query_key, api_key_header is not None, bearer_value is not None)
+    if sum(kinds) > 1:
+        raise ValueError("ambiguous credentials")
+    if bearer_value is not None:
+        del headers[authorization]
+        headers["X-BUGZILLA-API-KEY"] = bearer_value
+        return "bearer"
+    if api_key_header is not None:
+        return "header"
+    if query_key:
+        return "query"
+    return None
+
+
+def emit_auth_evidence(kind):
+    if kind is not None:
+        print(f"auth-kind {kind} count=1", file=sys.stderr, flush=True)
+
+
 def make_handler(backend_port):
     server_capability_mode = os.environ.get("BZR_FUNC_REDHAT_MODE") == (
         "server-capabilities"
@@ -504,6 +545,7 @@ def make_handler(backend_port):
         "attachment-comment"
     )
     cc_objects_mode = os.environ.get("BZR_FUNC_REDHAT_MODE") == "cc-objects"
+    bearer_auth_mode = os.environ.get("BZR_FUNC_REDHAT_MODE") == "bearer-auth"
 
     class Handler(http.server.BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -540,6 +582,13 @@ def make_handler(backend_port):
         def _forward(self, method):
             headers = {key: value for key, value in self.headers.items()
                        if key.lower() not in _HOP_BY_HOP}
+            credential_kind = None
+            if bearer_auth_mode:
+                try:
+                    credential_kind = prepare_auth_forward(self.path, headers)
+                except ValueError:
+                    self.send_error(400, "Invalid authentication credentials")
+                    return
             raw_content_length = self.headers.get("Content-Length", "0")
             try:
                 content_length = int(raw_content_length)
@@ -565,6 +614,8 @@ def make_handler(backend_port):
                 return
             finally:
                 conn.close()
+
+            emit_auth_evidence(credential_kind)
 
             if 200 <= status < 300:
                 try:
@@ -598,6 +649,48 @@ def make_handler(backend_port):
 
 
 class ShapeTests(unittest.TestCase):
+    def test_records_query_api_key_without_exposing_value(self):
+        status, captured, evidence = self._credential_round_trip(
+            "/rest/version?Bugzilla_api_key=query-secret"
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(captured["path"], "/rest/version?Bugzilla_api_key=query-secret")
+        self.assertEqual(evidence, "auth-kind query count=1\n")
+
+    def test_records_api_key_header_without_exposing_value(self):
+        status, captured, evidence = self._credential_round_trip(
+            "/rest/version", {"X-BUGZILLA-API-KEY": "header-secret"}
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(captured["headers"]["X-BUGZILLA-API-KEY"], "header-secret")
+        self.assertEqual(evidence, "auth-kind header count=1\n")
+
+    def test_translates_bearer_without_forwarding_authorization_or_exposing_value(self):
+        status, captured, evidence = self._credential_round_trip(
+            "/rest/version", {"Authorization": "Bearer bearer-secret"}
+        )
+        self.assertEqual(status, 200)
+        self.assertNotIn("Authorization", captured["headers"])
+        self.assertEqual(captured["headers"]["X-BUGZILLA-API-KEY"], "bearer-secret")
+        self.assertEqual(evidence, "auth-kind bearer count=1\n")
+
+    def test_rejects_empty_bearer_before_forwarding(self):
+        status, captured, evidence = self._credential_round_trip(
+            "/rest/version", {"Authorization": "Bearer "}
+        )
+        self.assertEqual(status, 400)
+        self.assertIsNone(captured)
+        self.assertEqual(evidence, "")
+
+    def test_rejects_ambiguous_credentials_before_forwarding(self):
+        status, captured, evidence = self._credential_round_trip(
+            "/rest/version?Bugzilla_api_key=query-secret",
+            {"Authorization": "Bearer bearer-secret"},
+        )
+        self.assertEqual(status, 400)
+        self.assertIsNone(captured)
+        self.assertEqual(evidence, "")
+
     def test_rewrite_hook_registry_has_uniform_entries(self):
         self.assertGreaterEqual(len(REWRITE_HOOKS), 6)
         for matches, transform in REWRITE_HOOKS:
@@ -1090,6 +1183,52 @@ class ShapeTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         return server, thread
+
+    def _credential_round_trip(self, path, headers=None):
+        captured = []
+
+        class BackendHandler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                captured.append({"path": self.path, "headers": dict(self.headers.items())})
+                body = b'{"version":"5.0.6"}'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        backend = http.server.ThreadingHTTPServer(("127.0.0.1", 0), BackendHandler)
+        backend_thread = threading.Thread(target=backend.serve_forever, daemon=True)
+        backend_thread.start()
+        previous_mode = os.environ.get("BZR_FUNC_REDHAT_MODE")
+        os.environ["BZR_FUNC_REDHAT_MODE"] = "bearer-auth"
+        proxy, proxy_thread = self._start_server(backend.server_port)
+        evidence = io.StringIO()
+        try:
+            connection = http.client.HTTPConnection(
+                "127.0.0.1", proxy.server_port, timeout=2
+            )
+            with contextlib.redirect_stderr(evidence):
+                connection.request("GET", path, headers=headers or {})
+                response = connection.getresponse()
+                status = response.status
+                response.read()
+            connection.close()
+        finally:
+            proxy.shutdown()
+            proxy.server_close()
+            proxy_thread.join(timeout=2)
+            backend.shutdown()
+            backend.server_close()
+            backend_thread.join(timeout=2)
+            if previous_mode is None:
+                os.environ.pop("BZR_FUNC_REDHAT_MODE", None)
+            else:
+                os.environ["BZR_FUNC_REDHAT_MODE"] = previous_mode
+        return status, captured[0] if captured else None, evidence.getvalue()
 
 
 def main():

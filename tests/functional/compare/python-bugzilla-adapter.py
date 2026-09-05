@@ -7,14 +7,18 @@ import os
 import stat
 import sys
 from types import SimpleNamespace
+import urllib.parse
 from xmlrpc.client import DateTime
 from pathlib import Path
 
-from bugzilla import Bugzilla
+from bugzilla import Bugzilla, BugzillaError
 
 
 SERVER_URL = "http://127.0.0.1"
 WORK_ROOT = Path("/work/compare")
+TOKEN_ROOT = Path.home() / ".cache/bzr-comparison"
+TOKEN_FILE = TOKEN_ROOT / "python-bugzilla-token"
+STALE_TOKEN_FILE = TOKEN_ROOT / "python-bugzilla-stale-token"
 
 
 class AdapterError(Exception):
@@ -522,6 +526,123 @@ def _component_update_shape(_client, request):
     return client.editcomponent(_required_mapping(request, "params", nonempty=True))
 
 
+def _required_url(request):
+    value = _required_text(request, "url", 2048)
+    parsed = urllib.parse.urlsplit(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or any(
+        (parsed.username, parsed.password)
+    ):
+        raise AdapterError("url must be an HTTP(S) URL without embedded credentials")
+    return value
+
+
+def _auth_client(url, token_file=TOKEN_FILE):
+    return Bugzilla(url, tokenfile=str(token_file), configpaths=[], force_rest=True)
+
+
+def _login_operation(_client, request):
+    _validate_keys(request, ("url", "username", "password", "restrict_login"))
+    client = _auth_client(_required_url(request))
+    result = client.login(
+        _required_text(request, "username", 320),
+        _required_text(request, "password", 1024),
+        restrict_login=_required_bool(request, "restrict_login"),
+    )
+    if not result or not client._tokencache.get_value(client.url):
+        raise AdapterError("python-bugzilla did not cache a login token")
+    TOKEN_FILE.chmod(0o600)
+    result = {
+        "authenticated": True,
+        "restricted": request["restrict_login"],
+        "cache_written": True,
+    }
+    return {"transport": _transport(client), "result": result}
+
+
+def _cached_auth_operation(_client, request):
+    _validate_keys(request, ("url", "username"))
+    client = _auth_client(_required_url(request))
+    if "Bugzilla_token" not in client._session.get_auth_params():
+        raise AdapterError("python-bugzilla did not load a cached token")
+    user = client.getuser(_required_text(request, "username", 320))
+    if user is None:
+        raise AdapterError("cached authentication did not identify the user")
+    return {
+        "transport": _transport(client),
+        "result": {"authenticated": True, "cache_used": True},
+    }
+
+
+def _api_key_identity_operation(_client, request):
+    _validate_keys(request, ("url", "api_key", "username"))
+    url = _required_url(request)
+    api_key = _required_text(request, "api_key", 4096)
+    username = _required_text(request, "username", 320)
+    client = Bugzilla(url, api_key=api_key, use_creds=False, force_rest=True)
+    user = client.getuser(username)
+    if user is None:
+        raise AdapterError("API-key authentication did not identify a user")
+    identity_matched = any(
+        getattr(user, attribute, None) == username for attribute in ("email", "name")
+    )
+    return {
+        "transport": _transport(client),
+        "result": {"authenticated": True, "identity_matched": identity_matched},
+    }
+
+
+def _logout_operation(_client, request):
+    _validate_keys(request, ("url", "username"))
+    url = _required_url(request)
+    client = _auth_client(url)
+    token = client._session.get_auth_params().get("Bugzilla_token")
+    if not token:
+        raise AdapterError("python-bugzilla did not load a cached token")
+    transport = _transport(client)
+    stale_client = _auth_client(url, STALE_TOKEN_FILE)
+    try:
+        stale_client._tokencache.set_value(url, token)
+        STALE_TOKEN_FILE.chmod(0o600)
+        client.logout()
+        try:
+            stale_client.getuser(_required_text(request, "username", 320))
+        except BugzillaError:
+            pass
+        else:
+            raise AdapterError("python-bugzilla logout left the token valid")
+    finally:
+        STALE_TOKEN_FILE.unlink(missing_ok=True)
+        client._tokencache.set_value(url, None)
+    if client._tokencache.get_value(url) is not None:
+        raise AdapterError("python-bugzilla did not clear the cached token")
+    return {
+        "transport": transport,
+        "result": {"logged_out": True, "cache_cleared": True},
+    }
+
+
+class _CertificateProbeBackend:
+    def __init__(self, _url, session):
+        self.session = session
+
+    @staticmethod
+    def bugzilla_version():
+        return {"version": "5.0"}
+
+
+def _client_certificate_surface(_client, request):
+    _validate_keys(request, ("certificate",))
+    certificate = _attachment_path(request, "certificate")
+    client = Bugzilla(None, use_creds=False, cert=str(certificate))
+    client._get_backend_class = lambda url: (_CertificateProbeBackend, url)
+    client.connect("https://127.0.0.1")
+    session = getattr(getattr(client, "_session", None), "_session", None)
+    return {
+        "transport": None,
+        "result": {"configured": getattr(session, "cert", None) == str(certificate)},
+    }
+
+
 OPERATIONS = {
     "create": _create,
     "query": _query,
@@ -550,6 +671,11 @@ OPERATIONS = {
     "product_catalogue": _product_catalogue,
     "component_add": _component_add,
     "component_update_shape": _component_update_shape,
+    "login": _login_operation,
+    "cached_auth": _cached_auth_operation,
+    "api_key_identity": _api_key_identity_operation,
+    "logout": _logout_operation,
+    "client_certificate_surface": _client_certificate_surface,
 }
 
 LEGACY_OPERATIONS = {
@@ -565,6 +691,13 @@ LEGACY_OPERATIONS = {
     "bug_tags",
 }
 LOCAL_OPERATIONS = {"component_update_shape"}
+SELF_MANAGED_OPERATIONS = {
+    "login",
+    "cached_auth",
+    "api_key_identity",
+    "logout",
+    "client_certificate_surface",
+}
 
 
 def _work_path(value, label):
@@ -599,9 +732,6 @@ def _load_request(path):
         raise AdapterError("input file is unreadable or invalid JSON") from error
     if not isinstance(request, dict):
         raise AdapterError("input must be one JSON object")
-    api_key = request.get("api_key")
-    if not isinstance(api_key, str) or not api_key:
-        raise AdapterError("api_key must be a non-empty string")
     return request
 
 
@@ -621,6 +751,8 @@ def _transport(client):
 
 
 def _requested_transport(request, operation):
+    if operation in SELF_MANAGED_OPERATIONS and "transport" in request:
+        raise AdapterError("auth operation does not accept transport")
     requested = request.pop("transport", None)
     if operation in LOCAL_OPERATIONS:
         if requested is not None:
@@ -662,6 +794,7 @@ def _write_output(path, payload):
 def main(argv):
     input_label = "python-bugzilla-adapter.py"
     try:
+        os.umask(0o077)
         if len(argv) != 4:
             raise AdapterError("usage: python-bugzilla-adapter.py OP INPUT OUTPUT")
         operation = argv[1]
@@ -674,13 +807,22 @@ def main(argv):
             raise AdapterError("input and output paths must differ")
         request = _load_request(input_path)
         requested_transport = _requested_transport(request, operation)
+        if operation in SELF_MANAGED_OPERATIONS:
+            if input_path.parent != WORK_ROOT or output_path.parent != WORK_ROOT:
+                raise AdapterError("auth operation paths must be direct exchange children")
+            payload = handler(None, request)
+            _write_output(output_path, payload)
+            return 0
         if operation in LOCAL_OPERATIONS:
             result = handler(None, request)
             observed_transport = None
         else:
+            api_key = request.get("api_key")
+            if not isinstance(api_key, str) or not api_key:
+                raise AdapterError("api_key must be a non-empty string")
             client = Bugzilla(
                 SERVER_URL,
-                api_key=request["api_key"],
+                api_key=api_key,
                 use_creds=False,
                 force_rest=(
                     requested_transport == "REST" or operation == "update_options"

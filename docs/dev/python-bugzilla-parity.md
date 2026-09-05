@@ -31,3 +31,16 @@ This report tracks bzr against python-bugzilla 3.3.0 using stable comparison tes
 | Product catalogues | `bzr product list --type` | parity | `compare/05-products-components/product-catalogues` |
 | Component create | `bzr component create`, `bzr component view` | parity | `compare/05-products-components/component-create` |
 | Red Hat component update | `bzr component update` | expected gap (#675) | `compare/05-products-components/component-update-redhat` |
+| API-key placement by server version | `bzr whoami` | bz50/bz52: both query; bz53: bzr header, python-bugzilla query | `compare/06-auth-config-tls/api-key-placement` |
+| Restricted password login | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/restricted-login` |
+| Cached login token reuse | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/cached-token` |
+| Logout token invalidation | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/logout` |
+| bugzillarc three-file precedence | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/bugzillarc-precedence` |
+| bugzillarc default URL | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/bugzillarc-default-url` |
+| bugzillarc URL-substring section | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/bugzillarc-substring-section` |
+| Disable TLS verification | `--server-tls-insecure` | parity | `compare/06-auth-config-tls/nosslverify` |
+| Login-token request transport | no equivalent | expected gap (#676) | `compare/06-auth-config-tls/token-transport-gap` |
+| Login and logout commands | no equivalent | expected gap (#681) | `compare/06-auth-config-tls/login-command-gap` |
+| bugzillarc import | no equivalent | expected gap (#682) | `compare/06-auth-config-tls/bugzillarc-import-gap` |
+| Client certificate configuration | no equivalent | surface gap (#677) | `compare/06-auth-config-tls/client-certificate-surface-gap` |
+| Red Hat Bearer API-key transport | no equivalent | expected gap (#678) | `compare/06-auth-config-tls/bearer-gap` |

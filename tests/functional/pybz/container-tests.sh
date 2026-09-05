@@ -186,12 +186,57 @@ run_sidecar_wrapper_fixture() (
     assert_equals 19 "$BZR_EXIT" "adapter exit"
 )
 
+run_api_key_identity_request_fixture() (
+    local request argv_log status
+    COMPARE_EXCHANGE_DIR=$(mktemp -d)
+    argv_log=$(mktemp)
+    trap 'rm -rf "$COMPARE_EXCHANGE_DIR"; rm -f "$argv_log"' EXIT
+    jq() {
+        printf '%s\n' "$@" >>"$argv_log"
+        if [[ ${FAIL_IDENTITY_JQ:-0} -eq 1 ]]; then
+            return 23
+        fi
+        command jq "$@"
+    }
+    request=$(pybz_write_api_key_identity_request auth-placement \
+        'http://identity-proxy.invalid:18080' 'identity-api-secret' \
+        'identity-user@test.invalid')
+    assert_equals "$COMPARE_EXCHANGE_DIR/auth-placement.pybz.input.json" "$request" \
+        "API-key identity request path"
+    assert_equals 600 \
+        "$(stat -f '%Lp' "$request" 2>/dev/null || stat -c '%a' "$request")" \
+        "API-key identity request mode"
+    assert_equals \
+        '{"api_key":"identity-api-secret","url":"http://identity-proxy.invalid:18080","username":"identity-user@test.invalid"}' \
+        "$(jq -cS . "$request")" "API-key identity request"
+    if grep -Eq 'identity-api-secret|identity-proxy|identity-user' "$argv_log"; then
+        printf 'API-key identity request value reached external argv\n' >&2
+        return 1
+    fi
+    if compgen -G "$COMPARE_EXCHANGE_DIR/.api-key-identity.*.source" >/dev/null; then
+        printf 'API-key identity request retained source files after success\n' >&2
+        return 1
+    fi
+    FAIL_IDENTITY_JQ=1
+    set +e
+    pybz_write_api_key_identity_request auth-failure \
+        'http://failure-proxy.invalid:18081' 'failure-api-secret' \
+        'failure-user@test.invalid' >/dev/null
+    status=$?
+    set -e
+    unset FAIL_IDENTITY_JQ
+    assert_equals 23 "$status" "API-key identity jq failure status"
+    if [[ -e $COMPARE_EXCHANGE_DIR/auth-failure.pybz.input.json ]] ||
+        compgen -G "$COMPARE_EXCHANGE_DIR/.api-key-identity.*.source" >/dev/null; then
+        printf 'API-key identity request retained private files after jq failure\n' >&2
+        return 1
+    fi
+)
 run_transport_observation_fixture() (
     if ! declare -F observe_bzr_transport >/dev/null; then
         printf 'observe_bzr_transport is not defined\n' >&2
         return 1
     fi
-
     printf 'DEBUG bzr::client::transport: API response\n' >"$BZR_STDERR"
     observe_bzr_transport
     assert_equals REST "$BZR_TRANSPORT" "single REST observation"
@@ -933,6 +978,19 @@ run_parity_report_fixture() {
         '| Product catalogues | `bzr product list --type` | parity | `compare/05-products-components/product-catalogues` |'
         '| Component create | `bzr component create`, `bzr component view` | parity | `compare/05-products-components/component-create` |'
         '| Red Hat component update | `bzr component update` | expected gap (#675) | `compare/05-products-components/component-update-redhat` |'
+        '| API-key placement by server version | `bzr whoami` | bz50/bz52: both query; bz53: bzr header, python-bugzilla query | `compare/06-auth-config-tls/api-key-placement` |'
+        '| Restricted password login | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/restricted-login` |'
+        '| Cached login token reuse | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/cached-token` |'
+        '| Logout token invalidation | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/logout` |'
+        '| bugzillarc three-file precedence | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/bugzillarc-precedence` |'
+        '| bugzillarc default URL | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/bugzillarc-default-url` |'
+        '| bugzillarc URL-substring section | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/bugzillarc-substring-section` |'
+        '| Disable TLS verification | `--server-tls-insecure` | parity | `compare/06-auth-config-tls/nosslverify` |'
+        '| Login-token request transport | no equivalent | expected gap (#676) | `compare/06-auth-config-tls/token-transport-gap` |'
+        '| Login and logout commands | no equivalent | expected gap (#681) | `compare/06-auth-config-tls/login-command-gap` |'
+        '| bugzillarc import | no equivalent | expected gap (#682) | `compare/06-auth-config-tls/bugzillarc-import-gap` |'
+        '| Client certificate configuration | no equivalent | surface gap (#677) | `compare/06-auth-config-tls/client-certificate-surface-gap` |'
+        '| Red Hat Bearer API-key transport | no equivalent | expected gap (#678) | `compare/06-auth-config-tls/bearer-gap` |'
     )
 
     for row in "${rows[@]}"; do
@@ -973,6 +1031,203 @@ run_sidecar_stop_failure_fixture() (
     assert_equals fake_runtime "$PYBZ_RUNTIME" "failed sidecar ownership"
 )
 
+run_auth_config_tls_phase_fixture() (
+    local phase="$PYBZ_DIR/../compare/06-auth-config-tls.sh" fixture_output
+    COMPARE_EXCHANGE_DIR=$(mktemp -d)
+    fixture_output=$(mktemp)
+    trap 'rm -rf "$COMPARE_EXCHANGE_DIR"; rm -f "$fixture_output"' EXIT
+    if [[ ! -r $phase ]]; then
+        printf 'missing auth/config/TLS comparison phase\n' >&2
+        return 1
+    fi
+    TEST_ID_PREFIX=compare CURRENT_TEST_GROUP=06-auth-config-tls BZ_VERSION=bz50
+    r11_api_key_control() { return 0; }
+    r11_login_control() { return 0; }
+    r11_cached_control() { [[ ${R11_FIXTURE_CACHED_FAIL:-0} -eq 0 ]]; }
+    r11_logout_control() { return 0; }
+    r11_bugzillarc_control() { return 0; }
+    r11_tls_control() { return 0; }
+    r11_certificate_control() { return 0; }
+    r11_bearer_control() { return 0; }
+    r11_parser_gap() { return 0; }
+    reset_r11_fixture() {
+        PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
+        SEEN_TEST_IDS=$'\n' TEST_RESULT_PENDING=0
+        : >"$fixture_output"
+    }
+    reset_r11_fixture
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    assert_equals query "$(r11_expected_bzr_auth_kind bz50)" "bz50 auth kind"
+    assert_equals query "$(r11_expected_bzr_auth_kind bz52)" "bz52 auth kind"
+    assert_equals header "$(r11_expected_bzr_auth_kind bz53)" "bz53 auth kind"
+    assert_equals 8 "$PASS_COUNT" "auth/config/TLS pass count"
+    assert_equals 0 "$FAIL_COUNT" "auth/config/TLS failure count"
+    assert_equals 5 "$GAP_COUNT" "auth/config/TLS gap count"
+    (
+        unset -f r11_tls_control
+        tls_fixture_start() { return 0; }
+        run_bzr_raw() { BZR_EXIT=0; }
+        pybz_proxy_stop() { return 0; }
+        _tls_cleanup() { : >"$COMPARE_EXCHANGE_DIR/tls-cleaned"; }
+        BZ_PORT=8080
+        reset_r11_fixture
+        source "$phase" >/dev/null
+        [[ -e $COMPARE_EXCHANGE_DIR/tls-cleaned ]]
+    )
+    reset_r11_fixture
+    R11_FIXTURE_CACHED_FAIL=1
+    source "$phase" >"$fixture_output"
+    _render_test_result >>"$fixture_output"
+    unset R11_FIXTURE_CACHED_FAIL
+    if [[ $FAIL_COUNT -lt 2 ]] || grep -Fq 'GAP (#676)' "$fixture_output"; then
+        printf 'cached-token positive-control failure became gap #676\n' >&2
+        return 1
+    fi
+)
+run_namespace_proxy_helper_fixture() (
+    local fixture_root staged log_path error_output
+    fixture_root=$(mktemp -d)
+    error_output=$(mktemp)
+    trap 'rm -rf "$fixture_root"; rm -f "$error_output"' EXIT
+    FUNC_CONFIG_DIR="$fixture_root"
+    COMPARE_EXCHANGE_DIR="$fixture_root/compare"
+    mkdir -p "$COMPARE_EXCHANGE_DIR"
+    BZ_VERSION=bz50
+    PYBZ_RUNTIME=fake_proxy_runtime
+    FAKE_PROXY_LOG="$fixture_root/runtime.args"
+    FAKE_PROXY_ALIVE=0
+    FAKE_PROXY_READY=1
+    : >"$FAKE_PROXY_LOG"
+    sleep() { :; }
+    fixture_mode() {
+        stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"
+    }
+    openssl() {
+        local previous='' argument
+        case "$1 ${2:-}" in
+        'x509 -in') printf 'fixture-der' ;;
+        'dgst -sha256') command cat ;;
+        'base64 -A') command cat ;;
+        *)
+            for argument in "$@"; do
+                if [[ $previous == -keyout || $previous == -out ]]; then
+                    : >"$argument"
+                fi
+                previous="$argument"
+            done
+            ;;
+        esac
+    }
+    python3() { return 0; }
+    curl() { return 0; }
+    reject_proxy_call() {
+        local message="$1"
+        shift
+        if "$@" 2>"$error_output"; then
+            printf '%s\n' "$message" >&2
+            return 1
+        fi
+    }
+    fake_proxy_runtime() {
+        printf '%q ' "$@" >>"$FAKE_PROXY_LOG"
+        printf '\n' >>"$FAKE_PROXY_LOG"
+        [[ $1 == exec ]] || return 2
+        case "${3:-}:${5:-}" in
+        sh:*pybz-proxy-start*)
+            [[ $FAKE_PROXY_READY -eq 1 ]] || \
+                printf 'OSError: Address already in use\n' >"$COMPARE_EXCHANGE_DIR/redhat.proxy.log"
+            if [[ $7 == tls ]]; then
+                printf 'mapped-cert=/work/%s/server.crt mapped-key=/work/%s/server.key\n' \
+                    "${10}" "${10}" >>"$FAKE_PROXY_LOG"
+            fi
+            printf '4242\n'
+            ;;
+        sh:*pybz-proxy-alive*) [[ $FAKE_PROXY_ALIVE -eq 1 ]] ;;
+        sh:*pybz-proxy-stop*) FAKE_PROXY_ALIVE=0 ;;
+        sh:*pybz-auth-cache-clear*) ;;
+        python:*) [[ $FAKE_PROXY_READY -eq 1 ]] ;;
+        sh:*pybz-redhat-alias*) ;;
+        *) return 2 ;;
+        esac
+    }
+    tls_fixture_start 8080
+    if [[ $TLS_FIXTURE_DIR != "$FUNC_CONFIG_DIR"/tls.* ]]; then
+        printf 'TLS fixture was not created beneath FUNC_CONFIG_DIR\n' >&2
+        return 1
+    fi
+    assert_equals 700 "$(fixture_mode "$TLS_FIXTURE_DIR")" "TLS fixture directory mode"
+    assert_equals 600 "$(fixture_mode "$TLS_FIXTURE_DIR/server.key")" \
+        "TLS fixture key mode"
+    _tls_cleanup
+    staged=$(pybz_stage_proxy "$PYBZ_DIR/../redhat-shape-proxy.py" redhat-proxy.py)
+    assert_equals /work/compare/redhat-proxy.py "$staged" "staged proxy path"
+    assert_equals 600 "$(fixture_mode "$COMPARE_EXCHANGE_DIR/redhat-proxy.py")" \
+        "staged proxy mode"
+    reject_proxy_call 'unsafe proxy destination was accepted' \
+        pybz_stage_proxy "$PYBZ_DIR/../redhat-shape-proxy.py" ../escape.py
+    printf 'stale evidence\n' >"$COMPARE_EXCHANGE_DIR/redhat.proxy.log"
+    FAKE_PROXY_ALIVE=1
+    log_path=$(pybz_proxy_start redhat 18080)
+    assert_equals "$COMPARE_EXCHANGE_DIR/redhat.proxy.log" "$log_path" \
+        "Red Hat evidence path"
+    assert_equals '' "$(<"$log_path")" "fresh Red Hat evidence"
+    assert_equals 600 "$(fixture_mode "$log_path")" "Red Hat evidence mode"
+    assert_equals 4242 "$(<"$COMPARE_EXCHANGE_DIR/redhat.proxy.pid")" \
+        "Red Hat proxy PID"
+    if ! grep -Fq '/work/compare/redhat-proxy.py' "$FAKE_PROXY_LOG" ||
+        ! grep -Fq '127.0.0.1' "$FAKE_PROXY_LOG"; then
+        printf 'Red Hat proxy invocation omitted its fixed mapped path or loopback backend\n' >&2
+        return 1
+    fi
+    reject_proxy_call 'live prior proxy PID was accepted' pybz_proxy_start redhat 18080
+    FAKE_PROXY_ALIVE=0
+    pybz_proxy_stop redhat
+    pybz_proxy_stop redhat
+    pybz_auth_cache_clear
+    if ! grep -Fq 'python-bugzilla-token' "$FAKE_PROXY_LOG" ||
+        ! grep -Fq 'python-bugzilla-stale-token' "$FAKE_PROXY_LOG"; then
+        printf 'auth cache cleanup omitted a comparison-owned token path\n' >&2
+        return 1
+    fi
+    mkdir -p "$FUNC_CONFIG_DIR/tls-fixture"
+    : >"$FUNC_CONFIG_DIR/tls-fixture/server.crt"
+    : >"$FUNC_CONFIG_DIR/tls-fixture/server.key"
+    chmod 600 "$FUNC_CONFIG_DIR/tls-fixture/server.crt" \
+        "$FUNC_CONFIG_DIR/tls-fixture/server.key"
+    pybz_stage_proxy "$PYBZ_DIR/../tls-proxy.py" tls-proxy.py >/dev/null
+    FAKE_PROXY_ALIVE=1
+    log_path=$(pybz_proxy_start tls 18443 tls-fixture)
+    assert_equals "$COMPARE_EXCHANGE_DIR/tls.proxy.log" "$log_path" \
+        "TLS evidence path"
+    if ! grep -Fq '/work/tls-fixture/server.crt' "$FAKE_PROXY_LOG" ||
+        ! grep -Fq '/work/tls-fixture/server.key' "$FAKE_PROXY_LOG"; then
+        printf 'TLS proxy invocation omitted mapped private material\n' >&2
+        return 1
+    fi
+    pybz_proxy_stop tls
+    for invalid in 'invalid 18080' 'redhat 0' 'redhat 65536' 'redhat not-a-port'; do
+        # shellcheck disable=SC2086 # fixture intentionally splits kind and port
+        reject_proxy_call "invalid proxy start was accepted: $invalid" pybz_proxy_start $invalid
+    done
+    printf 'not-a-pid\n' >"$COMPARE_EXCHANGE_DIR/redhat.proxy.pid"
+    reject_proxy_call 'malformed proxy PID was accepted' pybz_proxy_stop redhat
+    rm -f "$COMPARE_EXCHANGE_DIR/redhat.proxy.pid"
+    FAKE_PROXY_READY=1
+    reject_proxy_call 'dead launch PID was accepted via unrelated listener' \
+        pybz_proxy_start redhat 18080
+    grep -Fq 'redhat proxy exited before readiness confirmation' "$error_output"
+    FAKE_PROXY_READY=0
+    reject_proxy_call 'proxy readiness exhaustion was accepted' pybz_proxy_start redhat 18080
+    grep -Fq 'redhat proxy was not ready after 30 attempts (port unavailable)' "$error_output"
+    FAKE_PROXY_READY=1
+    pybz_redhat_alias_install
+    pybz_redhat_alias_install
+    if grep -Fq fixture-secret "$FAKE_PROXY_LOG"; then
+        printf 'secret sentinel reached proxy runtime argv\n' >&2
+        return 1
+    fi
+)
 run_adapter_staging_cleanup_fixture() (
     local fixture_root
     local residue
@@ -1045,6 +1300,13 @@ class _UnknownBackend:
     pass
 
 
+class BugzillaError(Exception):
+    pass
+
+
+_SERVER_TOKEN_VALID = True
+
+
 class _FixtureBug:
     def __init__(self, data):
         self._data = data
@@ -1071,22 +1333,70 @@ class _FixtureGroup:
     member_emails = ["fixture-user@test.invalid"]
 
 
+class _FixtureTokenCache:
+    def __init__(self, filename):
+        self.filename = filename
+    def get_value(self, _url):
+        if not self.filename or not __import__("os").path.exists(self.filename):
+            return None
+        with open(self.filename, encoding="utf-8") as source:
+            value = source.read()
+        return value or None
+    def set_value(self, _url, value):
+        if not self.filename:
+            return
+        __import__("os").makedirs(__import__("os").path.dirname(self.filename), exist_ok=True)
+        with open(self.filename, "w", encoding="utf-8") as destination:
+            destination.write(value or "")
+
+class _FixtureSession:
+    def __init__(self, token_cache, url, cert=None):
+        self._token_cache = token_cache
+        self._url = url
+        self._session = __import__("types").SimpleNamespace(cert=cert)
+    def get_auth_params(self):
+        token = self._token_cache.get_value(self._url)
+        return {"Bugzilla_token": token} if token else {}
+
+
 class Bugzilla:
     def __init__(
         self,
         url,
+        user=None,
+        password=None,
+        tokenfile=-1,
+        configpaths=-1,
         api_key=None,
+        cert=None,
         use_creds=True,
         force_rest=False,
         force_xmlrpc=False,
+        **_kwargs,
     ):
-        if (
+        auth_fixture = api_key is None and isinstance(tokenfile, str)
+        identity_fixture = (
+            url == "http://identity-proxy.invalid:18080"
+            and api_key == "identity-api-secret"
+            and not use_creds
+            and force_rest
+            and not force_xmlrpc
+        )
+        if not auth_fixture and not identity_fixture and url is not None and (
             url != "http://127.0.0.1"
             or api_key != "fixture-secret"
             or use_creds
             or (force_rest and force_xmlrpc)
         ):
             raise RuntimeError("unexpected constructor arguments")
+        self.url = url or ""
+        self.user = user or ""
+        self.password = password or ""
+        self.cert = cert
+        self._tokencache = _FixtureTokenCache(
+            tokenfile if isinstance(tokenfile, str) else None
+        )
+        self._session = _FixtureSession(self._tokencache, self.url, cert)
         self._backend = (
             _UnknownBackend()
             if __import__("os").environ.get("FIXTURE_UNKNOWN_BACKEND") == "1"
@@ -1096,6 +1406,28 @@ class Bugzilla:
             if force_rest
             else _BackendXMLRPC()
         )
+
+    def login(self, user=None, password=None, restrict_login=None):
+        if user != "fixture-user@test.invalid" or password != "login-secret":
+            raise RuntimeError("unexpected login credentials")
+        if restrict_login is not True:
+            raise RuntimeError("restricted login was not requested")
+        self._tokencache.set_value(self.url, "fixture-token")
+        return {"id": 601, "token": "fixture-token"}
+
+    def logout(self):
+        global _SERVER_TOKEN_VALID
+        if __import__("os").environ.get("FIXTURE_LOGOUT_NOOP") != "1":
+            _SERVER_TOKEN_VALID = False
+        return None
+
+    def connect(self, url):
+        self.url = url
+        backend_class, fixed_url = self._get_backend_class(url)
+        self.url = fixed_url
+        self._session = _FixtureSession(self._tokencache, self.url, self.cert)
+        self._backend = backend_class(self.url, self._session)
+        self._backend.bugzilla_version()
 
     def build_createbug(self, **params):
         return {"builder": "create", **params}
@@ -1223,6 +1555,10 @@ class Bugzilla:
         return _FixtureUser(email)
 
     def getuser(self, email):
+        if "Bugzilla_token" in self._session.get_auth_params() and not _SERVER_TOKEN_VALID:
+            raise BugzillaError("invalid token")
+        if email == "identity-mismatch@test.invalid":
+            return _FixtureUser("different-identity@test.invalid")
         return _FixtureUser(email)
 
     def searchusers(self, pattern):
@@ -1301,15 +1637,17 @@ assert_adapter_rejection() {
     local operation="$5"
     local request="$6"
     local diagnostic="$7"
+    local fixture_environment="${8:-}"
     local input="$config_dir/compare/${name}.input.json"
     local output="$config_dir/compare/${name}.output.json"
-    local error_output="$config_dir/compare/${name}.stderr"
-    local status
+    local error_output="$config_dir/compare/${name}.stderr" status
 
     printf '%s\n' "$request" >"$input"
     chmod 600 "$input"
     set +e
-    "$runtime" exec -e PYTHONPATH=/work/adapter-fixture "$sidecar" \
+    local -a environment=(-e PYTHONPATH=/work/adapter-fixture)
+    [[ -z $fixture_environment ]] || environment+=(-e "$fixture_environment")
+    "$runtime" exec "${environment[@]}" "$sidecar" \
         python /work/compare/python-bugzilla-adapter.py "$operation" \
         "/work/compare/${name}.input.json" "/work/compare/${name}.output.json" \
         2>"$error_output"
@@ -1320,7 +1658,8 @@ assert_adapter_rejection() {
         printf 'adapter rejection %s omitted diagnostic: %s\n' "$name" "$diagnostic" >&2
         return 1
     fi
-    if grep -Eq 'fixture-secret|/work/compare|fixture upstream' "$error_output"; then
+    if grep -Eq 'fixture-secret|identity-api-secret|rejected-api-secret|identity-user|/work/compare|fixture upstream' \
+        "$error_output"; then
         printf 'adapter rejection %s leaked private failure detail\n' "$name" >&2
         return 1
     fi
@@ -1354,6 +1693,73 @@ run_adapter_fixture() {
 
     "$runtime" exec "$sidecar" python -m py_compile \
         /work/compare/python-bugzilla-adapter.py
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" auth-login login \
+        '{"url":"http://127.0.0.1","username":"fixture-user@test.invalid","password":"login-secret","restrict_login":true}' \
+        '{"result":{"authenticated":true,"cache_written":true,"restricted":true},"transport":"REST"}'
+    rm -f "$config_dir/compare/auth-login.input.json"
+    # shellcheck disable=SC2016 # HOME expands in the sidecar shell.
+    assert_equals 600 \
+        "$("$runtime" exec "$sidecar" sh -c \
+            'stat -c "%a" "$HOME/.cache/bzr-comparison/python-bugzilla-token"')" \
+        "adapter token cache mode"
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" auth-cached cached_auth \
+        '{"url":"http://127.0.0.1","username":"fixture-user@test.invalid"}' \
+        '{"result":{"authenticated":true,"cache_used":true},"transport":"REST"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" auth-logout logout \
+        '{"url":"http://127.0.0.1","username":"fixture-user@test.invalid"}' \
+        '{"result":{"cache_cleared":true,"logged_out":true},"transport":"REST"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" auth-login-noop login \
+        '{"url":"http://127.0.0.1","username":"fixture-user@test.invalid","password":"login-secret","restrict_login":true}' \
+        '{"result":{"authenticated":true,"cache_written":true,"restricted":true},"transport":"REST"}'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" auth-logout-noop logout \
+        '{"url":"http://127.0.0.1","username":"fixture-user@test.invalid"}' \
+        'python-bugzilla logout left the token valid' FIXTURE_LOGOUT_NOOP=1
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" api-key-identity \
+        api_key_identity \
+        '{"url":"http://identity-proxy.invalid:18080","api_key":"identity-api-secret","username":"identity-user@test.invalid"}' \
+        '{"result":{"authenticated":true,"identity_matched":true},"transport":"REST"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" api-key-identity-mismatch \
+        api_key_identity \
+        '{"url":"http://identity-proxy.invalid:18080","api_key":"identity-api-secret","username":"identity-mismatch@test.invalid"}' \
+        '{"result":{"authenticated":true,"identity_matched":false},"transport":"REST"}'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        api-key-identity-extra api_key_identity \
+        '{"url":"http://identity-proxy.invalid:18080","api_key":"identity-api-secret","username":"identity-user@test.invalid","extra":true}' \
+        'unexpected request fields: extra'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        api-key-identity-transport api_key_identity \
+        '{"url":"http://identity-proxy.invalid:18080","api_key":"identity-api-secret","username":"identity-user@test.invalid","transport":"XMLRPC"}' \
+        'auth operation does not accept transport'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        api-key-identity-auth-failure api_key_identity \
+        '{"url":"http://identity-proxy.invalid:18080","api_key":"rejected-api-secret","username":"identity-user@test.invalid"}' \
+        'operation failed (RuntimeError)'
+    printf 'dummy certificate\n' >"$config_dir/compare/client-cert.pem"
+    chmod 600 "$config_dir/compare/client-cert.pem"
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" client-cert \
+        client_certificate_surface \
+        '{"certificate":"/work/compare/client-cert.pem"}' \
+        '{"result":{"configured":true},"transport":null}'
+    printf '%s\n' \
+        '{"url":"http://127.0.0.1","username":"fixture-user@test.invalid","password":"login-secret","restrict_login":true}' \
+        >"$config_dir/compare/public-auth.input.json"
+    chmod 644 "$config_dir/compare/public-auth.input.json"
+    if "$runtime" exec -e PYTHONPATH=/work/adapter-fixture "$sidecar" \
+        python /work/compare/python-bugzilla-adapter.py login \
+        /work/compare/public-auth.input.json /work/compare/public-auth.output.json \
+        2>"$error_output"; then
+        printf 'adapter accepted a public auth request file\n' >&2
+        return 1
+    fi
+    if ! grep -Fq 'input file must not be accessible by group or others' "$error_output"; then
+        printf 'public auth request rejection omitted its diagnostic\n' >&2
+        return 1
+    fi
+    if grep -R -E 'login-secret|dummy certificate|/work/compare/client-cert.pem' \
+        "$config_dir/compare"/*.output.json "$error_output"; then
+        printf 'auth adapter output exposed a secret or certificate path\n' >&2
+        return 1
+    fi
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" create create \
         '{"api_key":"fixture-secret","params":{"product":"Widget","summary":"create"}}' \
         '{"result":{"id":101,"request":{"builder":"create","product":"Widget","summary":"create"}},"transport":"XMLRPC"}'
@@ -2586,6 +2992,11 @@ run_container_fixture() (
     "$runtime" exec "$sidecar" sh -c "printf '%s' exchange-proof > /work/proof"
     assert_equals exchange-proof "$(<"$config_dir/proof")" "bind-mount bytes"
     run_adapter_fixture "$runtime" "$sidecar" "$config_dir"
+    pybz_auth_cache_clear
+    # shellcheck disable=SC2016 # HOME expands in the sidecar shell.
+    "$runtime" exec "$sidecar" sh -c \
+        'test ! -e "$HOME/.cache/bzr-comparison/python-bugzilla-token" &&
+test ! -e "$HOME/.cache/bzr-comparison/python-bugzilla-stale-token"'
     return 0
 )
 
@@ -2595,8 +3006,11 @@ run_product_normalization_fixture
 run_sidecar_wrapper_fixture
 run_transport_observation_fixture
 run_lifecycle_phase_fixture
+run_api_key_identity_request_fixture
+run_auth_config_tls_phase_fixture
 run_parity_report_fixture
 run_sidecar_stop_failure_fixture
+run_namespace_proxy_helper_fixture
 run_adapter_staging_cleanup_fixture
 run_comment_phase_fixture
 run_attachment_seed_fixture

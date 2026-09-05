@@ -412,6 +412,21 @@ pybz_sidecar_start() {
     return 0
 }
 
+pybz_auth_cache_clear() {
+    if [[ -z ${PYBZ_RUNTIME:-} ]]; then
+        printf 'pybz_auth_cache_clear: active sidecar required\n' >&2
+        return 2
+    fi
+
+    local sidecar
+
+    sidecar=$(pybz_sidecar_name) || return 1
+    # shellcheck disable=SC2016 # HOME expands in the sidecar shell.
+    "$PYBZ_RUNTIME" exec "$sidecar" sh -c '# pybz-auth-cache-clear
+rm -f "$HOME/.cache/bzr-comparison/python-bugzilla-token" \
+    "$HOME/.cache/bzr-comparison/python-bugzilla-stale-token"'
+}
+
 pybz_sidecar_stop() {
     if [[ $# -ne 1 ]]; then
         printf 'pybz_sidecar_stop: expected runtime\n' >&2
@@ -432,6 +447,175 @@ pybz_sidecar_stop() {
     return 0
 }
 
+pybz_stage_proxy() {
+    if [[ $# -ne 2 || ! -f $1 || ! -r $1 || -L $1 || ! -d ${COMPARE_EXCHANGE_DIR:-} ]]; then
+        printf 'pybz_stage_proxy: expected a readable repository file and exchange directory\n' >&2
+        return 2
+    fi
+    local source="$1" destination="$2" source_dir staged
+    source_dir=$(cd "$(dirname "$source")" && pwd -P) || return 1
+    if [[ $source_dir != "$SCRIPT_DIR" || ! $destination =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+        printf 'pybz_stage_proxy: source or destination is outside the fixed proxy surface\n' >&2
+        return 2
+    fi
+    staged="$COMPARE_EXCHANGE_DIR/$destination"
+    cp "$source" "$staged" || return 1
+    chmod 600 "$staged" || return 1
+    printf '/work/compare/%s\n' "$destination"
+}
+_pybz_proxy_pid_alive() {
+    local sidecar
+    sidecar=$(pybz_sidecar_name) || return 1
+    # shellcheck disable=SC2016 # $1 is expanded by the sidecar shell.
+    "$PYBZ_RUNTIME" exec "$sidecar" sh -c '# pybz-proxy-alive
+kill -0 "$1" 2>/dev/null' sh "$1"
+}
+pybz_proxy_start() {
+    if [[ $# -lt 2 || $# -gt 3 || ! $2 =~ ^[0-9]+$ || ${#2} -gt 5 ||
+        $2 -lt 1 || $2 -gt 65535 ||
+        -z ${PYBZ_RUNTIME:-} || ! -d ${COMPARE_EXCHANGE_DIR:-} ]]; then
+        printf 'pybz_proxy_start: expected kind, decimal port, and optional certificate directory\n' >&2
+        return 2
+    fi
+    local kind="$1" port="$2" cert_dir="${3:-}" script log pid_file old_pid pid pid_temp
+    case "$kind" in
+    redhat)
+        [[ $# -eq 2 ]] || return 2
+        script=/work/compare/redhat-proxy.py
+        ;;
+    tls)
+        if [[ $# -ne 3 || ! $cert_dir =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ||
+            $cert_dir == *..* ]]; then
+            printf 'pybz_proxy_start: invalid certificate directory\n' >&2
+            return 2
+        fi
+        script=/work/compare/tls-proxy.py
+        ;;
+    *)
+        printf 'pybz_proxy_start: kind must be tls or redhat\n' >&2
+        return 2
+        ;;
+    esac
+    local host_script="$COMPARE_EXCHANGE_DIR/${script##*/}"
+    if [[ ! -f $host_script || ! -r $host_script || -L $host_script ]]; then
+        printf 'pybz_proxy_start: staged proxy is missing or unreadable\n' >&2
+        return 1
+    fi
+    if [[ $kind == tls &&
+        (! -f ${FUNC_CONFIG_DIR:-}/$cert_dir/server.crt ||
+            ! -f ${FUNC_CONFIG_DIR:-}/$cert_dir/server.key) ]]; then
+        printf 'pybz_proxy_start: certificate material is missing\n' >&2
+        return 1
+    fi
+    log="$COMPARE_EXCHANGE_DIR/${kind}.proxy.log"
+    pid_file="$COMPARE_EXCHANGE_DIR/${kind}.proxy.pid"
+    if [[ -e $pid_file ]]; then
+        IFS= read -r old_pid <"$pid_file" || true
+        if [[ ! $old_pid =~ ^[1-9][0-9]*$ ]]; then
+            printf 'pybz_proxy_start: malformed prior PID for %s\n' "$kind" >&2
+            return 1
+        fi
+        if _pybz_proxy_pid_alive "$old_pid"; then
+            printf 'pybz_proxy_start: %s proxy is already running\n' "$kind" >&2
+            return 1
+        fi
+        rm -f "$pid_file"
+    fi
+    local log_temp
+    log_temp=$(mktemp "$COMPARE_EXCHANGE_DIR/.${kind}.proxy.log.XXXXXX") || return 1
+    chmod 600 "$log_temp" || return 1
+    mv "$log_temp" "$log" || return 1
+    local sidecar
+    sidecar=$(pybz_sidecar_name) || return 1
+    # shellcheck disable=SC2016 # positional values expand only in the sidecar shell.
+    pid=$("$PYBZ_RUNTIME" exec "$sidecar" sh -c '# pybz-proxy-start
+set -eu
+if [ "$1" = tls ]; then
+  python "$2" "$3" 127.0.0.1 80 "/work/$4/server.crt" \
+    "/work/$4/server.key" >"$5" 2>&1 &
+else
+  BZR_FUNC_REDHAT_MODE=bearer-auth python "$2" "$3" 80 >"$5" 2>&1 &
+fi
+printf "%s\n" "$!"' sh "$kind" "$script" "$port" "$cert_dir" \
+        "/work/compare/${kind}.proxy.log") || return 1
+    if [[ ! $pid =~ ^[1-9][0-9]*$ ]]; then
+        printf 'pybz_proxy_start: proxy returned an invalid PID\n' >&2
+        return 1
+    fi
+    pid_temp=$(mktemp "$COMPARE_EXCHANGE_DIR/.${kind}.proxy.pid.XXXXXX") || return 1
+    printf '%s\n' "$pid" >"$pid_temp"
+    chmod 600 "$pid_temp" || return 1
+    mv "$pid_temp" "$pid_file" || return 1
+    local attempt=0
+    while [[ $attempt -lt 30 ]]; do
+        if "$PYBZ_RUNTIME" exec "$sidecar" python -c \
+            'import socket,sys; socket.create_connection(("127.0.0.1", int(sys.argv[1])), 1).close()' \
+            "$port" >/dev/null 2>&1; then
+            if ! _pybz_proxy_pid_alive "$pid"; then
+                printf 'pybz_proxy_start: %s proxy exited before readiness confirmation\n' \
+                    "$kind" >&2
+                pybz_proxy_stop "$kind" || true
+                return 1
+            fi
+            printf '%s\n' "$log"
+            return 0
+        fi
+        sleep 1
+        attempt=$((attempt + 1))
+    done
+    local diagnostic='no startup detail'
+    if grep -Fq 'Address already in use' "$log"; then
+        diagnostic='port unavailable'
+    elif [[ -s $log ]]; then
+        diagnostic='proxy exited during startup'
+    fi
+    printf 'pybz_proxy_start: %s proxy was not ready after 30 attempts (%s)\n' \
+        "$kind" "$diagnostic" >&2
+    pybz_proxy_stop "$kind" || true
+    return 1
+}
+pybz_proxy_stop() {
+    if [[ $# -ne 1 || $1 != tls && $1 != redhat || -z ${PYBZ_RUNTIME:-} ||
+        ! -d ${COMPARE_EXCHANGE_DIR:-} ]]; then
+        printf 'pybz_proxy_stop: expected tls or redhat with an active sidecar\n' >&2
+        return 2
+    fi
+    local kind="$1" pid_file="$COMPARE_EXCHANGE_DIR/${1}.proxy.pid" pid sidecar attempt
+    [[ -e $pid_file ]] || return 0
+    IFS= read -r pid <"$pid_file" || true
+    if [[ ! $pid =~ ^[1-9][0-9]*$ ]]; then
+        printf 'pybz_proxy_stop: malformed PID for %s\n' "$kind" >&2
+        return 1
+    fi
+    sidecar=$(pybz_sidecar_name) || return 1
+    if _pybz_proxy_pid_alive "$pid"; then
+        # shellcheck disable=SC2016 # $1 is expanded by the sidecar shell.
+        "$PYBZ_RUNTIME" exec "$sidecar" sh -c '# pybz-proxy-stop
+kill -TERM "$1" 2>/dev/null || true' sh "$pid" || return 1
+        attempt=0
+        while _pybz_proxy_pid_alive "$pid" && [[ $attempt -lt 30 ]]; do
+            sleep 0.1
+            attempt=$((attempt + 1))
+        done
+        if _pybz_proxy_pid_alive "$pid"; then
+            # shellcheck disable=SC2016 # $1 is expanded by the sidecar shell.
+            "$PYBZ_RUNTIME" exec "$sidecar" sh -c 'kill -KILL "$1" 2>/dev/null || true' \
+                sh "$pid" || return 1
+        fi
+    fi
+    rm -f "$pid_file"
+}
+pybz_redhat_alias_install() {
+    if [[ -z ${PYBZ_RUNTIME:-} ]]; then
+        printf 'pybz_redhat_alias_install: expected an active sidecar\n' >&2
+        return 2
+    fi
+    local sidecar
+    sidecar=$(pybz_sidecar_name) || return 1
+    "$PYBZ_RUNTIME" exec "$sidecar" sh -c '# pybz-redhat-alias
+grep -Eq "^[[:space:]]*127\\.0\\.0\\.1[[:space:]]+bugzilla\\.redhat\\.com([[:space:]]|$)" \
+  /etc/hosts || printf "127.0.0.1 bugzilla.redhat.com\\n" >>/etc/hosts'
+}
 _run_pybz_command() {
     local command="$1"
     local sidecar
@@ -456,6 +640,32 @@ run_pybz_adapter() {
     _run_pybz_command python /work/compare/python-bugzilla-adapter.py "$@"
 }
 
+pybz_write_api_key_identity_request() (
+    if [[ $# -ne 4 || ! ${1:-} =~ ^[a-z0-9][a-z0-9-]*$ ||
+        ! -d ${COMPARE_EXCHANGE_DIR:-} ]]; then
+        printf 'pybz_write_api_key_identity_request: expected safe name, URL, API key, and username\n' >&2
+        return 2
+    fi
+    local name="$1" url="$2" api_key="$3" username="$4"
+    local output="$COMPARE_EXCHANGE_DIR/${name}.pybz.input.json"
+    local url_source="$COMPARE_EXCHANGE_DIR/.api-key-identity.url.source" status=0
+    local key_source="$COMPARE_EXCHANGE_DIR/.api-key-identity.key.source"
+    local username_source="$COMPARE_EXCHANGE_DIR/.api-key-identity.username.source"
+    umask 077
+    trap 'rm -f -- "$url_source" "$key_source" "$username_source" || :' EXIT
+    printf '%s' "$url" >"$url_source"
+    printf '%s' "$api_key" >"$key_source"
+    printf '%s' "$username" >"$username_source"
+    jq -ecn --rawfile url "$url_source" --rawfile api_key "$key_source" \
+        --rawfile username "$username_source" \
+        '{url:$url, api_key:$api_key, username:$username}' >"$output" || status=$?
+    if [[ $status -ne 0 ]]; then
+        rm -f -- "$output"
+        return "$status"
+    fi
+    chmod 600 "$output"
+    printf '%s\n' "$output"
+)
 # Shared mechanics for resource comparison phases.
 RESOURCE_GAP_ELIGIBLE=0
 RESOURCE_GAP_FILE=""
@@ -1140,7 +1350,12 @@ tls_tools_available() {
 tls_fixture_start() {
     local backend_port="$1"
     TLS_PORT="${BZR_FUNC_TLS_PORT:-$(functional_proxy_default_port "$backend_port" 1000)}"
-    TLS_FIXTURE_DIR=$(mktemp -d /tmp/bzr-func-tls.XXXXXX)
+    if [[ -d ${FUNC_CONFIG_DIR:-} ]]; then
+        TLS_FIXTURE_DIR=$(mktemp -d "$FUNC_CONFIG_DIR/tls.XXXXXX")
+    else
+        TLS_FIXTURE_DIR=$(mktemp -d /tmp/bzr-func-tls.XXXXXX)
+    fi
+    chmod 700 "$TLS_FIXTURE_DIR"
     TLS_CA_CERT="$TLS_FIXTURE_DIR/ca.pem"
 
     local ca_key="$TLS_FIXTURE_DIR/ca.key"
@@ -1169,6 +1384,7 @@ extendedKeyUsage=serverAuth
 EOF
     openssl x509 -req -in "$csr" -CA "$TLS_CA_CERT" -CAkey "$ca_key" \
         -CAcreateserial -out "$crt" -days 2 -extfile "$ext" >/dev/null 2>&1
+    chmod 600 "$ca_key" "$TLS_CA_CERT" "$key" "$crt" "$csr" "$ext"
 
     # Pin = sha256// + base64(SHA-256(leaf DER)), matching
     # src/tls/fingerprint.rs::compute_fingerprint.
