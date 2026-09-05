@@ -22,7 +22,8 @@ pagination, or per-comment fetch behavior changes.
 
 Before design, this run created and tagged a comment on each supported functional image.
 Native REST and XML-RPC `Bug.comments` responses both returned the tag on Bugzilla 5.0.6,
-5.2, and 5.3.3+. The existing one-request comment-list data flow is therefore sufficient.
+5.2, and 5.3.3+. The existing per-bug comment-list request is therefore sufficient; ADR 0049's
+client-side loop continues to issue that request once for each requested bug.
 
 ## Data model and transport behavior
 

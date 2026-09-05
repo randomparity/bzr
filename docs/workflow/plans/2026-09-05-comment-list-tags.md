@@ -1,8 +1,8 @@
 # Implement comment-list tag output
 
 Expose the tags already returned by Bugzilla's comment endpoint through the existing
-comment-list domain, projection, output, and schema paths. Keep one REST/XML-RPC request per
-list operation; normalize omitted tags to an empty array and preserve server order.
+comment-list domain, projection, output, and schema paths. Keep the existing one REST/XML-RPC
+request per bug; normalize omitted tags to an empty array and preserve server order.
 
 Tech stack: Rust 2021, serde/serde_json, the existing XML-RPC protocol adapter, clap, JSON
 Schema draft 2020-12, Bash functional tests, and real Bugzilla containers.
@@ -113,7 +113,7 @@ version pin updates.
 4. In `src/xmlrpc/resources/comment_tests.rs`, add a `tags` XML-RPC member containing
    `needs-info` and `follow-up` to the full-response fixture and assert exact order. Add the
    absent-field test, a non-array-to-empty case, and a mixed-array case proving non-string
-   members are discarded. Because the mapper implementation landed in step 2 to keep the
+   members are discarded. Because the mapper implementation landed in step 3 to keep the
    crate compilable, verify these tests bite by temporarily replacing `get_str_array` with an
    empty vector, observe the full-response assertion fail, then restore it. Run
    `make test-one T=xmlrpc_get_comments_since`; expect all matching tests pass.
@@ -181,8 +181,8 @@ version pin updates.
 - Mode: focused-test — live tag round trip and projection. Extend phase 15 so the added tag is
   read through table, explicit REST and XML-RPC modes before removal, read as full/projected
   NDJSON, prove the existing multi-ID attribution override, and add a credentialless list read.
-  A pre-implementation `make functional-test` must fail the new tag assertions; after Tasks 1–2
-  it passes on the default image.
+  After adding the phase assertions, a controlled wrong expected tag must fail the new tag
+  assertion; restoring the expected value passes on the default image.
 - Mode: focused-test — supported-version behavior. `make functional-test-all` must report
   bz50, bz52, and bz53 passed.
 
