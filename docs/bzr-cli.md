@@ -199,7 +199,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   └── dup <ID> <TARGET> [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 │                       [--expect-unchanged-since <TIMESTAMP>]
 ├── comment
-│   ├── list <BUG_ID> [--since <DATE>] [--fields <F>] [--exclude-fields <F>]
+│   ├── list <BUG_ID>... [--permissive] [--since <DATE>] [--fields <F>] [--exclude-fields <F>]
 │   ├── add <BUG_ID> [--body <TEXT>] [--body-file <PATH>] [--private]
 │   ├── tag <COMMENT_ID> [--add <TAG>...] [--remove <TAG>...]
 │   └── search-tags <QUERY>
@@ -1139,21 +1139,34 @@ update` would return.
 
 ### `bzr comment list`
 
-List all comments on a bug.
+List all comments on one or more bugs.
 
 ```bash
 bzr comment list 12345
+bzr comment list 12345 12346 12347
+bzr comment list 12345 12346 --permissive
 bzr comment list 12345 --since 2025-06-01
 bzr --json comment list 12345
+bzr --json comment list 12345 12346 | jq '.data | group_by(.bug_id)'
 bzr --json comment list 12345 --fields id,creator,creation_time   # tag/index view, fewer tokens
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `<BUG_ID>` | Yes | Bug ID |
-| `--since <DATE>` | No | Only show comments after this date (ISO 8601) |
-| `--fields <F>` | No | Comma-separated JSON keys to keep (`--json`/`ndjson` only). See [Field Projection](#field-projection---fields----exclude-fields). |
-| `--exclude-fields <F>` | No | Comma-separated JSON keys to drop (`--json`/`ndjson` only). |
+| `<BUG_ID>...` | Yes | One or more bug IDs, fetched in argument order. No maximum, matching `bzr bug view` |
+| `--permissive` | No | Multi-ID only: report inaccessible bugs on stderr and exit 0 instead of aborting. Failures appear on stderr only, so under `--json` a bug that failed is indistinguishable from a bug with no comments -- and under `--output ndjson`, if every bug fails, stdout is empty. Exits 7 when given with a single ID. |
+| `--since <DATE>` | No | Only show comments after this date (ISO 8601). Applies to every requested bug |
+| `--fields <F>` | No | Comma-separated JSON keys to keep (`--json`/`ndjson` only). On a multi-ID call `bug_id` is kept regardless, with a note on stderr -- it is what attributes each record to its bug. See [Field Projection](#field-projection---fields----exclude-fields). |
+| `--exclude-fields <F>` | No | Comma-separated JSON keys to drop (`--json`/`ndjson` only). Cannot drop `bug_id` on a multi-ID call. |
+
+Multi-ID `--json` output is **one flat array**, not a `{bugs, failed}` wrapper:
+each record carries its own `bug_id`, so group with
+`jq '.data | group_by(.bug_id)'`. Table output separates the bugs with a
+`Bug #N` header. Single-ID output keeps its shape, though `bug_id` is now
+always populated -- it was `null` on servers that omit the field. When every
+bug fails under `--permissive`, the result is `data: []` under `--json`, a
+single `No comments.` line in table mode, and empty stdout under
+`--output ndjson`.
 
 ### `bzr comment add`
 

@@ -90,6 +90,22 @@ Operate on bugs.
 
 ## comment
 - `bzr comment list 12345 [--json]`
+- `bzr comment list 12345 12346 12347 [--permissive] [--json]`
+  - Multi-ID returns one flat array, not a `{bugs, failed}` wrapper — group with
+    `jq '.data | group_by(.bug_id)'`. The payload is enveloped, so the array
+    lives at `.data`. Single-ID output is unchanged in shape.
+  - No maximum ID count, matching `bug view`.
+  - `--permissive` is multi-ID only; missing bugs go to stderr and the exit code
+    stays 0. Without it the first failure aborts. `--permissive` with a single
+    ID exits 7.
+  - Under `--permissive --json` a failed bug is indistinguishable from a bug
+    with no comments — the failed IDs are on **stderr** only. Under
+    `--output ndjson` with every bug failing, stdout is empty. Read stderr, or
+    drop `--permissive` and let the first failure abort.
+  - On a multi-ID call `bug_id` survives `--fields` / `--exclude-fields`; a note
+    on stderr says so. It is what attributes each record to its bug.
+  - `bug_id` is now always populated on every `comment list` record; it was
+    `null` on servers that omit the field.
 - `bzr comment add 12345 --body "I reproduced this on Fedora 42"`
 - `bzr comment add 12345 --body-file notes.md` (or `--body-file -` for stdin)
 - `bzr comment add 12345 --body "internal note" --private`
