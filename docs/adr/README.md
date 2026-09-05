@@ -47,3 +47,4 @@ rejected.
 | [0047](0047-centralize-terminal-width-table-wrapping.md) | Centralize terminal-width table wrapping | Accepted |
 | [0048](0048-comment-tags-are-always-present-arrays.md) | Comment tags are always-present arrays | Accepted |
 | [0049](0049-comment-list-client-side-multi-id-loop.md) | Fetch multi-ID comment sets with a client-side loop | Accepted |
+| [0050](0050-run-comparison-proxies-in-sidecar-namespace.md) | Run comparison proxies in the sidecar namespace | Accepted |
