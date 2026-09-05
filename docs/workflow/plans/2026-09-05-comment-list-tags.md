@@ -79,9 +79,11 @@ version pin updates.
   after registration.
 - Mode: focused-test — closed JSON schema. Add `comment_schema_accepts_tags` using a raw
   comment value with non-empty `tags`, plus `comment_schema_requires_tags` using an otherwise
-  complete raw comment without the key. The acceptance case fails because the closed schema
+  complete raw comment without the key, `comment_schema_rejects_non_array_tags`, and
+  `comment_schema_rejects_non_string_tag`. The acceptance case fails because the closed schema
   rejects the undeclared key; the required-key case initially fails because the current schema
-  accepts the omission. Both pass only after the property and required-list update.
+  accepts the omission. The negative shape cases protect the array and string-item constraints.
+  All pass only after the full property and required-list update.
 
 **Steps**
 
@@ -185,7 +187,8 @@ version pin updates.
 
 1. Update `comment-list-help-matches-output` to require `tags`. After `comment-tag-add`, use
    `run_bzr_raw --output table comment list "$BUG1"`; assert with `awk` that consecutive lines
-   for the unique body are exactly `  Tags: important`, a blank line, and `First test comment`.
+   for the unique body are exactly `  Tags: important`, a blank line, and
+   `  First test comment`, preserving leading whitespace.
    Run JSON `comment list "$BUG1"` once with `--api rest` and once with `--api xmlrpc`; select
    the entry with `COMMENT_ID` and assert its `.tags` equals `["important"]` in both responses.
    Run the projection with `--fields tags` and assert the projected object has exactly the
@@ -194,9 +197,10 @@ version pin updates.
    `any(.[]; .id == $COMMENT_ID and .tags == ["important"])`; on the `--fields tags` response,
    assert `all(.[]; keys == ["tags"])` and that exactly one record equals
    `{"tags":["important"]}`. This unique tag identifies the projected target without requiring
-   an excluded `id`. Run `--server public comment list "$BUG1"` and assert every returned
-   comment has an array-valued `tags` key, without asserting anonymous semantic parity with the
-   authenticated result. After removal, assert the tagged comment emits `tags: []`.
+   an excluded `id`. Run `--server public comment list "$BUG1"`, first assert the result length
+   is greater than zero, then assert every returned comment has an array-valued `tags` key,
+   without asserting anonymous semantic parity with the authenticated result. After removal,
+   assert the tagged comment emits `tags: []`.
 2. Verify the new functional assertion bites: temporarily change its expected tag to a value
    the fixture never writes, run `make functional-test`, and retain the phase-15 failure.
    Restore the assertion and rerun; expect every default-version case green.
