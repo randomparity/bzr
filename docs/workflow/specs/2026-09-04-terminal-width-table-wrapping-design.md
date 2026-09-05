@@ -19,7 +19,8 @@ unchanged.
    byte-for-byte compatible with the current unbounded path unless an explicit override is set.
 3. A positive `BZR_TABLE_WIDTH` integer from 1 through 65,535 must override terminal detection,
    including for redirected stdout. Invalid Unicode, non-integer, zero, and out-of-range values
-   must be ignored with a warning and normal detection must continue.
+   must be ignored with a warning and normal detection must continue. The value is resolved once at
+   the stdout-owning process boundary, never by inspecting an unrelated generic writer.
 4. The shared resource table writer, `bug list`/`search`/`my`, `bug links`, and both `bug adjacency`
    grids must use one finalization helper. No direct `Builder::build()` write may remain in product
    table rendering.
@@ -34,10 +35,15 @@ unchanged.
 
 ## Architecture
 
-`src/output/formatting.rs` owns three related operations: resolving the optional width, applying it
-to a completed `tabled::Table`, and writing that table. Production resolution reads the explicit
-override and otherwise asks `terminal_size` about stdout. A pure resolver and an explicit-width
-rendering seam let tests cover precedence and layout without process-terminal assumptions.
+`src/output/writers.rs` owns `TableWidth`, parsing an optional `OsStr`, and stdout-specific
+detection. `main.rs` resolves it before locking stdout and constructs `Writers` with that value.
+`Writers::new` defaults to no width for library callers and captured tests; tests that need a width
+construct `Writers` with one directly. The copied width is passed only through command/resource
+functions that render grids.
+
+`src/output/formatting.rs` owns applying a supplied width to a completed `tabled::Table` and writing
+that table. Its explicit-width seam lets layout tests avoid process-terminal assumptions and global
+environment mutation.
 
 All generic resource grids already pass through `write_table_records`; it will delegate its built
 table to the finalizer. `src/output/resources/bug.rs` will replace its four direct table writes with
@@ -46,27 +52,30 @@ the same finalizer. Resource code remains responsible only for headers and cell 
 The process flow is:
 
 ```text
-records -> Builder -> Table -> shared finalizer -> optional Width::wrap -> stdout writer
-                                      ^
-                         BZR_TABLE_WIDTH or stdout size
+main: BZR_TABLE_WIDTH or stdout size -> Writers.table_width
+                                               |
+records -> Builder -> Table -> shared finalizer(width) -> optional Width::wrap -> writer
 ```
 
 ## Width resolution and failures
 
-Resolution order is `BZR_TABLE_WIDTH` then detected stdout width then `None`. Only decimal values
-that parse to non-zero `u16` are accepted. An invalid explicit value does not fail the command: it
-emits a tracing warning and falls back to detection, matching the existing `BZR_TIMEOUT` invalid
-environment-value policy.
+Resolution order is `BZR_TABLE_WIDTH` then detected stdout width then `None`. The environment is
+read with `std::env::var_os`, and only an `OsStr` that converts to Unicode decimal text and parses to
+a non-zero `u16` is accepted. Invalid Unicode remains an explicit invalid state rather than
+collapsing to absence. An invalid explicit value does not fail the command: it emits a tracing
+warning and falls back to detection, matching the existing `BZR_TIMEOUT` invalid-value policy.
 
 `terminal_size_of(std::io::stdout())` is used rather than the crate's multi-stream convenience
 function. That prevents an interactive stderr or stdin from making redirected stdout behave like a
 terminal. Unix and Windows use the dependency's handle-specific implementation. Other platforms
 return `None` behind a local `cfg` fallback.
 
-`Width::wrap` shrinks content until the table reaches the requested width or its structural minimum.
-If borders, padding, and at least one display cell per selected column already exceed the width, the
-renderer preserves all columns and the valid grid at that minimum. It never drops data columns,
-panics, or turns the table into malformed text.
+Before `Width::wrap`, the renderer computes `4 * table.count_columns() + 1`: one display cell and
+two default-padding cells per column, plus every vertical boundary. It clamps the supplied width to
+that structural minimum. This avoids tabled 0.21.0's behavior of wrapping cells to zero content
+width and emitting empty headers/values. If the terminal is narrower, the renderer preserves all
+columns and at least one display cell from every non-empty value, accepting the minimum-width
+overflow. It never drops selected columns or silently empties cells.
 
 ## Public contract
 
@@ -89,10 +98,11 @@ No CLI flag, config key, JSON schema, exit code, or persisted data changes.
 
 ### Actor model and controls
 
-The relevant untrusted actor is a local parent process that controls the environment. Parsing into a
-non-zero `u16` bounds the value before it reaches table layout; malformed input is logged without
-echoing other environment data and cannot fail the command. The local OS is trusted to return a
-terminal cell count, which the dependency already represents as `u16`; zero is treated as absent.
+The relevant untrusted actor is a local parent process that controls the environment. An
+`OsStr`-aware parse into a non-zero `u16` bounds the value before it reaches table layout; malformed
+input is logged without echoing its raw bytes or other environment data and cannot fail the command.
+The local OS is trusted to return a terminal cell count, which the dependency already represents as
+`u16`; zero is treated as absent.
 
 The dependency is exact-pinned at the current 0.4.4 release, recorded in `Cargo.lock`, and checked by
 the repository's native and cross-target CI. It requires Rust 1.71, below this repository's 1.89.0
@@ -107,14 +117,15 @@ does not alter terminal escape handling because these grid cells contain no ANSI
 
 ## Testing
 
-- Resolver unit tests cover explicit-over-detected precedence, absent values, zero, malformed,
-  out-of-range, and detected zero.
+- Writer-context unit tests cover explicit-over-detected precedence, absent values, zero, malformed,
+  out-of-range, detected zero, invalid Unicode on Unix, captured-writer default `None`, and direct
+  injected width without environment mutation.
 - Renderer unit tests cover unbounded byte compatibility, a bounded ASCII row, word wrapping, and
   Unicode display width. Each line is checked against the injected width.
 - Bug resource tests cover list, links, and both adjacency grids through the common finalizer,
-  including the structural-minimum behavior for a many-column table.
-- Existing resource tests protect non-terminal snapshots because the production resolver returns
-  `None` under captured stdout when no explicit override is present.
+  including non-empty cells at the structural minimum for a many-column table.
+- Existing resource tests protect non-terminal snapshots because `CapturedIo::writers()` constructs
+  `Writers` with no width regardless of the process stdout TTY.
 - `tests/functional/phases/17-global-options.sh` runs a real bug-list table with a fixed override and
   asserts that all lines are within the requested width and the long summary wraps inside the grid.
 - Verification runs focused tests, `make lint`, `make test`, and `make functional-test` before
