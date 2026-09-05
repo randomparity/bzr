@@ -69,15 +69,17 @@ must advance in the same change; no other schema shape changes.
 
 ## Verification
 
-Focused type tests prove present and absent REST-shaped values, field-list drift, and
-always-present serialization. XML-RPC mapper tests prove non-empty tags and absence. Writer
-tests prove the non-empty table line, omission for empty tags, JSON `tags`, and
-`--fields tags` through the existing command/projection tests.
+Focused type tests prove present and absent REST-shaped values, wrong-shaped REST rejection,
+field-list drift, and always-present serialization. XML-RPC mapper tests prove non-empty tags,
+absence, non-array-to-empty behavior, and filtering of non-string array members. Writer tests
+prove the non-empty table line, omission for empty tags, JSON `tags`, and `--fields tags`
+through the existing command/projection tests.
 
-Functional coverage tags a created comment, reads it through `comment list --json`, asserts
-the tag array, projects `--fields tags`, and checks the restored help claim. The full
-supported-version functional suite proves the behavior on all three Bugzilla images and the
-existing credentialless comment-list arm remains green.
+Functional coverage tags a created comment, reads it through both `--api rest` and
+`--api xmlrpc`, asserts each tag array, projects `--fields tags`, and checks the restored help
+claim. A new `--server public comment list` case proves every credentialless result has an
+array-valued `tags` key. The full supported-version functional suite runs these arms on all
+three Bugzilla images.
 
 ## Guardrails and architecture context
 

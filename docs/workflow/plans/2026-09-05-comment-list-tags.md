@@ -64,14 +64,14 @@ version pin updates.
 **Verification**
 
 - Mode: focused-test — REST-shaped deserialization and serialization. Add
-  `comment_deserializes_tags` and extend `comment_deserializes_minimal`; before implementation
+  `comment_deserializes_tags`, `comment_rejects_wrong_shaped_tags`, and extend
+  `comment_deserializes_minimal`; before implementation
   `make test-one T=comment_deserializes_tags` must fail to compile because `Comment` has no
   `tags`, then pass after the field is added.
 - Mode: focused-test — XML-RPC mapping. Add tags to
-  `xmlrpc_get_comments_since_parses_full_response` and add
-  `value_to_comment_without_tags_defaults_empty`; before mapping,
-  `make test-one T=xmlrpc_get_comments_since_parses_full_response` must fail its tags
-  assertion, then pass.
+  `xmlrpc_get_comments_since_parses_full_response` and add focused absent, non-array, and
+  mixed-member cases; verify the full-response assertion fails under the controlled mapper
+  fault described below, then passes after restoration.
 - Mode: focused-test — projection key registration. Existing
   `comment_fields_matches_serialized_keys` must fail after the field is added but before
   `COMMENT_FIELDS` changes; `make test-one T=comment_fields_matches_serialized_keys` passes
@@ -81,7 +81,8 @@ version pin updates.
 
 1. In `src/types/comment_tests.rs`, assert a minimal comment has `comment.tags.is_empty()` and
    serializes `"tags": []`; add a present-array case that preserves
-   `vec!["needs-info", "follow-up"]`. Add `tags: vec![]` to all direct `Comment` fixtures in
+   `vec!["needs-info", "follow-up"]` and a wrong-shaped REST case that fails deserialization.
+   Add `tags: vec![]` to all direct `Comment` fixtures in
    `src/types/comment_tests.rs`, `src/output/resources/comment_tests.rs`, and
    `src/commands/bug/history_tests.rs`. Run the named type test and retain the expected red
    compile failure.
@@ -92,14 +93,18 @@ version pin updates.
    pub tags: Vec<String>,
    ```
 
-   Add `"tags"` to `COMMENT_FIELDS`. Run the two named type/projection commands; expect pass.
+   Add `"tags"` to `COMMENT_FIELDS`. At the same time, import `get_str_array` in
+   `src/xmlrpc/resources/comment.rs` and initialize `tags: get_str_array(m, "tags")` so the
+   exhaustive production literal remains buildable. Run the named type/projection commands;
+   expect pass.
 3. In `src/xmlrpc/resources/comment_tests.rs`, add a `tags` XML-RPC member containing
    `needs-info` and `follow-up` to the full-response fixture and assert exact order. Add the
-   absent-field test. Run the full-response test and retain the expected red assertion.
-4. Import `get_str_array` in `src/xmlrpc/resources/comment.rs` and initialize
-   `tags: get_str_array(m, "tags")` in `value_to_comment`. Run
+   absent-field test, a non-array-to-empty case, and a mixed-array case proving non-string
+   members are discarded. Because the mapper implementation landed in step 2 to keep the
+   crate compilable, verify these tests bite by temporarily replacing `get_str_array` with an
+   empty vector, observe the full-response assertion fail, then restore it. Run
    `make test-one T=xmlrpc_get_comments_since`; expect all matching tests pass.
-5. Run `make test-one T=comment_`; expect every matching comment unit test passes. Commit as
+4. Run `make test-one T=comment_`; expect every matching comment unit test passes. Commit as
    `feat(comment): carry tags through comment responses`.
 
 ## Task 2: Publish and present the additive contract
@@ -166,24 +171,28 @@ version pin updates.
 
 - Consumes the existing `COMMENT_ID` produced by `comment-add-first`, `run_bzr`, and JSON
   assertion helpers in `tests/functional/phases/15-comments.sh`.
-- Produces functional cases for help truth, full JSON tags, `--fields tags`, and an empty tag
-  after removal.
+- Produces functional cases for help truth, REST and XML-RPC full JSON tags, `--fields tags`,
+  an empty tag after removal, and a credentialless array-shape read.
 - No later implementation task depends on this task; it is the end-to-end proof.
 
 **Verification**
 
 - Mode: focused-test — live tag round trip and projection. Extend phase 15 so the added tag is
-  read before removal. A pre-implementation `make functional-test` must fail the new JSON tag
-  assertion; after Tasks 1–2 it passes on the default image.
+  read through explicit REST and XML-RPC modes before removal, and add a credentialless list
+  read. A pre-implementation `make functional-test` must fail the new JSON tag assertion;
+  after Tasks 1–2 it passes on the default image.
 - Mode: focused-test — supported-version behavior. `make functional-test-all` must report
   bz50, bz52, and bz53 passed.
 
 **Steps**
 
 1. Update `comment-list-help-matches-output` to require `tags`. After `comment-tag-add`, run
-   `comment list "$BUG1"`, select the entry with `COMMENT_ID`, and assert its `.tags` equals
-   `["important"]`. Run again with `--fields tags` and assert the projected object has exactly
-   the `tags` key and the same value. After removal, assert the same comment emits `tags: []`.
+   `comment list "$BUG1"` once with `--api rest` and once with `--api xmlrpc`; select the entry
+   with `COMMENT_ID` and assert its `.tags` equals `["important"]` in both responses. Run the
+   projection with `--fields tags` and assert the projected object has exactly the `tags` key
+   and the same value. Run `--server public comment list "$BUG1"` and assert every returned
+   comment has an array-valued `tags` key. After removal, assert the tagged comment emits
+   `tags: []`.
 2. Verify the new functional assertion bites: temporarily change its expected tag to a value
    the fixture never writes, run `make functional-test`, and retain the phase-15 failure.
    Restore the assertion and rerun; expect every default-version case green.
