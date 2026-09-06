@@ -230,35 +230,57 @@ while answering `503` on every `/rest/` path:
   than an unbuilt one.
 - `Bugzilla.extensions` answers over XML-RPC on bz50, bz52 and bz53 unauthenticated, returning
   the same `{extensions: {...}}` shape REST returns.
-- The defect is not confined to REST-disabled deployments. Against a fully REST-enabled bz50,
-  `bzr --api xmlrpc bug search --saved-search <name>` issues `GET /rest/extensions`. `--api` is
-  a documented contract and the REST-only probe violated it on every server, which is why
-  deployment rarity was the wrong axis to decide this on.
+- Against a fully REST-enabled bz50, `bzr --api xmlrpc bug search --saved-search <name>` still
+  issues `GET /rest/extensions`. `--api` is documented as a *preference* with acknowledged
+  per-operation exceptions (`docs/bzr-cli.md`, and the `--api` doc comment in `src/cli/mod.rs`,
+  which names comments and attachments as standing exceptions), so this was a defensible
+  exception rather than a broken promise — which is what made the issue's "is this worth fixing
+  at all?" a real question. What settles it is that the exception is now the *only* REST
+  dependency left on an otherwise complete XML-RPC path, and removing it costs about forty
+  lines.
 
 ### Decision
 
 **`BugzillaClient::server_extensions()` establishes the extension list over the transport in
 use.** `ApiMode::Rest` probes REST; `ApiMode::XmlRpc` calls `Bugzilla.extensions`;
-`ApiMode::Hybrid` probes REST first and falls back to XML-RPC only on a transport failure,
-matching the REST-first dispatch `bug search` itself uses in that mode.
+`ApiMode::Hybrid` probes REST first and falls back to XML-RPC on a transport failure — the same
+*order* `search_bugs_hybrid` uses, though not the same trigger: that method's own XML-RPC retry
+fires on an empty structured-filter result and it has no transport-failure fallback at all.
 
 Two properties of the amendment are part of the decision:
 
 1. **The cached answer gains no transport dimension.** The advertised extension list is a fact
-   about the server, not the transport, and both transports return the same list. The URL and
-   capability-allowlist binding specified above is unchanged.
-2. **A missing `extensions` member in the XML-RPC response is an error, not an empty map.** An
-   empty map would render as *absent* — a settled refusal — where the REST path's decode
-   failure renders as *undetermined*. The transports must reach the same verdict from the same
-   evidence, so the adapter fails rather than inventing an empty list.
+   about the server, not the transport, and both transports return the same list on bz50, bz52
+   and bz53. The URL and capability-allowlist binding specified above is unchanged, and a third
+   dimension that cannot change the answer would only cause redundant probes.
+2. **A malformed XML-RPC response is an error, not an empty or partial map.** Two shapes, and
+   both matter for the same reason: a missing `extensions` member, and an extension whose value
+   is not a struct. An empty map renders as *absent* — a settled refusal — and a map that keeps
+   a name whose value bzr could not read renders as *advertised*; the REST path's serde decode
+   fails on both inputs and renders *undetermined*. The transports must reach the same verdict
+   from the same evidence, in the conservative direction, so the adapter fails rather than
+   inventing a list.
 
 ### Consequences
 
 - The refusal messages no longer name `/rest/extensions`, because the probe no longer always
-  goes there. The *undetermined* message's embedded transport error names what actually failed.
+  goes there, and neither does the `bug search --saved-search` note in `docs/bzr-cli.md`.
+  The *undetermined* message's embedded transport error names what actually failed.
 - Fail-closed is preserved: the three outcomes, the error variant, the exit code and the
   `capability_status` values are untouched, and no path is added on which an undetermined
   capability dispatches the parameter.
+- **The Hybrid fallback covers a broken extensions endpoint, not a REST-disabled deployment.**
+  `search_bugs_hybrid` `?`-propagates its REST call, so on a Hybrid connection to a
+  REST-unreachable server the gate now resolves over XML-RPC and `bug search` then fails at its
+  own REST call — a different error, not a working search. What the arm actually buys is the
+  case where `/rest/extensions` specifically fails (a transient 503, a proxy allowlisting
+  `/rest/bug` but not `/rest/extensions`) while REST search works. A REST-disabled deployment is
+  `--api xmlrpc`, which detection already selects when version probing fails.
+- A cached answer written by this code can differ from one the previous code could have
+  written: on a REST-unreachable server the probe now reaches a settled *absent*, where before
+  it could only fail undetermined and cache nothing. So reverting this change does not restore
+  the previous behaviour on such a server until that cached entry is cleared, by the same
+  `server_extensions` config remedy the refusal message already names.
 - **The positive verdict remains uncoverable against a stock container.** No supported image
   advertises the `RedHat` extension, so no functional test can establish "capability confirmed
   over XML-RPC". The functional tier covers the probe mechanism and the *negative* verdict over
@@ -279,18 +301,14 @@ Two properties of the amendment are part of the decision:
   `--saved-search` returns `capability_status: undetermined` at exit 15 (bzr at `dcaf259f`,
   macOS, bz50 image). judgment: documenting a refusal the tool could simply stop issuing, on a
   path whose other half is already built, spends a paragraph to avoid ~40 lines of adapter.
-- **Use the existing `dispatch_xmlrpc_first` helper for all three modes.** verified: `bug
-  search` in Hybrid is REST-first — `search_bugs_configured` routes `ApiMode::Hybrid` to
+- **Use the existing `dispatch_xmlrpc_first` helper for all three modes.** verified: Hybrid
+  `bug search` is REST-first — `search_bugs_configured` routes `ApiMode::Hybrid` to
   `search_bugs_hybrid`, which calls `search_bugs_rest` first (`src/client/resources/bug.rs`).
   judgment: XML-RPC-first would change the probe's transport for the default mode on 5.0/5.2 —
-  most users — for no requirement, and would make the probe disagree with the command it gates
-  about which transport is "in use".
+  most users — for no requirement, and would put the gate on a different transport from the
+  command it gates.
 - **Add a generic REST-first dispatch helper beside `dispatch_xmlrpc_first`.** judgment: one
   caller. Three lines inline in the resource that needs them, until a second caller exists.
-- **Key the persisted capability answer on transport as well as URL.** verified: `GET
-  /rest/extensions` and `Bugzilla.extensions` return the same list on bz50, bz52 and bz53.
-  judgment: a cache key that cannot change the answer only causes redundant probes, and it
-  would add a third dimension to a binding this record already had to reason about carefully.
 - **Also route `server_version()` through the transport in use.** judgment: correct, and not
   reachable from any #724 criterion — the gate never calls it. Widening the change to fix an
   adjacent command is scope this record does not own.
