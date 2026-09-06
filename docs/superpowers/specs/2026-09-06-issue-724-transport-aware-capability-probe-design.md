@@ -154,8 +154,9 @@ and still does.
 The honest limit, and what has since changed about it, is recorded in the ADR amendment's
 Consequences: no supported *image* advertises the extension, so this phase covers the probe
 mechanism and the negative verdict; ADR 0061's shaped proxy can now produce a positive verdict,
-but only over REST and only in the comparison tier, so it does not reach this amendment's
-XML-RPC path. What follows is why each test here discriminates.
+but it shapes `/rest/extensions` only and contains no XML-RPC handling at all, so reaching
+this amendment's XML-RPC path is a design pass over that proxy rather than a call to an
+existing helper. What follows is why each test here discriminates.
 
 A capability probe exercised only against servers that all lack the capability is an
 empty-versus-empty oracle by default: a test asserting "bzr correctly determines the extension

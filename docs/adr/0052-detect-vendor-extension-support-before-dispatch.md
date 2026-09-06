@@ -369,14 +369,23 @@ Three properties of the amendment are part of the decision:
   **[ADR 0061](0061-prove-vendor-extension-behaviour-against-a-shaped-proxy.md) has since built
   the mechanism that closes the other half**, and this record would be stale without saying so:
   `tests/functional/redhat-shape-proxy.py` rewrites a real `/rest/extensions` response to
-  advertise `RedHat`, so a *positive* verdict is now provable against a shaped proxy rather
-  than only against a stock image. Two limits keep it from covering this amendment's XML-RPC
-  path: the shaping hook matches on `/rest/extensions` and so is REST-only, and the proxy runs
-  in the comparison tier (`run-compare.sh`), not the phase tier where the transport assertions
-  live. Extending it to shape `Bugzilla.extensions` would make the XML-RPC positive path
-  provable end to end. That is deliberately not done here — it is #710's file and harness, and
-  it arrived after this design was frozen — and it is recorded as the obvious next step rather
-  than as an impossibility.
+  advertise `RedHat`, so a *positive* verdict is provable against a shaped proxy rather than
+  only against a stock image. The phase tier can reach it — `lib.sh` exports
+  `redhat_shape_start`/`redhat_shape_stop` and eleven phase scripts already call them, so this
+  is **not** a tier boundary.
+
+  What blocks the XML-RPC positive path is the proxy's own shape: **it contains no XML-RPC
+  handling at all.** `REWRITE_HOOKS` is a tuple of matcher/transformer pairs whose matchers key
+  on `/rest/*` paths and whose transformers are JSON rewriters end to end. Shaping
+  `Bugzilla.extensions` therefore means intercepting `POST /xmlrpc.cgi`, parsing an XML
+  `methodResponse` struct, injecting a `RedHat` member and re-serialising — and discriminating
+  by RPC method name *inside the request body*, which the existing matcher contract
+  (`method`, `path`, `enabled_modes`) cannot see. That is a new capability in a proxy that has
+  never touched XML, with its own fault surface and its own cases in that file's self-test.
+
+  So criterion 2's strongest reading is **satisfiable and deliberately deferred, not
+  impossible** — sized as a design pass over the proxy rather than a call to an existing
+  helper. Deferred to the operator batch rather than taken here.
 
   The limit is stated rather than papered over, because a probe tested only against servers
   that all lack the capability is otherwise an oracle that cannot fail.

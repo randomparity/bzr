@@ -19,8 +19,8 @@
 # is the probe MECHANISM and the negative verdict: which transport carried the
 # probe, from the RUST_LOG debug trace, and that the response was really
 # received and parsed. (ADR 0061's shaped proxy can synthesize a positive
-# advertisement, but it rewrites /rest/extensions only and runs in the
-# comparison tier, so it does not cover the XML-RPC path asserted here.) The latter is why these tests assert the *absent*
+# advertisement, but it rewrites /rest/extensions only and carries no XML-RPC
+# handling, so it does not cover the XML-RPC path asserted here.) The latter is why these tests assert the *absent*
 # wording rather than only exit 15 — absent and undetermined share exit 15, so
 # the exit code alone would pass whether the probe worked, silently failed, or
 # never fired.
