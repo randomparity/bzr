@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used, clippy::panic)]
 
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -132,7 +132,10 @@ async fn auth_fallback_header_to_query_param_on_401() {
         .expect(1)
         .mount(&mock)
         .await;
-    // First request returns 401 (registered second, checked first by LIFO)
+    // First request returns 401. wiremock stable-sorts by priority and takes
+    // the FIRST match, so with equal priorities the first-registered mock wins;
+    // what separates these two is the auth matchers above, which the header
+    // attempt fails, not registration order.
     Mock::given(method("GET"))
         .and(path("/rest/user"))
         .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
@@ -171,7 +174,10 @@ async fn auth_fallback_query_param_to_header_on_401() {
         .expect(1)
         .mount(&mock)
         .await;
-    // First request returns 401 (registered second, checked first by LIFO)
+    // First request returns 401. wiremock stable-sorts by priority and takes
+    // the FIRST match, so with equal priorities the first-registered mock wins;
+    // what separates these two is the auth matchers above, which the header
+    // attempt fails, not registration order.
     Mock::given(method("GET"))
         .and(path("/rest/user"))
         .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
@@ -526,4 +532,399 @@ async fn no_retry_when_budget_zero() {
 
     let client = test_client(&mock.uri());
     assert!(client.get_bug("1", None, None).await.is_err());
+}
+
+// ── Alternate-auth body classification (#715, ADR 0057) ─────────────
+
+/// Mount the two halves of a 401 alternate-auth fallback on `route`. The mocks
+/// share identical matchers, so ordering alone separates them: wiremock
+/// stable-sorts by priority and serves the first match, and equal priorities
+/// keep insertion order — so `first` is registered first and capped at one
+/// serve, and the retry falls through to `retried`.
+async fn mount_auth_fallback_on(
+    mock: &MockServer,
+    route: &str,
+    first: ResponseTemplate,
+    retried: ResponseTemplate,
+) {
+    Mock::given(method("GET"))
+        .and(path(route.to_string()))
+        .respond_with(first)
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(route.to_string()))
+        .respond_with(retried)
+        .expect(1)
+        .mount(mock)
+        .await;
+}
+
+/// The common case: the fallback on `/rest/bug/1`.
+async fn mount_auth_fallback(
+    mock: &MockServer,
+    first: ResponseTemplate,
+    retried: ResponseTemplate,
+) {
+    mount_auth_fallback_on(mock, "/rest/bug/1", first, retried).await;
+}
+
+fn bugzilla_error(code: i64, message: &str) -> serde_json::Value {
+    serde_json::json!({"error": true, "code": code, "message": message})
+}
+
+fn login_required() -> ResponseTemplate {
+    ResponseTemplate::new(401).set_body_json(bugzilla_error(410, "You must log in"))
+}
+
+#[tokio::test]
+async fn auth_fallback_relays_a_policy_refusal_from_the_retried_body() {
+    let mock = MockServer::start().await;
+    mount_auth_fallback(
+        &mock,
+        login_required(),
+        ResponseTemplate::new(401).set_body_json(bugzilla_error(
+            120,
+            "you are not allowed to restrict bugs to this group in the 'FuncTestProd' product",
+        )),
+    )
+    .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_json_value("bug/1").await.unwrap_err();
+    match err {
+        BzrError::Api { code, message } => {
+            assert_eq!(code, 120, "the retried body's code must win");
+            assert!(
+                message.contains("not allowed to restrict bugs"),
+                "the retried body's message must win: {message}"
+            );
+        }
+        other => panic!("expected a relayed Api error, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn auth_fallback_keeps_the_original_401_when_the_retry_also_fails_to_log_in() {
+    let mock = MockServer::start().await;
+    // The two bodies must differ, or `Original` and `Refused` would build the
+    // identical error from identical bytes and the test would pass whatever the
+    // band check does. 300 is `invalid_login_or_password`.
+    mount_auth_fallback(
+        &mock,
+        login_required(),
+        ResponseTemplate::new(401).set_body_json(bugzilla_error(
+            300,
+            "The username or password you entered is not valid",
+        )),
+    )
+    .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_json_value("bug/1").await.unwrap_err();
+    match err {
+        BzrError::Api { code, message } => {
+            assert_eq!(code, 410, "an authentication code must not be relayed");
+            assert!(
+                message.contains("must log in"),
+                "the original's message must stand: {message}"
+            );
+        }
+        other => panic!("expected the original Api 410, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn auth_fallback_keeps_the_original_401_when_the_retry_carries_no_envelope() {
+    let mock = MockServer::start().await;
+    mount_auth_fallback(
+        &mock,
+        login_required(),
+        ResponseTemplate::new(401).set_body_string("<html>Proxy Authentication Required</html>"),
+    )
+    .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_json_value("bug/1").await.unwrap_err();
+    match err {
+        BzrError::Api { code, .. } => assert_eq!(code, 410),
+        other => panic!("expected the original Api 410, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn auth_fallback_keeps_the_original_401_when_the_retried_envelope_has_no_code() {
+    let mock = MockServer::start().await;
+    mount_auth_fallback(
+        &mock,
+        login_required(),
+        ResponseTemplate::new(401)
+            .set_body_json(serde_json::json!({"error": true, "message": "refused"})),
+    )
+    .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_json_value("bug/1").await.unwrap_err();
+    match err {
+        BzrError::Api { code, .. } => assert_eq!(code, 410),
+        other => panic!("expected the original Api 410, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn auth_fallback_relays_a_403_policy_refusal() {
+    let mock = MockServer::start().await;
+    mount_auth_fallback(
+        &mock,
+        login_required(),
+        ResponseTemplate::new(403).set_body_json(bugzilla_error(120, "refused by policy")),
+    )
+    .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_json_value("bug/1").await.unwrap_err();
+    match err {
+        BzrError::Api { code, .. } => assert_eq!(code, 120),
+        other => panic!("expected the relayed Api 120, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn auth_fallback_keeps_the_original_when_a_403_retry_carries_an_auth_code() {
+    // This is the case that proves FORBIDDEN belongs in the classification
+    // guard. With 403 classified, the retried authentication code keeps the
+    // original 410. Without it, the 403 is Replaced and `check_response_status`
+    // reports the retried 300 — so the two routes disagree here, unlike the
+    // relay case above, where both produce the same Api { code: 120 }.
+    let mock = MockServer::start().await;
+    mount_auth_fallback(
+        &mock,
+        login_required(),
+        ResponseTemplate::new(403).set_body_json(bugzilla_error(
+            300,
+            "The username or password you entered is not valid",
+        )),
+    )
+    .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_json_value("bug/1").await.unwrap_err();
+    match err {
+        BzrError::Api { code, .. } => assert_eq!(code, 410, "the original 401 must stand"),
+        other => panic!("expected the original Api 410, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn auth_fallback_treats_a_retried_410_as_an_authentication_failure() {
+    // Pins the `|| code == LOGIN_REQUIRED` half of the band check, which the
+    // 300..=399 band does not cover. The first attempt answers 300 so the
+    // expected value cannot be produced by the retried body: without the
+    // LOGIN_REQUIRED clause the retried 410 is relayed and the assertion sees
+    // 410 instead of 300. That is #715's own failure mode arriving from the
+    // other direction — "You must log in" reported as a policy refusal.
+    let mock = MockServer::start().await;
+    mount_auth_fallback(
+        &mock,
+        ResponseTemplate::new(401).set_body_json(bugzilla_error(
+            300,
+            "The username or password you entered is not valid",
+        )),
+        ResponseTemplate::new(401).set_body_json(bugzilla_error(410, "You must log in")),
+    )
+    .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_json_value("bug/1").await.unwrap_err();
+    match err {
+        BzrError::Api { code, .. } => assert_eq!(code, 300, "410 is an authentication code"),
+        other => panic!("expected the original Api 300, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn auth_fallback_relays_a_refusal_when_the_original_401_carried_no_envelope() {
+    // The second user-visible transition recorded in ADR 0057: when the first
+    // attempt's 401 carries no Bugzilla envelope — an HTML challenge page from
+    // a fronting proxy, say — and the retry's does, the reported error moves
+    // from `HttpStatus` (exit 5, error.type "http", structured key "status") to
+    // `Api` (exit 4, error.type "api", structured key "api_code"). The retried
+    // envelope is the server's real answer; the bare 401 was not.
+    let mock = MockServer::start().await;
+    mount_auth_fallback(
+        &mock,
+        ResponseTemplate::new(401).set_body_string("<html>Unauthorized</html>"),
+        ResponseTemplate::new(401).set_body_json(bugzilla_error(120, "policy refusal")),
+    )
+    .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_json_value("bug/1").await.unwrap_err();
+    assert_eq!(
+        err.exit_code(),
+        4,
+        "an envelope-carrying retry reports as Api"
+    );
+    assert_eq!(err.error_type(), "api");
+    match err {
+        BzrError::Api { code, .. } => assert_eq!(code, 120),
+        other => panic!("expected the relayed Api 120, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn auth_fallback_band_edges_separate_login_failure_from_refusal() {
+    // 300 and 399 are inside Bugzilla's documented authentication band, so the
+    // original 410 stands. 299 and 400 are outside it and are relayed as
+    // themselves — 400 in particular, because it is a status code, not a
+    // Bugzilla error code.
+    for (retried_code, expected) in [(299, 299), (300, 410), (399, 410), (400, 400)] {
+        let mock = MockServer::start().await;
+        mount_auth_fallback(
+            &mock,
+            login_required(),
+            ResponseTemplate::new(401).set_body_json(bugzilla_error(retried_code, "refused")),
+        )
+        .await;
+
+        let client = test_client(&mock.uri());
+        let err = client.get_json_value("bug/1").await.unwrap_err();
+        match err {
+            BzrError::Api { code, .. } => {
+                assert_eq!(code, expected, "retried code {retried_code}");
+            }
+            other => panic!("retried code {retried_code}: expected Api, got {other:?}"),
+        }
+    }
+}
+
+/// A minimal `bug view` payload — enough fields for the view formatter.
+fn view_ok_bug_body(id: u64, summary: &str) -> serde_json::Value {
+    serde_json::json!({
+        "bugs": [{
+            "id": id,
+            "summary": summary,
+            "status": "NEW",
+            "resolution": "",
+            "assigned_to": "nobody@test.com",
+            "priority": "P1",
+            "severity": "normal",
+            "product": "TestProduct",
+            "component": "General",
+            "creation_time": "2025-01-01T00:00:00Z",
+            "last_change_time": "2025-01-01T00:00:00Z"
+        }]
+    })
+}
+
+fn permissive_view_action(ids: &[&str]) -> crate::cli::BugAction {
+    crate::cli::BugAction::View(crate::cli::ViewArgs {
+        ids: ids.iter().map(|s| (*s).to_string()).collect(),
+        permissive: true,
+        web: false,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
+    })
+}
+
+/// ADR 0057 Consequences: relaying the retry's `api_code` is the one place this
+/// change moves a process exit code. `api_code` is control flow — code 102 is a
+/// per-resource fault `--permissive` skips (`BzrError::is_permissive_bug_view_error`),
+/// while the header attempt's 410 is not — so a batch that previously aborted
+/// with exit 4 now completes with exit 0 and the bug listed as failed. Driving
+/// the command is what makes that observable; asserting the predicate on the
+/// error would never exercise the exit-0 path.
+#[tokio::test]
+async fn relayed_per_resource_refusal_makes_permissive_view_exit_zero_not_four() {
+    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(view_ok_bug_body(1, "first")))
+        .mount(&mock)
+        .await;
+    mount_auth_fallback_on(
+        &mock,
+        "/rest/bug/2",
+        login_required(),
+        ResponseTemplate::new(401).set_body_json(bugzilla_error(
+            102,
+            "You are not authorized to access bug #2",
+        )),
+    )
+    .await;
+
+    let action = permissive_view_action(&["1", "2"]);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ),
+        &mut io.writers(),
+    )
+    .await;
+    let output = io.out_str().to_string();
+    assert!(
+        result.is_ok(),
+        "a relayed per-resource code must be suppressible: {result:?}"
+    );
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
+    assert_eq!(parsed["failed"].as_array().unwrap().len(), 1);
+    assert_eq!(parsed["failed"][0]["id"], "2");
+}
+
+/// The other direction of the same substitution, and the one that costs a user
+/// something: when the ORIGINAL 401 carries a suppressible per-resource code
+/// and the retry carries a non-suppressible one, a `--permissive` batch that
+/// previously completed now aborts. Relaying the server's true code is the
+/// decision (ADR 0057); this is its correct consequence, and it is recorded
+/// rather than discovered.
+#[tokio::test]
+async fn relayed_non_suppressible_code_makes_permissive_view_exit_four_not_zero() {
+    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(view_ok_bug_body(1, "first")))
+        .mount(&mock)
+        .await;
+    mount_auth_fallback_on(
+        &mock,
+        "/rest/bug/2",
+        ResponseTemplate::new(401).set_body_json(bugzilla_error(
+            102,
+            "You are not authorized to access bug #2",
+        )),
+        ResponseTemplate::new(401).set_body_json(bugzilla_error(
+            120,
+            "you are not allowed to restrict bugs to this group",
+        )),
+    )
+    .await;
+
+    let action = permissive_view_action(&["1", "2"]);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let outcome = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ),
+        &mut io.writers(),
+    )
+    .await;
+    let Err(err) = outcome else {
+        panic!("a relayed non-suppressible code must abort the batch");
+    };
+    assert_eq!(err.exit_code(), 4);
+    match err {
+        BzrError::Api { code, .. } => assert_eq!(code, 120),
+        other => panic!("expected the relayed Api 120, got {other:?}"),
+    }
 }
