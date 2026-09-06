@@ -325,11 +325,10 @@ Three properties of the amendment are part of the decision:
 ### Consequences
 
 - The refusal messages no longer name `/rest/extensions`, because the probe no longer always
-  goes there. Nor do two of the three other places that described the REST-only probe: the
-  `bug search` long-about in `src/cli/bug/search.rs` (which is `--help` and the man page), and
-  the rustdoc on `ServerConfig::server_extensions`. The third, the `bug search --saved-search`
-  note in `docs/bzr-cli.md`, still says the probe reads `/rest/extensions`; it lands separately
-  because #718 is editing a different section of that same file. **In Hybrid the *undetermined* message names both attempts**
+  goes there. Nor do the three other places that described the REST-only probe: the
+  `bug search --saved-search` note in `docs/bzr-cli.md`, the `bug search` long-about in
+  `src/cli/bug/search.rs` (which is `--help` and the man page), and the rustdoc on
+  `ServerConfig::server_extensions`. **In Hybrid the *undetermined* message names both attempts**
   rather than only detailing the XML-RPC failure. The REST error is also logged at `warn`, but a
   log line is a trace event and a `--json` consumer reads the error body and never the trace, so
   without this a user on a REST-first connection would see only an XML-RPC failure and
