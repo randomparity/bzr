@@ -180,6 +180,19 @@ if [[ -n "$BUG1" ]]; then
         assert_json 'has("remaining_time")' "false"; then test_pass; fi
 else test_skip "no BUG1"; fi
 
+# The contrast with the case above: the `auto` server's auth method is detected
+# rather than pinned, so a read through it proves detection resolved to a method
+# the server actually authenticates. Under issue #713 the header-auth probe
+# confirmed on any 2xx, detection persisted `header`, and these permission-gated
+# fields went missing exactly as they do for the credentialless read.
+test_begin "auto-server-read-includes-time-fields" "auto-detected server read includes permission-gated time fields"
+if [[ -n "$BUG1" ]]; then
+    run_bzr --server auto bug view "$BUG1"
+    if assert_success &&
+        assert_json '.estimated_time' "8.0" &&
+        assert_json '.remaining_time' "5.0"; then test_pass; fi
+else test_skip "no BUG1"; fi
+
 test_begin "bug-view-groups-round-trip-and-project" "bug update/view groups round-trip and project"
 _READ_FIELDS_BUG=$(make_bug --product FuncTestProd --component Backend \
     --summary "Read fields group round-trip" --description "read fields" \
