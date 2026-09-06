@@ -181,3 +181,29 @@ fn parse_saved_search_with_sharer() {
     assert_eq!(search.sharer, Some(112_233));
     assert!(search.query.is_none());
 }
+
+/// Without matching conflicts on `--sharer`, clap suppresses its `requires`
+/// check when a positional query is present and silently ignores the flag.
+#[test]
+fn sharer_with_positional_query_is_rejected_not_ignored() {
+    assert_eq!(
+        parse_error_kind(&["bzr", "bug", "search", "crash", "--sharer", "1"]),
+        ErrorKind::ArgumentConflict
+    );
+}
+
+#[test]
+fn sharer_with_from_url_is_rejected_not_ignored() {
+    assert_eq!(
+        parse_error_kind(&[
+            "bzr",
+            "bug",
+            "search",
+            "--from-url",
+            "https://bz.example/buglist.cgi?product=X",
+            "--sharer",
+            "1",
+        ]),
+        ErrorKind::ArgumentConflict
+    );
+}

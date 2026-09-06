@@ -95,7 +95,11 @@ pub(crate) struct SearchArgs {
     /// Needed only for a search someone else shared with you; Bugzilla
     /// shows the ID in the saved search's own URL. Requires
     /// `--saved-search`.
-    #[arg(long, requires = "saved_search")]
+    ///
+    /// Carries the same conflicts as `--saved-search`: without them clap
+    /// suppresses the `requires` check when a conflicting query source is
+    /// present, and `--sharer` would be silently ignored.
+    #[arg(long, requires = "saved_search", conflicts_with_all = ["query", "from_url"])]
     pub sharer: Option<u64>,
     /// Max number of results (default: 50)
     #[arg(long)]
