@@ -77,8 +77,8 @@ Re-measured against merged `main` rather than reasoned about, same three contain
 | 5.2 | `query_param` | 5 (2) / 2 (1) | 5 (2) / 2 (1) |
 | 5.3.3+ | `header` | 5 (2) / 2 (1) | 5 (2) / 2 (1) |
 
-So the default path is complete on every supported version **for a config written by a post-#713
-bzr**. Two routes still reach the loss:
+So the default path is complete on every supported version **for a config a post-#713 bzr writes
+with no `--auth-method`**. Two routes still reach the loss:
 
 - **Pinned** — `--auth-method header` against a server whose REST ignores it.
 - **Inherited** — a persisted `auth_method = "header"` written by a pre-#713 bzr. Upgrading does
