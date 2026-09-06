@@ -197,7 +197,12 @@ functional-start: ## Start the Bugzilla container
 functional-test: functional-start ## Run functional tests against real Bugzilla
 	tests/functional/run-tests.sh
 
-functional-compare: release functional-start ## Compare bzr and python-bugzilla
+# The comparison tier is meant to compare against a server the run set up, and
+# `functional-start` silently reuses a container an earlier `make functional-test`
+# left running. The precise coupling is uncharacterised (see ADR 0058); `reset`
+# removes the variable for the price of a container rebuild.
+functional-compare: release ## Compare bzr and python-bugzilla (recreates the container)
+	tests/functional/setup-bugzilla.sh reset
 	BZR_COMPARE_BIN="$(BZR_COMPARE_BIN)" tests/functional/run-compare.sh
 
 functional-stop: ## Stop and remove the Bugzilla container

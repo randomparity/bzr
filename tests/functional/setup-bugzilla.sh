@@ -185,6 +185,17 @@ cmd_status() {
 
 cmd_reset() {
     cmd_stop
+    # cmd_stop discards `rm -f` failure and logs "Container removed." regardless,
+    # so verify here: podman refuses to remove a container a running one depends
+    # on through `--network container:<name>`, which is what a leftover
+    # python-bugzilla sidecar is. Unchecked, `reset` would silently be `start`.
+    if container_exists; then
+        err "Container ${CONTAINER_NAME} survived removal. A dependent container" \
+            "is probably holding it -- most likely a leftover python-bugzilla" \
+            "sidecar from a comparison run whose cleanup did not fire. Remove it" \
+            "(\`${CONTAINER_RT} rm -f <sidecar>\`) and retry."
+        return 1
+    fi
     cmd_start
     return 0
 }
