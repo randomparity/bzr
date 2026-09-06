@@ -83,17 +83,17 @@ else
     run_bzr bug update "$AFID" --field "cf_no_such_field_here=1"
     if assert_exit_code 7 &&
         assert_stderr_contains "cf_no_such_field_here" &&
-        assert_stderr_contains "bzr server capabilities"; then test_pass; fi
+        assert_stderr_contains "bzr field list"; then test_pass; fi
 fi
 
 # The rejection above is the one message a user is guaranteed to read, because
 # they only see it when they are already stuck. Advice that fails when followed
-# is a defect, so run the command it names and require it to work. `bzr field
-# list` cannot be that command: it takes a required field name and lists that
-# one field's legal values, so a no-argument form is a clap usage error.
+# is a defect, so run the command it names and require it to work. Since #718
+# that command is `bzr field list` with no argument, which enumerates the whole
+# accepted set rather than the custom-field subset.
 test_begin "undeclared-field-advice-names-a-command-that-works" "the undeclared-field message names a command that works"
-run_bzr server capabilities
-if assert_success && assert_json_exists '.custom_fields'; then test_pass; fi
+run_bzr field list
+if assert_success && assert_json 'length > 0' true; then test_pass; fi
 
 test_begin "bug-create-undeclared-field-exits-7" "bug create --field with an undeclared name exits 7"
 run_bzr bug create "${_AF[@]}" --summary "field reject" --field "cf_no_such_field_here=1"
@@ -154,6 +154,33 @@ else
     fi
 fi
 
+# Acceptance criterion 2 against a real server: anything the listing shows is
+# accepted. The name is read OUT of the listing rather than hard-coded in the
+# comparison, so the assertion bites in both directions -- a listing that
+# stopped emitting server-only names yields an empty name and fails at the
+# guard, and a listing that emitted a name the validator rejects exits 7 here.
+#
+# Placed last in the phase deliberately: it writes to $AFID, and the block above
+# asserts that bug's whiteboard is still empty. `short_desc` is pinned rather
+# than taking an arbitrary .[0], which could land on a read-only catalogue field
+# Bugzilla refuses on its own; 05-fields-classifications.sh already proves these
+# containers declare it, and `summary` (not `short_desc`) is the BUG_FIELDS
+# canonical, so `source: server` is the grounded expectation.
+test_begin "field-list-agrees-with-field-validator" "a server-only name from field list is accepted by --field"
+run_bzr field list
+_AF_SERVER_NAME=""
+if assert_success; then
+    _AF_SERVER_NAME=$(jq -r 'map(select(.source == "server" and .name == "short_desc")) | .[0].name // empty' "$BZR_STDOUT")
+fi
+if [[ -z "$_AF_SERVER_NAME" ]]; then
+    test_fail "field list did not report short_desc as a server-declared name"
+elif [[ -z "$AFID" ]]; then
+    test_fail "no fixture bug: the --field create above did not succeed"
+else
+    run_bzr bug update "$AFID" --field "${_AF_SERVER_NAME}=oracle"
+    if assert_success; then test_pass; fi
+fi
+
 rm -r "$_AF_DIR"
-unset _AF _AF_DIR _AF_INITIAL _AF_UPDATED _AF_JSON AFID
+unset _AF _AF_DIR _AF_INITIAL _AF_UPDATED _AF_JSON _AF_SERVER_NAME AFID
 echo ""
