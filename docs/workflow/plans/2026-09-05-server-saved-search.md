@@ -100,7 +100,32 @@ uses.
 A probe failure must not be fatal to unrelated commands: detection already tolerates a failed
 version probe, and this follows it.
 
+Then add the gate itself as a new shared helper, `src/commands/runtime/shared/capability.rs`,
+exporting
+
+```rust
+pub(crate) async fn require_server_capability(
+    ctx: &CommandContext,
+    client: &BugzillaClient,
+    capability: &str,
+    operation: &str,
+) -> Result<()>
+```
+
+`connect_and_configure` returns only a `BugzillaClient` and is called by every command, so the
+gate does not widen its signature. The helper resolves the server with
+`Config::resolve_server(ctx.server())`, reads `server_extensions` from the entry, probes via
+`client.server_extensions()` on a miss, persists what it learned, and returns either `Ok(())`
+or the Task 1 error in its unsupported or undetermined form. Register the module in
+`src/commands/runtime/shared/mod.rs` beside `body_source` and `merge`.
+
+**Inline servers:** a `--server-url` connection resolves to `INLINE_SERVER_NAME` with no config
+entry, so there is nothing to read or write. Probe every time and persist nothing. Cover this
+case in the helper's sibling tests — it is the path the credentialless functional test takes.
+
 **Acceptance.** Detection persists a sorted extension list on success and nothing on failure;
+the helper returns `Ok` when the capability is advertised, the unsupported error when it is
+not, and the undetermined error when the probe fails; inline servers probe without persisting;
 existing config round-trip tests still pass; `make lint` and `make test` green.
 
 ## Task 3 — the flags and the capability gate

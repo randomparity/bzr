@@ -49,6 +49,30 @@ endpoint responded, `None` on transient failure, and callers persist only when i
 follows that contract unchanged, and `ServerConfig` gains a matching
 `server_extensions: Option<Vec<String>>` beside `auth_method`, `api_mode` and `server_version`.
 
+**Where the gate lives.** `connect_and_configure` returns only a `BugzillaClient`, so the
+command layer cannot see what detection found. Rather than widen that signature — it is called
+by every command — the check goes in a new command-layer helper beside the other shared runtime
+helpers:
+
+```rust
+// src/commands/runtime/shared/capability.rs
+pub(crate) async fn require_server_capability(
+    ctx: &CommandContext,
+    client: &BugzillaClient,
+    capability: &str,
+    operation: &str,
+) -> Result<()>
+```
+
+It reads the cached list from `ServerConfig` via `Config::resolve_server(ctx.server())`, probes
+through the client on a cache miss, persists what it learned, and decides. One helper, reusable
+by the sibling issues that ADR 0052 governs, and no ripple through unrelated commands.
+
+**Inline servers have no cache.** A `--server-url` connection resolves to `INLINE_SERVER_NAME`
+with no config entry, so there is nothing to read from and nothing to write to. The helper
+probes every time in that case and persists nothing. This is the path the credentialless
+functional test exercises, and it works because `/rest/extensions` answers unauthenticated.
+
 Three outcomes, and they are deliberately three rather than two:
 
 | Probe | Extension | Behaviour |
