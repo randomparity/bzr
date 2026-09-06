@@ -193,11 +193,18 @@ async fn single_update_tags_the_posted_comment_after_a_bug_update_that_ignores_t
 }
 
 #[tokio::test]
-async fn single_update_tag_lookup_failure_fails_the_update() {
+async fn single_update_tag_lookup_failure_fails_the_update_and_warns_against_retry() {
     let (_lock, mock, _tmp) = setup_test_env().await;
     mock_put_bug_ok(&mock, 42).await;
-    // No comment matches the posted body: the GET returns an unrelated one.
-    mock_bug_comment(&mock, 42, 900, "a different comment").await;
+    // The comment GET returns nothing at all: there is no comment to tag.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": {"42": {"comments": []}}})),
+        )
+        .mount(&mock)
+        .await;
     let client = crate::client::test_helpers::test_client(&mock.uri());
     let request = ApplyRequest {
         ids: vec![42],
@@ -212,6 +219,53 @@ async fn single_update_tag_lookup_failure_fails_the_update() {
         .unwrap_err();
 
     assert!(matches!(err, crate::error::BzrError::NotFound { .. }));
+    assert!(
+        io.err_str().contains("do not retry") || io.err_str().contains("Do not retry"),
+        "stderr should warn against retrying with the same comment: {}",
+        io.err_str()
+    );
+}
+
+#[tokio::test]
+async fn single_update_tags_the_comment_with_the_highest_count_ignoring_stale_text() {
+    // Regression: Bugzilla does not always round-trip comment text
+    // byte-for-byte (e.g. trailing whitespace stripped), so matching by
+    // text is unreliable. The tagging step must select the comment with the
+    // highest `count` regardless of what its text looks like.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_put_bug_ok(&mock, 42).await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/42/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": { "42": { "comments": [
+                {"id": 800, "bug_id": 42, "text": "an earlier comment",
+                 "creator": "user@test.com", "creation_time": "2025-01-01T00:00:00Z",
+                 "is_private": false, "count": 0},
+                {"id": 900, "bug_id": 42, "text": "tagged comment",
+                 "creator": "user@test.com", "creation_time": "2025-01-01T00:00:01Z",
+                 "is_private": false, "count": 1}
+            ]}}
+        })))
+        .mount(&mock)
+        .await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/comment/900/tags"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!(["triaged"])))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let client = crate::client::test_helpers::test_client(&mock.uri());
+    let request = ApplyRequest {
+        ids: vec![42],
+        params: params_with_comment_tags("tagged comment", &["triaged"]),
+        expect_unchanged_since: None,
+    };
+    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let mut io = CapturedIo::new();
+
+    let result = apply_checked_connected(&client, request, &ctx, &mut io.writers()).await;
+
+    assert!(result.is_ok(), "tagging should succeed: {result:?}");
 }
 
 #[tokio::test]
@@ -251,4 +305,13 @@ async fn batch_update_tag_failure_reports_that_id_as_failed() {
     let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["succeeded"], serde_json::json!([1]));
     assert_eq!(parsed["failed"][0]["id"], 2);
+    // The field update and comment for bug 2 already succeeded; only tagging
+    // failed. `step` distinguishes that from a fully-failed update so a
+    // caller does not retry and duplicate the comment.
+    assert_eq!(parsed["failed"][0]["step"], "comment_tags");
+    assert!(
+        io.err_str().contains("do not retry") || io.err_str().contains("Do not retry"),
+        "stderr should warn against retrying with the same comment: {}",
+        io.err_str()
+    );
 }

@@ -117,19 +117,26 @@ fn search_result_json_shape() {
 
 #[test]
 fn batch_result_json_shape() {
-    let result = BatchResult::new(
-        vec![1, 2],
-        vec![BatchFailure {
-            id: 3,
-            error: "permission denied".into(),
-        }],
-    );
+    let result = BatchResult::new(vec![1, 2], vec![BatchFailure::new(3, "permission denied")]);
     let json: serde_json::Value = serde_json::to_value(&result).unwrap();
     assert_eq!(json["resource"], "bug");
     assert_eq!(json["action"], "updated");
     assert_eq!(json["succeeded"][0], 1);
     assert_eq!(json["failed"][0]["id"], 3);
     assert_eq!(json["failed"][0]["error"], "permission denied");
+    assert!(
+        json["failed"][0].get("step").is_none(),
+        "plain failures must omit step, got: {json}"
+    );
+}
+
+#[test]
+fn batch_failure_comment_tags_carries_the_step() {
+    let f = BatchFailure::comment_tags(3, "not found");
+    let json: serde_json::Value = serde_json::to_value(&f).unwrap();
+    assert_eq!(json["id"], 3);
+    assert_eq!(json["error"], "not found");
+    assert_eq!(json["step"], "comment_tags");
 }
 
 #[test]

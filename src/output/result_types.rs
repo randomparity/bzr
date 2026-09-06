@@ -314,6 +314,32 @@ pub struct BatchResult {
 pub struct BatchFailure {
     pub id: u64,
     pub error: String,
+    /// Set when the bug's own field/comment update already succeeded and
+    /// only a post-update sub-step (currently just `comment_tags`) failed —
+    /// distinct from `id`'s `Bug.update` call itself failing. A caller must
+    /// not retry a `comment_tags`-stepped failure with the same `--comment`
+    /// text: `Bug.update` posts a new comment on every call, so a retry
+    /// would duplicate it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step: Option<String>,
+}
+
+impl BatchFailure {
+    pub fn new(id: u64, error: impl Into<String>) -> Self {
+        Self {
+            id,
+            error: error.into(),
+            step: None,
+        }
+    }
+
+    pub fn comment_tags(id: u64, error: impl Into<String>) -> Self {
+        Self {
+            id,
+            error: error.into(),
+            step: Some("comment_tags".to_string()),
+        }
+    }
 }
 
 impl BatchResult {
