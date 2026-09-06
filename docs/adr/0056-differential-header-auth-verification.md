@@ -162,13 +162,27 @@ fixes on a container the project already runs.
   the outcome for a whole class of server. Each terminal decline logs at `info` naming that
   consequence, matching the level the confirming path already used, so `-v` shows an
   operator why detection chose what it chose. Per-leg diagnostics stay at `debug`.
-- **Probe transport errors are redacted.** `reqwest::Error`'s `Display` appends
-  ` for url (<url>)`, and the query-parameter legs carry the API key in that query string,
-  so formatting such an error verbatim would write the key to stderr on any timeout, reset,
-  or DNS failure. Every probe error in `src/client/auth/` now routes its URL through the
-  request layer's existing `safe_url`, which keeps the origin and path and drops the query.
-  This also fixes the same latent leak in `log_probe_send_error`, which the pre-existing
-  `whoami` and `valid_login` query-parameter probes shared.
+- **Probe transport errors are redacted, through one seam.** `reqwest::Error`'s `Display`
+  appends ` for url (<url>)`, and the query-parameter legs carry the API key in that query
+  string, so formatting such an error verbatim writes the key to stderr on any timeout,
+  reset, or DNS failure. `redacted_probe_error` composes two seams: `safe_url` reduces the
+  attached URL to origin and path, keeping the message diagnosable, and the result then goes
+  through `bugzilla_auth::redact_api_key` — the same marker- and thread-local-based
+  redaction that already guards the user-facing `BzrError::Http` display — because
+  `safe_url` rewrites only the exact string reqwest attached and a source chain can render a
+  differently-encoded copy.
+
+  The sites were enumerated rather than sampled. Every place in `src/client/auth/` where a
+  `reqwest::Error` can reach output: `log_probe_send_error` and `network_error_outcome` in
+  `mod.rs`; the send and body-read arms of `read_probe_leg`, and the `valid_login` body-read
+  arm, in `valid_login.rs`; and the `whoami` body-read arm in `whoami.rs`. All six now route
+  through the seam. Three were live leaks the query-parameter probes could reach; the two
+  body-read arms attach no URL in reqwest 0.12.28 and are routed for the same reason, since
+  that is a property of a dependency version rather than of this code. Two further paths
+  were checked and need nothing: `tls_hint` appends a constant and never renders the error,
+  and `BzrError::Http`'s display already redacts via `format_http_error`. `whoami.rs` was
+  outside this change's declared surface and was taken deliberately, so that no caller sits
+  outside the shared seam.
 - **An already-affected user does not get the fix by upgrading.** The detected method is
   persisted per server in `config.toml`, and a server with both `auth_method` and
   `api_mode` cached is never re-detected — `connect` short-circuits to a TLS probe

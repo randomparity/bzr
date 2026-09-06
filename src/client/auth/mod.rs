@@ -204,19 +204,30 @@ pub async fn detect_server_settings_without_auth(
     })
 }
 
-/// Render a probe transport error with its URL's query string stripped.
+/// Render a probe transport error with the API key removed.
 ///
 /// `reqwest::Error`'s `Display` appends ` for url (<url>)` whenever a URL is
 /// attached to the error, and the query-parameter probes carry the API key in
 /// that query string. Formatting the error verbatim would therefore write the
-/// key to stderr on any timeout, reset, or DNS failure. Route the URL through
-/// the same `safe_url` redaction the request layer uses.
+/// key to stderr on any timeout, reset, or DNS failure.
+///
+/// Two seams, composed, because neither alone is complete. `safe_url` reduces
+/// the attached URL to origin and path, which is what keeps the message useful
+/// for diagnosis — but it rewrites only the exact string reqwest attached, and
+/// an error's source chain can render a differently-encoded copy. So the result
+/// then goes through [`crate::bugzilla_auth::redact_api_key`], the same
+/// marker- and thread-local-based redaction that guards the user-facing
+/// `BzrError::Http` display seam, which catches the key wherever it appears.
+///
+/// This is the single seam for every transport error raised under
+/// `src/client/auth/`; adding a probe means routing its error through here.
 pub(super) fn redacted_probe_error(error: &reqwest::Error) -> String {
     let rendered = format!("{error:#}");
-    match error.url() {
+    let without_url = match error.url() {
         Some(url) => rendered.replace(url.as_str(), &super::BugzillaClient::safe_url(url)),
         None => rendered,
-    }
+    };
+    crate::bugzilla_auth::redact_api_key(&without_url)
 }
 
 /// Log a probe's `send()` error, surfacing TLS-certificate problems at `warn`
