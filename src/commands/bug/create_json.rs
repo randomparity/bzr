@@ -148,9 +148,15 @@ impl JsonCreateBug {
             })?;
             attachments.push(params);
         }
+        let comment_tags = super::create::resolve_comment_tags(
+            &std::mem::take(&mut self.comment_tags),
+            self.description.is_some(),
+            "--comment-tag requires a description (set it in the JSON or via --description)",
+        )?;
         Ok(CompoundPlan {
             comment,
             attachments,
+            comment_tags,
         })
     }
 
@@ -173,11 +179,6 @@ impl JsonCreateBug {
         let deadline =
             crate::validation::parse_optional_date_only(self.deadline.as_deref(), "deadline")?;
         let groups = self.groups.into_option();
-        let comment_tags = super::create::resolve_comment_tags(
-            &self.comment_tags,
-            self.description.is_some(),
-            "--comment-tag requires a description (set it in the JSON or via --description)",
-        )?;
         let mut params = CreateBugParams {
             product: required(self.product, "product")?,
             component: required(self.component, "component")?,
@@ -201,7 +202,6 @@ impl JsonCreateBug {
             groups: Vec::new(),
             groups_present: false,
             flags,
-            comment_tags,
         };
         if let Some(groups) = groups {
             params.set_groups_from_structured_input(groups);

@@ -805,7 +805,7 @@ bzr bug create --from-json bugs.json
 | `--groups <G>` | No | | Add the bug to these groups (comma-separated, repeatable) |
 | `--flag <F>` | No | | Set/request a flag using Bugzilla flag syntax (repeatable): `name+`, `name-`, `name?`, `name?(user@example.com)` |
 | `--template <T>` | No | | Name of a saved template to use for default field values |
-| `--comment-tag <TAG>` | No | | Tag the bug's first comment (the description) with this tag (repeatable). Requires a description from any source; using it without one is a usage error (exit 7). |
+| `--comment-tag <TAG>` | No | | Tag the bug's first comment (the description) with this tag (repeatable). Requires a description from any source; using it without one is a usage error (exit 7). `Bug.create` has no `comment_tags` parameter, so this is a post-create sub-step (see [Compound create](#compound-create-comment--attachments)); a failed tag PUT does not roll back the created bug. |
 | `--with-comment <TEXT>` | No | | Post a first comment after the bug is created (compound create). Literal text; no `-`/stdin. Mutually exclusive with `--with-comment-file` and `--from-json`. See [Compound create](#compound-create-comment--attachments). |
 | `--with-comment-file <PATH>` | No | | Post a first comment read from a UTF-8 file. Mutually exclusive with `--with-comment` and `--from-json`. |
 | `--with-attachment <PATH>` | No | | Upload an attachment after the bug is created (repeatable). Content type guessed from the extension. Mutually exclusive with `--from-json`. |
@@ -873,7 +873,7 @@ mutually exclusive with `--from-json`.
 | 6 | Unreadable `--with-attachment` / JSON `attachments[].file` |
 | 7 | Input validation: missing `--summary` outside the editor flow; missing or unreadable `--description-file`; empty stdin without an explicit description; empty editor buffer; `$EDITOR` exited non-zero; empty `--with-comment` body; more `--attachment-description` than `--with-attachment`; `--comment-tag` without a description; malformed `--from-json` (bad JSON, unknown key, wrong shape, or missing required field) |
 | 9 | Authentication failure |
-| 11 | Partial failure: one or more elements of a `--from-json` array failed to create, **or** a compound sub-step (comment/attachment) failed after the bug was created |
+| 11 | Partial failure: one or more elements of a `--from-json` array failed to create, **or** a compound sub-step (comment/attachment/comment_tags) failed after the bug was created |
 
 Agent note: agent workflows should pass `--description` (or `--description-file`) explicitly and supply `--summary`. The `$EDITOR` flow only fires when stdin is a TTY, which is rare in headless / CI invocations.
 
@@ -907,7 +907,7 @@ Accepted keys match the create flag names: `product`, `component`, `summary`, `v
 - `comment` — object `{"body": "...", "is_private": false}`. Posts a first comment after the bug is created. `body` is required and must be non-empty. Distinct from the top-level `comment_tags` key above, which tags the description comment created *with* the bug, not this separate post-create comment.
 - `attachments` — array of objects `{"file": "...", "description": "...", "content_type": "...", "is_patch": false, "is_private": false}`. Each uploads one file after create; `file` is required, the rest are optional (`description` defaults to the filename, `content_type` to the extension guess). Both objects reject unknown keys.
 
-Both keys default to absent, so existing payloads are unaffected. In the array form, a sub-step failure on element *N* does **not** remove that bug's ID from `created`; instead the element is also recorded in `failed` as `{"index":N,"bug_id":M,"step":"comment"|"attachment","file":"...","error":"..."}`. **`created` and `failed` are therefore not disjoint** — `created` lists every bug the server filed, `failed` lists every failure; a created-but-partially-failed element appears in both. Count filed bugs with `created`, detect problems with `failed`. The single-object form with a failed sub-step emits a `compound-create-result` object instead (`bzr schema compound-create-result`).
+Both keys default to absent, so existing payloads are unaffected. `comment_tags` (see above) is a third sub-step on the same recovery model: a failed tag PUT after a successful create also lands in `failed` rather than rolling back. In the array form, a sub-step failure on element *N* does **not** remove that bug's ID from `created`; instead the element is also recorded in `failed` as `{"index":N,"bug_id":M,"step":"comment"|"attachment"|"comment_tags","file":"...","error":"..."}` (`file` is present only for `attachment`). **`created` and `failed` are therefore not disjoint** — `created` lists every bug the server filed, `failed` lists every failure; a created-but-partially-failed element appears in both. Count filed bugs with `created`, detect problems with `failed`. The single-object form with a failed sub-step emits a `compound-create-result` object instead (`bzr schema compound-create-result`).
 
 **Precedence:** an explicit CLI flag overrides the corresponding JSON field, applied uniformly to every element of an array — e.g. `--product Fedora --from-json bugs.json` forces `product` on all entries. `--from-json` is mutually exclusive with `--template` and bypasses the `$EDITOR` flow.
 

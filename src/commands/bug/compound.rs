@@ -22,7 +22,7 @@ use crate::output::result_types::{
 use crate::output::writers::Writers;
 use crate::types::attachment::UploadAttachmentParams;
 use crate::types::bug::CreateBugParams;
-use crate::types::comment::AddCommentParams;
+use crate::types::comment::{AddCommentParams, Comment, UpdateCommentTagsParams};
 
 /// The comment and attachments to attach to a freshly-created bug. Built before
 /// any network call; an empty plan means there are no sub-steps to run.
@@ -30,20 +30,59 @@ use crate::types::comment::AddCommentParams;
 pub(super) struct CompoundPlan {
     pub comment: Option<AddCommentParams>,
     pub attachments: Vec<UploadAttachmentParams>,
+    /// Tags for the description comment (comment 0). `Bug.create` has no
+    /// `comment_tags` parameter (unlike `Bug.update`), so these are applied
+    /// as a post-create sub-step via `bug/comment/{id}/tags`.
+    pub comment_tags: Vec<String>,
 }
 
 impl CompoundPlan {
-    /// True when there is no comment and no attachment — the caller can use the
-    /// plain single-create path with byte-identical output.
+    /// True when there is no comment, attachment, or comment tag — the caller
+    /// can use the plain single-create path with byte-identical output.
     pub fn is_empty(&self) -> bool {
-        self.comment.is_none() && self.attachments.is_empty()
+        self.comment.is_none() && self.attachments.is_empty() && self.comment_tags.is_empty()
     }
 }
 
-/// Post the comment (if any) then each attachment, in order, against the
-/// already-created `bug_id`. Never aborts early: every failure is recorded and
-/// announced on stderr (naming the bug ID) so one run reports the complete
-/// failure set. Consumes the plan so attachment payloads are not cloned.
+/// The description comment is always comment 0; fall back to the first
+/// returned comment when a server omits `count` (issue #672's tagging
+/// sub-step runs before any other comment exists, so "first" is unambiguous
+/// even then).
+fn find_description_comment_id(comments: &[Comment]) -> Option<u64> {
+    comments
+        .iter()
+        .find(|c| c.count == Some(0))
+        .or_else(|| comments.first())
+        .map(|c| c.id)
+}
+
+/// Tag the newly-created bug's description comment. Run before any other
+/// sub-step posts a comment, so the bug has exactly one comment and "first"
+/// is unambiguous regardless of whether the server reports `count`.
+async fn tag_description_comment(
+    client: &BugzillaClient,
+    bug_id: u64,
+    tags: &[String],
+) -> Result<()> {
+    let comments = client.get_comments_since(bug_id, None).await?;
+    let comment_id =
+        find_description_comment_id(&comments).ok_or_else(|| crate::error::BzrError::NotFound {
+            resource: "comment",
+            id: bug_id.to_string(),
+        })?;
+    let params = UpdateCommentTagsParams {
+        add: tags.to_vec(),
+        remove: vec![],
+    };
+    client.update_comment_tags(comment_id, &params).await?;
+    Ok(())
+}
+
+/// Tag the description comment (if requested), post the comment (if any),
+/// then each attachment, in order, against the already-created `bug_id`.
+/// Never aborts early: every failure is recorded and announced on stderr
+/// (naming the bug ID) so one run reports the complete failure set. Consumes
+/// the plan so attachment payloads are not cloned.
 pub(super) async fn run_sub_steps(
     client: &BugzillaClient,
     bug_id: u64,
@@ -51,6 +90,15 @@ pub(super) async fn run_sub_steps(
     w: &mut Writers<'_>,
 ) -> Vec<SubStepFailure> {
     let mut failures = Vec::new();
+    if !plan.comment_tags.is_empty() {
+        if let Err(e) = tag_description_comment(client, bug_id, &plan.comment_tags).await {
+            let _ = writeln!(
+                w.err,
+                "warning: created bug #{bug_id} but failed to tag its first comment: {e}"
+            );
+            failures.push(SubStepFailure::comment_tags(e.to_string()));
+        }
+    }
     if let Some(comment) = plan.comment {
         if let Err(e) = client.add_comment(bug_id, &comment).await {
             let _ = writeln!(
@@ -125,6 +173,8 @@ pub(super) struct CompoundDryRunChanges<'a> {
     comment: Option<&'a str>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     attachments: Vec<AttachmentDryRun<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    comment_tags: &'a Vec<String>,
 }
 
 /// One attachment's dry-run preview (no payload bytes, just metadata + size).
@@ -156,6 +206,7 @@ pub(super) fn dry_run_changes<'a>(
                 size: a.data.len(),
             })
             .collect(),
+        comment_tags: &plan.comment_tags,
     }
 }
 
