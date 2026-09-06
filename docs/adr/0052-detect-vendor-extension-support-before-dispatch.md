@@ -10,9 +10,12 @@ python-bugzilla exposes several Bugzilla search and mutation parameters that are
 extensions rather than upstream Bugzilla API. The parity campaign tracked in
 `docs/dev/python-bugzilla-parity.md` asks bzr to match that surface across five issues: #670
 server-side saved searches (`savedsearch`, `sharer_id`), #671 generic arbitrary fields, #672
-comment tags and minor update, #679 whiteboard match types, and #680 personal bug tags.
+comment tags and minor update, #679 whiteboard match types, and #680 personal bug tags. They
+are not all the same kind of gap — #671 and #672 turned out to be core Bugzilla rather than
+vendor extensions, which is what the scope boundary at the end of this record exists to
+capture.
 
-Issue #670 established what "unsupported" means in practice, and the finding generalises.
+Issue #670 established what "unsupported" means for the vendor-extension kind.
 Neither `savedsearch` nor `sharer_id` appears anywhere under `Bugzilla/` in the project's
 functional images (5.0.6, 5.2, 5.3.3+); `Bugzilla::WebService::Bug::search` passes its
 parameter hash straight into `Bugzilla::Search->new`, which ignores keys it does not know.
@@ -117,8 +120,53 @@ Three consequences of that rule are part of the decision, not implementation det
   `bzr query run`. Gating raw passthrough would require bzr to model every vendor parameter it
   currently forwards blindly; this decision does not attempt that, and the documentation says so
   rather than implying the protection is universal.
-- Sibling issues #671, #672, #679 and #680 inherit this rule and the mechanism, rather than
-  each re-deciding.
+- Sibling issues that ship a genuine *vendor extension* inherit this rule and the mechanism.
+  #679 and #680 are the current candidates. #671 and #672 are **not** — see the scope boundary
+  below, which is what makes the rule usable rather than a blanket instruction.
+- bzr has no runtime version-gating mechanism to hang a version-floor decision on. The
+  `supports_*` flags in `src/types/capabilities.rs` derive from `ApiMode` via
+  `supports_rest_surface(mode)`, not from the server version, and `server_version`
+  (`src/config/model.rs`, `src/client/auth/mod.rs`) only feeds API-mode selection. The
+  repository's one precedent for a version-gated field, `require_version 520` in
+  `tests/functional/lib.sh`, gates the *test*, not the client. So the alternative path this
+  decision declines to take is genuinely unbuilt, which is part of why the version-floor case
+  below resolves differently.
+
+## Scope: vendor extensions, not core version floors
+
+This decision governs **vendor extensions** — parameters that only ever work on one vendor's
+fork. Sending one is a bet about whose server this is, and the bet is unresolvable from the
+version, so refusing when the fork does not announce itself is the only honest answer.
+
+It does **not** govern a **core feature behind a version floor**. That works on any server new
+enough, and the floor moves in the user's favour with every upgrade. Refusing a request the
+user's next upgrade makes valid is not a service to them, so the right response there is to
+proceed and warn, not to error.
+
+Two worked counter-examples, both core and both outside this ADR, and they fall outside for
+different reasons — which is the point of naming both:
+
+- **`minor_update` (#672) — core, gated by server version.** Verified against Bugzilla source
+  in the project's own containers: it is core `Bug.update` plumbing, present in 5.3.3+ at
+  `Bugzilla/WebService/Bug.pm` `sub update` and tracked through `has_unsent_changes` into
+  `send_changes`, and simply absent from 5.0.6 and 5.2. It never lives under `extensions/`, so
+  `GET /rest/extensions` would not report it either way. #672 ships it with a stderr warning
+  below the floor rather than an error, and that is the correct call for this shape.
+- **`cf_*` custom-field writes (#671) — core, varying by per-installation schema.** Custom
+  fields are stock upstream Bugzilla: real columns on the `bugs` table with a dedicated branch
+  in `Bugzilla::Bug::set_all`. They are neither a fork's parameter nor version-gated, and
+  decisively for this ADR's mechanism, `GET /rest/extensions` **cannot report them at all**,
+  because they are per-installation schema rather than an extension. There is nothing for the
+  probe to return, so #671 cannot inherit this mechanism even in principle. bzr has no field
+  catalogue today either — `src/client/resources/field.rs` exposes only
+  `get_field_values(field_name)`, and `src/types/field.rs` models a field's *values*, not the
+  field itself, with no `is_custom` and no `type` — so per-installation schema is currently
+  outside bzr's reach entirely. Whatever mechanism serves it will be a separate one, not an
+  extension of this.
+
+The test for whether this ADR applies is therefore not "is the parameter missing upstream?" but
+"is it missing because of *whose* server this is?" `savedsearch` and `sharer_id` sit cleanly on
+the vendor-extension side; the two above do not.
 
 ## Considered & rejected
 
