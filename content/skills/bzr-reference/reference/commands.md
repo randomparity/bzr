@@ -80,7 +80,7 @@ Operate on bugs.
     lexical order; canonical `bugs` are unique and numeric-ID ordered, and
     `blocks`/`depends_on` are sorted and deduplicated.
   - Table output has `Requests` (requested/result) and `Canonical bugs`
-    sections. JSON is the `3.0.2` envelope with `.data.requests` and
+    sections. JSON is the `3.0.3` envelope with `.data.requests` and
     `.data.bugs`; NDJSON is one bare compact result object. Inspect the closed
     payload with `bzr schema bug-adjacency`.
   - Only Bugzilla codes `100` (invalid alias), `101` (invalid numeric ID), and

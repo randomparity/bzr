@@ -77,6 +77,18 @@ Adding a result type is additive under ADR 0007, so `SCHEMA_VERSION` goes 3.0.2 
 
 ## Consequences
 
+- **A `SCHEMA_VERSION` bump is not a one-line change, and ADR 0007's "additive = patch"
+  does not make it cheap.** Eleven files outside `src/` pin the literal, and each is an
+  exact-match consumer: four functional phase scripts, `README.md`, `docs/bzr-cli.md`, two
+  `bzr-reference` files, and — the load-bearing one —
+  `content/skills/bzr-dependency-analysis/scripts/collect.py`, whose
+  `BZR_SCHEMA_VERSION` is compared with `!=` at `collect.py:421` and raises
+  `FatalCollection` on any difference. So the bundled dependency-analysis skill treats
+  *every* bump as breaking, patch included, which is at odds with what a patch bump is
+  supposed to mean for a consumer. All eleven are updated here because they are direct
+  consequences of this change; the exact-match policy in `collect.py` is not, and is
+  recorded as follow-up rather than fixed under this charter. The 16 functional failures
+  it produced on the first full run all had this single cause.
 - One subcommand emits two shapes, selected by whether the positional is present:
   `FieldValue[]` with a name, `FieldName[]` without. `bzr schema` already does exactly
   this, so the pattern is not new to the CLI, but an agent that hard-codes `field list`'s

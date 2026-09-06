@@ -29,7 +29,16 @@ Transcribed from the spec and `CLAUDE.md`:
 - Clippy pedantic, `-D warnings`. `unwrap_used` denied; `expect_used` and `allow_attributes`
   warned.
 - `SCHEMA_VERSION` is live (3.0.0 shipped in v0.9.0). Under ADR 0007 an additive result type is
-  a **patch** bump: 3.0.2 → 3.0.3.
+  a **patch** bump: 3.0.2 → 3.0.3. **The bump is not a one-line change.** Eleven files outside
+  `src/` pin the literal and match it exactly; `rg -n '3\.0\.2'` over the tree is the way to
+  find them, and all of them must move in the same commit or the functional suite goes red
+  (16 failures, one cause). They are: `tests/functional/phases/{08e-bugs-restricted-access,
+  18a-json-envelope,18c-skills-install,18d-dependency-analysis}.sh`, `README.md`,
+  `docs/bzr-cli.md`, `content/skills/bzr-reference/reference/{commands,json-recipes}.md`,
+  `content/skills/bzr-dependency-analysis/scripts/collect.py` (the `BZR_SCHEMA_VERSION`
+  constant, compared with `!=` at `:421`), and that skill's
+  `tests/fixtures/recording_runner.py` and `tests/test_collect.py`. Touching
+  `content/skills/` means `make skills-test` becomes a required guardrail for this change.
 - A new `--json` shape needs five coupled updates: the schema file, the **sorted** `SCHEMAS`
   registry, a conformance case, the docs schema list, and the input parser-key drift check
   (not applicable here — output shape). Only the first three are gated by `schema_tests`. The
