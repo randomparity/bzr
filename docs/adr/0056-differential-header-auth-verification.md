@@ -29,6 +29,18 @@ column. Stock Bugzilla has no API-key-header code path at all, so the probe's po
 always wrong there. Reads then returned 200 with a narrower body — `estimated_time` and
 private comments absent — which is indistinguishable from a legitimately empty result.
 
+The defect was independently reproduced from the other side while this record was being
+written, by the worker on issue #714 measuring private-content visibility on live
+containers — not by anyone looking for this bug. On Bugzilla 5.0.6 and 5.2,
+`/rest/valid_login` *correctly rejects* the header key with `{"result":false}`, and the
+any-2xx probe then overrides that correct rejection. Their measurement also shows the cost
+is larger than #713 itself reported, and lands on bzr's **default** path rather than an
+opt-in one: on Bugzilla 5.2, `config set-server` with no `--auth-method` selects `header`,
+after which `comment list` returns 3 of 5 comments and `attachment list` 1 of 2 — **exit 0,
+no diagnostic**. Bugzilla 5.0 escapes only because its `Hybrid` mapping happens to route
+those two reads XML-RPC-first. Silently returning less than the caller is entitled to, on a
+default configuration, with a success exit code, is the harm this record removes.
+
 The question this record answers is what evidence a client can collect that actually
 separates an honoured header from an ignored one, on a server whose version, permission
 model and extension set it does not know.
@@ -299,7 +311,20 @@ fixes on a container the project already runs.
   reintroduce exactly the `requirelogin` false negative the previous bullet was rejected for
   causing. The credentialed legs need the stricter test because their job is to stand in for
   the authenticated response; the anonymous leg's job is only to be different.
-- **Probe an endpoint anonymous callers cannot read at all.** verified: issue #713's table
+- **Key on `Set-Cookie: Bugzilla_login_request_cookie`.** verified: measured by the #714
+  worker across Bugzilla 5.0.6, 5.2 and 5.3 — the header was present on exactly the
+  anonymously-answered replies and absent on exactly the honoured ones, with no exceptions.
+  It is a genuine discriminator and would cost one request instead of two to four.
+  judgment: rejected, and the reason is the same one that makes this record necessary. A
+  header-presence check depends on an undocumented detail of Bugzilla's login machinery,
+  where the differential depends only on credentialed and anonymous responses differing —
+  which is the property actually under test. Keying on an implementation detail no contract
+  pins is the *class* of mistake the `rest/bug` any-2xx probe was: an assumption about how
+  this server behaves, held by a probe that cannot check it. That objection is sharpest
+  exactly where the confirming branch matters, since the fallback exists for forks, and a
+  fork is where cookie behaviour is most likely to diverge from the three upstream images
+  the measurement covers. The cost of the differential is two extra requests on a cached,
+  once-per-server path; that is a low price for not depending on a detail bzr cannot verify.
   records `rest/group?names=admin` answering 401 (code 410) anonymously and to the header,
   and 200 to query-parameter auth, on stock Bugzilla 5.2. judgment: it needs a group name
   bzr does not have, and whether a given endpoint requires a login is a per-deployment
