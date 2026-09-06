@@ -1083,6 +1083,11 @@ bzr bug update 12345 --field cf_release=9.7
 bzr bug update 12345 --field-json fields.json   # {"cf_targets": ["a", "b"]}
 ```
 
+`--field-json -` reads the document from stdin, which can only be read once:
+it cannot be combined with `--from-json -`, `--description -`, `--comment -`,
+or a piped bug description. Doing so fails with exit 7 naming the conflict —
+pass a file path instead.
+
 `--field KEY=VALUE` splits on the first `=`, so `--field k=a=b` sets `a=b`.
 The value is sent as a string; `--field k=` sends the empty string, which is how
 Bugzilla clears a field. `--field-json` takes a JSON object whose values keep

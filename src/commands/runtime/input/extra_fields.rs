@@ -68,6 +68,23 @@ fn parse_json_source(source: &str) -> Result<ExtraFields> {
             "--field-json",
         )?
     };
+    // stdin can only be consumed once. When another flag on the same command
+    // line already read it (`--from-json -`, `--description -`, `--comment -`,
+    // or a piped description), this read comes back empty; say so, rather than
+    // reporting an EOF parse error that names neither flag.
+    if raw.trim().is_empty() {
+        return Err(BzrError::input_field(
+            format!(
+                "--field-json: '{source}' produced an empty document. stdin can only be \
+                 read once, so `--field-json -` cannot be combined with another flag \
+                 that reads it (--from-json -, --description -, --description-file -, \
+                 --comment -, --comment-file -, or a piped bug description); pass a \
+                 file path instead"
+            ),
+            "--field-json",
+            Some(source.to_string()),
+        ));
+    }
     let value: Value = serde_json::from_str(&raw).map_err(|e| {
         BzrError::input_field(
             format!("--field-json: '{source}' is not valid JSON: {e}"),
