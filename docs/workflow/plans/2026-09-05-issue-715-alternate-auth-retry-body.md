@@ -14,11 +14,11 @@ drift.
 Tech stack: Rust 2021, `reqwest` (async), `serde`/`serde_json`, `tracing`,
 `wiremock` + `tokio` for tests, Bash for the functional tier.
 
-Expected implementation size: 350–450 changed lines (M) — counted off the file
+Expected implementation size: 380–490 changed lines (M) — counted off the file
 map: `response.rs` ~50 changed lines (a ~30-line helper pair, ~18 lines moved out
-of `check_response_status`), `transport.rs` ~105, ~200 added to
-`src/client/transport_tests.rs`, ~55 added to one existing functional phase
-script. No other file changes: `ErrorResponse` is reused unchanged, so
+of `check_response_status`), `transport.rs` ~105, ~230 added to
+`src/client/transport_tests.rs` (eight new cases plus ~35 lines of helpers, and
+two comment corrections), ~55 added to one existing functional phase script. No other file changes: `ErrorResponse` is reused unchanged, so
 `src/client/response_tests.rs` and the ADR-0015-governed HTTP-200 error path stay
 untouched.
 
@@ -126,13 +126,40 @@ Published for later tasks:
 - Contract: *a retried 401 carrying an authentication code leaves the original
   401 standing.*
   Mode: focused-test.
-  Observable contract: `Err(BzrError::Api { code: 410, .. })` when both attempts
-  answer 401 with code 410.
+  Observable contract: `Err(BzrError::Api { code: 410, .. })` when the first
+  attempt answers 401 code 410 and the retry answers 401 code **300**
+  (`invalid_login_or_password`). The two bodies must differ: if the retry
+  repeated code 410, `Original` and `Refused` would build the identical error
+  from the identical bytes and the test would pass whatever the band check does.
   Test: `auth_fallback_keeps_the_original_401_when_the_retry_also_fails_to_log_in`.
   Expected red: not red before the edit — it passes on `main` and exists to fail
   if the new branch over-relays. Confirm it bites by temporarily inverting the
-  band check to `!code_proves_auth_failure(code)` and observing it report `120`.
+  band check to `!code_proves_auth_failure(code)` and observing it report `300`.
   Green command: `make test-one T=auth_fallback_keeps_the_original`.
+  `auth_fallback_band_edges_separate_login_failure_from_refusal` proves the same
+  contract independently, at the band's edges.
+
+- Contract: *a relayed per-resource code is suppressible by `--permissive`
+  (spec R9).*
+  Mode: focused-test.
+  Observable contract: with the first attempt answering 401 code 410 and the
+  retry answering 401 code 102, `bug view --permissive` over that id completes
+  with the bug recorded as failed instead of returning `Err`.
+  Test: `permissive_bug_view_suppresses_a_relayed_per_resource_refusal`.
+  Expected red: before Task 1 step 8 the error is `Api { code: 410 }`, which
+  `BzrError::is_permissive_bug_view_error` (`src/error.rs:247`) rejects, so the
+  call returns `Err` and the assertion on a completed batch fails.
+  Green command: `make test-one T=permissive_bug_view_suppresses`.
+
+- Contract: *an anonymous client never retries.*
+  Mode: focused-test.
+  Observable contract: with an anonymous client and a single 401 mock carrying
+  `.expect(1)`, the mock server's drop-time verification passes — exactly one
+  request reached it.
+  Test: `anonymous_client_does_not_retry_401_with_alternate_auth`, which
+  **already exists** at `src/client/transport_tests.rs:282`. Read it and confirm
+  it still holds after Task 1; add nothing.
+  Green command: `make test-one T=anonymous_client_does_not_retry`.
 
 - Contract: *`error_from_status_body` preserves `check_response_status`'s
   existing behaviour for a body with no `code`.*
@@ -388,7 +415,8 @@ Every entry below is `Mode: focused-test`, in
 | Test | Contract | Expected red |
 |---|---|---|
 | `auth_fallback_relays_a_policy_refusal_from_the_retried_body` | retried 401 code 120 wins over original 401 code 410 | before Task 1 step 8: reports `410` |
-| `auth_fallback_keeps_the_original_401_when_the_retry_also_fails_to_log_in` | retried 401 code 410 does not win | under an inverted band check: reports `120` |
+| `auth_fallback_keeps_the_original_401_when_the_retry_also_fails_to_log_in` | retried 401 code **300** does not win over original 401 code 410 | under an inverted band check: reports `300` |
+| `permissive_bug_view_suppresses_a_relayed_per_resource_refusal` | retried 401 code 102 is suppressed by `--permissive` instead of aborting the batch (spec R9) | before Task 1 step 8: the batch returns `Err` |
 | `auth_fallback_keeps_the_original_401_when_the_retry_carries_no_envelope` | retried 401 with an HTML body does not win | if `bugzilla_error_code` returned a code for unparseable input |
 | `auth_fallback_keeps_the_original_401_when_the_retried_envelope_has_no_code` | retried 401 `{"error":true,"message":…}` does not win | if the `-1` sentinel were not read back as "no signal" |
 | `auth_fallback_relays_a_403_policy_refusal` | retried **403** code 120 wins | if 403 were not classified alongside 401 |
@@ -478,8 +506,11 @@ Every entry below is `Mode: focused-test`, in
    }
    ```
 
-4. Append the remaining six tests from the Verification table in that same
-   shape. Their retried templates are, in order: `login_required()`;
+4. Append the remaining tests from the Verification table in that same shape.
+   Their retried templates are, in order:
+   `ResponseTemplate::new(401).set_body_json(bugzilla_error(300, "The username
+   or password you entered is not valid"))` — asserting `code == 410` and that
+   the message is the original's, which is what makes the pair discriminate;
    `ResponseTemplate::new(401).set_body_string("<html>Proxy Authentication
    Required</html>")`; `ResponseTemplate::new(401).set_body_json(json!({"error":
    true, "message": "refused"}))`; and
@@ -490,6 +521,19 @@ Every entry below is `Mode: focused-test`, in
    `code == expected` with `"retried code {retried_code}"` as the message. The
    sentinel test mounts a single uncapped 400 mock instead of the pair, because
    no fallback is involved.
+
+4a. Append the `--permissive` suppression test. It mounts
+   `mount_auth_fallback(&mock, login_required(),
+   ResponseTemplate::new(401).set_body_json(bugzilla_error(102, "You are not
+   authorized to access bug #1")))`, then drives the same code path
+   `bzr bug view --permissive` uses: call
+   `crate::commands::bug::view::…`'s batch helper if it is reachable from this
+   module, and otherwise assert the equivalent directly — that
+   `client.get_bug("1", None, None).await.unwrap_err()
+   .is_permissive_bug_view_error()` is `true`, and add a one-line comment naming
+   `src/commands/bug/view.rs:199` as the caller that acts on it. Resolve which
+   form is reachable by reading `src/commands/bug/view.rs` before writing the
+   test; do not add a `pub(crate)` export to make the first form reachable.
 
 5. Run `make test-one T=auth_fallback` and `make test-one T=error_body_without`
    bare. Expect both green.
@@ -506,7 +550,7 @@ Every entry below is `Mode: focused-test`, in
 
 ### Acceptance criteria
 
-- Seven new `#[tokio::test]` cases in `src/client/transport_tests.rs`; no inline
+- Eight new `#[tokio::test]` cases in `src/client/transport_tests.rs`; no inline
   `mod tests` anywhere.
 - The two misleading "LIFO" comments at `src/client/transport_tests.rs:135`
   and `:174` corrected.
@@ -554,10 +598,18 @@ Published for later tasks: nothing.
   unauthenticated request.*
   Mode: focused-test — `08e` test id
   `credentialless-policy-refused-write-reports-the-servers-own-answer`.
-  Expected red: if the `self.auth.is_none()` early return at
-  `src/client/transport.rs:145` were removed, letting an anonymous request be
-  retried and reclassified. It is **not** reddened by mutating
-  `code_proves_auth_failure`, because the band check never runs on this path.
+  Expected red: **no mutation of the new code reddens this test**, and the plan
+  says so rather than claiming a bite it does not have. Removing the
+  `self.auth.is_none()` guard would not change the observable outcome either:
+  `apply_alternate_auth` (`src/client/transport.rs:169-187`) strips both
+  credentials and then falls through to `_ => Ok(builder)` at `:185` when
+  `self.auth` is `None`, so the "retry" is the byte-identical anonymous request
+  and the server answers it identically. The guard's own bite is held by the
+  existing `anonymous_client_does_not_retry_401_with_alternate_auth`
+  (`src/client/transport_tests.rs:282`), whose `.expect(1)` fails if a second
+  request is sent. What this functional test pins is the user-visible contract:
+  a credentialless write reports the server's own answer with
+  `error.type == "api"` and an observed `api_code`.
   Green command: `make functional-test`.
 
 ### Steps
@@ -582,7 +634,10 @@ Published for later tasks: nothing.
    --description "not enabled on any product"` and `assert_success`. Comment
    that the absence of a `group_control_map` row is deliberate: the group exists
    and `FuncTestProd` does not permit restricting bugs to it, which is the exact
-   shape Bugzilla refuses with `group_restriction_not_allowed`.
+   shape Bugzilla refuses with `group_restriction_not_allowed`
+   (`Bugzilla/Bug.pm` throws it when `group_is_settable` is false). Add
+   `UNAVAILABLE_GROUP` to the phase's `unset` at 08e:375-377, so the new fixture
+   variable is cleared with the other eight rather than leaking past the phase.
 
 4. Add the authenticated direction:
 
@@ -633,7 +688,7 @@ Published for later tasks: nothing.
 ### Acceptance criteria
 
 - Two new test ids in `08e`, both green against a real container, both placed
-  before the phase's `unset` block.
+  before the phase's `unset` block, and `UNAVAILABLE_GROUP` added to that block.
 - Both directions assert an observed exit code and `api_code`, not a guessed one.
 - The scope limit — a stock server cannot reproduce the masking, and neither test
   is reddened by mutating the band — is stated in the phase comment, not implied
