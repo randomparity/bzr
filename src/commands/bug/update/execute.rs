@@ -57,7 +57,7 @@ pub(crate) async fn apply_comment_tags(
 /// tag-only sub-step failed, so a caller does not retry with the same
 /// `--comment` text — `Bug.update` posts a new comment on every call, so a
 /// retry would duplicate it.
-fn warn_comment_tags_failed(w: &mut Writers<'_>, id: u64, e: &BzrError) {
+pub(crate) fn warn_comment_tags_failed(w: &mut Writers<'_>, id: u64, e: &BzrError) {
     let _ = writeln!(
         w.err,
         "warning: updated bug #{id} and posted its comment, but failed to tag it: {e}. \

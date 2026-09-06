@@ -183,13 +183,7 @@ async fn update_many_from_json(
             {
                 Ok(()) => succeeded.push(request.id),
                 Err(e) => {
-                    let _ = writeln!(
-                        w.err,
-                        "warning: updated bug #{} and posted its comment, but failed to tag it: {e}. \
-                         Do not retry with the same comment text (Bug.update would post a \
-                         duplicate comment); use `bzr comment tag` on the existing comment instead.",
-                        request.id
-                    );
+                    super::update::warn_comment_tags_failed(w, request.id, &e);
                     failed.push(BatchFailure::comment_tags(request.id, e.to_string()));
                 }
             },
