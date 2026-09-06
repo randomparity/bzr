@@ -25,11 +25,16 @@ fn extract_flat_comment_envelope(value: &serde_json::Value) -> Result<Vec<Commen
 
 impl BugzillaClient {
     /// In Hybrid mode, comments are fetched via XML-RPC `Bug.comments`
-    /// rather than REST. Bugzilla 5.0.x REST silently filters private
-    /// comments under API-key auth (issue #125), and the truncation is
-    /// not reliably detectable from the REST response — XML-RPC is the
-    /// only path that returns the full thread. REST is the fallback
-    /// when the server doesn't expose `xmlrpc.cgi`.
+    /// rather than REST. Private comments come back over either
+    /// protocol whenever the server honoured the credential; what
+    /// varies is whether it did. Bugzilla 5.0 and 5.2 ignore the
+    /// `X-BUGZILLA-API-KEY` header on REST and answer anonymously with
+    /// `200` and the private comments removed — indistinguishable from
+    /// a thread that has none (issues #125, #714). XML-RPC carries the
+    /// key in the request body, so it is unaffected by which auth
+    /// method the REST endpoint accepts. REST is the fallback when the
+    /// server doesn't expose `xmlrpc.cgi`. ADR-0059 records the
+    /// per-version measurement.
     pub async fn get_comments_since(
         &self,
         bug_id: u64,
