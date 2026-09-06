@@ -100,8 +100,25 @@ reference oracle the REST arm is asserted against.
   adjacency to three relations; `get_bug_links_root_node_reads_direct_path_with_isolated_fields`
   pins all six.
 
-- **`bug adjacency` is unaffected.** It does not share this code path;
-  `get_bug_links_nodes` has exactly two callers, both in `commands/bug/links.rs`.
+- **`bug adjacency` is unaffected.** It does not share this code path. After
+  this change `get_bug_links_nodes` has exactly one caller — the related-id
+  batch in `commands/bug/links.rs` — and `get_bug_links_root_node` has exactly
+  one, the root read in the same file. Neither has a caller anywhere else.
+
+- **The 100500 search fallback travels with the root read.** The direct
+  endpoint is the one some extensions hook and crash on, which is why
+  `get_bug_rest` retries through search at all. `get_bug_links_root_node_rest`
+  carries the same retry, and the same ADR 0015 rule that an empty retry
+  re-surfaces the original error rather than becoming `NotFound`. Without it
+  this change would have taken `bug links` from exit 0 to exit 4 on exactly the
+  deployments ADR 0015 exists to keep working — a third exit-code transition,
+  and an unintended one. It does **not** carry Hybrid's residual-100500
+  XML-RPC step, which the links path never had.
+
+- **CHANGELOG entry required**, as for ADR 0015. Release notes are generated
+  from commit subjects and bodies are discarded, so the transition has to be
+  named in a subject line to reach a reader of the notes; a subject describing
+  only the mechanism would leave the contract change invisible.
 
 ## Alternatives considered
 
