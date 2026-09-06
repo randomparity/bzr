@@ -392,6 +392,29 @@ if [[ -n "$BUG1" ]]; then
     if assert_success && assert_json '.changes.minor_update' "true"; then test_pass; fi
 else test_skip "no BUG1"; fi
 
+# minor_update is core upstream Bugzilla functionality with a version floor
+# (verified against server source: present in 5.3.3+, absent in 5.0.6/5.2),
+# not a vendor extension -- bzr has no runtime detection for it and instead
+# warns below the floor rather than failing. Both sides of the floor get a
+# real assertion: below, the warning fires; at/above, it does not.
+test_begin "bug-update-minor-update-warns-below-floor" "bug update --minor-update warns below the version floor"
+if [[ -n "$BUG1" ]]; then
+    if [[ $(bz_version_num) -lt 530 ]]; then
+        run_bzr bug update "$BUG1" --minor-update
+        if assert_success && assert_stderr_contains "minor_update support"; then test_pass; fi
+    else
+        test_skip "only relevant below the minor_update floor (Bugzilla 5.3)"
+    fi
+else test_skip "no BUG1"; fi
+
+test_begin "bug-update-minor-update-silent-at-floor" "bug update --minor-update has no warning at/above the version floor"
+if [[ -n "$BUG1" ]]; then
+    if require_version 530 "minor_update floor is Bugzilla 5.3"; then
+        run_bzr bug update "$BUG1" --minor-update
+        if assert_success && assert_stderr_not_contains "minor_update support"; then test_pass; fi
+    fi
+else test_skip "no BUG1"; fi
+
 test_begin "bug-update-comment-tag-without-comment-rejected" "bug update --comment-tag without --comment (exit 7)"
 if [[ -n "$BUG1" ]]; then
     run_bzr bug update "$BUG1" --comment-tag "orphan-tag"

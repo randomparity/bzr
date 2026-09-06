@@ -190,7 +190,11 @@ pub(crate) struct UpdateArgs {
     pub comment_tag: Vec<String>,
     /// Suppress bugmail notifications for this update.
     ///
-    /// Forwards Bugzilla's `minor_update` field on `Bug.update`.
+    /// Forwards Bugzilla's `minor_update` field on `Bug.update`. Core
+    /// upstream Bugzilla functionality with a version floor (verified
+    /// present on 5.3.3, absent on 5.0.6 and 5.2): on a server below the
+    /// floor, bzr warns on stderr and sends the notification anyway rather
+    /// than failing the update.
     #[arg(long)]
     pub minor_update: bool,
     /// Set, request, or clear a flag using Bugzilla flag syntax.

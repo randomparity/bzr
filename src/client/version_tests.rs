@@ -188,6 +188,28 @@ fn version_to_mode_5_bare_differs_from_5_1() {
     assert_ne!(version_to_api_mode("5"), version_to_api_mode("5.1"));
 }
 
+#[test]
+fn parse_major_minor_reads_three_part_version() {
+    assert_eq!(parse_major_minor("5.3.3+"), (Some(5), Some(3)));
+    assert_eq!(parse_major_minor("5.0.6"), (Some(5), Some(0)));
+    assert_eq!(parse_major_minor("5.2"), (Some(5), Some(2)));
+}
+
+#[test]
+fn parse_major_minor_reads_two_part_plus_suffixed_version() {
+    assert_eq!(parse_major_minor("5.3+"), (Some(5), Some(3)));
+}
+
+#[test]
+fn parse_major_minor_minor_absent_when_bare_major() {
+    assert_eq!(parse_major_minor("5"), (Some(5), None));
+}
+
+#[test]
+fn parse_major_minor_both_absent_when_unparseable() {
+    assert_eq!(parse_major_minor("unknown"), (None, None));
+}
+
 #[tokio::test]
 async fn detect_version_non_json_returns_hybrid() {
     let server = MockServer::start().await;

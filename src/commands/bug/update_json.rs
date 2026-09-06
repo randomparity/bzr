@@ -153,6 +153,11 @@ async fn update_many_from_json(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let format = ctx.format();
+    super::update::warn_if_minor_update_unsupported(
+        ctx,
+        requests.iter().any(|request| request.params.minor_update),
+        w,
+    );
     if ctx.dry_run() {
         write_json_array_dry_run(requests, format, w);
         return Ok(());

@@ -17,6 +17,58 @@ use crate::types::output::OutputFormat;
 
 use super::output::{comment_suffix, write_batch_result, write_update_dry_run};
 
+/// The lowest Bugzilla `(major, minor)` verified to honor `Bug.update`'s
+/// `minor_update` parameter. Verified against the actual server source
+/// (issue #672): present and wired into `send_changes()` on Bugzilla
+/// 5.3.3+; absent (no occurrence anywhere in core or `extensions/`) on
+/// 5.0.6 and 5.2. Not a vendor extension -- a core feature with a version
+/// floor -- so bzr sends the field unconditionally and only warns below the
+/// floor, rather than detecting-and-erroring the way a vendor extension
+/// would (ADR-0052 does not apply to a version floor: a server upgrade can
+/// cross it, which is never true of a fork-only extension).
+const MINOR_UPDATE_FLOOR: (u32, u32) = (5, 3);
+
+/// Warn -- but do not fail -- when `--minor-update` was requested and the
+/// server's cached version is known and below [`MINOR_UPDATE_FLOOR`]. A
+/// silent no-op here means the bugmail the user asked to suppress is sent
+/// anyway, so this is deliberately more visible than an ordinary
+/// best-effort gap. Says nothing when the version cannot be determined
+/// (unnamed/inline server, no config entry, cache miss, or a store read
+/// failure) rather than guessing; it never triggers a network probe just to
+/// warn.
+pub(crate) fn warn_if_minor_update_unsupported(
+    ctx: &CommandContext,
+    requested: bool,
+    w: &mut Writers<'_>,
+) {
+    // Inline (`--server-url`) connections have no persisted version cache of
+    // their own; resolving a named/default server's cached version here
+    // would check the wrong server entirely.
+    if !requested || ctx.inline_server().is_some() {
+        return;
+    }
+    let Ok(config) = crate::config::Config::load_at(ctx.config_path_override()) else {
+        return;
+    };
+    let Ok((name, server)) = config.resolve_server(ctx.server()) else {
+        return;
+    };
+    let Some(version) = server.server_version.as_deref() else {
+        return;
+    };
+    let (major, minor) = crate::client::parse_major_minor(version);
+    let below_floor = matches!((major, minor), (Some(m), Some(n)) if (m, n) < MINOR_UPDATE_FLOOR);
+    if below_floor {
+        let (floor_major, floor_minor) = MINOR_UPDATE_FLOOR;
+        let _ = writeln!(
+            w.err,
+            "warning: --minor-update requested but server '{name}' reports Bugzilla {version}, \
+             which has no verified minor_update support (floor: Bugzilla {floor_major}.{floor_minor}); \
+             the bugmail notification will be sent anyway."
+        );
+    }
+}
+
 /// Select the comment the update just posted. Bugzilla does not reliably
 /// round-trip a comment's body byte-for-byte (observed: trailing whitespace
 /// stripped), so matching by text is unreliable — the newly-posted comment
@@ -158,6 +210,7 @@ pub(crate) async fn apply_checked(
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    warn_if_minor_update_unsupported(ctx, request.params.minor_update, w);
     if ctx.dry_run() {
         write_update_dry_run(&request.ids, &request.params, ctx.format(), w);
         return Ok(());

@@ -430,7 +430,7 @@ run_lifecycle_phase_fixture() (
         source "$phase" >"$fixture_output"
         _render_test_result >>"$fixture_output"
         unset LIFECYCLE_REPEATED_REST_EVENTS
-        if [[ $FAIL_COUNT -ne 0 || $PASS_COUNT -ne 5 || $GAP_COUNT -ne 5 ]]; then
+        if [[ $FAIL_COUNT -ne 0 || $PASS_COUNT -ne 6 || $GAP_COUNT -ne 4 ]]; then
             printf 'repeated REST observations did not preserve lifecycle outcomes\n' >&2
             cat "$fixture_output" >&2
             return 1
@@ -477,12 +477,16 @@ run_lifecycle_phase_fixture() (
         source "$phase" >"$fixture_output"
         _render_test_result >>"$fixture_output"
         unset LIFECYCLE_NOOP_STALE_GAPS
-        if [[ $FAIL_COUNT -ne 0 || $GAP_COUNT -ne 5 ]] ||
-            ! grep -Fq '[compare/01-bug-lifecycle/update-options] comment tags and minor update ... GAP (#672)' \
+        # update-options (#672) has no gap fallback left (both flags are
+        # real): a no-op --comment-tag now surfaces as a genuine FAIL, not a
+        # GAP, so it drops out of the GAP count and adds to the FAIL count.
+        if [[ $FAIL_COUNT -ne 1 || $GAP_COUNT -ne 4 ]] ||
+            ! grep -Fq \
+                '[compare/01-bug-lifecycle/update-options] comment tags and minor update ... FAIL' \
                 "$fixture_output" ||
             ! grep -Fq '[compare/01-bug-lifecycle/bug-tags] personal bug tags ... GAP (#680)' \
                 "$fixture_output"; then
-            printf 'no-op stale mutation controls did not remain gaps\n' >&2
+            printf 'no-op stale mutation controls did not behave as expected\n' >&2
             cat "$fixture_output" >&2
             return 1
         fi
@@ -597,14 +601,26 @@ run_lifecycle_phase_fixture() (
             fixture_finish_bzr 0
             return 0
         fi
-        if [[ ${LIFECYCLE_STALE_GAPS:-0} -ne 1 &&
+        # --comment-tag / --minor-update are real flags (issue #672 shipped),
+        # so they always dispatch successfully -- neither the "old bzr"
+        # diagnostic branch below nor a stale-gap toggle applies to them.
+        # This only populates $BZR_STDOUT; the unconditional injection-check
+        # block below still applies (a control simulating a malformed
+        # dry-run response must still be able to corrupt this output).
+        if [[ $args == *" --comment-tag "* ]]; then
+            if [[ $args == *" --dry-run "* ]]; then
+                printf '{"changes":{"minor_update":true}}\n' >"$BZR_STDOUT"
+            else
+                printf '{}\n' >"$BZR_STDOUT"
+            fi
+        fi
+        if [[ ! -s $BZR_STDOUT && ${LIFECYCLE_STALE_GAPS:-0} -ne 1 &&
             ( $args == *" --saved-search "* || $args == *" --field "* ||
-                $args == *" --comment-tag "* || $args == *" --status-whiteboard-type "* ||
+                $args == *" --status-whiteboard-type "* ||
                 $args == *" bug tag "* || $args == *" --tag "* ) ]]; then
             case "$args" in
             *" --saved-search "*) diagnostic="error: unexpected argument '--saved-search' found" ;;
             *" --field "*) diagnostic="error: unexpected argument '--field' found" ;;
-            *" --comment-tag "*) diagnostic="error: unexpected argument '--comment-tag' found" ;;
             *" --status-whiteboard-type "*)
                 diagnostic="error: unexpected argument '--status-whiteboard-type' found"
                 ;;
@@ -620,7 +636,7 @@ run_lifecycle_phase_fixture() (
             [[ ${LIFECYCLE_EXPECTED_DIAGNOSTIC_EXIT_ONE:-0} -eq 0 ]] || BZR_EXIT=1
             return 0
         fi
-        if [[ ${LIFECYCLE_STALE_GAPS:-0} -eq 1 ]]; then
+        if [[ ! -s $BZR_STDOUT && ${LIFECYCLE_STALE_GAPS:-0} -eq 1 ]]; then
             case "$args" in
             *" --saved-search "*) printf '[{"id":41},{"id":42}]\n' >"$BZR_STDOUT" ;;
             *" --field whiteboard="*)
@@ -633,34 +649,27 @@ run_lifecycle_phase_fixture() (
                 [[ ${LIFECYCLE_GENERIC_BZR_UPDATED:-0} -eq 0 ]] || value="$LIFECYCLE_FIELD_UPDATED"
                 jq -cn --arg value "$value" '{id:46,whiteboard:$value}' >"$BZR_STDOUT"
                 ;;
-            *" --comment-tag "*)
-                if [[ $args == *" --dry-run "* ]]; then
-                    if [[ ${LIFECYCLE_MINOR_UPDATE_OMITTED:-0} -eq 1 ]]; then
-                        printf '{"changes":{}}\n' >"$BZR_STDOUT"
-                    else printf '{"changes":{"minor_update":true}}\n' >"$BZR_STDOUT"; fi
-                else printf '{}\n' >"$BZR_STDOUT"; fi
-                ;;
             *" bug list "*" --status-whiteboard-type equals "*) printf '[{"id":44}]\n' >"$BZR_STDOUT" ;;
             *" bug tag "*) printf '{}\n' >"$BZR_STDOUT" ;;
             *" bug list "*" --tag "*) printf '[{"id":42}]\n' >"$BZR_STDOUT" ;;
             *) : ;;
             esac
-            if [[ -s $BZR_STDOUT ]]; then
-                if [[ ${LIFECYCLE_MALFORMED_BZR_RESULT:-0} -eq 1 &&
-                    ${LIFECYCLE_BZR_CALL_NAME:-} == saved-search ]]; then
-                    printf '{invalid\n' >"$BZR_STDOUT"
-                fi
-                if [[ ${LIFECYCLE_INVALID_NO_DISPATCH_RESULT:-0} -eq 1 &&
-                    ${LIFECYCLE_BZR_CALL_NAME:-} == update-options-bzr-request ]]; then
-                    printf '{invalid\n' >"$BZR_STDOUT"
-                fi
-                if [[ ${LIFECYCLE_INVALID_NO_DISPATCH_SHAPE:-0} -eq 1 &&
-                    ${LIFECYCLE_BZR_CALL_NAME:-} == update-options-bzr-request ]]; then
-                    printf 'true\n' >"$BZR_STDOUT"
-                fi
-                fixture_finish_bzr 0
-                return 0
+        fi
+        if [[ -s $BZR_STDOUT ]]; then
+            if [[ ${LIFECYCLE_MALFORMED_BZR_RESULT:-0} -eq 1 &&
+                ${LIFECYCLE_BZR_CALL_NAME:-} == saved-search ]]; then
+                printf '{invalid\n' >"$BZR_STDOUT"
             fi
+            if [[ ${LIFECYCLE_INVALID_NO_DISPATCH_RESULT:-0} -eq 1 &&
+                ${LIFECYCLE_BZR_CALL_NAME:-} == update-options-bzr-request ]]; then
+                printf '{invalid\n' >"$BZR_STDOUT"
+            fi
+            if [[ ${LIFECYCLE_INVALID_NO_DISPATCH_SHAPE:-0} -eq 1 &&
+                ${LIFECYCLE_BZR_CALL_NAME:-} == update-options-bzr-request ]]; then
+                printf 'true\n' >"$BZR_STDOUT"
+            fi
+            fixture_finish_bzr 0
+            return 0
         fi
         case "$args" in
         *" bug create "*) printf '{"id":41}\n' >"$BZR_STDOUT" ;;
@@ -677,7 +686,13 @@ run_lifecycle_phase_fixture() (
         *" bug update "*) LIFECYCLE_UPDATED=1; printf '{}\n' >"$BZR_STDOUT" ;;
         *" bug view "*) fixture_bug "$id" "$summary" >"$BZR_STDOUT" ;;
         *" comment list "*)
-            if [[ ${LIFECYCLE_STALE_GAPS:-0} -eq 1 ]]; then
+            # --comment-tag is a real flag (#672): the tagged round-trip is
+            # unconditional, keyed on the named call rather than on a
+            # stale-gap toggle. LIFECYCLE_NOOP_STALE_GAPS models a
+            # regression where the update accepted the flag but had no real
+            # effect, so it must fall through to the untagged default.
+            if [[ ${LIFECYCLE_BZR_CALL_NAME:-} == update-options-bzr-comment &&
+                ${LIFECYCLE_NOOP_STALE_GAPS:-0} -ne 1 ]]; then
                 jq -cn --arg text "${LIFECYCLE_BZR_COMMENT:-$LIFECYCLE_COMMENT}" \
                     --arg tag "${LIFECYCLE_BZR_COMMENT_TAG:-$LIFECYCLE_COMMENT_TAG}" \
                     '[{text:$text,tags:[$tag]}]' >"$BZR_STDOUT"
@@ -787,9 +802,11 @@ run_lifecycle_phase_fixture() (
     source "$phase" >"$fixture_output"
     _render_test_result >>"$fixture_output"
     if [[ $FAIL_COUNT -ne 0 ]]; then cat "$fixture_output" >&2; fi
-    assert_equals 5 "$PASS_COUNT" "lifecycle pass count"
+    # update-options (#672) now passes cleanly in the default scenario too:
+    # both flags are real, so it moves from the gap count to the pass count.
+    assert_equals 6 "$PASS_COUNT" "lifecycle pass count"
     assert_equals 0 "$FAIL_COUNT" "lifecycle fail count"
-    assert_equals 5 "$GAP_COUNT" "lifecycle gap count"
+    assert_equals 4 "$GAP_COUNT" "lifecycle gap count"
     for slug in create query update view history saved-search arbitrary-fields update-options \
         query-match-types bug-tags; do
         grep -Fq "compare/01-bug-lifecycle/$slug" "$fixture_output"
@@ -865,10 +882,6 @@ run_lifecycle_phase_fixture() (
         'generic arbitrary fields'; then
         control_failures=$((control_failures + 1))
     fi
-    if ! run_partial_stale_gap_control LIFECYCLE_MINOR_UPDATE_OMITTED 672 update-options \
-        'comment tags and minor update'; then
-        control_failures=$((control_failures + 1))
-    fi
     if ! run_noop_stale_gap_control; then
         control_failures=$((control_failures + 1))
     fi
@@ -929,13 +942,16 @@ run_lifecycle_phase_fixture() (
         printf 'stale gap controls unexpectedly passed\n' >&2
         return 1
     fi
-    for issue in 670 671 672 679 680; do
+    # #672 is not in this list: both its flags are real now, with no gap
+    # fallback left, so its `lifecycle_expect_gap` sentinel is gone from the
+    # phase script and there is nothing left to detect as stale.
+    for issue in 670 671 679 680; do
         if ! grep -Fq "#${issue} appears resolved" "$fixture_output"; then
             printf 'stale gap control did not name #%s\n' "$issue" >&2
             return 1
         fi
     done
-    assert_equals 5 "$FAIL_COUNT" "stale gap fail count"
+    assert_equals 4 "$FAIL_COUNT" "stale gap fail count"
     if ! jq -e '.minor_update == true' \
         "$COMPARE_EXCHANGE_DIR/update-options-bzr.request.json" >/dev/null; then
         printf 'stale update-options control omitted minor_update request payload\n' >&2
@@ -959,7 +975,7 @@ run_parity_report_fixture() {
         '| Bug history | `bzr bug history` | parity | `compare/01-bug-lifecycle/history` |'
         '| Server saved search | `bzr bug search --saved-search` | expected gap (#670) | `compare/01-bug-lifecycle/saved-search` |'
         '| Generic arbitrary fields | `bzr bug create/update --field` | expected gap (#671) | `compare/01-bug-lifecycle/arbitrary-fields` |'
-        '| Comment tags and minor update | `bzr bug update --comment-tag --minor-update` | expected gap (#672) | `compare/01-bug-lifecycle/update-options` |'
+        '| Comment tags and minor update | `bzr bug update --comment-tag --minor-update` | comment tags: parity; minor update — bz50/bz52: warns (no core support, mail sent anyway); bz53: parity | `compare/01-bug-lifecycle/update-options` |'
         '| Whiteboard match types | `bzr bug list --status-whiteboard-type` | expected gap (#679) | `compare/01-bug-lifecycle/query-match-types` |'
         '| Personal bug tags | `bzr bug tag`, `bzr bug list --tag` | expected gap (#680) | `compare/01-bug-lifecycle/bug-tags` |'
         '| Public comments | `bzr comment add`, `bzr comment list` | parity | `compare/02-comments/public-comments` |'

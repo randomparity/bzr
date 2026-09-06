@@ -112,14 +112,14 @@ async fn detect_version_and_mode_inner(
     Ok((Some(parsed.version), mode))
 }
 
-/// Parse a Bugzilla version string and determine the API mode.
+/// Extract `(major, minor)` from a Bugzilla version string.
 ///
-/// Version strings can be like "5.0.4", "5.1.2", "5.0.4.rh103", etc.
-/// We extract major.minor and apply:
-///   < 5.0 -> xmlrpc
-///   >= 5.0, < 5.1 -> hybrid
-///   >= 5.1 -> rest
-fn version_to_api_mode(version: &str) -> ApiMode {
+/// Version strings can be like "5.0.4", "5.1.2", "5.0.4.rh103", "5.3.3+",
+/// etc. `minor` is `None` when the string has no second component, or that
+/// component isn't a bare or `+`-suffixed integer (a two-part string like
+/// "5.3+" reports minor via the `+`-suffix fallback; a three-part string's
+/// second component is a plain integer).
+pub(crate) fn parse_major_minor(version: &str) -> (Option<u32>, Option<u32>) {
     let parts: Vec<&str> = version.split('.').collect();
     let major = parts.first().and_then(|s| s.parse::<u32>().ok());
     let minor = parts
@@ -131,6 +131,17 @@ fn version_to_api_mode(version: &str) -> ApiMode {
                 .flatten()
                 .and_then(|s| s.parse::<u32>().ok())
         });
+    (major, minor)
+}
+
+/// Parse a Bugzilla version string and determine the API mode.
+///
+/// We extract major.minor and apply:
+///   < 5.0 -> xmlrpc
+///   >= 5.0, < 5.1 -> hybrid
+///   >= 5.1 -> rest
+fn version_to_api_mode(version: &str) -> ApiMode {
+    let (major, minor) = parse_major_minor(version);
 
     match (major, minor) {
         (Some(major), _) if major < 5 => ApiMode::XmlRpc,
