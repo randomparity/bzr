@@ -41,6 +41,15 @@ reserved for **the direct path returning an empty result with no error
 payload** — the one case where "no such bug" is what the server actually said.
 That rule was never carried to the links root read.
 
+This was a defect rather than a design choice, and the repository's own
+reference documentation is the evidence. `docs/bzr-cli.md` already described the
+behaviour this decision implements: "A root id that cannot be fetched
+(nonexistent or no read permission) fails like `bzr bug view` — exit 2 when the
+server reports no such bug, exit 4 when it reports an access error; inaccessible
+related bugs are skipped silently." No code ever did that. The implementation
+was violating its own published contract, so the change restores the documented
+behaviour rather than choosing a new one.
+
 ## Decision
 
 **`bug links` reads its root id on Bugzilla's direct endpoint. Related ids keep
@@ -113,6 +122,14 @@ reference oracle the REST arm is asserted against.
   claim about the bug's existence was the reported defect. Closing it means
   giving the related-id read a fault path of its own, which is a larger change
   than this one and is recorded as follow-up work rather than smuggled in here.
+
+  **The trade is temporary, not permanent.** It only bites a caller whose
+  credential the server silently ignores, and #713 fixes the condition that
+  makes such callers anonymous in the first place. Once it lands, header auth
+  stops being silently ignored on those images and the truncation case largely
+  evaporates. What remains afterwards is the narrower, genuinely permanent case:
+  a deployment where a bug is visible to some callers and not others, where the
+  related-id read still cannot tell an invisible neighbour from an absent one.
 
 - **One extra request per invocation is not added.** The root was already a
   request of its own — a one-id search — and is now a one-id direct read.

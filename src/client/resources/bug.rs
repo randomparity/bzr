@@ -507,6 +507,16 @@ impl BugzillaClient {
     /// reported a permission denial as `NotFound` (issue #719). ADR 0015
     /// reserves `NotFound` for the direct path returning an empty result with
     /// no error payload, which is the one case still mapped to it here.
+    ///
+    /// This reads the same direct endpoint as [`Self::get_bug`] but does not
+    /// call it, and the difference is load-bearing rather than incidental:
+    /// `get_bug` yields a [`Bug`], and the only way to a `BugLinksNode` from
+    /// there is `BugLinksNode::from_bug`, which can express just the three core
+    /// relations and leaves `duplicates`, `regressed_by`, and `regressions`
+    /// empty. Those are the BMO relations, and this node seeds the traversal —
+    /// so routing through `get_bug` would silently truncate the root's adjacency
+    /// on Red Hat and Mozilla deployments. Deserializing `BugLinksResponse`
+    /// keeps all six. Do not "simplify" this into a `get_bug` call (ADR 0060).
     pub(crate) async fn get_bug_links_root_node(&self, id: u64) -> Result<BugLinksNode> {
         match self.api_mode {
             ApiMode::XmlRpc => self
