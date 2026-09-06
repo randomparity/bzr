@@ -1,4 +1,4 @@
-#![expect(clippy::disallowed_methods, clippy::unwrap_used)]
+#![expect(clippy::disallowed_methods, clippy::unwrap_used, clippy::panic)]
 
 use std::io::{Read as _, Write as _};
 use std::net::TcpListener;
@@ -1196,4 +1196,37 @@ async fn http_status_from_non_json_body_redacts_echoed_api_key() {
         msg.contains("upstream rejected"),
         "body text must survive: {msg}"
     );
+}
+
+/// The construction moved into `error_from_status_body` (ADR 0057) so the 401
+/// alternate-auth fallback could share it. `ErrorResponse` defaults a missing
+/// `code` to `default_error_code()`, and that default has to survive the move —
+/// `bugzilla_error_code` reads the same sentinel back as "no signal".
+#[tokio::test]
+async fn error_body_without_a_code_reports_the_unknown_code_sentinel() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/group"))
+        .respond_with(
+            ResponseTemplate::new(400)
+                .set_body_json(serde_json::json!({"error": true, "message": "boom"})),
+        )
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let resp = client
+        .http
+        .get(format!("{}/rest/group", mock.uri()))
+        .send()
+        .await
+        .unwrap();
+    let err = client.check_response_status(resp).await.unwrap_err();
+    match err {
+        BzrError::Api { code, message } => {
+            assert_eq!(code, -1);
+            assert_eq!(message, "boom");
+        }
+        other => panic!("expected Api -1, got {other:?}"),
+    }
 }

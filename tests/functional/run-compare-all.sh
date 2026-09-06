@@ -26,7 +26,7 @@ for ver in "${VERSIONS[@]}"; do
     echo ""
 
     export BZR_BZ_VERSION="$ver"
-    if ! "$SCRIPT_DIR/setup-bugzilla.sh" start; then
+    if ! "$SCRIPT_DIR/setup-bugzilla.sh" reset; then
         RESULTS+=("${ver}: FAILED (container start)")
         FAILED=1
         continue

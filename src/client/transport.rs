@@ -10,6 +10,34 @@ use crate::error::{BzrError, Result};
 
 use super::{BugzillaClient, PreparedAuth};
 
+/// What the 401 alternate-auth retry established about the original refusal.
+enum AlternateAuth {
+    /// The retry's response replaces the original 401.
+    Replace(reqwest::Response),
+    /// The retry authenticated and the server refused the request for a reason
+    /// unrelated to authentication. Establishing that consumed the body, so the
+    /// refusal travels as the error it will be reported as.
+    Refused(BzrError),
+    /// The original 401 stands: no retry was possible, or the retry proved
+    /// authentication itself failed, or it said nothing that distinguishes the
+    /// two.
+    Original,
+}
+
+/// Bugzilla's own taxonomy of authentication failure, from
+/// `Bugzilla/WebService/Constants.pm`: "Authentication errors are usually
+/// 300-400", plus the historical `login_required` at 410. Every other code
+/// Bugzilla maps onto HTTP 401 — 102, 106, 109, 110, 113, 115, 120, 504, 505 —
+/// refuses a caller who did authenticate. Keying on the band rather than an
+/// enumerated list matters because `REST_STATUS_CODE_MAP` is extended at
+/// runtime through the `webservice_status_code_map` hook. The band is
+/// `300..=399`: 400 is Bugzilla's own `STATUS_BAD_REQUEST` and no
+/// `WS_ERROR_CODE` entry uses it (ADR 0057).
+fn code_proves_auth_failure(code: i64) -> bool {
+    const LOGIN_REQUIRED: i64 = 410;
+    (300..=399).contains(&code) || code == LOGIN_REQUIRED
+}
+
 impl BugzillaClient {
     /// Apply auth credentials to a request. Infallible because any configured
     /// API key was validated at client construction time. Anonymous clients
@@ -127,43 +155,70 @@ impl BugzillaClient {
             "API response"
         );
         if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-            if let Some(retried) = self.retry_with_alternate_auth(retry_builder).await? {
-                return Ok(retried);
+            match self.retry_with_alternate_auth(retry_builder).await? {
+                AlternateAuth::Replace(retried) => return Ok(retried),
+                AlternateAuth::Refused(err) => return Err(err),
+                AlternateAuth::Original => {}
             }
         }
         Ok(resp)
     }
 
-    /// On 401, retry the request with the alternate auth method (header ↔ query param).
-    /// Returns `Ok(Some(response))` if the retry should replace the original 401,
-    /// `Ok(None)` if the retry also proved auth failed or wasn't possible, or
-    /// `Err` on transport-level failures.
+    /// On 401, retry the request with the alternate auth method (header ↔ query
+    /// param) and classify what came back. Bugzilla maps fifteen distinct error
+    /// codes onto HTTP 401, so the status alone cannot say whether the retry
+    /// failed to authenticate or authenticated and was then refused; only the
+    /// body can (ADR 0057).
     async fn retry_with_alternate_auth(
         &self,
         retry_builder: Option<RequestBuilder>,
-    ) -> Result<Option<reqwest::Response>> {
+    ) -> Result<AlternateAuth> {
         if self.auth.is_none() {
-            return Ok(None);
+            return Ok(AlternateAuth::Original);
         }
         let Some(clone) = retry_builder else {
-            return Ok(None);
+            return Ok(AlternateAuth::Original);
         };
         tracing::debug!("401 received, retrying with alternate auth method");
         let retried = self.apply_alternate_auth(clone)?.send().await?;
+        let status = retried.status();
         tracing::debug!(
             url = Self::safe_url(retried.url()),
-            status = %retried.status(),
+            status = %status,
             "auth fallback response"
         );
-        if Self::alternate_auth_failed(retried.status()) {
-            tracing::debug!("auth fallback also failed, returning original 401");
-            return Ok(None);
+        if status != reqwest::StatusCode::UNAUTHORIZED && status != reqwest::StatusCode::FORBIDDEN {
+            return Ok(AlternateAuth::Replace(retried));
         }
-        Ok(Some(retried))
-    }
-
-    fn alternate_auth_failed(status: reqwest::StatusCode) -> bool {
-        status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN
+        // Reading the body is the only way to tell the two apart, and it
+        // consumes the response — so a refusal is returned as the error it will
+        // be reported as rather than as a response.
+        let Ok(body) = retried.text().await else {
+            // The transport error's `Display` carries the request URL, which on
+            // the query-parameter path holds the API key, so nothing derived
+            // from it is logged. Nothing was learned; the original stands.
+            tracing::debug!("auth fallback response body unreadable, returning original 401");
+            return Ok(AlternateAuth::Original);
+        };
+        match Self::bugzilla_error_code(&body) {
+            Some(code) if code_proves_auth_failure(code) => {
+                tracing::debug!(code, "auth fallback also failed to authenticate");
+                Ok(AlternateAuth::Original)
+            }
+            Some(code) => {
+                tracing::debug!(
+                    code,
+                    "auth fallback authenticated; server refused the request"
+                );
+                Ok(AlternateAuth::Refused(Self::error_from_status_body(
+                    status, &body,
+                )))
+            }
+            None => {
+                tracing::debug!("auth fallback carried no Bugzilla error code");
+                Ok(AlternateAuth::Original)
+            }
+        }
     }
 
     fn apply_alternate_auth(&self, builder: RequestBuilder) -> Result<RequestBuilder> {
