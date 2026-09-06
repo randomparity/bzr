@@ -29,6 +29,14 @@ const KNOWN_CAPABILITIES: &[&str] = &[RED_HAT_EXTENSION];
 /// Label for a server whose configuration could not be read at message time.
 const UNKNOWN_SERVER_LABEL: &str = "(unresolved server)";
 
+/// What a refusal is about: the three strings every message needs, carried
+/// together so they cannot drift apart between the two failure paths.
+struct Subject<'a> {
+    capability: &'a str,
+    operation: &'a str,
+    server: &'a str,
+}
+
 /// Ensure `capability` is advertised by the server, or fail before dispatch.
 ///
 /// `operation` is the user-facing first clause of the error message (e.g.
@@ -43,13 +51,26 @@ pub(crate) async fn require_server_capability(
     capability: &str,
     operation: &str,
 ) -> Result<()> {
-    let server = server_label(ctx);
+    // Resolve the configured entry once: both the message label and the cache
+    // read come from it, and a second load could disagree with the first.
+    // An inline `--server-url` connection has no entry at all.
+    let configured = if ctx.inline_server().is_some() {
+        None
+    } else {
+        cached_server_name_and_extensions(ctx)
+    };
+    let server = server_label(ctx, configured.as_ref());
+    let subject = Subject {
+        capability,
+        operation,
+        server: &server,
+    };
     let Resolved { extensions, cached } =
-        resolve_extensions(ctx, client, capability, operation, &server).await?;
+        resolve_extensions(ctx, client, configured, &subject).await?;
     if extensions.iter().any(|name| name == capability) {
         Ok(())
     } else {
-        Err(unsupported(capability, operation, &server, cached))
+        Err(unsupported(&subject, cached))
     }
 }
 
@@ -58,7 +79,7 @@ pub(crate) async fn require_server_capability(
 /// An inline connection has no configured name, so it is named by the host it
 /// actually probed — sanitized, because an inline URL can carry an API key in
 /// a query parameter.
-fn server_label(ctx: &CommandContext) -> String {
+fn server_label(ctx: &CommandContext, configured: Option<&CachedServer>) -> String {
     if let Some(inline) = ctx.inline_server() {
         // Origin + path only: an inline URL can carry an API key in a query
         // parameter, and this string reaches stderr and the JSON error body.
@@ -71,7 +92,7 @@ fn server_label(ctx: &CommandContext) -> String {
             Err(_) => UNKNOWN_SERVER_LABEL.to_string(),
         };
     }
-    cached_server_name_and_extensions(ctx).map_or_else(
+    configured.map_or_else(
         || UNKNOWN_SERVER_LABEL.to_string(),
         |server| format!("'{}'", server.name),
     )
@@ -84,18 +105,9 @@ fn server_label(ctx: &CommandContext) -> String {
 async fn resolve_extensions(
     ctx: &CommandContext,
     client: &BugzillaClient,
-    capability: &str,
-    operation: &str,
-    server: &str,
+    cached_server: Option<CachedServer>,
+    subject: &Subject<'_>,
 ) -> Result<Resolved> {
-    // An inline `--server-url` connection has no config entry, so there is
-    // nothing to read from and nothing to write back: probe every time.
-    let cached_server = if ctx.inline_server().is_some() {
-        None
-    } else {
-        cached_server_name_and_extensions(ctx)
-    };
-
     if let Some(CachedServer {
         extensions: Some(extensions),
         ..
@@ -110,7 +122,7 @@ async fn resolve_extensions(
     let advertised = client
         .server_extensions()
         .await
-        .map_err(|e| undetermined(capability, operation, server, &e))?
+        .map_err(|e| undetermined(subject, &e))?
         .extensions;
     let mut names: Vec<String> = KNOWN_CAPABILITIES
         .iter()
@@ -227,7 +239,12 @@ fn persist_extensions(
     written
 }
 
-fn unsupported(capability: &str, operation: &str, server: &str, cacheable: bool) -> BzrError {
+fn unsupported(subject: &Subject<'_>, cacheable: bool) -> BzrError {
+    let Subject {
+        capability,
+        operation,
+        server,
+    } = *subject;
     // Only a configured server has a cached answer to explain; an inline
     // `--server-url` connection probes every time.
     let cache_note = if cacheable {
@@ -250,7 +267,12 @@ fn unsupported(capability: &str, operation: &str, server: &str, cacheable: bool)
     }
 }
 
-fn undetermined(capability: &str, operation: &str, server: &str, error: &BzrError) -> BzrError {
+fn undetermined(subject: &Subject<'_>, error: &BzrError) -> BzrError {
+    let Subject {
+        capability,
+        operation,
+        server,
+    } = *subject;
     BzrError::UnsupportedServerCapability {
         capability: capability.to_string(),
         status: CAPABILITY_UNDETERMINED,
