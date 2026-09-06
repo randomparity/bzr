@@ -214,3 +214,32 @@ async fn server_absent_from_config_validates_without_persisting() {
         "an absent server is not resurrected by the persist"
     );
 }
+
+/// Bugzilla's catalogue calls the whiteboard `status_whiteboard`, but
+/// `Bug.update` takes `whiteboard`. A REST name bzr already models is accepted
+/// without a probe, so the alias gap never reaches the user — this is the case
+/// the python-bugzilla comparison drives.
+#[tokio::test]
+async fn a_rest_name_bzr_models_is_accepted_without_a_probe() {
+    let (server, tmp, client) = setup(&["status_whiteboard"], 0).await;
+    let config_path = write_config(&tmp, &server.uri(), "");
+
+    validate_bug_fields(&client, &ctx_for(&config_path), &keys(&["whiteboard"]))
+        .await
+        .expect("a REST name bzr models needs no catalogue round trip");
+}
+
+/// A mixed key set still probes once, for the keys bzr does not model.
+#[tokio::test]
+async fn a_mixed_key_set_probes_only_for_the_unknown_keys() {
+    let (server, tmp, client) = setup(&["status_whiteboard", "cf_release"], 1).await;
+    let config_path = write_config(&tmp, &server.uri(), "");
+
+    validate_bug_fields(
+        &client,
+        &ctx_for(&config_path),
+        &keys(&["whiteboard", "cf_release"]),
+    )
+    .await
+    .expect("both keys are acceptable");
+}

@@ -1,7 +1,9 @@
 //! Server field-catalogue lookup for the `--field` / `--field-json`
 //! passthrough on `bug create` and `bug update` (ADR 0053).
 //!
-//! No key reaches the wire that the server has not declared. The persisted
+//! No key reaches the wire that the server has not declared, or that bzr's own
+//! REST payloads already use (the catalogue reports internal column names for
+//! many built-ins, so the two sets are not the same). The persisted
 //! `ServerConfig.bug_field_names` list is a fast path only: a key missing from
 //! it always forces a fresh `field/bug` probe, so a stale list can never
 //! reject a field the server has since declared. When the probe itself fails
@@ -90,23 +92,47 @@ fn persist_names(
     Ok(())
 }
 
-/// Refuse the write unless the server declares every key in `keys`.
+/// True for a bug field name bzr's own REST payloads already use.
+///
+/// The catalogue answers with Bugzilla's internal column names for many
+/// built-ins — `status_whiteboard` for `whiteboard`, `short_desc` for
+/// `summary`, `rep_platform` for `platform` — while `Bug.create` and
+/// `Bug.update` take the REST names. A catalogue-only check would therefore
+/// reject `--field whiteboard=...`, which is exactly the case the
+/// python-bugzilla comparison drives. `BUG_FIELDS` is the REST bug-field list
+/// bzr already maintains for `--fields`, so reusing it keeps the accepted set
+/// in step with the names bzr knows the server's REST layer speaks, without a
+/// second hand-written alias table to drift.
+fn is_bzr_known_bug_field(key: &str) -> bool {
+    crate::types::bug::BUG_FIELDS
+        .iter()
+        .any(|field| field.canonical() == key)
+}
+
+/// Refuse the write unless every key in `keys` is a field the server declares
+/// or a REST bug field bzr itself models.
 ///
 /// A no-op for an empty key set, so callers pay nothing when `--field` was not
-/// used. A key set fully covered by the cached names costs no network call.
+/// used. Keys bzr already models, and a key set fully covered by the cached
+/// names, cost no network call.
 pub(crate) async fn validate_bug_fields(
     client: &BugzillaClient,
     ctx: &CommandContext,
     keys: &BTreeSet<String>,
 ) -> Result<()> {
-    if keys.is_empty() {
+    let unknown: Vec<&str> = keys
+        .iter()
+        .map(String::as_str)
+        .filter(|key| !is_bzr_known_bug_field(key))
+        .collect();
+    if unknown.is_empty() {
         return Ok(());
     }
     let server_name = client.server_name();
     let config_path = ctx.config_path_override();
     if let Some(cached) = cached_names(config_path, server_name) {
         let cached: BTreeSet<&str> = cached.iter().map(String::as_str).collect();
-        if keys.iter().all(|key| cached.contains(key.as_str())) {
+        if unknown.iter().all(|key| cached.contains(key)) {
             return Ok(());
         }
     }
@@ -116,8 +142,8 @@ pub(crate) async fn validate_bug_fields(
         .map_err(annotate_probe_failure)?;
     persist_names(config_path, server_name, &declared)?;
     let declared: BTreeSet<&str> = declared.iter().map(String::as_str).collect();
-    for key in keys {
-        if !declared.contains(key.as_str()) {
+    for key in unknown {
+        if !declared.contains(key) {
             return Err(undeclared(key));
         }
     }

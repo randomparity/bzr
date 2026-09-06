@@ -75,10 +75,15 @@ pub(crate) async fn connect_and_validate_bug_fields(
 ) -> Result<BugzillaClient>;
 ```
 
-`validate_bug_fields` is a no-op on an empty key set. Otherwise:
+`validate_bug_fields` first drops every key that is a REST bug field bzr models —
+`BUG_FIELDS` in `src/types/bug/fields.rs`, matched on `BugField::canonical()`. Bugzilla's
+catalogue reports internal column names for many built-ins (`status_whiteboard`,
+`short_desc`, `rep_platform`, `bug_file_loc`, `blocked`) while the write API takes the REST
+names, so a catalogue-only check rejects `--field whiteboard=...`. If nothing is left, it
+returns without a network call. Otherwise:
 
 1. Load `ServerConfig.bug_field_names` for `client.server_name()` from the config at
-   `ctx.config_path_override()`. If every key is present, return.
+   `ctx.config_path_override()`. If every remaining key is present, return.
 2. Probe `client.bug_field_names()`. On failure, return the probe error annotated (below).
 3. Persist the probed names under the config lock via `Config::update_locked_at`, following
    `persist_detected_settings` (`src/commands/runtime/shared/connection/detect.rs:38`): only
