@@ -23,6 +23,21 @@
 #   authenticated group member  → exit 0, bug returned
 #   authenticated non-member    → exit 4, api_code 102
 #   anonymous                   → exit 4, api_code 102
+#
+# #715 (ADR 0057): the 401 alternate-auth retry used to judge its outcome by
+# HTTP status alone. Bugzilla maps fifteen distinct WebService error codes onto
+# HTTP 401, so a policy refusal read as "auth failed again", the retried
+# response was discarded, and the user was told to log in on a request the
+# server had authenticated.
+#
+# Same scope limit as the #504 tests above, for the same kind of reason: a stock
+# Bugzilla cannot reproduce the masking. It needs the FIRST attempt to fail
+# authentication while the retry succeeds — the server-side condition in #713 —
+# and a stock container authenticates both. Neither test below can be reddened
+# by mutating `code_proves_auth_failure`; the divergent path is driven by
+# wiremock in `src/client/transport_tests.rs`. What these two pin is the
+# user-visible contract, in both directions, so a regression that reports a
+# policy refusal as a login failure reddens the suite.
 echo "── Phase 8e: Restricted-bug access (#504) ───────────────────"
 
 # ── Fixture: a second credentialed identity ──────────────────────────
@@ -372,7 +387,48 @@ if assert_exit_code 4 &&
     fi
 fi
 
-unset RESTRICTED_USER RESTRICTED_KEY RESTRICTED_GROUP
+# ── #715: a policy refusal is not a login failure ────────────────────
+UNAVAILABLE_GROUP=$(unique_name unavail-grp)
+
+test_begin "fixture-group-not-enabled-on-the-product" "fixture: group not enabled on the product"
+# Deliberately no `group_control_map` row for this group: it exists, and
+# FuncTestProd does not permit restricting bugs to it. That is the exact shape
+# Bugzilla refuses with `group_restriction_not_allowed`.
+run_bzr group create --name "$UNAVAILABLE_GROUP" --description "not enabled on any product"
+if assert_success; then test_pass; fi
+
+test_begin "authenticated-policy-refusal-is-not-reported-as-a-login-failure" "authenticated policy refusal is not reported as a login failure"
+if [[ -n "$RESTRICTED_BUG" ]]; then
+    run_bzr_raw --json bug update "$RESTRICTED_BUG" --groups-add "$UNAVAILABLE_GROUP"
+    # The contract #715 broke: the server's own refusal must survive the
+    # alternate-auth fallback. Assert the negative too — "must log in" is the
+    # wrong answer this issue was filed about.
+    if assert_exit_code 4 &&
+        assert_stderr_json '.error.type' "api" &&
+        assert_stderr_json '.error.api_code' "120" &&
+        assert_stderr_not_contains "must log in"; then
+        test_pass
+    fi
+else test_skip "no restricted bug"; fi
+
+test_begin "credentialless-write-is-refused-before-any-request" "credentialless write is refused before any request"
+if [[ -n "$RESTRICTED_BUG" ]]; then
+    run_bzr_raw --json --server public bug update "$RESTRICTED_BUG" \
+        --groups-add "$UNAVAILABLE_GROUP"
+    # Measured, not predicted: `bug update` requires credentials and refuses
+    # locally (exit 3, type config) before any HTTP request, so there is no
+    # server answer on this path and the 401 fallback is never reached. What
+    # this pins for #715 is the negative — a credentialless write must keep
+    # reporting the local credential precondition, and must not start reporting
+    # an api/auth error once the fallback classifies bodies.
+    if assert_exit_code 3 &&
+        assert_stderr_json '.error.type' "config" &&
+        assert_stderr_not_contains "must log in"; then
+        test_pass
+    fi
+else test_skip "no restricted bug"; fi
+
+unset RESTRICTED_USER RESTRICTED_KEY RESTRICTED_GROUP UNAVAILABLE_GROUP
 unset RESTRICTED_PRODUCT RESTRICTED_PROD_BUG _RA
 unset _RESTRICTED_ALIASES_OK _RESTRICTED_MODE
 
