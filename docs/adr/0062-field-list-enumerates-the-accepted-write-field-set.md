@@ -51,7 +51,11 @@ prose in `docs/bzr-cli.md` and left out of the data.
 **Agreement is structural on both halves.** The listing and the validator live in one
 module — `src/commands/runtime/shared/field_catalogue.rs`, which already owns "what
 `--field` accepts" — and neither half of the union is bound by convention. `BUG_FIELDS` is
-shared because both call `is_bzr_known_bug_field`. The catalogue is shared because
+shared because both sides read that one constant: the validator through
+`is_bzr_known_bug_field`, the listing by iterating it directly. (They are not the *same
+call*; a predicate that answers "is this key in `BUG_FIELDS`" is the wrong shape for
+building the list, so the binding here is the constant, not a function.) The catalogue is
+shared because
 `accepted_bug_fields()` fetches it *itself*, through the same
 `BugzillaClient::bug_field_names()` the validator probes with. Taking the catalogue as a
 `&[String]` parameter was the first shape and is rejected: it type-checks against any
@@ -96,12 +100,15 @@ Adding a result type is additive under ADR 0007, so `SCHEMA_VERSION` goes 3.0.2 
   nothing mechanically ties those eleven literals to `output::SCHEMA_VERSION` — the
   coupling is found by grep and held by review. The 16 functional failures it produced on
   the first full run all had this single cause.
-- **A shell variable that expands to nothing changes behaviour rather than failing.**
-  `bzr field list "$FIELD"` with `FIELD` unset was a clap usage error (exit 2); it is now
-  the listing, exiting 0 with a different JSON shape. Any script relying on the old
-  failure to catch an unset variable stops catching it. This is the unavoidable cost of
-  the no-argument form the issue asks for, and it is the only behaviour change to an
-  existing invocation.
+- **An *unquoted* shell variable that expands to nothing changes behaviour rather than
+  failing.** `bzr field list $FIELD` with `FIELD` unset drops the word entirely: that was
+  a clap usage error (exit 2) and is now the listing, exiting 0 with a different JSON
+  shape, so a script relying on the old failure to catch an unset variable stops catching
+  it. The *quoted* form `bzr field list "$FIELD"` is unaffected — it passes an empty
+  string, which both before and after exits 7 with `field name must not be empty, '.', or
+  '..'` (verified against the built binary). This is the unavoidable cost of the
+  no-argument form the issue asks for, and it is the only behaviour change to an existing
+  invocation.
 - One subcommand emits two shapes, selected by whether the positional is present:
   `FieldValue[]` with a name, `FieldName[]` without. `bzr schema` already does exactly
   this, so the pattern is not new to the CLI, but an agent that hard-codes `field list`'s

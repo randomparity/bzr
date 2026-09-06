@@ -128,8 +128,8 @@ sources are what they are; this section states only what the criterion requires.
 bound that, and all three go in `docs/bzr-cli.md`:
 
 1. **A removed field is the one accepted-but-unlisted case.** `validate_bug_fields`
-   short-circuits on a `ServerConfig.bug_field_names` cache hit without probing
-   (`field_catalogue.rs:177-182`), so a field the server drops after its names were
+   short-circuits on a `ServerConfig.bug_field_names` cache hit without probing (the
+   `cached_names` fast path in `field_catalogue.rs`), so a field the server drops after its names were
    cached stays accepted on a write while the listing, which always probes, no longer
    shows it. ADR 0053 records this residual and accepts it as the price of the cache;
    closing it means probing on every write. Documented, not fixed.

@@ -154,8 +154,9 @@ fn is_bzr_known_bug_field(key: &str) -> bool {
 ///
 /// This is the listing half of the contract [`validate_bug_fields`] enforces,
 /// and the agreement is structural on **both** halves rather than by
-/// convention. The `BUG_FIELDS` half is shared through
-/// [`is_bzr_known_bug_field`], which the validator also calls. The catalogue
+/// convention. The `BUG_FIELDS` half is shared because both sides read that one
+/// constant — the validator through [`is_bzr_known_bug_field`], the listing by
+/// iterating it directly. The catalogue
 /// half is shared because this function fetches it itself, through the same
 /// [`BugzillaClient::bug_field_names`] the validator probes with — taking the
 /// names as a parameter would leave the two bound only by whatever a caller
