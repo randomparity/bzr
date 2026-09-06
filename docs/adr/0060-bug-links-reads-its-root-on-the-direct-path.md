@@ -130,13 +130,19 @@ reference oracle the REST arm is asserted against.
   giving the related-id read a fault path of its own, which is a larger change
   than this one and is recorded as follow-up work rather than smuggled in here.
 
-  **The trade is temporary, not permanent.** It only bites a caller whose
-  credential the server silently ignores, and #713 fixes the condition that
-  makes such callers anonymous in the first place. Once it lands, header auth
-  stops being silently ignored on those images and the truncation case largely
-  evaporates. What remains afterwards is the narrower, genuinely permanent case:
-  a deployment where a bug is visible to some callers and not others, where the
-  related-id read still cannot tell an invisible neighbour from an absent one.
+  **The trade is mostly temporary.** It only bites a caller whose credential the
+  server silently ignores. #713 (ADR 0056), merged before this change landed,
+  makes auth detection reject a header the server does not honour instead of
+  accepting any 2xx, so a server configured by detection now resolves to the
+  query parameter and never reaches this state at all.
+
+  Two cases survive it. A server **explicitly pinned** with
+  `--auth-method header` bypasses detection, so its related-id reads are still
+  answered anonymously — that is the configuration the functional coverage uses,
+  precisely because it is the one that can still reach the state. And the
+  genuinely permanent case: a deployment where a bug is visible to some callers
+  and not others, where the related-id read still cannot tell an invisible
+  neighbour from an absent one.
 
 - **One extra request per invocation is not added.** The root was already a
   request of its own — a one-id search — and is now a one-id direct read.
@@ -178,11 +184,12 @@ reference oracle the REST arm is asserted against.
   incomplete edge set on Red Hat and Mozilla deployments — a silent graph
   regression in exchange for reusing a function whose field handling does not
   fit.
-- **Wait for #713.** #713's auth-probe fix would incidentally close the reported
-  symptom, since the query-parameter column already returns the bug. Rejected:
-  the links arm would still be the only read in `bzr` with no error path of its
-  own, and would fail the same way against any deployment or account where a bug
-  is visible to some callers and not others.
+- **Wait for #713.** #713's auth-probe fix (ADR 0056, since merged) closes the
+  reported symptom incidentally, since the query-parameter column already
+  returns the bug. Rejected, and the rejection holds after that merge: the links
+  arm would still be the only read in `bzr` with no error path of its own, and
+  would fail the same way against any deployment or account where a bug is
+  visible to some callers and not others — a condition no auth fix reaches.
 - **Keep exit 2 and improve the message.** Rejected for the reason ADR 0015
   gives: it keeps `bzr` deciding disclosure, discards the server's `code` and
   `message`, and leaves the operator unable to tell a permissions outcome from a
