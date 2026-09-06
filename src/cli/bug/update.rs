@@ -178,8 +178,10 @@ pub(crate) struct UpdateArgs {
     /// Tag the comment posted with this update (repeatable).
     ///
     /// Requires `--comment` or `--comment-file`; using
-    /// `--comment-tag` alone is a usage error (exit 7). Forwards
-    /// Bugzilla's `comment_tags` field on `Bug.update`.
+    /// `--comment-tag` alone is a usage error (exit 7). `Bug.update`'s
+    /// `comment_tags` parameter is not reliably honored across
+    /// supported server versions, so this issues a follow-up tag
+    /// call after the update (two API round-trips).
     #[arg(long, value_name = "TAG")]
     pub comment_tag: Vec<String>,
     /// Suppress bugmail notifications for this update.

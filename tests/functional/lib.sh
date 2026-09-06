@@ -998,7 +998,7 @@ assert_json_array_length() {
 # assert_stdout_contains <substring>
 assert_stdout_contains() {
     local substring="$1"
-    if ! grep -q "$substring" "$BZR_STDOUT" 2>/dev/null; then
+    if ! grep -q -- "$substring" "$BZR_STDOUT" 2>/dev/null; then
         test_fail "stdout does not contain '$substring'"
         return 1
     fi
@@ -1007,7 +1007,7 @@ assert_stdout_contains() {
 # assert_stdout_not_contains <substring>
 assert_stdout_not_contains() {
     local substring="$1"
-    if grep -q "$substring" "$BZR_STDOUT" 2>/dev/null; then
+    if grep -q -- "$substring" "$BZR_STDOUT" 2>/dev/null; then
         test_fail "stdout unexpectedly contains '$substring'"
         return 1
     fi
@@ -1033,7 +1033,7 @@ assert_stderr_empty() {
 assert_file_contains() {
     local path="$1"
     local string="$2"
-    if ! grep -q "$string" "$path" 2>/dev/null; then
+    if ! grep -q -- "$string" "$path" 2>/dev/null; then
         test_fail "file '$path' does not contain '$string'"
         return 1
     fi
@@ -1100,7 +1100,7 @@ assert_ndjson_line_count() {
 # test proves the reason, not just that exit 2 fired.
 assert_stderr_contains() {
     local substring="$1"
-    if ! grep -q "$substring" "$BZR_STDERR" 2>/dev/null; then
+    if ! grep -q -- "$substring" "$BZR_STDERR" 2>/dev/null; then
         test_fail "stderr does not contain '$substring'"
         return 1
     fi
@@ -1110,7 +1110,7 @@ assert_stderr_contains() {
 # stderr. Pairs with progress-stream checks (e.g. no `done` event on failure).
 assert_stderr_not_contains() {
     local substring="$1"
-    if grep -q "$substring" "$BZR_STDERR" 2>/dev/null; then
+    if grep -q -- "$substring" "$BZR_STDERR" 2>/dev/null; then
         test_fail "stderr unexpectedly contains '$substring'"
         return 1
     fi

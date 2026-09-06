@@ -1051,7 +1051,7 @@ bzr bug update --from-json updates.json --json | jq '.data.failed'
 | `--comment <BODY>` | No | Post a comment atomically with the field changes; `-` reads stdin (mutually exclusive with `--comment-file`) |
 | `--comment-file <PATH>` | No | Read the comment body from a UTF-8 file; `-` reads stdin (mutually exclusive with `--comment`; missing or non-UTF-8 paths exit 7) |
 | `--comment-private` | No | Mark the comment private (requires `--comment` or `--comment-file`) |
-| `--comment-tag <TAG>` | No | Tag the comment posted with this update (repeatable). Requires `--comment` or `--comment-file`; using it alone is a usage error (exit 7). |
+| `--comment-tag <TAG>` | No | Tag the comment posted with this update (repeatable). Requires `--comment` or `--comment-file`; using it alone is a usage error (exit 7). `Bug.update`'s `comment_tags` parameter is not reliably honored across supported server versions, so this issues a follow-up tag call after the update (two API round-trips). |
 | `--minor-update` | No | Suppress bugmail notifications for this update (forwards Bugzilla's `minor_update` field) |
 | `--expect-unchanged-since <TIMESTAMP>` | No | Optimistic-concurrency guard: only apply if the bug's `last_change_time` still equals this value (pass the `last_change_time` from a preceding `bug view`). Re-reads each target before writing and exits 14 (collision) without writing on a mismatch. Client-side, so a narrow check-then-write window remains; with multiple IDs any mismatch aborts the whole batch |
 
