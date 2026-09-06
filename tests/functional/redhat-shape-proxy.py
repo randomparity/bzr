@@ -19,6 +19,7 @@ import socket
 import sys
 import threading
 import unittest
+import unittest.mock
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -28,6 +29,7 @@ _HOP_BY_HOP = frozenset(
      "te", "trailers", "transfer-encoding", "upgrade", "host", "content-length"}
 )
 _MAX_REQUEST_BODY = 1024 * 1024
+RED_HAT_EXTENSION = "RedHat"
 
 
 def is_termless_bug_search(path):
@@ -42,6 +44,74 @@ def is_termless_bug_search(path):
         name.casefold() not in ignored and value
         for name, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
     )
+
+
+def _saved_search_fixture():
+    """Return (name, ids, sharer) for the saved-search fixture, or None when unusable.
+
+    A malformed value disables the fixture instead of being coerced: filtering to
+    an empty set on a typo would turn a harness mistake into a plausible-looking
+    result, which is the exact failure this fixture exists to make visible.
+    """
+    name = os.environ.get("BZR_FUNC_SAVED_SEARCH_NAME", "")
+    raw_ids = os.environ.get("BZR_FUNC_SAVED_SEARCH_IDS", "")
+    sharer = os.environ.get("BZR_FUNC_SAVED_SEARCH_SHARER", "")
+    if not name or not raw_ids:
+        return None
+    fields = raw_ids.split(",")
+    # `.isascii()` before `.isdigit()`: str.isdigit() is true for characters int()
+    # rejects (superscripts, for one), so the bare form raises out of the handler
+    # thread instead of disabling the fixture. Other Unicode digits int() *accepts*
+    # would be taken as ids.
+    if not all(field.isascii() and field.isdigit() and int(field) > 0 for field in fields):
+        return None
+    if sharer and not (sharer.isascii() and sharer.isdigit() and int(sharer) > 0):
+        return None
+    return name, {int(field) for field in fields}, sharer
+
+
+def shape_saved_search_extensions(path, data):
+    """Return JSON bytes advertising the Red Hat extension at /rest/extensions."""
+    if urllib.parse.urlsplit(path).path != "/rest/extensions":
+        return data, {}
+    value = json.loads(data)
+    extensions = value.get("extensions") if isinstance(value, dict) else None
+    if not isinstance(extensions, dict) or RED_HAT_EXTENSION in extensions:
+        return data, {}
+    extensions[RED_HAT_EXTENSION] = {"version": "1.0"}
+    return json.dumps(value, separators=(",", ":")).encode(), {"extensions": 1}
+
+
+def shape_saved_search_response(path, data, fixture):
+    """Return JSON bytes with `bugs` resolved as a Red Hat saved search would.
+
+    Filtering only when the parameter is present is what makes a client that
+    stops sending it fail.
+    """
+    parsed = urllib.parse.urlsplit(path)
+    if parsed.path != "/rest/bug":
+        return data, {}
+    query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+    requested = query.get("savedsearch")
+    if not requested:
+        return data, {}
+
+    name, ids, sharer = fixture
+    sharer_values = query.get("sharer_id") or []
+    resolved = requested == [name] and (
+        not sharer_values or (bool(sharer) and sharer_values == [sharer])
+    )
+
+    value = json.loads(data)
+    bugs = value.get("bugs") if isinstance(value, dict) else None
+    if not isinstance(bugs, list):
+        return data, {}
+    kept = [
+        bug for bug in bugs
+        if resolved and isinstance(bug, dict) and bug.get("id") in ids
+    ]
+    value["bugs"] = kept
+    return json.dumps(value, separators=(",", ":")).encode(), {"bug-search": len(kept)}
 
 
 def shape_bug_response(data):
@@ -403,6 +473,17 @@ def _run_server_hook(_method, path, body):
     ]
 
 
+def _run_saved_search_hook(_method, path, body):
+    body, evidence = shape_saved_search_extensions(path, body)
+    fixture = _saved_search_fixture()
+    if fixture is not None:
+        body, search_evidence = shape_saved_search_response(path, body, fixture)
+        evidence = {**evidence, **search_evidence}
+    return body, [
+        ("saved-search", route, count) for route, count in evidence.items()
+    ]
+
+
 def _run_attachment_hook(method, path, body):
     shaped, evidence = shape_attachment_comment_response(method, path, body)
     return shaped, [
@@ -468,6 +549,7 @@ REWRITE_HOOKS = (
         _run_product_ids_hook,
     ),
     (_hook_matches(mode="server-capabilities"), _run_server_hook),
+    (_hook_matches(mode="saved-search"), _run_saved_search_hook),
     (_attachment_hook_matches, _run_attachment_hook),
     (_hook_matches(("/rest/bug",), method="GET", mode="cc-objects"), _run_cc_objects_hook),
     (_hook_matches(), _run_metadata_hook),
@@ -546,6 +628,7 @@ def make_handler(backend_port):
     )
     cc_objects_mode = os.environ.get("BZR_FUNC_REDHAT_MODE") == "cc-objects"
     bearer_auth_mode = os.environ.get("BZR_FUNC_REDHAT_MODE") == "bearer-auth"
+    saved_search_mode = os.environ.get("BZR_FUNC_REDHAT_MODE") == "saved-search"
 
     class Handler(http.server.BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -627,6 +710,7 @@ def make_handler(backend_port):
                             ("server-capabilities", server_capability_mode),
                             ("attachment-comment", attachment_comment_mode),
                             ("cc-objects", cc_objects_mode),
+                            ("saved-search", saved_search_mode),
                         ) if enabled},
                     )
                 except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -1174,6 +1258,111 @@ class ShapeTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join(timeout=2)
+
+    _SAVED_SEARCH_BODY = json.dumps(
+        {"bugs": [{"id": 1}, {"id": 2}, {"id": 3}]}, separators=(",", ":")
+    ).encode()
+
+    def _resolve(self, path, **environment):
+        base = {
+            "BZR_FUNC_SAVED_SEARCH_NAME": "owned-search",
+            "BZR_FUNC_SAVED_SEARCH_IDS": "1",
+            "BZR_FUNC_SAVED_SEARCH_SHARER": "7",
+        }
+        base.update(environment)
+        with unittest.mock.patch.dict(os.environ, base, clear=False):
+            body, _ = _run_saved_search_hook("GET", path, self._SAVED_SEARCH_BODY)
+        return [bug["id"] for bug in json.loads(body)["bugs"]]
+
+    def _saved_search_round_trip(self, path, mode="saved-search"):
+        """Drive one request through a real handler, so make_handler's wiring counts."""
+        body = self._SAVED_SEARCH_BODY
+
+        class BackendHandler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        backend = http.server.ThreadingHTTPServer(("127.0.0.1", 0), BackendHandler)
+        backend_thread = threading.Thread(target=backend.serve_forever, daemon=True)
+        backend_thread.start()
+        environment = {
+            "BZR_FUNC_SAVED_SEARCH_NAME": "owned-search",
+            "BZR_FUNC_SAVED_SEARCH_IDS": "1",
+        }
+        if mode is not None:
+            environment["BZR_FUNC_REDHAT_MODE"] = mode
+        try:
+            # The whole round trip stays inside the patched environment. The mode is
+            # read once by make_handler at construction, but the fixture variables are
+            # read per request by _saved_search_fixture, so restoring the environment
+            # before the request would silently disable the filter and the case would
+            # pass for the wrong reason.
+            with unittest.mock.patch.dict(os.environ, environment, clear=False):
+                if mode is None:
+                    os.environ.pop("BZR_FUNC_REDHAT_MODE", None)
+                proxy, proxy_thread = self._start_server(backend.server_port)
+                try:
+                    with contextlib.redirect_stderr(io.StringIO()):
+                        connection = http.client.HTTPConnection(
+                            "127.0.0.1", proxy.server_port, timeout=2
+                        )
+                        connection.request("GET", path)
+                        payload = json.loads(connection.getresponse().read())
+                        connection.close()
+                finally:
+                    proxy.shutdown()
+                    proxy.server_close()
+                    proxy_thread.join(timeout=2)
+        finally:
+            backend.shutdown()
+            backend.server_close()
+            backend_thread.join(timeout=2)
+        return [bug["id"] for bug in payload["bugs"]]
+
+    def test_saved_search_filters_to_fixture_ids(self):
+        self.assertEqual(self._resolve("/rest/bug?savedsearch=owned-search"), [1])
+
+    def test_unknown_saved_search_resolves_empty(self):
+        self.assertEqual(self._resolve("/rest/bug?savedsearch=other"), [])
+
+    def test_sharer_id_qualifies_resolution(self):
+        self.assertEqual(
+            self._resolve("/rest/bug?savedsearch=owned-search&sharer_id=7"), [1]
+        )
+        self.assertEqual(
+            self._resolve("/rest/bug?savedsearch=owned-search&sharer_id=8"), []
+        )
+
+    def test_absent_saved_search_is_untouched(self):
+        self.assertEqual(self._resolve("/rest/bug?summary=x"), [1, 2, 3])
+
+    def test_malformed_fixture_ids_disable_filtering(self):
+        self.assertEqual(
+            self._resolve(
+                "/rest/bug?savedsearch=owned-search", BZR_FUNC_SAVED_SEARCH_IDS="1,x"
+            ),
+            [1, 2, 3],
+        )
+
+    def test_advertises_red_hat_extension(self):
+        body, _ = _run_saved_search_hook(
+            "GET", "/rest/extensions", b'{"extensions":{}}'
+        )
+        self.assertEqual(
+            json.loads(body)["extensions"]["RedHat"], {"version": "1.0"}
+        )
+
+    def test_mode_gates_the_saved_search_hook(self):
+        path = "/rest/bug?savedsearch=owned-search"
+        self.assertEqual(self._saved_search_round_trip(path), [1])
+        self.assertEqual(self._saved_search_round_trip(path, mode=None), [1, 2, 3])
 
     @staticmethod
     def _start_server(backend_port):

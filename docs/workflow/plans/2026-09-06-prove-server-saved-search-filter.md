@@ -12,9 +12,10 @@ advertises the `RedHat` extension and resolves `savedsearch`/`sharer_id`.
 what the filtered call equals. `pybz/container-tests.sh` sources the real phase script against
 stubs, and is where the controls are proven without a container.
 
-Expected implementation size: ≈379 changed lines (M), reproduced by applying every code block
-below to a scratch checkout and running `git diff --numstat`: proxy 189, `run-compare.sh` 23,
-lifecycle phase 56, self-test 105, parity document 6.
+Implementation size: **365 changed lines** (M) — the built branch, `git diff --numstat`
+against `main`: proxy 189, self-test 101, lifecycle phase 59, `run-compare.sh` 10, parity
+document 6. (The pre-build estimate was ≈379; the scope audit's cut to a single-id seeder is
+the difference.)
 
 ADR 0061 is the single home for **why**; the spec states the shape. This file is build
 instructions only.

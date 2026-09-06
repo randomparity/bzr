@@ -32,22 +32,22 @@ fi
 BZ_URL="http://127.0.0.1:${BZ_PORT}"
 
 seed_server_saved_search() {
-    if [[ $# -ne 4 ]]; then
-        printf 'seed_server_saved_search: expected LOGIN NAME BUG_ID BUG_ID\n' >&2
+    if [[ $# -ne 3 ]]; then
+        printf 'seed_server_saved_search: expected LOGIN NAME BUG_ID\n' >&2
         return 2
     fi
 
-    local login="$1" name="$2" first_id="$3" second_id="$4"
+    local login="$1" name="$2" id="$3"
     local runtime container helper query
     if [[ -z $login || -z $name || ${#name} -gt 64 || $name == *$'\n'* ||
-        ! $first_id =~ ^[1-9][0-9]*$ || ! $second_id =~ ^[1-9][0-9]*$ ]]; then
+        ! $id =~ ^[1-9][0-9]*$ ]]; then
         printf 'seed_server_saved_search: invalid login, name, or bug ID\n' >&2
         return 2
     fi
     runtime=$(container_runtime) || return 1
     container=$(bugzilla_container_name) || return 1
     helper="$SCRIPT_DIR/compare/seed-saved-search.pl"
-    query="bug_id=${first_id},${second_id}&bug_id_type=anyexact"
+    query="bug_id=${id}&bug_id_type=anyexact"
     if [[ ! -r $helper ]]; then
         printf 'seed_server_saved_search: helper is unreadable\n' >&2
         return 1

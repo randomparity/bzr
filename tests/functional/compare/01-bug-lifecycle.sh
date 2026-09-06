@@ -66,7 +66,7 @@ lifecycle_bzr_probe() {
     shift 6
 
     lifecycle_gap_reset
-    RUST_LOG=bzr=debug run_bzr --server-url "$BZ_URL" \
+    RUST_LOG=bzr=debug run_bzr --server-url "${LIFECYCLE_BZR_URL:-$BZ_URL}" \
         --server-api-key-env BZR_COMPARE_API_KEY --server-email "$COMPARE_ADMIN_EMAIL" \
         --api "$api" "$@"
     lifecycle_capture_bzr "$name"
@@ -116,6 +116,25 @@ lifecycle_bzr_refusal_gap() {
     local exit_code="$3"
     shift 3
     lifecycle_bzr_probe "$name" rest REST "$diagnostic" "$exit_code" contains "$@"
+}
+
+# Run one bzr probe against the Red-Hat-shaped proxy rather than the container, so
+# ADR-0052's capability gate passes and `savedsearch` actually resolves. Only bzr is
+# routed here; ADR-0061 records why the python-bugzilla arm stays on the container.
+lifecycle_saved_search_probe() {
+    local name="$1"
+    shift
+    local status=0
+
+    BZR_FUNC_REDHAT_MODE=saved-search \
+        BZR_FUNC_SAVED_SEARCH_NAME="$LIFECYCLE_SAVED_SEARCH" \
+        BZR_FUNC_SAVED_SEARCH_IDS="$LIFECYCLE_BZR_ID" \
+        redhat_shape_start "$BZ_PORT" || return 1
+    LIFECYCLE_BZR_URL="http://127.0.0.1:${REDHAT_SHAPE_PORT}"
+    lifecycle_bzr "$name" "$@" || status=1
+    LIFECYCLE_BZR_URL=""
+    redhat_shape_stop || status=1
+    return "$status"
 }
 
 lifecycle_bzr_xmlrpc_gap() {
@@ -223,6 +242,23 @@ lifecycle_ids_are() {
         test_fail "could not validate bzr ID evidence"
     fi
     return "$status"
+}
+
+# `lifecycle_ids_are` is exact-equality, which the saved-search row cannot use for
+# either set it does not fully control: the unfiltered control is every bug whose
+# summary carries the run stem, and python-bugzilla's unfiltered result is the whole
+# database. Both need containment instead.
+lifecycle_ids_contain() {
+    local source="$1" expected="$2"
+
+    if ! jq -e 'type == "array" and all(.[]; .id | type == "number")' \
+        "$source" >/dev/null; then
+        test_fail "ID evidence had an invalid structure"
+        return 1
+    fi
+    jq -e --argjson expected "$expected" \
+        '[.[].id] as $ids | all($expected[]; . as $id | $ids | index($id) != null)' \
+        "$source" >/dev/null
 }
 
 lifecycle_transport_is() {
@@ -473,16 +509,29 @@ LIFECYCLE_BZR_BUG_TAG="${LIFECYCLE_BUG_TAG}-bzr"
 test_begin "saved-search" "server saved search"
 if [[ -n $LIFECYCLE_BZR_ID && -n $LIFECYCLE_PYBZ_ID ]] &&
     seed_server_saved_search "$COMPARE_ADMIN_EMAIL" "$LIFECYCLE_SAVED_SEARCH" \
-        "$LIFECYCLE_BZR_ID" "$LIFECYCLE_PYBZ_ID" &&
+        "$LIFECYCLE_BZR_ID" &&
+    lifecycle_saved_search_probe saved-search-control bug list --summary "$LIFECYCLE_STEM" &&
+    { lifecycle_ids_contain "$COMPARE_EXCHANGE_DIR/saved-search-control.bzr.stdout.json" \
+        "[$LIFECYCLE_BZR_ID,$LIFECYCLE_PYBZ_ID]" ||
+        { [[ $TEST_RESULT_PENDING -eq 1 ]] ||
+            test_fail "saved-search control did not exceed the seeded subset"; false; }; } &&
+    lifecycle_saved_search_probe saved-search-filtered \
+        bug search --saved-search "$LIFECYCLE_SAVED_SEARCH" &&
+    { lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/saved-search-filtered.bzr.stdout.json" \
+        "[$LIFECYCLE_BZR_ID]" ||
+        { [[ $TEST_RESULT_PENDING -eq 1 ]] ||
+            test_fail "saved-search filtered result was not the seeded subset"; false; }; } &&
     lifecycle_pybz saved-search saved_search "$(jq -cn --arg name "$LIFECYCLE_SAVED_SEARCH" \
         '{name:$name}')" &&
     lifecycle_transport_is saved-search pybz XMLRPC &&
-    lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/saved-search.pybz.result.json" \
-        "[$LIFECYCLE_BZR_ID,$LIFECYCLE_PYBZ_ID]"; then
+    { lifecycle_ids_contain "$COMPARE_EXCHANGE_DIR/saved-search.pybz.result.json" \
+        "[$LIFECYCLE_PYBZ_ID]" ||
+        { [[ $TEST_RESULT_PENDING -eq 1 ]] ||
+            test_fail "python-bugzilla saved-search result was filtered"; false; }; }; then
     if lifecycle_bzr_refusal_gap saved-search '"type":"unsupported_server_capability"' 15 \
         bug search --saved-search "$LIFECYCLE_SAVED_SEARCH" &&
         lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/saved-search.bzr.stdout.json" \
-            "[$LIFECYCLE_BZR_ID,$LIFECYCLE_PYBZ_ID]"; then
+            "[$LIFECYCLE_BZR_ID]"; then
         test_pass
     elif [[ $LAST_TEST_RESULT != FAIL ]]; then
         test_fail "bzr saved-search result differed"

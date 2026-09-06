@@ -307,6 +307,41 @@ run_transport_observation_fixture() (
     fi
 )
 
+run_saved_search_seed_fixture() (
+    # Source the real function out of run-compare.sh rather than restating it: a
+    # second hand-written copy is what let the arity change go untested before.
+    local source_file="$PYBZ_DIR/../run-compare.sh" extracted status
+    extracted=$(mktemp)
+    trap 'rm -f "$extracted"' EXIT
+    awk '/^seed_server_saved_search\(\) \{$/,/^\}$/' "$source_file" >"$extracted"
+    if [[ ! -s $extracted ]]; then
+        printf 'could not extract seed_server_saved_search from run-compare.sh\n' >&2
+        return 1
+    fi
+    # shellcheck disable=SC1090 # the extracted function text is generated above.
+    source "$extracted"
+
+    SCRIPT_DIR=$(cd "$PYBZ_DIR/.." && pwd)
+    container_runtime() { printf 'echo\n'; }
+    bugzilla_container_name() { printf 'fixture-container\n'; }
+
+    set +e
+    seed_server_saved_search admin@test.bzr name >/dev/null 2>&1
+    status=$?
+    set -e
+    assert_equals 2 "$status" "seed rejects a missing bug ID"
+
+    set +e
+    seed_server_saved_search admin@test.bzr name x >/dev/null 2>&1
+    status=$?
+    set -e
+    assert_equals 2 "$status" "seed rejects a non-decimal bug ID"
+
+    assert_equals 'bug_id=41&bug_id_type=anyexact' \
+        "$(seed_server_saved_search admin@test.bzr fixture-name 41 | awk '{print $NF}')" \
+        "seed builds a single-ID query"
+)
+
 run_lifecycle_phase_fixture() (
     local phase="$PYBZ_DIR/../compare/01-bug-lifecycle.sh"
     local fixture_output
@@ -321,7 +356,7 @@ run_lifecycle_phase_fixture() (
     umask 077
     PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
     TEST_ID_PREFIX=compare CURRENT_TEST_GROUP=01-bug-lifecycle BZ_VERSION=bz50
-    BZ_URL=http://127.0.0.1 BZR_COMPARE_API_KEY=fixture-secret
+    BZ_URL=http://127.0.0.1 BZ_PORT=1 BZR_COMPARE_API_KEY=fixture-secret
     COMPARE_ADMIN_EMAIL=admin@test.bzr PYBZ_RUNTIME=fake_lifecycle_runtime
     LIFECYCLE_BZR_ARGS="$COMPARE_EXCHANGE_DIR/bzr.args"
     sleep() { :; }
@@ -335,9 +370,17 @@ run_lifecycle_phase_fixture() (
     }
 
     seed_server_saved_search() {
-        [[ $1 == admin@test.bzr && -n $2 && ${#2} -le 64 &&
-            $3 =~ ^[1-9][0-9]*$ && $4 =~ ^[1-9][0-9]*$ ]]
+        [[ $1 == admin@test.bzr && -n $2 && ${#2} -le 64 && $# -eq 3 &&
+            $3 =~ ^[1-9][0-9]*$ ]]
     }
+
+    redhat_shape_start() {
+        [[ $# -eq 1 && ${BZR_FUNC_REDHAT_MODE:-} == saved-search &&
+            -n ${BZR_FUNC_SAVED_SEARCH_NAME:-} && -n ${BZR_FUNC_SAVED_SEARCH_IDS:-} ]] ||
+            return 1
+        REDHAT_SHAPE_PORT=59999
+    }
+    redhat_shape_stop() { REDHAT_SHAPE_PORT=""; }
 
     fixture_bug() {
         local id="$1" summary="$2"
@@ -622,6 +665,28 @@ run_lifecycle_phase_fixture() (
                 printf '{}\n' >"$BZR_STDOUT"
             fi
         fi
+        # The proxied control and filtered calls (ADR-0061).
+        # LIFECYCLE_SAVED_SEARCH_UNFILTERED models a proxy or client that stopped
+        # applying the filter; LIFECYCLE_SAVED_SEARCH_CONTROL_NARROW models a control
+        # that no longer exceeds the seeded subset, making the comparison vacuous.
+        if [[ ${LIFECYCLE_BZR_CALL_NAME:-} == saved-search-control ]]; then
+            if [[ ${LIFECYCLE_SAVED_SEARCH_CONTROL_NARROW:-0} -eq 1 ]]; then
+                printf '[{"id":41}]\n' >"$BZR_STDOUT"
+            else
+                printf '[{"id":41},{"id":42}]\n' >"$BZR_STDOUT"
+            fi
+            fixture_finish_bzr 0
+            return 0
+        fi
+        if [[ ${LIFECYCLE_BZR_CALL_NAME:-} == saved-search-filtered ]]; then
+            if [[ ${LIFECYCLE_SAVED_SEARCH_UNFILTERED:-0} -eq 1 ]]; then
+                printf '[{"id":41},{"id":42}]\n' >"$BZR_STDOUT"
+            else
+                printf '[{"id":41}]\n' >"$BZR_STDOUT"
+            fi
+            fixture_finish_bzr 0
+            return 0
+        fi
         # --saved-search is a real flag too (issue #670 shipped), so it does not
         # take the "old bzr" diagnostic branch either. bzr refuses it before
         # dispatch because no supported image advertises the Red Hat extension
@@ -671,7 +736,7 @@ run_lifecycle_phase_fixture() (
         fi
         if [[ ! -s $BZR_STDOUT && ${LIFECYCLE_STALE_GAPS:-0} -eq 1 ]]; then
             case "$args" in
-            *" --saved-search "*) printf '[{"id":41},{"id":42}]\n' >"$BZR_STDOUT" ;;
+            *" --saved-search "*) printf '[{"id":41}]\n' >"$BZR_STDOUT" ;;
             *" bug list "*" --status-whiteboard-type equals "*) printf '[{"id":44}]\n' >"$BZR_STDOUT" ;;
             *" bug tag "*) printf '{}\n' >"$BZR_STDOUT" ;;
             *" bug list "*" --tag "*) printf '[{"id":42}]\n' >"$BZR_STDOUT" ;;
@@ -792,7 +857,12 @@ run_lifecycle_phase_fixture() (
                 result=$(jq '.bugs += [(.bugs[0] | .id=52)]' <<<"$result")
             fi
             ;;
-        saved_search) result='[{"id":41},{"id":42}]' ;;
+        saved_search)
+            # An ignoring server returns the unfiltered set, which includes the
+            # pybz bug the seeded query excludes.
+            result='[{"id":41},{"id":42}]'
+            [[ ${LIFECYCLE_SAVED_SEARCH_PYBZ_FILTERED:-0} -eq 0 ]] || result='[{"id":41}]'
+            ;;
         generic_fields)
             if [[ $(jq -r '.action' <<<"$request") == create ]]; then
                 LIFECYCLE_GENERIC_CREATE_COUNT=${LIFECYCLE_GENERIC_CREATE_COUNT:-0}
@@ -909,6 +979,24 @@ run_lifecycle_phase_fixture() (
     if ! run_noop_stale_gap_control; then
         control_failures=$((control_failures + 1))
     fi
+    # Each control must redden through its OWN assertion. run_lifecycle_failure_control
+    # only proves the row went FAIL, and all three would match that on the generic
+    # reason, so pair each with the distinct reason the phase gives its assertion.
+    # Descriptor 3: the loop body sources the phase, which would otherwise inherit
+    # this heredoc on stdin and could silently eat control lines.
+    while IFS='|' read -r control reason <&3; do
+        if ! run_lifecycle_failure_control "$control" saved-search 'server saved search'; then
+            control_failures=$((control_failures + 1))
+        elif ! grep -Fq "$reason" "$fixture_output"; then
+            printf '%s did not redden through its own assertion (%s)\n' \
+                "$control" "$reason" >&2
+            control_failures=$((control_failures + 1))
+        fi
+    done 3<<'CONTROLS'
+LIFECYCLE_SAVED_SEARCH_CONTROL_NARROW|saved-search control did not exceed the seeded subset
+LIFECYCLE_SAVED_SEARCH_UNFILTERED|saved-search filtered result was not the seeded subset
+LIFECYCLE_SAVED_SEARCH_PYBZ_FILTERED|python-bugzilla saved-search result was filtered
+CONTROLS
     for control in \
         LIFECYCLE_MISSING_BZR_EVENTS \
         LIFECYCLE_MIXED_BZR_EVENTS \
@@ -998,7 +1086,7 @@ run_parity_report_fixture() {
         '| Bug update | `bzr bug update` | parity | `compare/01-bug-lifecycle/update` |'
         '| Bug view | `bzr bug view` | parity | `compare/01-bug-lifecycle/view` |'
         '| Bug history | `bzr bug history` | parity | `compare/01-bug-lifecycle/history` |'
-        '| Server saved search | `bzr bug search --saved-search` | bzr errors; python-bugzilla returns unfiltered results (#670) | `compare/01-bug-lifecycle/saved-search` |'
+        '| Server saved search | `bzr bug search --saved-search` | stock: bzr errors, python-bugzilla returns unfiltered results (#670); Red-Hat-shaped proxy: bzr filters | `compare/01-bug-lifecycle/saved-search` |'
         '| Generic arbitrary fields | `bzr bug create/update --field` | parity | `compare/01-bug-lifecycle/arbitrary-fields` |'
         '| Comment tags and minor update | `bzr bug update --comment-tag --minor-update` | comment tags: parity; minor update — bz50/bz52: warns (no core support, mail sent anyway); bz53: parity | `compare/01-bug-lifecycle/update-options` |'
         '| Whiteboard match types | `bzr bug list --status-whiteboard-type` | expected gap (#679) | `compare/01-bug-lifecycle/query-match-types` |'
@@ -3046,6 +3134,7 @@ run_summary_fixture
 run_product_normalization_fixture
 run_sidecar_wrapper_fixture
 run_transport_observation_fixture
+run_saved_search_seed_fixture
 run_lifecycle_phase_fixture
 run_api_key_identity_request_fixture
 run_auth_config_tls_phase_fixture

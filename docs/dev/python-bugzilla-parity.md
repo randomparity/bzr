@@ -10,7 +10,7 @@ This report tracks bzr against python-bugzilla 3.3.0 using stable comparison tes
 | Bug update | `bzr bug update` | parity | `compare/01-bug-lifecycle/update` |
 | Bug view | `bzr bug view` | parity | `compare/01-bug-lifecycle/view` |
 | Bug history | `bzr bug history` | parity | `compare/01-bug-lifecycle/history` |
-| Server saved search | `bzr bug search --saved-search` | bzr errors; python-bugzilla returns unfiltered results (#670) | `compare/01-bug-lifecycle/saved-search` |
+| Server saved search | `bzr bug search --saved-search` | stock: bzr errors, python-bugzilla returns unfiltered results (#670); Red-Hat-shaped proxy: bzr filters | `compare/01-bug-lifecycle/saved-search` |
 | Generic arbitrary fields | `bzr bug create/update --field` | parity | `compare/01-bug-lifecycle/arbitrary-fields` |
 | Comment tags and minor update | `bzr bug update --comment-tag --minor-update` | comment tags: parity; minor update — bz50/bz52: warns (no core support, mail sent anyway); bz53: parity | `compare/01-bug-lifecycle/update-options` |
 | Whiteboard match types | `bzr bug list --status-whiteboard-type` | expected gap (#679) | `compare/01-bug-lifecycle/query-match-types` |
@@ -44,3 +44,7 @@ This report tracks bzr against python-bugzilla 3.3.0 using stable comparison tes
 | bugzillarc import | no equivalent | expected gap (#682) | `compare/06-auth-config-tls/bugzillarc-import-gap` |
 | Client certificate configuration | no equivalent | surface gap (#677) | `compare/06-auth-config-tls/client-certificate-surface-gap` |
 | Red Hat Bearer API-key transport | no equivalent | expected gap (#678) | `compare/06-auth-config-tls/bearer-gap` |
+
+The Red-Hat-shaped proxy arm is a harness fixture built from the vendor's documented
+parameter names (ADR 0061). It proves bzr's behaviour, not that Red Hat Bugzilla resolves a
+named query the same way.
