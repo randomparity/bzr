@@ -16,7 +16,10 @@ use crate::types::OutputFormat;
 use super::super::test_helpers::{
     forbid_put, mock_get_bug_lct, mock_put_bug_ok, received_put_count,
 };
-use super::{apply_checked, apply_checked_connected, find_latest_comment_id, ApplyRequest};
+use super::{
+    apply_checked, apply_checked_connected, find_latest_comment_id,
+    warn_if_minor_update_unsupported, ApplyRequest,
+};
 
 fn comment_with(id: u64, count: Option<u64>) -> Comment {
     Comment {
@@ -345,5 +348,106 @@ async fn batch_update_tag_failure_reports_that_id_as_failed() {
         io.err_str().contains("do not retry") || io.err_str().contains("Do not retry"),
         "stderr should warn against retrying with the same comment: {}",
         io.err_str()
+    );
+}
+
+fn config_with_server_version(tmp: &tempfile::TempDir, version: &str) -> std::path::PathBuf {
+    let contents = format!(
+        r#"
+default_server = "test"
+
+[servers.test]
+url = "http://example.invalid"
+server_version = "{version}"
+"#
+    );
+    crate::test_helpers::write_config_to(tmp, &contents)
+}
+
+fn ctx_with_config(config_path: &std::path::Path) -> CommandContext {
+    CommandContext::new(None, OutputFormat::Json, None)
+        .with_config_path_override(Some(config_path.to_path_buf()))
+}
+
+#[test]
+fn warn_if_minor_update_unsupported_warns_below_the_floor() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = config_with_server_version(&tmp, "5.0.6");
+    let ctx = ctx_with_config(&config_path);
+    let mut io = CapturedIo::new();
+
+    warn_if_minor_update_unsupported(&ctx, true, &mut io.writers());
+
+    assert!(
+        io.err_str().contains("5.0.6") && io.err_str().contains("--minor-update"),
+        "stderr: {}",
+        io.err_str()
+    );
+}
+
+#[test]
+fn warn_if_minor_update_unsupported_silent_at_or_above_the_floor() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = config_with_server_version(&tmp, "5.3.3+");
+    let ctx = ctx_with_config(&config_path);
+    let mut io = CapturedIo::new();
+
+    warn_if_minor_update_unsupported(&ctx, true, &mut io.writers());
+
+    assert_eq!(io.err_str(), "", "should not warn at/above the floor");
+}
+
+#[test]
+fn warn_if_minor_update_unsupported_silent_when_not_requested() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = config_with_server_version(&tmp, "5.0.6");
+    let ctx = ctx_with_config(&config_path);
+    let mut io = CapturedIo::new();
+
+    warn_if_minor_update_unsupported(&ctx, false, &mut io.writers());
+
+    assert_eq!(io.err_str(), "");
+}
+
+#[test]
+fn warn_if_minor_update_unsupported_silent_when_version_unknown() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let contents = r#"
+default_server = "test"
+
+[servers.test]
+url = "http://example.invalid"
+"#;
+    let config_path = crate::test_helpers::write_config_to(&tmp, contents);
+    let ctx = ctx_with_config(&config_path);
+    let mut io = CapturedIo::new();
+
+    warn_if_minor_update_unsupported(&ctx, true, &mut io.writers());
+
+    assert_eq!(
+        io.err_str(),
+        "",
+        "no cached version means nothing to warn about"
+    );
+}
+
+#[test]
+fn warn_if_minor_update_unsupported_silent_for_inline_server() {
+    let ctx = CommandContext::new(None, OutputFormat::Json, None).with_inline_server(Some(
+        crate::commands::runtime::invocation::InlineServer {
+            url: "http://example.invalid".into(),
+            api_key_env: None,
+            email: None,
+            tls: crate::commands::runtime::invocation::InlineTlsOptions::default(),
+        },
+    ));
+    let mut io = CapturedIo::new();
+
+    warn_if_minor_update_unsupported(&ctx, true, &mut io.writers());
+
+    assert_eq!(
+        io.err_str(),
+        "",
+        "an inline connection has no relevant cached version to check"
     );
 }
