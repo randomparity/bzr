@@ -58,20 +58,21 @@
 //! | the header or query-param leg is non-`2xx`, or carries a 200 error | keep query-param |
 //! | header body == anonymous body                                      | keep query-param |
 //! | header body matches neither peer                                   | keep query-param |
-//! | header body == query-param body, anonymous leg answered `2xx`      | prefer header    |
-//! | header body == query-param body, anonymous refusal did not repeat  | keep query-param |
-//! | header body == query-param body, anonymous refusal repeated        | prefer header    |
+//! | header body == query-param body, anonymous response did not repeat | keep query-param |
+//! | header body == query-param body, anonymous response repeated       | prefer header    |
 //!
 //! A `401`/`403` on the *anonymous* leg is kept deliberately: an anonymous
 //! caller being refused what a credentialed one receives is discrimination, not
 //! an inconclusive leg, and Bugzilla delivers that refusal as a status and an
-//! error body together. Because that refusal is then the whole of the evidence,
-//! it is re-observed once before header auth is preferred -- a one-off rate-limit
-//! or WAF `401` would otherwise confirm header auth on a server that ignores the
-//! header. A 2xx alone is not evidence either: `rest/bug` answers 200
-//! anonymously, so the probe this replaced could not fail for the condition it
-//! verified (ADR 0056). Every inconclusive outcome keeps the method
-//! `valid_login` proved, and both terminal declines say so at `info`.
+//! error body together. Because the anonymous leg is a single observation that
+//! the whole differential rests on, it is re-issued once before header auth is
+//! preferred, and must return the same status class and body -- a one-off
+//! rate-limit or WAF response, refusal or `200` interstitial alike, would
+//! otherwise confirm header auth on a server that ignores the header. A 2xx
+//! alone is not evidence either: `rest/bug` answers 200 anonymously, so the
+//! probe this replaced could not fail for the condition it verified (ADR 0056).
+//! Every inconclusive outcome keeps the method `valid_login` proved, and each
+//! terminal decline says so at `info`.
 //!
 //! ## Cached vs. fresh detection (connection layer)
 //!
@@ -247,8 +248,11 @@ fn network_error_outcome(e: reqwest::Error) -> Result<AuthMethod> {
     if crate::tls::is_tls_cert_error(&e) {
         return Err(BzrError::Http(e));
     }
+    // Not `{e:#}`: the query-param probes carry the API key in the URL reqwest
+    // attaches to a transport error, and this arm logs at `warn`.
     tracing::warn!(
-        "could not reach server during auth detection ({e:#}); defaulting to header auth"
+        "could not reach server during auth detection ({}); defaulting to header auth",
+        redacted_probe_error(&e)
     );
     Ok(AuthMethod::Header)
 }

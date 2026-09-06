@@ -288,6 +288,95 @@ async fn transient_anonymous_refusal_is_not_confirmed() {
 }
 
 #[tokio::test]
+async fn transient_two_hundred_anomaly_is_not_confirmed() {
+    // The anomaly that makes the anonymous leg differ need not be a refusal: a
+    // rate limiter or WAF can answer the second request of a burst with a 200
+    // interstitial. On a server that ignores the header and does not discriminate
+    // here, that alone would otherwise confirm header auth.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .and(header(AUTH_HEADER_NAME, "test-key"))
+        .respond_with(thin_user())
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .and(query_param(AUTH_QUERY_PARAM, "test-key"))
+        .respond_with(thin_user())
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("<html>rate limited</html>"))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .respond_with(thin_user())
+        .mount(&server)
+        .await;
+
+    assert!(!header_auth_confirmed(&server).await);
+}
+
+#[tokio::test]
+async fn anonymous_refusal_with_a_changed_body_is_not_confirmed() {
+    // The re-check compares the body as well as the status. A refusal that
+    // repeats with *different* content is not the same observation, so it is not
+    // the stable discrimination the confirmation rests on.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .and(header(AUTH_HEADER_NAME, "test-key"))
+        .respond_with(rich_user())
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .and(query_param(AUTH_QUERY_PARAM, "test-key"))
+        .respond_with(rich_user())
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .respond_with(bugzilla_error(401))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .respond_with(ResponseTemplate::new(401).set_body_json(
+            serde_json::json!({"error": true, "code": 505, "message": "different refusal"}),
+        ))
+        .mount(&server)
+        .await;
+
+    assert!(!header_auth_confirmed(&server).await);
+}
+
+#[tokio::test]
+async fn null_error_key_is_not_an_error_body() {
+    // `carries_error` rejects only a truthy error key: `null` is not one.
+    let server = MockServer::start().await;
+    let ok_with_null_error = || {
+        ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({"error": null, "users": [{"id": 1, "real_name": "T", "groups": ["g"]}]}),
+        )
+    };
+    mount_user_legs(
+        &server,
+        ok_with_null_error(),
+        ok_with_null_error(),
+        thin_user(),
+    )
+    .await;
+
+    assert!(header_auth_confirmed(&server).await);
+}
+
+#[tokio::test]
 async fn repeated_anonymous_refusal_is_confirmed() {
     // The mirror of the case above: a `requirelogin` server refuses the anonymous
     // caller every time, so the refusal is policy and the confirmation stands.

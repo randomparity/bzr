@@ -83,15 +83,19 @@ carries. The positive stays pinned by the query-parameter leg regardless: a head
 server ignored would have been refused exactly as the anonymous request was, so its body
 would equal the anonymous body and the probe would stop at the second leg.
 
-**A refusal the decision rests on must repeat.** That last argument compares two sequential
-requests and quietly assumes both observed the same server state. They need not: a rate
-limiter or WAF tripping on the second request of a burst produces a one-off `401`, and on a
-server that ignores the header *and* does not discriminate at this endpoint, the header and
-query-parameter legs are then equal for a reason unrelated to auth — so one unlucky refusal
-would confirm header auth, which is the defect this record exists to close, reached by a
-longer route. So when the anonymous leg was non-2xx, and only on the path about to return
-`true`, the anonymous request is re-issued once and must produce the same refusal. One extra
-request, in the one branch where a refusal is the whole of the evidence.
+**The anonymous observation must repeat.** That last argument compares two sequential
+requests and quietly assumes both observed the same server state. They need not. Reaching
+the confirming branch means the anonymous leg differed from the header leg, and that
+difference is evidence about auth only if it is stable: a rate limiter or WAF answering the
+second request of a burst differently — a one-off `401`, a `200` HTML interstitial, a `200`
+Bugzilla error — produces the same inequality. On a server that ignores the header *and*
+does not discriminate at this endpoint, the query-parameter leg then matches the header leg,
+so one anomaly would confirm header auth: the defect this record exists to close, reached by
+a longer route. So on the path about to return `true`, the anonymous request is re-issued
+once and must return the same status class and the same body. One extra request, only on the
+confirming path. The check is deliberately not conditioned on the anonymous leg having been
+a refusal — gating it that way would cover only the anomalies that happen to arrive as
+`401`/`403` and leave the `200`-shaped ones confirming.
 
 **2. The comparison is over the parsed body, not over status-plus-bytes.** This is measured,
 not stylistic. Against the project's own `bz50` image (Bugzilla 5.0.6), three identical
@@ -151,12 +155,11 @@ fixes on a container the project already runs.
   probes already are.
 - **Detection costs one to three extra round trips**, only in the `valid_login` +
   query-parameter branch, and only when auth is not already cached: two requests in the
-  common not-confirmed case, three when header auth is confirmed against an anonymous leg
-  the server answered, four when it is confirmed against an anonymous *refusal*, which must
-  be re-observed. The old probe cost one.
+  common not-confirmed case, four when header auth is confirmed, because the anonymous
+  observation is re-issued before confirming. The old probe cost one.
 - **A decline is announced, not silent.** The probe declining leaves the API key in request
   URLs, where the server's access log sees it, and ADR-recorded false negatives make that
-  the outcome for a whole class of server. Both terminal declines log at `info` naming that
+  the outcome for a whole class of server. Each terminal decline logs at `info` naming that
   consequence, matching the level the confirming path already used, so `-v` shows an
   operator why detection chose what it chose. Per-leg diagnostics stay at `debug`.
 - **Probe transport errors are redacted.** `reqwest::Error`'s `Display` appends

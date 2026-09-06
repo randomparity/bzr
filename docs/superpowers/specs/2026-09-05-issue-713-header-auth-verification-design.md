@@ -91,10 +91,17 @@ There is no error type. Every failure path resolves to `false`, which returns th
 auth on positive evidence and can never downgrade a working configuration. ADR 0056's
 Consequences enumerates the false negatives this accepts.
 
-Each outcome emits one `tracing::debug!` line naming which leg ended the probe, so `-vv`
-shows why header auth was or was not preferred — and the functional tier asserts on one of
-those lines. No URL is logged (the query-parameter leg carries the API key in its query
-string); the messages name the leg, not the request.
+Each per-leg outcome emits one `tracing::debug!` line naming which leg ended the probe, so
+`-vv` shows why header auth was or was not preferred — and the functional tier asserts on one
+of those lines. Each *terminal decline* logs at `tracing::info!` instead, naming the
+consequence (the API key travels in request URLs and so reaches the server's access log),
+because that outcome is what a whole class of server gets and it previously had no signal
+below `-vv`.
+
+A URL reaches a log only through `redacted_probe_error`, which renders a transport error with
+its URL routed through the request layer's `safe_url` — origin and path, query dropped. The
+query-parameter legs carry the API key in that query string, so this is the seam that keeps
+it out of stderr; `probe_transport_error_does_not_leak_the_api_key` asserts it.
 
 ### Observability
 

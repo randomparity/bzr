@@ -164,7 +164,10 @@ async fn probe_valid_login(
     let body_text = match resp.text().await {
         Ok(t) => t,
         Err(e) => {
-            tracing::warn!(error = %e, "valid_login response read error");
+            tracing::warn!(
+                error = super::redacted_probe_error(&e),
+                "valid_login response read error"
+            );
             return ValidLoginOutcome::NetworkError(e);
         }
     };
@@ -336,30 +339,34 @@ pub(super) async fn verify_header_auth_via_rest(
         return false;
     }
 
-    // When the anonymous leg was refused rather than answered, the refusal *is*
-    // the discrimination this probe rests on -- and a single observation of a
-    // refusal can be a rate limiter or a WAF tripping on the second request of a
-    // burst rather than the server's policy. Without this re-check, a server that
-    // ignores the header and does not discriminate at this endpoint reaches here
-    // with equal header and query-parameter bodies for a reason unrelated to auth,
-    // and one unlucky 401 confirms header auth. Costs one request, on the path
-    // that is about to return `true`, and only when the refusal is load-bearing.
-    if !anonymous_leg.status.is_success() {
-        let Some(recheck) = read_probe_leg(
-            http.get(&url).query(&[("names", login)]),
-            "anonymous re-check",
-        )
-        .await
-        else {
-            return false;
-        };
-        if recheck.status.is_success() || recheck.body != anonymous_leg.body {
-            tracing::info!(
-                "header auth probe on rest/user saw the anonymous refusal not repeat, \
-                 so it was transient rather than policy; keeping query-parameter auth"
-            );
-            return false;
-        }
+    // The anonymous leg is a single observation, and the whole differential rests
+    // on it: reaching here means it differed from the header leg. That difference
+    // is only evidence about auth if it repeats. A rate limiter or WAF answering
+    // the second request of a burst differently -- a `401`, a `200` HTML
+    // interstitial, a `200` Bugzilla error -- produces the same inequality, and on
+    // a server that ignores the header and does not discriminate at this endpoint
+    // the query-parameter leg then matches the header leg, so one anomaly would
+    // confirm header auth. Re-observe before confirming; a server that genuinely
+    // discriminates answers an anonymous caller the same way twice. One extra
+    // request, only on the path that is about to return `true`.
+    let Some(recheck) = read_probe_leg(
+        http.get(&url).query(&[("names", login)]),
+        "anonymous re-check",
+    )
+    .await
+    else {
+        return false;
+    };
+    if recheck.status.is_success() != anonymous_leg.status.is_success()
+        || recheck.body != anonymous_leg.body
+    {
+        tracing::info!(
+            "header auth probe on rest/user saw the anonymous response change between \
+             requests, so the difference was transient rather than authentication; \
+             keeping query-parameter auth -- the API key travels in request URLs and so \
+             reaches the server's access log"
+        );
+        return false;
     }
 
     tracing::debug!("header auth probe on rest/user matched the authenticated response");
