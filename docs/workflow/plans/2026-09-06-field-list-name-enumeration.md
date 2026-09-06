@@ -47,9 +47,11 @@ Transcribed from the spec and `CLAUDE.md`:
 - `docs/adr/README.md` is **not** edited: this is a dispatched run and the ADR index is not
   CI-coupled for this batch. Report `index row pending`.
 
-Expected implementation size: 450–700 changed lines (M) — derived from the file map below: nine
-source files averaging ~35 changed lines, six sibling test files averaging ~40, one new 30-line
-schema, and ~120 lines of docs and functional phase script.
+Expected implementation size: 450–650 changed lines (M) — derived from the file map below: six
+substantive source files totalling ~155 changed lines plus four one-line edits
+(`src/types/mod.rs`, `src/output/mod.rs`, `src/commands/schema.rs`,
+`src/commands/runtime/shared/mod.rs`), seven sibling test files totalling ~230, one new 25-line
+schema, and ~140 lines of docs and functional phase script.
 
 ## Deferrals carried from design review
 
@@ -69,12 +71,13 @@ None. (Populated if the design review disposes any finding as `deferred-tracked`
 |------|-----------------|
 | `src/types/field.rs` | `FieldName`, `FieldNameSource`, `FIELD_NAME_FIELDS` |
 | `src/types/field_tests.rs` | their serialization |
-| `src/types/mod.rs` | re-exporting the two new types if the module re-exports `FieldValue` |
+| `src/types/mod.rs` | re-exporting `FieldName` / `FieldNameSource` on line 33 |
 | `src/commands/runtime/shared/field_catalogue.rs` | `accepted_bug_fields()`; `undeclared()` wording |
 | `src/commands/runtime/shared/field_catalogue_tests.rs` | union correctness + the agreement test |
 | `src/output/resources/field.rs` | `write_field_names()` |
 | `src/output/resources/field_tests.rs` | table and JSON rendering |
-| `src/cli/field.rs` | optional positional + doc comment |
+| `src/cli/field.rs` | optional positional; `List` **and** `Aliases` doc comments |
+| `src/cli/mod.rs` | the `Field` group doc comment (`bzr field --help`) |
 | `src/cli/field_tests.rs` | both parse shapes; replaces `parse_field_list_requires_name` |
 | `src/cli/mod_tests.rs` | its one `FieldAction::List` destructuring site (line 1339) |
 | `src/commands/field.rs` | dispatch on the positional |
@@ -83,7 +86,7 @@ None. (Populated if the design review disposes any finding as `deferred-tracked`
 | `src/commands/schema.rs` | `"field-name"` in the sorted registry |
 | `src/commands/schema_tests.rs` | conformance case |
 | `src/output/mod.rs` | `SCHEMA_VERSION` bump |
-| `docs/bzr-cli.md` | command tree, `field list` section, projection table, schema list |
+| `docs/bzr-cli.md` | command tree, `field list` section, projection table, schema list, and the stale `--field` discovery paragraph at :1110–1117 |
 | `tests/functional/phases/05-fields-classifications.sh` | listing coverage incl. credentialless |
 | `tests/functional/phases/08g-bug-arbitrary-fields.sh` | rejection wording + live agreement oracle |
 
@@ -244,7 +247,7 @@ pub const FIELD_NAME_FIELDS: &[&str] = &["name", "source"];
 ### Acceptance criteria
 
 - `cargo run -- schema field-name` prints the schema.
-- `cargo run -- schema` lists `field-name` between `envelope` and `field-value`.
+- `cargo run -- schema` lists `field-name` between `error` and `field-value`.
 - `SCHEMA_VERSION` is `3.0.3`.
 
 ## Task 2 — `accepted_bug_fields()` and the re-pointed rejection message
@@ -409,9 +412,9 @@ from drifting.
    }
    ```
 
-6. In the same file, add the agreement test, using the file's existing
-   `setup(names, expected_calls)` / `write_config` / `ctx_for` helpers (lines 45–70) rather
-   than a second mock:
+6. In the same file, add the agreement test, using the file's existing helpers rather
+   than a second mock — `write_config` / `ctx_for` at lines 22–34, `mount_catalogue` / `setup`
+   at lines 46–70:
 
    ```rust
    /// Acceptance criterion 2 of issue #718, executable: every name the listing emits is a
@@ -538,49 +541,22 @@ pub fn write_field_names<W: Write + ?Sized>(
 
 3. Extend the file's `use crate::types::{FieldValue, OutputFormat};` line to
    `use crate::types::{FieldName, FieldNameSource, FieldValue, OutputFormat};`.
-4. In `src/output/resources/field_tests.rs`, add:
+4. In `src/output/resources/field_tests.rs`, add two tests. Both are mechanical rendering
+   checks, so write them in the file's established shape rather than from a transcript here:
+   add `write_field_names` to the `use super::{…}` line and `FieldName`, `FieldNameSource` to
+   the `use crate::types::{…}` line, then add a `capture_names(format, projection, rows)`
+   helper alongside the existing `capture_values` (line 6), which already shows the
+   `Vec::new()` → writer → `String::from_utf8(buf).unwrap()` pattern and the
+   `crate::validation::fields::FieldProjection::none()` path.
 
-   ```rust
-   #[test]
-   fn write_field_names_table() {
-       let rows = vec![
-           FieldName { name: "keywords".to_string(), source: FieldNameSource::Both },
-           FieldName { name: "status_whiteboard".to_string(), source: FieldNameSource::Server },
-       ];
-       let mut out = Vec::new();
-       write_field_names(
-           &rows,
-           OutputFormat::Table,
-           &FieldProjection::none(),
-           None,
-           &mut out,
-       );
-       let text = String::from_utf8(out).expect("utf-8");
-       assert!(text.contains("NAME"));
-       assert!(text.contains("SOURCE"));
-       assert!(text.contains("status_whiteboard"));
-       assert!(text.contains("server"));
-       assert!(text.contains("both"));
-   }
-
-   #[test]
-   fn write_field_names_json_projects() {
-       let rows = vec![FieldName {
-           name: "whiteboard".to_string(),
-           source: FieldNameSource::Bzr,
-       }];
-       let projection = FieldProjection::resolve(Some("name"), None, FIELD_NAME_FIELDS)
-           .expect("name is a known key");
-       let mut out = Vec::new();
-       write_field_names(&rows, OutputFormat::Json, &projection, None, &mut out);
-       let text = String::from_utf8(out).expect("utf-8");
-       assert!(text.contains("whiteboard"));
-       assert!(!text.contains("source"));
-   }
-   ```
-
-   Add whatever `use` lines the file's existing tests use for `FieldProjection` and
-   `OutputFormat`; match them exactly rather than inventing paths.
+   - `write_field_names_table` — over rows
+     `[("keywords", Both), ("status_whiteboard", Server)]` at `OutputFormat::Table`, assert the
+     output contains `NAME`, `SOURCE`, `status_whiteboard`, `server`, and `both`.
+   - `write_field_names_json_projects` — over one `("whiteboard", Bzr)` row at
+     `OutputFormat::Json` with
+     `FieldProjection::resolve(Some("name"), None, FIELD_NAME_FIELDS).unwrap()`, assert the
+     output contains `whiteboard` and does **not** contain `source`. The negative half is the
+     assertion that bites: without it the test passes whether or not the projection applied.
 5. Run `make test-one T=write_field_names` bare. Expect both tests green.
 6. `git add -A && git commit -m "feat(field): render the accepted field-name listing"`.
 
@@ -670,6 +646,18 @@ derives `Default`).
    },
    ```
 
+1a. Two adjacent doc comments go stale with the same edit; update both.
+
+   - `src/cli/field.rs:22-23`, inside the `Aliases` variant, reads "See bzr-field-list(1) to
+     enumerate the legal values of one field." Reword it to cover both forms, and add that
+     aliases apply to the **named** form only: `accepted_bug_fields` does no alias resolution,
+     whereas `get_field_values` calls `resolve_field_alias` (`src/client/resources/field.rs:48`).
+   - `src/cli/mod.rs:488-501`, the `Field` group doc comment — what `bzr field --help` prints —
+     opens "Discover valid values for Bugzilla bug fields (status, priority, etc.)" and its
+     examples are `bzr field aliases`, `bzr field list status`, `bzr field list priority --json`.
+     Reword the opening to name both discovery jobs (which *names* a server accepts, and which
+     *values* one field accepts) and add `bzr field list` to the examples.
+
 2. In `src/commands/field.rs`, replace the `FieldAction::List` arm with:
 
    ```rust
@@ -726,8 +714,7 @@ derives `Default`).
    };
    ```
 
-   and call it as `super::runtime::shared::accepted_bug_fields(&declared)` in the handler —
-   correct step 2's path accordingly.
+   which is the path step 2's handler already calls.
 4. Update every existing construction and destructuring site of `FieldAction::List`, all five
    of them, since `name` is now `Option<String>`:
 
@@ -871,11 +858,19 @@ derives `Default`).
 
 ### Verification
 
-- Contract: the Command Tree matches the binary's flag surface.
+- Contract: the tree edit introduces no *flag* drift.
   `Mode: focused-test` — `agent-skills/tests/flag-drift-check.sh` with `BZR_BIN` pointed at the
-  freshly built debug binary. Red if the tree's `field list` line still shows a required
-  positional in a way the check parses as a flag mismatch. Green:
-  `BZR_BIN="$PWD/target/debug/bzr" sh agent-skills/tests/flag-drift-check.sh` exits 0.
+  freshly built debug binary. Be honest about what this proves: the script compares **long
+  flags only** (its own header, lines 3–17, and its `binary_flags` extractor at 71–79 — a
+  positional never enters the comparison), so it is blind to the `<FIELD_NAME>` →
+  `[<FIELD_NAME>]` change by design and its result is identical before and after step 2. It is
+  run to prove the edit broke nothing, not to prove the edit happened. Green:
+  `BZR_BIN=<abs path to target/debug/bzr> sh agent-skills/tests/flag-drift-check.sh` exits 0.
+- Contract: the `--field` documentation no longer asserts that no command can enumerate the
+  accepted set. `Mode: focused-test` — the grep pair in step 7 below. Red before step 6:
+  `docs/bzr-cli.md` still contains `missing enumeration command`, so the first grep exits 0
+  and the check fails. Green: step 7 exits 0. This is the only check in Task 5 that can fail
+  on a docs defect, and it exists because the flag-drift check above structurally cannot.
 - Contract: the projection table lists the keys each form accepts.
   `Mode: task-test-not-applicable` — the projection table is prose in `docs/bzr-cli.md` with no
   executable consumer; the drift check compares flags, not table cells, and inventing a prose
@@ -919,8 +914,14 @@ derives `Default`).
      `bug_file_loc`/`url`, `blocked`/`blocks`, and stating plainly that bzr does **not** pair
      them in the output — both spellings are listed, both are accepted, and the `source` column
      is the relationship it does record;
-   - the two caveats from the spec: the listing reflects the catalogue at call time, and listed
-     means bzr will not refuse the key, not that Bugzilla will honour it;
+   - the three caveats from the spec, in full: (i) a field the server *removes* after its
+     names were cached is still accepted on a cache-hit write while this listing, which always
+     probes, no longer shows it — the one accepted-but-unlisted case, recorded as a residual by
+     ADR 0053; (ii) a field *added* since the listing is a cache miss and re-probes, so it is
+     never wrongly rejected; (iii) listed means bzr will not refuse the key, not that Bugzilla
+     will honour it — which covers the read-only catalogue names *and* the read-only entries of
+     `BUG_FIELDS`, a `--fields` read-projection list, so `id`, `creator`, `creation_time`, and
+     `last_change_time` are listed as `source: bzr` and no write can set them;
    - examples:
 
      ```bash
@@ -931,15 +932,55 @@ derives `Default`).
 
 5. Confirm the `field-name` entry added to the "Available schemas" paragraph in Task 1 is
    present and in the right place.
-6. Run `cd agent-skills && BZR_BIN="$(git rev-parse --show-toplevel)/target/debug/bzr" sh tests/flag-drift-check.sh`
+6. **Rewrite the stale `--field` discovery paragraph.** `docs/bzr-cli.md` lines 1108–1117
+   currently read:
+
+   ```
+   ... `bzr server capabilities` lists the custom fields a server
+   declares.
+
+   The set bzr accepts is wider than the set it can currently list:
+   `server capabilities` shows only custom (`is_custom`) fields, so the non-custom
+   catalogue names and the `BUG_FIELDS` REST names are accepted without appearing
+   in any listing. `bzr field list <name>` enumerates one named field's legal
+   *values* and needs the name up front, so it does not close that gap either.
+   Issue #718 tracks the missing enumeration command.
+   ```
+
+   Every clause of the second paragraph becomes false when this change ships, and its last
+   sentence points at the issue this change closes. Line 1109 is also the advice the rejection
+   message is being re-pointed away from in Task 2 step 3, so leaving it makes the document
+   disagree with the binary's own error text.
+
+   Replace both with a single paragraph that: points at `bzr field list` (no argument) as the
+   command that enumerates the accepted set; states the three caveats from the spec — a field
+   the server *removes* after its names were cached is still accepted on a cache-hit write
+   while the listing no longer shows it (ADR 0053's recorded residual); a field *added* since
+   the listing is a cache miss and re-probes, so it is never wrongly rejected; and listed means
+   bzr will not refuse the key, not that Bugzilla will honour it, which covers both the
+   read-only catalogue names and the read-only `BUG_FIELDS` entries (`id`, `creator`,
+   `creation_time`, `last_change_time`) that a write cannot set. Keep the existing paragraph
+   below it about the cache, which is still accurate.
+7. Run this grep pair bare from the worktree root; both must hold:
+
+   ```sh
+   grep -c 'missing enumeration command' docs/bzr-cli.md   # must print 0 (exit 1)
+   grep -cF 'list [<FIELD_NAME>]' docs/bzr-cli.md          # must print 1
+   ```
+
+   The first goes red on exactly the defect step 6 fixes. Note `grep -c` exits 1 on zero
+   matches, so read the printed count, not just the exit status.
+8. Run `cd agent-skills && BZR_BIN="$(git rev-parse --show-toplevel)/target/debug/bzr" sh tests/flag-drift-check.sh`
    bare from the worktree. Expect exit 0 and no drift lines. A run with `BZR_BIN` unset is
    evidence of nothing — it resolves the installed binary from `PATH`.
-7. `git add -A && git commit -m "docs(field): document the field list name enumeration"`.
+9. `git add -A && git commit -m "docs(field): document the field list name enumeration"`.
 
 ### Acceptance criteria
 
 - `flag-drift-check.sh` exits 0 against the freshly built binary.
 - The `field list` section describes both forms and states the non-pairing explicitly.
+- `docs/bzr-cli.md` contains no reference to issue #718 as open work, and its `--field`
+  section points at `bzr field list` rather than `bzr server capabilities`.
 
 ## Task 6 — Functional coverage
 
@@ -1062,8 +1103,12 @@ the credentialless path.
 7. Run `cargo build` bare so the functional harness runs HEAD.
 8. Run `make functional-test` bare. It takes roughly 10 minutes on a warm Docker/podman host;
    background it rather than polling. Expect exit 0.
-9. **Confirm the new assertions bite.** After the green run, make one controlled fault and
-   re-run only the affected phase: in `src/commands/runtime/shared/field_catalogue.rs`, change
+9. **Confirm the new assertions bite.** The Makefile exposes no per-phase target —
+   `functional-test`, `functional-test-bz50/52/53`, `functional-test-all` and
+   `functional-test-keyring` are all whole-suite runs differing only in Bugzilla version — so
+   budget **two further full runs at roughly 10 minutes each** (the fault run, then the revert
+   run) and background both per the repository's guardrail-runtime rule. After the green run,
+   make one controlled fault: in `src/commands/runtime/shared/field_catalogue.rs`, change
    `accepted_bug_fields_map` to skip the `declared` loop entirely (return only the `BUG_FIELDS`
    half). Rebuild and re-run `make functional-test`. Expect
    `field-list-no-argument-lists-both-sources`,

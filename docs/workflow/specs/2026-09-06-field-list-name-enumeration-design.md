@@ -104,33 +104,36 @@ left to read as false.
 > The listing and the `--field` validator agree: anything listed is accepted, and the
 > relationship for anything accepted but not listed is documented.
 
-This is made structural, not documentary. Both sides read the same two sources through
-one function in the module that already owns "what `--field` accepts":
+Made structural, not documentary: both sides read the same two sources through one
+function in the module that already owns the accept rule.
 
 ```rust
 // src/commands/runtime/shared/field_catalogue.rs
 pub(crate) fn accepted_bug_fields(declared: &[String]) -> Vec<FieldName>
 ```
 
-`validate_bug_fields()` keeps its existing fast paths and its existing predicate; what
-changes is that `is_bzr_known_bug_field` and `accepted_bug_fields` are the only two
-readers of `BUG_FIELDS` in this module, and `accepted_bug_fields` is defined in terms of
-`is_bzr_known_bug_field` so the two cannot disagree about a name.
+`validate_bug_fields` accepts exactly
+`{k : is_bzr_known_bug_field(k)} ∪ {k : k ∈ declared}`; `accepted_bug_fields(declared)`
+emits exactly that union, defined in terms of the same `is_bzr_known_bug_field`. ADR 0062
+records why the sources are what they are; this section states only what the criterion
+requires.
 
-**Nothing accepted is unlisted.** `validate_bug_fields` accepts exactly
-`{k : is_bzr_known_bug_field(k)} ∪ {k : k ∈ declared}`, and `accepted_bug_fields(declared)`
-emits exactly that union. The second half of the criterion is therefore vacuous rather
-than documented: there is no accepted-but-unlisted name, subject to the two caveats
-below, which `docs/bzr-cli.md` states.
+**Given one snapshot of the catalogue, nothing accepted is unlisted.** Three caveats
+bound that, and all three go in `docs/bzr-cli.md`:
 
-Two caveats, both stated in the docs:
-
-1. The listing reflects the catalogue *at the moment of the call*. A field added to the
-   server between the listing and the write is accepted without having been listed. The
-   validator re-probes on a miss, so this direction never rejects a real field.
-2. Listed means "bzr will not refuse this key", not "the server will honour it".
-   Bugzilla silently ignores write keys it does not want (ADR 0053), and bzr cannot know
-   which those are.
+1. **A removed field is the one accepted-but-unlisted case.** `validate_bug_fields`
+   short-circuits on a `ServerConfig.bug_field_names` cache hit without probing
+   (`field_catalogue.rs:177-182`), so a field the server drops after its names were
+   cached stays accepted on a write while the listing, which always probes, no longer
+   shows it. ADR 0053 records this residual and accepts it as the price of the cache;
+   closing it means probing on every write. Documented, not fixed.
+2. **A field added since the listing is safe.** It is a cache *miss*, and a miss always
+   re-probes, so this direction never rejects a real field.
+3. **Listed means bzr will not refuse the key**, not that the server will honour it.
+   Bugzilla silently ignores write keys it does not want (ADR 0053). This covers both
+   halves of the union: read-only catalogue names, and the read-only entries of
+   `BUG_FIELDS` — which is a `--fields` read-projection list, so `id`, `creator`,
+   `creation_time`, and `last_change_time` are listed and are not settable.
 
 ## Schema
 
@@ -193,12 +196,16 @@ Required by the acceptance criteria, including the credentialless path.
 - The `advice-names-a-command-that-works` test runs `bzr field list` instead of
   `bzr server capabilities`, and its comment about why `field list` could not be that
   command is deleted.
-- **The live agreement oracle.** Read a `source == "server"` name *out of the listing*
-  with `jq`, then feed that name to `bug update --field <name>=…` and require it not to
-  be rejected. Deriving the name from the listing rather than hard-coding it is what
-  makes the assertion bite in both directions: a listing that omits server names yields
-  an empty name and the guard's `else` branch calls `test_fail`, and a listing that emits
-  a name the validator rejects exits 7.
+- **The live agreement oracle.** Read `status_whiteboard` *out of the listing* with `jq`,
+  requiring `source == "server"`, then feed that name to `bug update --field <name>=…`
+  and require it not to be rejected. The name is pinned rather than taken from an
+  arbitrary `.[0]`: an arbitrary catalogue row could land on a read-only field Bugzilla
+  refuses on its own, reddening the block for a reason that has nothing to do with bzr's
+  validator. Reading it out of the listing is still what makes the block bite — an absent
+  row yields an empty name and the guard's `else` calls `test_fail` rather than passing
+  vacuously, and a listed name the validator rejects exits 7. What it proves against a
+  live server is that bzr does not refuse a catalogue-only name, which is what the block
+  is named for; it does not prove Bugzilla honours the key, and cannot (caveat 3 above).
 
 Every fixture guard in the new blocks gets an `else` that calls `test_fail`. None of the
 new assertions is skippable: the containers always declare a catalogue, so an absent
@@ -208,7 +215,8 @@ fixture is a real failure, not a reason to skip.
 
 | path | change |
 |------|--------|
-| `src/cli/field.rs` | `name: Option<String>`; doc comment covers both forms |
+| `src/cli/field.rs` | `name: Option<String>`; `List` and `Aliases` doc comments |
+| `src/cli/mod.rs` | the `Field` group doc comment (`bzr field --help`) |
 | `src/commands/field.rs` | dispatch on `name`; the no-argument branch |
 | `src/types/field.rs` | `FieldName`, `FieldNameSource`, `FIELD_NAME_FIELDS` |
 | `src/output/resources/field.rs` | `write_field_names` |
@@ -216,7 +224,7 @@ fixture is a real failure, not a reason to skip.
 | `src/commands/schema.rs` | `"field-name"` in `SCHEMAS` |
 | `src/output/mod.rs` | `SCHEMA_VERSION` 3.0.2 → 3.0.3 |
 | `schemas/field-name.json` | new |
-| `docs/bzr-cli.md` | command tree, `field list` section, projection table, schema list |
+| `docs/bzr-cli.md` | command tree, `field list` section, projection table, schema list, **and the `--field` section's stale "wider than the set it can currently list" paragraph, which this change falsifies** |
 | `tests/functional/phases/05-fields-classifications.sh` | listing coverage |
 | `tests/functional/phases/08g-bug-arbitrary-fields.sh` | message + agreement oracle |
 | sibling `*_tests.rs` of each source file above | unit coverage |

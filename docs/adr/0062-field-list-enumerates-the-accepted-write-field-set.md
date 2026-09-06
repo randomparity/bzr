@@ -91,10 +91,25 @@ Adding a result type is additive under ADR 0007, so `SCHEMA_VERSION` goes 3.0.2 
   `BUG_FIELDS` contributes 28 rows unconditionally. There is therefore no empty-listing
   message to specify, and a `source: server` row missing from the output is a real
   signal rather than an ambiguous one.
-- A field the server declares but Bugzilla's write API rejects (`bug_id`, timestamps)
-  is still listed. The listing's claim is "bzr will not refuse this key", not "the server
-  will honour it" — bzr cannot know the latter, and ADR 0053 already accepted that
-  Bugzilla silently ignores keys it does not want.
+- Read-only names appear on **both** halves of the union, not just the server's. A field
+  the server declares but Bugzilla's write API rejects (`bug_id`, timestamps) is listed,
+  and so is every read-only name in `BUG_FIELDS` — which is bzr's `--fields`
+  *read-projection* allow-list (`src/types/bug/fields.rs:175`), so `source: bzr` rows
+  include `id`, `creator`, `creation_time`, and `last_change_time`, none of which a write
+  can set. ADR 0053 already settled that these are *accepted*; this change is what makes
+  them *published*, which its own defence ("the flag's own help and this document point
+  at the REST names") did not anticipate. The listing's claim is therefore precisely "bzr
+  will not refuse this key", never "the server will honour it", and `docs/bzr-cli.md`
+  says so.
+- **The one accepted-but-unlisted case, and it runs the other way from the obvious one.**
+  `validate_bug_fields` short-circuits on a `ServerConfig.bug_field_names` cache hit
+  without probing, so a field the server *removes* after its names were cached is still
+  accepted on a write while this listing, which always probes, no longer shows it. ADR
+  0053 records that residual explicitly and accepts it as the price of the cache. The
+  opposite direction is safe: a field *added* since the last listing is a cache miss,
+  which always re-probes, so it is accepted rather than wrongly rejected. Closing the
+  removal case would mean probing on every write, which is the round trip ADR 0053's
+  cache exists to avoid; it is documented instead.
 - `tests/functional/phases/08g-bug-arbitrary-fields.sh` carries an assertion added by
   #283 that runs the command the rejection names and requires it to work. It now runs
   `bzr field list`, and its comment explaining why `field list` *could not* be that
