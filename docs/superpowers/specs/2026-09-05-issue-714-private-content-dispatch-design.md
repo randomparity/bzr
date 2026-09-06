@@ -51,8 +51,9 @@ Two further observations, both already intended behaviour and not part of this d
 
 ## Change
 
-1. Rewrite the three doc comments that misattribute the cause — `get_comments_since`,
-   `get_attachments`, `get_attachment` — to state the measured rule: private content is
+1. Rewrite the four doc comments that misattribute the cause — `get_comments_since`,
+   `get_attachments`, `get_attachment`, and the `BugzillaClient` struct comment in
+   `src/client/mod.rs` — to state the measured rule: private content is
    complete whenever the server honoured the credential; XML-RPC is preferred in Hybrid
    mode because it authenticates in the request body and so is immune to a REST endpoint
    that ignores the configured auth method. Correct the same claim wherever it is repeated:
@@ -91,6 +92,29 @@ mechanism, measured here, is what that statement rests on:
 
 So the exposure is `>= 5.1` servers that ignore the header, out of the box. Owned by issue
 #713 (`src/client/auth/`), outside this issue's surface; handed over with this measurement.
+
+## A second finding: the existing assertions cannot fail
+
+Both phases test private visibility with a bare conjunct:
+
+```bash
+if assert_success &&
+    assert_json_array_min_length '.' 4 &&
+    [[ "$(jq '[.[] | select(.is_private == true)] | length' "$BZR_STDOUT")" -ge 1 ]]; then
+    test_pass
+fi
+```
+
+Only `test_pass` / `test_fail` / `test_skip` move the counters (`tests/functional/lib.sh`).
+The two `assert_*` helpers call `test_fail` themselves when they fail; the bare `[[ ]]` does
+not, and there is no `else`. So when *only* the private-content clause is false — the exact
+#125 / #133 regression these phases exist to catch — nothing increments, the case renders no
+result, and the suite exits 0 having reported it as neither passed nor failed.
+
+A private-content phase whose private clause cannot fail is worse than no phase: it reports
+green over the regression it exists to catch. Same class as the defect PR #728 fixed in
+`08c-bugs-create-fields.sh`. Fixed here, before the new cases are added, by reusing
+`assert_json_array_min_length` with a jq expression rather than adding a helper.
 
 ## Testing
 
