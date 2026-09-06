@@ -43,7 +43,7 @@ to a REST endpoint that ignores the configured auth method.
 - The forced-`rest` assertions run on every supported version, so a future server or client
   change that reintroduces REST-side filtering under working auth turns a phase red instead of
   returning a quietly short list.
-- **The remaining exposure is an explicitly pinned auth method, not the default path.** When
+- **A config written by a post-#713 bzr is not exposed on the default path.** When
   this ADR was first written, `bzr config set-server` with no `--auth-method` selected `header`
   on stock Bugzilla 5.0/5.2 and the loss was the out-of-the-box outcome. Issue #713 closed that
   while this change was in review: its differential probe replaced the any-2xx

@@ -20,8 +20,9 @@
 #     and they return the public subset on 5.0.6 and 5.2 alike, since
 #     neither honours that header on REST.
 #   - Under a header auth_method, 5.2 loses it in DEFAULT mode too,
-#     because version_to_api_mode maps 5.0.x to Hybrid and dispatches
-#     these reads XML-RPC-first, while 5.3.3+ honours the header.
+#     because version_to_api_mode maps 5.2 to Rest; 5.0.x maps to
+#     Hybrid and dispatches these reads XML-RPC-first, so 5.0.6 keeps
+#     them in default mode, and 5.3.3+ honours the header.
 # Not covered here, deliberately: no case uses a header auth_method,
 # the one configuration that still loses private content over REST
 # (5.0.6 and 5.2 only). It is reached either by pinning
