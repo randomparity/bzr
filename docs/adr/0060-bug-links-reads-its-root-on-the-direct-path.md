@@ -78,9 +78,11 @@ reference oracle the REST arm is asserted against.
 
 ## Consequences
 
-- **Three user-visible exit-code transitions on the REST/Hybrid root read.** The
+- **Four user-visible exit-code transitions on the REST/Hybrid root read.** The
   first two follow from the direct path faulting where search did not, and both
-  make `bug links` agree with `bug view` on the same id; the third is below:
+  make `bug links` agree with `bug view` on the same id; the third and fourth
+  are in the bullets below. Three move `2` → `4`; the fourth moves `2` → `0`
+  and is the only one that is not a strict improvement.
 
   1. **A restricted bug the caller cannot see**: exit `2` (`not-found`,
      `bug not found: <id>`) → exit `4` (`api`) with the server's code and
@@ -101,9 +103,14 @@ reference oracle the REST arm is asserted against.
   direct endpoint, an absent or invisible root previously read through search,
   came back empty, and became exit `2`. It now takes the restored search
   fallback and re-surfaces the annotated `Api { code: 100500 }` — exit `4` —
-  because ADR 0015 forbids an empty search retry becoming `NotFound`. Correct,
-  deliberate, and enumerated here so the count of user-visible exit-code changes
-  in this decision is three rather than two.
+  because ADR 0015 forbids an empty search retry becoming `NotFound`. Correct
+  and deliberate, and enumerated rather than left implicit.
+
+- **The fourth transition, `2` → `0`, is the one below**, and it is the only one
+  that trades a loud wrong answer for a quiet incomplete one rather than
+  improving on its predecessor. It is stated as a consequence in its own right
+  because a reader counting only the `2` → `4` moves would miss a case where
+  `bug links` starts reporting success.
 
 - **A member whose key travels in a header now reads the root where the command
   previously failed outright — but only the root.** That configuration drew
