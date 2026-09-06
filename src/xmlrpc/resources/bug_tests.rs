@@ -696,3 +696,34 @@ async fn search_bugs_xmlrpc_negation_resolution_uses_notequals() {
     let bugs = client.search_bugs(&params).await.unwrap();
     assert_eq!(bugs.len(), 1);
 }
+
+#[tokio::test]
+async fn search_bugs_sends_saved_search_and_sharer_id_xmlrpc() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(42, "Test bug")),
+        )
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
+    let params = SearchParams {
+        saved_search: Some("team list".into()),
+        sharer_id: Some(112_233),
+        ..Default::default()
+    };
+    client.search_bugs(&params).await.unwrap();
+
+    let requests = mock.received_requests().await.unwrap();
+    let body = String::from_utf8(requests[0].body.clone()).unwrap();
+    assert!(
+        body.contains("<name>savedsearch</name><value><string>team list</string></value>"),
+        "{body}"
+    );
+    assert!(
+        body.contains("<name>sharer_id</name><value><int>112233</int></value>"),
+        "{body}"
+    );
+}

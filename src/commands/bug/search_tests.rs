@@ -23,6 +23,8 @@ fn from_url_action(url: String, save_as: Option<String>) -> BugAction {
         query: None,
         from_url: Some(url),
         save_as,
+        saved_search: None,
+        sharer: None,
         limit: None,
         field_args: crate::cli::FieldArgs {
             fields: None,
@@ -361,6 +363,8 @@ async fn handle_search_quicksearch_passes_limit_and_field_filters() {
         query: Some("crash".into()),
         from_url: None,
         save_as: None,
+        saved_search: None,
+        sharer: None,
         limit: Some(5),
         field_args: crate::cli::FieldArgs {
             fields: Some("id,summary".into()),
@@ -528,6 +532,8 @@ async fn bug_search_quicksearch_sends_default_order() {
         query: Some("crash".to_string()),
         from_url: None,
         save_as: None,
+        saved_search: None,
+        sharer: None,
         limit: None,
         field_args: crate::cli::FieldArgs {
             fields: None,
@@ -597,6 +603,8 @@ async fn handle_search_count_emits_count_object() {
         query: Some("crash".to_string()),
         from_url: None,
         save_as: None,
+        saved_search: None,
+        sharer: None,
         limit: None,
         field_args: crate::cli::FieldArgs {
             fields: None,
@@ -852,5 +860,143 @@ async fn from_url_offset_with_paginate_sends_single_offset_per_page() {
     for req in requests.iter().filter(|r| r.url.path() == "/rest/bug") {
         let n = req.url.query_pairs().filter(|(k, _)| k == "offset").count();
         assert_eq!(n, 1, "each paginate request must send exactly one offset");
+    }
+}
+
+/// Build a `bug search --saved-search` action, with an optional sharer.
+fn saved_search_action(name: &str, sharer: Option<u64>) -> BugAction {
+    BugAction::Search(crate::cli::SearchArgs {
+        page_args: crate::cli::PageArgs::default(),
+        query: None,
+        from_url: None,
+        save_as: None,
+        saved_search: Some(name.to_string()),
+        sharer,
+        limit: None,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
+        sort_args: crate::cli::SortArgs::default(),
+        count: false,
+    })
+}
+
+async fn mount_extensions(mock: &wiremock::MockServer, names: &[&str]) {
+    let map: serde_json::Map<String, serde_json::Value> = names
+        .iter()
+        .map(|n| ((*n).to_string(), serde_json::json!({ "version": "0.1" })))
+        .collect();
+    Mock::given(method("GET"))
+        .and(path("/rest/extensions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "extensions": map
+        })))
+        .mount(mock)
+        .await;
+}
+
+async fn run_action(action: &BugAction) -> crate::error::Result<()> {
+    let mut io = crate::test_helpers::CapturedIo::new();
+    crate::commands::bug::execute(
+        action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+}
+
+#[tokio::test]
+async fn handle_search_saved_search_passes_saved_search_and_sharer() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_extensions(&mock, &["RedHat"]).await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("savedsearch", "team list"))
+        .and(query_param("sharer_id", "112233"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let result = run_action(&saved_search_action("team list", Some(112_233))).await;
+    assert!(result.is_ok(), "{result:?}");
+}
+
+/// The refusal must precede dispatch: `.expect(0)` on `/rest/bug` is what
+/// proves bzr never asked the server to run the search.
+#[tokio::test]
+async fn handle_search_saved_search_refuses_without_the_extension() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_extensions(&mock, &["Voting"]).await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let err = run_action(&saved_search_action("team list", None))
+        .await
+        .expect_err("a server without the extension must be refused");
+    assert_eq!(err.exit_code(), 15);
+    assert!(err.to_string().contains("team list"), "{err}");
+}
+
+#[tokio::test]
+async fn handle_search_without_a_query_source_names_all_three() {
+    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let action = BugAction::Search(crate::cli::SearchArgs {
+        page_args: crate::cli::PageArgs::default(),
+        query: None,
+        from_url: None,
+        save_as: None,
+        saved_search: None,
+        sharer: None,
+        limit: None,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
+        sort_args: crate::cli::SortArgs::default(),
+        count: false,
+    });
+
+    let err = run_action(&action)
+        .await
+        .expect_err("no query source must fail input validation");
+    let message = err.to_string();
+    assert!(message.contains("--saved-search"), "{message}");
+    assert!(message.contains("--from-url"), "{message}");
+}
+
+/// An empty name would pass the query-source guard and the capability gate,
+/// then reach the server as `savedsearch=`, which Bugzilla discards — an
+/// unfiltered search reported as a saved one. Rejected at the input boundary,
+/// before any request: the `.expect(0)` mounts are what prove that.
+#[tokio::test]
+async fn handle_search_rejects_an_empty_saved_search_name() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/extensions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "extensions": {"RedHat": {"version": "0.3"}}
+        })))
+        .expect(0)
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    for name in ["", "   "] {
+        let err = run_action(&saved_search_action(name, None))
+            .await
+            .expect_err("an empty saved-search name must be rejected");
+        assert_eq!(err.exit_code(), 7, "name {name:?}");
+        assert!(err.to_string().contains("non-empty"), "{err}");
     }
 }

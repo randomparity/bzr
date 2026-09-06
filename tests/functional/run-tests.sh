@@ -81,6 +81,7 @@ for _phase in \
     00-build 01-config 02-server-auth 02c-tls-inline 03-products 04-components \
     05-fields-classifications 06-users 07-groups 08-bugs 08b-bugs-paging \
     08c-bugs-create-fields 08d-bug-update-from-json 08e-bugs-restricted-access \
+    08f-bug-saved-search \
     09-bug-relationships 09b-bug-collision 09c-bug-links \
     10-bug-clone 11-batch-update 11b-bug-verbs 12-my-bugs 13-templates 14-queries \
     15-comments 15b-comments-private 16-attachments 16b-attachments-private \

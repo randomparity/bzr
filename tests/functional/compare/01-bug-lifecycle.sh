@@ -36,14 +36,34 @@ lifecycle_capture_bzr() {
     printf '%s\n' "$BZR_EXIT" >"$COMPARE_EXCHANGE_DIR/${name}.bzr.exit"
 }
 
+lifecycle_diagnostic_matches() {
+    local mode="$1" expected="$2"
+
+    case "$mode" in
+    exact) grep -Fxq "$expected" "$BZR_STDERR" ;;
+    contains) grep -Fq "$expected" "$BZR_STDERR" ;;
+    *)
+        printf 'lifecycle_diagnostic_matches: unknown mode %s\n' "$mode" >&2
+        return 2
+        ;;
+    esac
+}
+
+# `expected_exit` and `diagnostic_match` describe what a gap-eligible failure
+# looks like. A flag bzr does not implement fails clap's parse: exit 2, and the
+# whole stderr line is the diagnostic, so `exact`. A refusal bzr raises itself
+# carries its own exit code and, under --json, a structured object whose message
+# embeds run-specific text — so those callers match a stable substring instead.
 lifecycle_bzr_probe() {
     local name="$1"
     local api="$2"
     local expected_transport="$3"
     local expected_diagnostic="$4"
+    local expected_exit="$5"
+    local diagnostic_match="$6"
     # shellcheck disable=SC2034 # The controlled run_bzr fixture reads this dynamic-scope value.
     local LIFECYCLE_BZR_CALL_NAME="$name"
-    shift 4
+    shift 6
 
     lifecycle_gap_reset
     RUST_LOG=bzr=debug run_bzr --server-url "$BZ_URL" \
@@ -51,8 +71,8 @@ lifecycle_bzr_probe() {
         --api "$api" "$@"
     lifecycle_capture_bzr "$name"
     if [[ $BZR_EXIT -ne 0 ]]; then
-        if [[ -n $expected_diagnostic && $BZR_EXIT -eq 2 ]] &&
-            grep -Fxq "$expected_diagnostic" "$BZR_STDERR"; then
+        if [[ -n $expected_diagnostic && $BZR_EXIT -eq $expected_exit ]] &&
+            lifecycle_diagnostic_matches "$diagnostic_match" "$expected_diagnostic"; then
             lifecycle_gap_allow
         fi
         test_fail "bzr $name failed with exit $BZR_EXIT"
@@ -78,21 +98,31 @@ lifecycle_bzr_probe() {
 lifecycle_bzr() {
     local name="$1"
     shift
-    lifecycle_bzr_probe "$name" rest REST "" "$@"
+    lifecycle_bzr_probe "$name" rest REST "" 2 exact "$@"
 }
 
 lifecycle_bzr_gap() {
     local name="$1"
     local diagnostic="$2"
     shift 2
-    lifecycle_bzr_probe "$name" rest REST "$diagnostic" "$@"
+    lifecycle_bzr_probe "$name" rest REST "$diagnostic" 2 exact "$@"
+}
+
+# A gap where bzr refuses the operation itself rather than failing to parse the
+# flag: the caller names the exit code and a stable stderr substring.
+lifecycle_bzr_refusal_gap() {
+    local name="$1"
+    local diagnostic="$2"
+    local exit_code="$3"
+    shift 3
+    lifecycle_bzr_probe "$name" rest REST "$diagnostic" "$exit_code" contains "$@"
 }
 
 lifecycle_bzr_xmlrpc_gap() {
     local name="$1"
     local diagnostic="$2"
     shift 2
-    lifecycle_bzr_probe "$name" xmlrpc XMLRPC "$diagnostic" "$@"
+    lifecycle_bzr_probe "$name" xmlrpc XMLRPC "$diagnostic" 2 exact "$@"
 }
 
 lifecycle_bzr_no_dispatch() {
@@ -449,7 +479,7 @@ if [[ -n $LIFECYCLE_BZR_ID && -n $LIFECYCLE_PYBZ_ID ]] &&
     lifecycle_transport_is saved-search pybz XMLRPC &&
     lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/saved-search.pybz.result.json" \
         "[$LIFECYCLE_BZR_ID,$LIFECYCLE_PYBZ_ID]"; then
-    if lifecycle_bzr_gap saved-search "error: unexpected argument '--saved-search' found" \
+    if lifecycle_bzr_refusal_gap saved-search '"type":"unsupported_server_capability"' 15 \
         bug search --saved-search "$LIFECYCLE_SAVED_SEARCH" &&
         lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/saved-search.bzr.stdout.json" \
             "[$LIFECYCLE_BZR_ID,$LIFECYCLE_PYBZ_ID]"; then

@@ -69,16 +69,15 @@ pub(super) async fn handle(
         url: url.to_owned(),
         api_key: api_key.map(str::to_owned),
         api_key_env: api_key_env.map(str::to_owned),
-        api_key_keyring: None,
         email: email.map(str::to_owned),
         auth_method,
-        api_mode: None,
-        server_version: None,
         tls_insecure,
         tls_ca_cert: tls_ca_cert.map(PathBuf::from),
         tls_pin_sha256: tls_pin_sha256.map(str::to_owned),
-        tls_pin_issuer: None,
-        tls_pin_issuer_der: None,
+        // Keyring reference, detected settings (api_mode, server_version,
+        // capability cache) and TOFU issuer state all reset: `set-server`
+        // replaces the entry rather than merging into it.
+        ..Default::default()
     };
 
     // Handle --tls-pin-now: probe the server cert and ask user to confirm.

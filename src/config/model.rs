@@ -38,6 +38,25 @@ pub struct ServerConfig {
     pub api_mode: Option<ApiMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub server_version: Option<String>,
+    /// Bugzilla extension names advertised at `/rest/extensions`, sorted.
+    ///
+    /// Detection state like `auth_method`/`api_mode`/`server_version`: cached
+    /// so a vendor-extension capability check (ADR-0052) costs one probe per
+    /// server rather than one per invocation. `None` means not yet probed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_extensions: Option<Vec<String>>,
+    /// The `url` that `server_extensions` was probed from. A cached capability
+    /// answer is only trusted while this still matches `url`: re-pointing a
+    /// server name at a different host must not inherit the old host's
+    /// capabilities, or the pre-dispatch gate fails open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_extensions_url: Option<String>,
+    /// The capability allowlist `server_extensions` was filtered against.
+    /// Only capabilities bzr knows about are stored, so a cache written by an
+    /// older bzr cannot answer for a capability added later — it would report
+    /// a false "not advertised". A mismatch here is treated as a cache miss.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_extensions_known: Option<Vec<String>>,
     /// Accept invalid TLS certificates (self-signed, expired, etc.).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tls_insecure: bool,

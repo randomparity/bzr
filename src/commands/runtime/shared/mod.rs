@@ -1,6 +1,7 @@
 //! Shared command runtime helpers grouped by architectural role.
 
 mod body_source;
+mod capability;
 mod connection;
 mod merge;
 
@@ -9,6 +10,7 @@ pub(crate) use body_source::{
     materialize_optional_comment_body, read_file_with_context, read_stdin_to_string,
     CommentBodyRequirement,
 };
+pub(crate) use capability::{require_server_capability, RED_HAT_EXTENSION};
 pub(crate) use connection::connect_and_configure;
 pub(crate) use merge::{merge_set, merge_vec};
 

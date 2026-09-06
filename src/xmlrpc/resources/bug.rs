@@ -26,6 +26,7 @@ impl XmlRpcClient {
             ("alias", &params.alias),
             ("summary", &params.summary),
             ("quicksearch", &params.quicksearch),
+            ("savedsearch", &params.saved_search),
             ("creation_time", &params.creation_time),
             ("last_change_time", &params.last_change_time),
         ];
@@ -48,6 +49,9 @@ impl XmlRpcClient {
         }
         if let Some(offset) = params.offset {
             rpc_params.insert("offset".into(), Value::Int(i64::from(offset)));
+        }
+        if let Some(sharer_id) = params.sharer_id {
+            rpc_params.insert("sharer_id".into(), xmlrpc_id(sharer_id, "sharer ID")?);
         }
         add_field_lists(&mut rpc_params, params);
 

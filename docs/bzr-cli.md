@@ -93,6 +93,7 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 | 12 | Keyring error (OS keychain access failed, e.g. locked keyring or missing daemon) |
 | 13 | TLS error (certificate pin mismatch or issuer changed; use `--tls-pin-now` to re-pin, `--tls-pin-clear` to remove a named-server pin, or `--server-tls-pin-now` for session-only ad-hoc trust) |
 | 14 | Mid-air collision (`bug update`/convenience verb `--expect-unchanged-since`: the bug changed since the given time; re-read and retry) |
+| 15 | Unsupported server capability (the server does not implement a Bugzilla extension the command requires, or bzr could not determine whether it does; the request is refused before dispatch) |
 
 *Exit code 2 is produced by clap for argument errors before bzr's error handling runs, in addition to resource-not-found errors from bzr itself.
 
@@ -153,7 +154,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │        [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
 │   ├── view <ID> [--fields <F>] [--exclude-fields <F>] [--permissive] [--web]
 │   ├── search [<QUERY>] [--from-url <URL>] [--save-as [NAME]] [--limit <N>] [--offset <N>] [--paginate] [--count] [--fields <F>] [--exclude-fields <F>]
-│   │          [--sort <FIELD>] [--order asc|desc]
+│   │          [--saved-search <NAME>] [--sharer <ID>] [--sort <FIELD>] [--order asc|desc]
 │   ├── history <ID> [--since <DATE>]
 │   ├── links <ID> [--recursive] [--depth <N>] [--relation <TYPE>]
 │   ├── adjacency <ID_OR_ALIAS>...
@@ -446,7 +447,7 @@ bzr bug list --version 9.4 --version 9.5 --op-sys Linux
 ```
 
 `platform` is the canonical Bugzilla hardware-field name for search, bug
-objects, create, update, and clone. Schema 3.0.1 publishes and accepts only the
+objects, create, update, and clone. Schema 3.0.2 publishes and accepts only the
 canonical `platform` spelling.
 
 ### `bzr bug view`
@@ -522,17 +523,25 @@ bzr bug search "memory leak" --fields id,summary,cf_release
 bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?product=Firefox&bug_status=NEW"
 bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?product=Firefox&bug_status=NEW" --save-as "my-query"
 bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?known_name=my%20search&product=Firefox" --save-as
+bzr bug search --saved-search "my triage list"
+bzr bug search --saved-search "team list" --sharer 112233
 ```
 
 > **Note:** Bugzilla's quicksearch defaults to OPEN bugs only. Prepend the bare token `ALL` to the query to include closed/resolved bugs. For a Summary-field-only substring match across all bug states with no quicksearch tokenization or status defaults at play, use [`bzr bug list --summary <text>`](#bzr-bug-list); quicksearch additionally searches description and comments, so `ALL <term>` is broader than `--summary <term>` against the same term.
 
 `--from-url` and the positional `<QUERY>` argument are mutually exclusive.
 
+`--saved-search` is a third, mutually exclusive query source: it runs a saved search stored in your Bugzilla account, which is unrelated to bzr's local saved queries (see [`bzr query`](#bzr-query----saved-query-management)).
+
+> **Note:** Resolving a server-side saved search is a Red Hat Bugzilla extension. bzr checks `/rest/extensions` before searching and exits 15 when the server does not advertise it, rather than returning an unfiltered result — a stock Bugzilla accepts `savedsearch`/`sharer_id` and silently ignores them. Confirmed against Bugzilla 5.0.6, 5.2 and 5.3.3+: none implements the parameters. If the check itself cannot be completed, bzr says so distinctly instead of claiming the extension is absent; the structured error carries `capability_status` (`absent` or `undetermined`) so a script can tell the two apart. The check applies to `--saved-search`; parameters passed through `--from-url` (including a `buglist.cgi` saved-search URL) are forwarded verbatim and are **not** gated.
+
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
 | `<QUERY>` | No* | | Search query (quicksearch syntax) |
 | `--from-url <URL>` | No* | | Execute a search from a Bugzilla buglist.cgi URL. Recognized parameters (product, component, status, etc.) are mapped to structured fields; unrecognized parameters (boolean charts, field-change filters) are passed through to the REST API verbatim. |
 | `--save-as [NAME]` | No | | Save this URL query for future reuse. If `NAME` is omitted, uses the URL's `known_name` parameter as the query name. Requires `--from-url`. |
+| `--saved-search <NAME>` | No* | | Run a saved search stored on the server (Bugzilla `savedsearch`). Mutually exclusive with `<QUERY>` and `--from-url`. Requires a Bugzilla with the Red Hat saved-search extension; exits 15 otherwise. |
+| `--sharer <ID>` | No | | Numeric Bugzilla user ID of the account that shared the saved search (Bugzilla `sharer_id`). Requires `--saved-search`. |
 | `--limit <N>` | No | 50 | Max results. When `--from-url` is used, the URL's own limit parameter takes precedence unless overridden here. |
 | `--offset <N>` | No | | Skip the first N matches (manual paging past `--limit`). Mutually exclusive with `--paginate`; cannot be combined with `--count` or with `--limit 0` when N is nonzero. |
 | `--paginate` | No | | Retrieve every matching page, looping internally past `--limit`. Cannot be combined with `--count`. |
@@ -540,7 +549,7 @@ bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?known_name=m
 | `--fields <F>` | No | | Comma-separated built-in fields or Bugzilla custom fields named `cf_*` requested from the server; in table output, selects which columns to show (in order). Under `--json`, the object contains only the selected fields (gh-style; `id` is included only when requested). A selection that resolves to no known fields is rejected with exit code 7 rather than emitting an empty object. |
 | `--exclude-fields <F>` | No | | Comma-separated fields dropped from the server request; in table output, removes those columns. Under `--json`, the object omits the dropped fields (including custom `cf_*` fields and `id`, when excluded). Excluding every field is rejected with exit code 7 rather than emitting `{}`. |
 
-*One of `<QUERY>` or `--from-url` must be provided.
+*One of `<QUERY>`, `--saved-search`, or `--from-url` must be provided.
 
 ### `bzr bug history`
 
@@ -2518,6 +2527,8 @@ then read the keys relevant to that type:
 | `api_code` | integer | `api` | The Bugzilla fault code. |
 | `succeeded` / `failed` | integer | `batch_partial_failure` | Counts of elements that succeeded / failed. |
 | `server` / `expected` / `actual` | string | `tls` | The server whose TLS trust changed and the expected vs. presented pin/issuer. |
+| `capability` | string | `unsupported_server_capability` | The server capability (Bugzilla extension) the command required. |
+| `capability_status` | string | `unsupported_server_capability` | `absent` when the server answered and does not advertise the capability; `undetermined` when the capability probe itself failed (retryable). |
 
 ```bash
 # Recover the field an agent must fix after a rejected mutation:

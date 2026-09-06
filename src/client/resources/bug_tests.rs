@@ -1496,3 +1496,26 @@ async fn hybrid_empty_search_fallback_recovers_via_xmlrpc() {
     assert_eq!(bug.id, 216_593);
     assert_eq!(bug.summary.as_deref(), Some("restricted but visible"));
 }
+
+#[tokio::test]
+async fn search_bugs_sends_saved_search_and_sharer_id() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("savedsearch", "team list"))
+        .and(query_param("sharer_id", "112233"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        saved_search: Some("team list".into()),
+        sharer_id: Some(112_233),
+        ..Default::default()
+    };
+
+    let bugs = client.search_bugs(&params).await.unwrap();
+    assert!(bugs.is_empty());
+}

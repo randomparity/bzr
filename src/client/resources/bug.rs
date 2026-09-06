@@ -152,6 +152,7 @@ fn append_option_params(
         ("alias", &params.alias),
         ("summary", &params.summary),
         ("quicksearch", &params.quicksearch),
+        ("savedsearch", &params.saved_search),
         ("include_fields", &params.include_fields),
         ("exclude_fields", &params.exclude_fields),
         ("creation_time", &params.creation_time),
@@ -168,6 +169,9 @@ fn append_option_params(
     }
     if let Some(offset) = params.offset {
         builder = builder.query(&[("offset", offset)]);
+    }
+    if let Some(sharer_id) = params.sharer_id {
+        builder = builder.query(&[("sharer_id", sharer_id)]);
     }
     builder
 }

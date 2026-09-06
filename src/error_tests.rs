@@ -546,3 +546,45 @@ fn structured_detail_does_not_republish_raw_server_text() {
         );
     }
 }
+
+#[test]
+fn unsupported_server_capability_has_distinct_exit_code_and_type() {
+    let err = BzrError::UnsupportedServerCapability {
+        capability: "RedHat".to_string(),
+        status: crate::error::CAPABILITY_ABSENT,
+        operation: "saved search 'triage'".to_string(),
+        detail: "server does not implement the Red Hat saved-search extension".to_string(),
+    };
+    assert_eq!(err.exit_code(), 15);
+    assert_eq!(err.error_type(), "unsupported_server_capability");
+    assert_eq!(
+        err.structured_detail()
+            .get("capability")
+            .and_then(|v| v.as_str()),
+        Some("RedHat")
+    );
+    assert!(err.to_string().starts_with("saved search 'triage': "));
+}
+
+/// The undetermined refusal interpolates a `BzrError` whose `Display` is the
+/// redaction seam. Pin that: a transport error carrying an API key must not
+/// reach the user through the capability message.
+#[test]
+fn unsupported_capability_detail_redacts_an_interpolated_api_key() {
+    let _guard = crate::bugzilla_auth::active_api_key_test_guard(Some("supersecretkey123"));
+    let inner = BzrError::HttpStatus {
+        status: 500,
+        body: "failure for Bugzilla_api_key=supersecretkey123".to_string(),
+    };
+    let err = BzrError::UnsupportedServerCapability {
+        capability: "RedHat".to_string(),
+        status: crate::error::CAPABILITY_UNDETERMINED,
+        operation: "saved search 'triage'".to_string(),
+        detail: format!("reading /rest/extensions failed ({inner})"),
+    };
+    let rendered = err.to_string();
+    assert!(
+        !rendered.contains("supersecretkey123"),
+        "capability detail leaked an API key: {rendered}"
+    );
+}

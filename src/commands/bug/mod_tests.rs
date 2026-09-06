@@ -34,6 +34,8 @@ fn capabilities_are_anonymous_for_search() {
         query: Some("q".into()),
         from_url: None,
         save_as: None,
+        saved_search: None,
+        sharer: None,
         limit: None,
         field_args: crate::cli::FieldArgs {
             fields: None,
@@ -177,6 +179,8 @@ async fn bug_column_spec_search_validates_unknown_field_in_table_mode() {
         query: Some("crash".into()),
         from_url: None,
         save_as: None,
+        saved_search: None,
+        sharer: None,
         limit: None,
         field_args: crate::cli::FieldArgs {
             fields: Some("totally_unknown_field_xyz".into()),

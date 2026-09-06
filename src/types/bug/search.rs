@@ -41,6 +41,16 @@ pub struct SearchParams {
     pub offset: Option<u32>,
     pub summary: Option<String>,
     pub quicksearch: Option<String>,
+    /// Name of a server-side saved search (Bugzilla `savedsearch`).
+    ///
+    /// A query stored in the Bugzilla account, distinct from bzr's local
+    /// saved queries (`bzr query`). Resolving one is a Red Hat Bugzilla
+    /// extension, so the command layer refuses before dispatch when the
+    /// server does not advertise it (ADR-0052).
+    pub saved_search: Option<String>,
+    /// Numeric Bugzilla user ID owning a shared saved search
+    /// (Bugzilla `sharer_id`). Only meaningful alongside `saved_search`.
+    pub sharer_id: Option<u64>,
     pub include_fields: Option<String>,
     pub exclude_fields: Option<String>,
     /// Raw query parameters passed through verbatim to the REST API.
@@ -208,6 +218,7 @@ impl SearchParams {
             || self.summary.is_some()
             || self.quicksearch.is_some()
             || !self.raw_params.is_empty()
+            || self.saved_search.is_some()
             || self.creation_time.is_some()
             || self.last_change_time.is_some()
     }
@@ -224,6 +235,14 @@ impl SearchParams {
     /// XML-RPC implementation. An empty quicksearch or summary result is
     /// authoritative - retrying via XML-RPC will return the same set
     /// (and may incur a long timeout on servers with slow XML-RPC).
+    ///
+    /// `saved_search` is excluded for the same reason: a saved search is
+    /// resolved by one server-side path on both transports, so an empty REST
+    /// result is authoritative. Including it was tried and reverted — the retry
+    /// is time-capped but its *error* is not swallowed (ADR-0015), so on a
+    /// hybrid server with XML-RPC disabled a saved search that legitimately
+    /// matched nothing failed the command with the XML-RPC transport error
+    /// instead of returning an empty list.
     pub fn has_structured_filters(&self) -> bool {
         self.has_mapped_filters()
             || self.cc.is_some()
