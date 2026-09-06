@@ -55,8 +55,11 @@ Two further observations, both already intended behaviour and not part of this d
    `get_attachments`, `get_attachment` — to state the measured rule: private content is
    complete whenever the server honoured the credential; XML-RPC is preferred in Hybrid
    mode because it authenticates in the request body and so is immune to a REST endpoint
-   that ignores the configured auth method. Correct the same claim in the header comments of
-   both `tests/functional/phases/15b-comments-private.sh` and `16b-attachments-private.sh`.
+   that ignores the configured auth method. Correct the same claim wherever it is repeated:
+   `docs/bzr-cli.md`'s hybrid-transport paragraph ("REST responses cannot reliably distinguish
+   private data from missing public data on some Bugzilla versions" — the user-facing copy of
+   the wrong explanation), and the header comments of both
+   `tests/functional/phases/15b-comments-private.sh` and `16b-attachments-private.sh`.
 2. Extend `tests/functional/phases/15b-comments-private.sh` and
    `16b-attachments-private.sh` with default-mode and forced `--api rest` private-content
    assertions. Today both phases assert only `--api hybrid` and `--api xmlrpc`, which is why
@@ -66,18 +69,27 @@ Two further observations, both already intended behaviour and not part of this d
 No dispatch, version-mapping, or auth behaviour changes. `dispatch_xmlrpc_first` and
 `version_to_api_mode` are untouched.
 
-## Residual, not fixed here
+## Residual, not fixed here — the measured mechanism
 
-A client configured for `header` auth against Bugzilla 5.0 or 5.2 still reads `comment list` and
-`attachment list` anonymously and gets a silently incomplete answer. The root cause is
-auth-method selection accepting a method the REST endpoint does not honour, in
-`src/client/auth/` — outside this issue's surface and owned by issue #713. A detection guard
-added to these two reads would be a caller-side patch over a shared root cause; reported as a
-follow-up with the measurement above instead.
+ADR 0059's Consequences state the residual and why it is not this change's to close. The
+mechanism, measured here, is what that statement rests on:
+
+- `bzr config set-server --url <5.2> --api-key <key> --email <addr>` with **no**
+  `--auth-method` leads to `header` being selected, and the resulting default-mode
+  `comment list` returns the public subset (3 of 5 entries, 0 of 2 private).
+- 5.2 has no `/rest/whoami` (`404`, code `32614`), so detection falls through to the
+  `valid_login` probe, which tries header first (`src/client/auth/valid_login.rs`); 5.2's
+  `/rest/valid_login` accepts a key that its comment and attachment endpoints then ignore.
+- Bugzilla 5.0.6 is not exposed on that path: `version_to_api_mode` maps it to `Hybrid`, so
+  default-mode `comment list` returns 5 / 2 there and the loss needs a forced `--api rest`.
+
+So the exposure is `>= 5.1` servers that ignore the header, out of the box. Owned by issue
+#713 (`src/client/auth/`), outside this issue's surface; handed over with this measurement.
 
 ## Testing
 
 Functional only. The contract is "a real server returns private content over REST when
 authenticated", which no wiremock fixture can prove — a fixture only replays a shape someone
-assumed. Each new assertion is verified to bite by inverting its expectation once and
-observing red.
+assumed. Each new assertion carries its own red recipe in the plan, chosen per case: the
+obvious inversion does not work, because `is_private` is present and `false` on public
+entries, so flipping the predicate merely counts those instead.
