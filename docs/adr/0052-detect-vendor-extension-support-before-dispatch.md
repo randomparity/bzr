@@ -219,9 +219,13 @@ established.
 ### Context
 
 The Consequences section above deferred routing the probe through the resolved transport and
-left open whether it was worth doing at all. Three measurements settle it, taken 2026-09-06
-against the project's own functional images and a proxy that forwards `/xmlrpc.cgi` to bz50
-while answering `503` on every `/rest/` path:
+left open whether it was worth doing at all. **That was a fair question, honestly asked**: the
+behaviour failed closed with an actionable error, the limitation was disclosed rather than
+hidden, and REST-disabled deployments are genuinely rare. What answers it is not that the
+question was confused but that the cost side of its trade-off was overstated — most of the
+XML-RPC path was already built. Three measurements settle it, taken 2026-09-06 against the
+project's own functional images and a proxy that forwards `/xmlrpc.cgi` to bz50 while answering
+`503` on every `/rest/` path:
 
 - The XML-RPC search path already carries the vendor parameters —
   `src/xmlrpc/resources/bug.rs` inserts `savedsearch` and `sharer_id` into `Bug.search` — and
@@ -249,29 +253,53 @@ while answering `503` on every `/rest/` path:
 
 **`BugzillaClient::server_extensions()` establishes the extension list over the transport in
 use.** `ApiMode::Rest` probes REST; `ApiMode::XmlRpc` calls `Bugzilla.extensions`;
-`ApiMode::Hybrid` probes REST first and falls back to XML-RPC on a transport failure — the same
-*order* `search_bugs_hybrid` uses, though not the same trigger: that method's own XML-RPC retry
-fires on an empty structured-filter result and it has no transport-failure fallback at all.
+`ApiMode::Hybrid` probes REST first and falls back to XML-RPC when the REST probe returns **any**
+error. That is the same *order* `search_bugs_hybrid` uses, though not the same trigger: that
+method's own XML-RPC retry fires on an empty structured-filter result and it has no
+failure-driven fallback at all.
 
-Two properties of the amendment are part of the decision:
+Three properties of the amendment are part of the decision:
 
-1. **The cached answer gains no transport dimension.** The advertised extension list is a fact
-   about the server, not the transport, and both transports return the same list on bz50, bz52
-   and bz53. The URL and capability-allowlist binding specified above is unchanged, and a third
-   dimension that cannot change the answer would only cause redundant probes.
-2. **A malformed XML-RPC response is an error, not an empty or partial map.** Two shapes, and
-   both matter for the same reason: a missing `extensions` member, and an extension whose value
-   is not a struct. An empty map renders as *absent* — a settled refusal — and a map that keeps
-   a name whose value bzr could not read renders as *advertised*; the REST path's serde decode
-   fails on both inputs and renders *undetermined*. The transports must reach the same verdict
-   from the same evidence, in the conservative direction, so the adapter fails rather than
-   inventing a list.
+1. **The Hybrid fallback deliberately does not use `BzrError::is_transport_failure()`**, the
+   predicate the rest of the client uses for "the other transport might do better". That
+   predicate matches `Http | HttpStatus | XmlRpc` (`src/error.rs`), and
+   `error_from_status_body` (`src/client/response.rs`) classifies *any* REST error whose body
+   parses as a Bugzilla error envelope as `BzrError::Api` instead — which Bugzilla sends even
+   for a 404 on an absent endpoint, verified against 5.0.6 and 5.3.3+. So a transport-failure
+   guard would not fire for the commonest shape of "REST did not serve this endpoint", which is
+   the case the fallback exists for.
+
+   Falling back on any error is safe here in a way it is not in general, and the reason is
+   specific to this probe: an error *from the extensions endpoint* is a statement about that
+   endpoint, never about the capability. The XML-RPC probe returns the server's own extension
+   list, so falling back more often can only make the verdict more accurate — it can never
+   fabricate a capability the server does not advertise. **Do not "fix" this into consistency
+   with `is_transport_failure()`**; doing so silently restores the defect.
+2. **The cached answer gains no transport dimension.** `Bugzilla.extensions` and
+   `/rest/extensions` are two views of the same Bugzilla handler, so the advertised list is
+   treated as a property of the server rather than of the transport. Note the limit of the
+   evidence: all three images return an *empty* list on both transports, which confirms both
+   probes reach the endpoint and cannot confirm that non-empty lists would agree — an empty map
+   matches an empty map whatever either probe does. The URL and capability-allowlist binding
+   specified above is unchanged, and a third dimension would only cause redundant probes.
+3. **A malformed XML-RPC response is an error, not an empty or partial map.** Three shapes: a
+   missing `extensions` member, an `extensions` member that is not a struct, and an extension
+   whose own value is not a struct. An empty map renders as *absent* — a settled refusal — and a
+   map that keeps a name whose value bzr could not read renders as *advertised*; the REST path's
+   serde decode fails on all three inputs and renders *undetermined*. The transports must reach
+   the same verdict from the same evidence, in the conservative direction, so the adapter fails
+   rather than inventing a list. The same rule extends to a present-but-non-string `version`,
+   which `Option<String>` rejects on the REST side.
 
 ### Consequences
 
 - The refusal messages no longer name `/rest/extensions`, because the probe no longer always
-  goes there, and neither does the `bug search --saved-search` note in `docs/bzr-cli.md`.
-  The *undetermined* message's embedded transport error names what actually failed.
+  goes there. Nor do the three other places that described the REST-only probe: the
+  `bug search --saved-search` note in `docs/bzr-cli.md`, the `bug search` long-about in
+  `src/cli/bug/search.rs` (which is `--help` and the man page), and the rustdoc on
+  `ServerConfig::server_extensions`. The *undetermined* message's embedded error names the
+  transport that actually failed — in Hybrid that is the XML-RPC attempt, with the earlier REST
+  failure logged at `info` so the first failure is not invisible.
 - Fail-closed is preserved: the three outcomes, the error variant, the exit code and the
   `capability_status` values are untouched, and no path is added on which an undetermined
   capability dispatches the parameter.
@@ -282,6 +310,18 @@ Two properties of the amendment are part of the decision:
   case where `/rest/extensions` specifically fails (a transient 503, a proxy allowlisting
   `/rest/bug` but not `/rest/extensions`) while REST search works. A REST-disabled deployment is
   `--api xmlrpc`, which detection already selects when version probing fails.
+- **A cached answer is now transport-agnostic.** Before this change every probe went over REST,
+  so every cached answer was a REST answer. Now an answer probed under `--api xmlrpc` is served
+  to a later `--api rest` invocation and the reverse. The fail-open direction is already covered
+  above by the `RedHat`-as-proxy consequence; the new direction is a cached *absent* written
+  over one transport that goes on refusing the other, with the same absence of a TTL this record
+  already discusses for a server upgraded in place. The remedy is the one the refusal message
+  already names: delete the server's `server_extensions` key in `config.toml`.
+- **The `version` field is read strictly on both transports**, so a present-but-non-string
+  `version` is *undetermined* rather than an extension advertised with no version. This is
+  parity for its own sake rather than a reachable hazard — a server sending it is already
+  advertising the extension — but the fail-closed property above is stated as complete, and a
+  reader will rely on that completeness instead of re-deriving it.
 - A cached answer written by this code can differ from one the previous code could have
   written: on a REST-unreachable server the probe now reaches a settled *absent*, where before
   it could only fail undetermined and cache nothing. So reverting this change does not restore

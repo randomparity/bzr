@@ -69,23 +69,17 @@ with no parameters and maps `{extensions: {Name: {version: String}}}` onto the e
 what the REST path deserialises into. Registered with one `mod server;` line in
 `src/xmlrpc/resources/mod.rs`.
 
-**A malformed response is an error, not an empty or partial map**, in the two shapes where
-the adapter would otherwise be more permissive than serde:
-
-- a **missing `extensions` member**, where an empty map would render as *absent* — a settled
-  "your server does not support this" — while the REST path's decode of a body with no
-  `extensions` key fails and renders *undetermined*;
-- an **extension whose value is not a struct** (`{"RedHat": 5}`), where absorbing the shape
-  error into `version: None` would keep `RedHat` in the map and render as *advertised*, while
-  serde fails the whole `HashMap<String, ExtensionInfo>` decode and again renders
-  *undetermined*.
-
-Both return `BzrError::XmlRpc`. An `extensions` member that is present and empty is a
-legitimate empty map, which is what all three containers actually send.
+A malformed response is an error rather than an empty or partial map, in every shape where
+the adapter would otherwise be more permissive than serde — see ADR decision point 3, which
+enumerates them. An `extensions` member that is present and empty is a legitimate empty map,
+and is what all three containers actually send.
 
 ### Messages and documentation
 
-Three places currently describe a REST-only probe and become false.
+Five statements currently describe a REST-only probe and become false. The last two are
+outside the surface #724 was dispatched with; the campaign orchestrator granted the widening
+on 2026-09-06, because fixing the CLI reference while leaving `--help` false would ship the
+phantom-doc defect this change itself creates, in the higher-traffic surface, having seen it.
 
 - `src/commands/runtime/shared/capability.rs`, the *absent* message:
   `(not advertised at /rest/extensions)` → `(not advertised in the server's extension list)`.
@@ -101,6 +95,12 @@ Three places currently describe a REST-only probe and become false.
   "bzr checks the server's advertised extension list over the API mode in use before
   searching", plus one clause recording that `bzr server info`'s version step still needs
   REST.
+- `src/cli/bug/search.rs:32`, the `bug search` long-about — which is `bzr bug search --help`
+  **and** the generated man page, so it reaches more users than the CLI reference does. Same
+  correction. `make man` regenerates the page in the same commit, since man generation is
+  CI-hard-gated.
+- `src/config/model.rs:41`, rustdoc on the persisted `server_extensions` field: "advertised at
+  `/rest/extensions`" becomes "the server advertises". Lowest blast radius, same defect.
 
 Everything else about the gate is unchanged: the same three outcomes, the same
 `UnsupportedServerCapability` variant, the same exit code 15, the same
@@ -117,9 +117,17 @@ could weaken it:
 - The three outcomes stay distinct, and `absent` versus `undetermined` remains the
   machine-readable distinction in `capability_status`.
 - The new adapter is the only new surface on which the two transports could reach different
-  verdicts from the same evidence, and both shapes where that was possible — the missing
-  member and the non-struct value — are closed above, in the conservative direction.
+  verdicts from the same evidence, and every shape where that was possible is closed in the
+  conservative direction: a missing `extensions` member, a non-struct `extensions` member, a
+  non-struct extension value, and a present-but-non-string `version`. The first three decide
+  presence; the fourth is parity for its own sake, since a server sending it is already
+  advertising the extension.
 - No path is added on which an undetermined capability dispatches the parameter.
+- The Hybrid arm falls back on **any** REST error rather than on
+  `BzrError::is_transport_failure()`. That widens when the fallback fires and so can only make
+  the verdict more determinate; it cannot grant a capability, because the XML-RPC probe returns
+  the server's own list. ADR decision point 1 carries the reasoning and the warning against
+  "fixing" it into consistency.
 
 ## Threat model
 
@@ -155,9 +163,12 @@ TLS and the pin/TOFU machinery in `src/tls/` govern it, not this code.
   redaction does hold, through `BzrError::Api`'s `Display` (`src/error.rs`). So the two
   transports are symmetric here and this change introduces no new exposure; the shared
   unboundedness is pre-existing and outside #724.
-- *Credential placement.* `XmlRpcClient::call` carries the API key in the POST body rather
-  than a URL query parameter. That is the existing, documented XML-RPC behaviour for every
-  other call and is no worse than the REST query-param path it replaces here.
+- *Credential placement.* Under `ApiMode::XmlRpc` the client already carries the key in the
+  request body for every call on that connection — `src/client/mod.rs` logs exactly this,
+  overriding configured header auth for XML-RPC — so routing the probe there adds no placement
+  the connection did not already have. Under `ApiMode::Rest` the probe is unchanged. The Hybrid
+  fallback moves this one probe's credential from a header (the common case, not a query
+  parameter) into a request body, and only after REST has already failed.
 
 **Explicitly out of scope.** The `RedHat`-as-proxy false negative and false positive
 (ADR 0052 consequences, and named as out of scope by issue #724); raw `--from-url`
@@ -167,11 +178,9 @@ for — the gate checks capability, not identity, and still does.
 
 ## Tests
 
-The honest limit is recorded in the ADR amendment's Consequences: **no supported container
-can produce a positive capability verdict**, so "cover the XML-RPC path against a real
-container" is satisfiable for the probe *mechanism* and the *negative* verdict, and not for a
-positive one. Coverage splits across two tiers accordingly, and neither tier is reported as
-the other.
+The honest limit — no supported container can produce a positive capability verdict — is
+recorded in the ADR amendment's Consequences, along with what the two tiers do and do not
+establish. What follows is the part that is this spec's own: why each test discriminates.
 
 A capability probe exercised only against servers that all lack the capability is an
 empty-versus-empty oracle by default: a test asserting "bzr correctly determines the
@@ -190,8 +199,8 @@ a broken adapter flips the verdict to *undetermined* and the assertion fails.
 
 | Tier | File | What it establishes |
 |---|---|---|
-| unit | `src/xmlrpc/resources/server_tests.rs` | advertised extensions parse; `<struct />` parses as an empty map; a missing `extensions` member, a non-struct `extensions` member, and a non-struct extension value are each an error rather than a map |
-| unit | `src/client/resources/server_tests.rs` | `XmlRpc` probes only `/xmlrpc.cgi`; `Rest` probes only `/rest/extensions`; `Hybrid` prefers REST; `Hybrid` falls back to XML-RPC when REST answers 503 |
+| unit | `src/xmlrpc/resources/server_tests.rs` | `Bugzilla.extensions` is the method called; advertised extensions parse; `<struct />` parses as an empty map; and each malformed shape is an error rather than a map — missing `extensions` member, non-struct `extensions` member, non-struct extension value, non-string `version` |
+| unit | `src/client/resources/server_tests.rs` | `XmlRpc` probes only `/xmlrpc.cgi`; `Rest` probes only `/rest/extensions`; `Hybrid` prefers REST; and `Hybrid` falls back to XML-RPC for **both** REST failure shapes — a 404 carrying a Bugzilla error envelope (the shape a real server sends, classified `BzrError::Api`) and a bodyless 503 (classified `HttpStatus`). Testing only the second is what let the guard defect through the first design pass, because it passes under either predicate |
 | unit | `src/commands/runtime/shared/capability_tests.rs` | the issue itself: REST answering 503 while XML-RPC advertises `RedHat` establishes the capability under `ApiMode::XmlRpc` — the positive verdict, at the only tier that can express it; plus the absent and undetermined paths over XML-RPC |
 | functional | `tests/functional/phases/08f-bug-saved-search.sh` | against a real container: the probe goes over XML-RPC under `--api xmlrpc` and over REST under `--api rest`, and the XML-RPC response really parsed |
 
