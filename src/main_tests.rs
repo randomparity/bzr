@@ -1,6 +1,7 @@
 #![expect(clippy::expect_used)]
 
 use super::*;
+use std::ffi::OsStr;
 use std::sync::{Mutex, OnceLock};
 
 fn env_lock() -> std::sync::MutexGuard<'static, ()> {
@@ -650,4 +651,37 @@ async fn format_dispatch_error_redacts_bare_configured_key_and_clears_context() 
             "formatting did not clear the redaction context"
         );
     }
+}
+
+// `tracing_ansi_enabled` truth table. The helper takes its inputs as
+// parameters, so these cases need no environment mutation and no `env_lock`.
+
+#[test]
+fn tracing_ansi_enabled_on_a_terminal_without_overrides() {
+    assert!(tracing_ansi_enabled(false, None, true));
+}
+
+#[test]
+fn tracing_ansi_enabled_treats_empty_no_color_as_unset() {
+    assert!(tracing_ansi_enabled(false, Some(OsStr::new("")), true));
+}
+
+#[test]
+fn tracing_ansi_disabled_off_a_terminal() {
+    assert!(!tracing_ansi_enabled(false, None, false));
+}
+
+#[test]
+fn tracing_ansi_disabled_by_the_no_color_flag() {
+    assert!(!tracing_ansi_enabled(true, None, true));
+}
+
+#[test]
+fn tracing_ansi_disabled_by_a_non_empty_no_color_env() {
+    assert!(!tracing_ansi_enabled(false, Some(OsStr::new("1")), true));
+}
+
+#[test]
+fn tracing_ansi_off_a_terminal_ignores_an_empty_no_color_env() {
+    assert!(!tracing_ansi_enabled(false, Some(OsStr::new("")), false));
 }
