@@ -117,10 +117,13 @@ async fn undeclared_key_is_refused_at_exit_seven() {
 #[tokio::test]
 async fn cached_names_answer_without_a_probe() {
     let (server, tmp, client) = setup(&["whiteboard"], 0).await;
+    let uri = server.uri();
     let config_path = write_config(
         &tmp,
-        &server.uri(),
-        "bug_field_names = [\"cf_release\", \"whiteboard\"]",
+        &uri,
+        &format!(
+            "bug_field_names = [\"cf_release\", \"whiteboard\"]\nbug_field_names_url = \"{uri}\""
+        ),
     );
 
     validate_bug_fields(&client, &ctx_for(&config_path), &keys(&["cf_release"]))
@@ -134,7 +137,12 @@ async fn cached_names_answer_without_a_probe() {
 #[tokio::test]
 async fn cache_miss_reprobes_and_accepts_a_newly_declared_field() {
     let (server, tmp, client) = setup(&["whiteboard", "cf_new"], 1).await;
-    let config_path = write_config(&tmp, &server.uri(), "bug_field_names = [\"whiteboard\"]");
+    let uri = server.uri();
+    let config_path = write_config(
+        &tmp,
+        &uri,
+        &format!("bug_field_names = [\"whiteboard\"]\nbug_field_names_url = \"{uri}\""),
+    );
 
     validate_bug_fields(&client, &ctx_for(&config_path), &keys(&["cf_new"]))
         .await
@@ -273,4 +281,46 @@ async fn an_unwritable_config_does_not_fail_the_validation() {
         None,
         "the write really did fail, so the assertion above is not vacuous"
     );
+}
+
+/// A cache written against a different host must not answer for this one.
+/// Re-pointing a server name at another Bugzilla would otherwise let the old
+/// host's catalogue wave through a key the new host does not declare, and that
+/// key reaches the wire to be silently ignored -- the exact failure this
+/// validation exists to prevent. Follows `server_extensions_url` (ADR 0052).
+#[tokio::test]
+async fn a_cache_probed_from_another_url_is_ignored() {
+    let (server, tmp, client) = setup(&["cf_release"], 1).await;
+    let config_path = write_config(
+        &tmp,
+        &server.uri(),
+        "bug_field_names = [\"cf_stale\"]\nbug_field_names_url = \"https://elsewhere.test\"",
+    );
+
+    let err = validate_bug_fields(&client, &ctx_for(&config_path), &keys(&["cf_stale"]))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err.exit_code(),
+        7,
+        "a stale-host cache must not accept: {err:?}"
+    );
+
+    assert_eq!(
+        cached_names(&config_path),
+        Some(vec!["cf_release".to_string()]),
+        "the re-probe replaces the other host's list"
+    );
+}
+
+/// A list with no recorded URL predates the binding and cannot be trusted.
+#[tokio::test]
+async fn a_cache_without_a_recorded_url_is_ignored() {
+    let (server, tmp, client) = setup(&["cf_release"], 1).await;
+    let config_path = write_config(&tmp, &server.uri(), "bug_field_names = [\"cf_stale\"]");
+
+    let err = validate_bug_fields(&client, &ctx_for(&config_path), &keys(&["cf_stale"]))
+        .await
+        .unwrap_err();
+    assert_eq!(err.exit_code(), 7, "got {err:?}");
 }

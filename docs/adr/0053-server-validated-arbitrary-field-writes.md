@@ -78,6 +78,10 @@ call at all. For the rest, bzr resolves the catalogue before dispatch:
 4. A failed probe **refuses the write** with a message that names the catalogue probe as the
    thing that failed, never as an absent field.
 
+The cache is bound to the URL it was probed from, following `server_extensions_url` from
+ADR 0052: re-pointing a server name at a different host is a cache miss, so the old host's
+catalogue can never wave through a key the new host does not declare.
+
 Step 3 is what makes the cache safe: a cache miss always forces a fresh probe, so a stale
 cache can never reject a field the server has since declared. The cache is an optimisation
 that cannot change an answer — and, for the same reason, cannot break one: a config bzr
