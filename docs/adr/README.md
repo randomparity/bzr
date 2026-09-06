@@ -40,6 +40,15 @@ rejected.
 | [0031](0031-compose-dependency-presentation-artifacts.md) | Compose dependency presentation artifacts through active capabilities | Accepted |
 | [0032](0032-operation-scoped-search-transport.md) | Resolve search transport once per operation | Accepted |
 | [0033](0033-share-lenient-deserialization-adapters.md) | Share lenient deserialization adapters by wire contract | Accepted |
+| [0034](0034-platform-naming-transition.md) | Use `platform` for Bugzilla's hardware field | Accepted |
+| [0035](0035-normalize-xmlrpc-resource-timestamps.md) | Normalize XML-RPC resource timestamps at the mapper boundary | Accepted |
+| [0036](0036-preserve-bug-create-group-presence.md) | Preserve bug-create group presence through structured input | Accepted |
+| [0037](0037-remove-unsupported-component-update.md) | Remove unsupported component update | Accepted |
+| [0038](0038-normalize-user-group-wire-contracts.md) | Normalize user and group values at the wire boundary | Accepted |
+| [0039](0039-normalize-server-capability-wire-shapes.md) | Normalize server capability wire shapes at deserialization | Accepted |
+| [0040](0040-normalize-attachment-comment-wire-shapes.md) | Normalize attachment and comment wire shapes at the REST boundary | Accepted |
+| [0041](0041-role-negation-and-zero-limit-paging.md) | Complement role filters and reject zero-limit offsets | Accepted |
+| [0042](0042-field-classification-list-resilience.md) | Keep response leniency and disabled-classification policy at their owners | Accepted |
 | [0043](0043-stabilize-test-tracing-callsite-interest.md) | Keep a sentinel tracing dispatch alive in tests | Accepted |
 | [0044](0044-python-bugzilla-comparison-sidecar.md) | Run python-bugzilla as a network-namespace sidecar | Accepted |
 | [0045](0045-observe-comparison-transport-from-debug-events.md) | Observe comparison transport from request-boundary debug events | Accepted |
