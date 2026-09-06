@@ -130,19 +130,31 @@ reference oracle the REST arm is asserted against.
   giving the related-id read a fault path of its own, which is a larger change
   than this one and is recorded as follow-up work rather than smuggled in here.
 
-  **The trade is mostly temporary.** It only bites a caller whose credential the
-  server silently ignores. #713 (ADR 0056), merged before this change landed,
-  makes auth detection reject a header the server does not honour instead of
-  accepting any 2xx, so a server configured by detection now resolves to the
-  query parameter and never reaches this state at all.
+  **The trade is narrower than it first reads.** It needs two things at once,
+  and neither alone is enough: the client must send the key in a header, and the
+  **server must ignore that header**. Pinning `--auth-method header` only makes
+  the state reachable; the server ignoring the header is what makes it harmful.
 
-  Two cases survive it. A server **explicitly pinned** with
-  `--auth-method header` bypasses detection, so its related-id reads are still
-  answered anonymously — that is the configuration the functional coverage uses,
-  precisely because it is the one that can still reach the state. And the
-  genuinely permanent case: a deployment where a bug is visible to some callers
-  and not others, where the related-id read still cannot tell an invisible
-  neighbour from an absent one.
+  #713 (ADR 0056), merged before this change landed, removes the first half by
+  default. Auth detection now rejects a header the server does not honour rather
+  than accepting any 2xx, so a server configured by detection resolves to the
+  query parameter and never reaches this state. Reaching it at all now takes an
+  explicit `--auth-method header`.
+
+  The second half is measured rather than argued. Bugzilla 5.3 maps
+  `X-BUGZILLA-API-KEY` onto `Bugzilla_api_key`; 5.0 and 5.2 do not. On 5.3 the
+  header-authenticated caller is authenticated on *both* endpoints, the
+  related-id batch returns its rows, and there is no truncation to have. The
+  functional suite runs the header-pinned `bug links` assertions against all
+  three images and they pass on each, so the truncation they tolerate exists
+  only on the two that ignore the header.
+
+  So the surviving exposure is bounded by **server behaviour**, not by client
+  configuration: a deployment that ignores `X-BUGZILLA-API-KEY`, read by a
+  caller explicitly pinned to header auth. Beyond it sits the genuinely
+  permanent case, which no auth fix reaches: a deployment where a bug is visible
+  to some callers and not others, where the related-id read still cannot tell an
+  invisible neighbour from an absent one.
 
 - **One extra request per invocation is not added.** The root was already a
   request of its own — a one-id search — and is now a one-id direct read.
