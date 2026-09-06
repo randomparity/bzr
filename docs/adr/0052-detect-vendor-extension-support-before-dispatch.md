@@ -78,11 +78,23 @@ Three consequences of that rule are part of the decision, not implementation det
   request its server would have honoured. That false negative is the accepted cost, and it is
   the mirror of what passthrough gets wrong: passthrough is silently wrong on most servers,
   detection is loudly wrong on few.
+- **The proxy also fails in the other direction, and the gate does not catch it.** A server that
+  advertises `RedHat` but whose `Bug.search` does not implement saved searches — a partial
+  deployment, a fork of the fork, a future version that drops the parameter — passes the gate,
+  and bzr then dispatches and returns whatever comes back. The same holds for a name the server
+  does implement but cannot resolve. Nothing verifies the *result*, and nothing should: proving a
+  saved search was applied would mean re-running the query unfiltered and comparing, which costs
+  more than the risk it removes. So the guarantee this decision buys is precise — bzr will not
+  send the parameter to a server that says it lacks the extension — and it is not a guarantee
+  that a dispatched saved search was resolved.
 - `ServerConfig` gains a persisted field, and a cached answer has no TTL. A server *upgraded in
-  place* to add the extension keeps being refused until the cache is cleared, which
-  `bzr config set-server` does by replacing the entry. This is worse than a stale `api_mode` or
-  `auth_method`, which surface as a visible connection failure rather than a plausible-looking
-  refusal, so the refusal message says the answer is cached and how to re-probe. Only
+  place* to add the extension keeps being refused until the cache is cleared. The refusal message
+  says so and names the remedy the tool actually supports: delete the `server_extensions` key for
+  that server in `config.toml`. It deliberately does **not** point at `bzr config set-server`,
+  which replaces the whole entry — including the keyring reference, TLS pin and TOFU issuer state
+  — and would silently unpin a server the user pinned. This staleness is worse than a stale
+  `api_mode` or `auth_method`, which surface as a visible connection failure rather than a
+  plausible-looking refusal. Only
   capabilities bzr acts on are stored — the probe response is server-controlled and unbounded,
   and persisting it verbatim would write arbitrary server text into the user's config. The cached
   answer is bound to the URL it was probed from and discarded when that changes, so a server name

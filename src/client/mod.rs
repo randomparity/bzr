@@ -121,6 +121,16 @@ fn deserialize_id_response_id<'de, D: serde::Deserializer<'de>>(
 }
 
 impl BugzillaClient {
+    /// The resolved server base URL this client actually talks to.
+    ///
+    /// Callers that persist something *about* the connected server must key it
+    /// on this rather than on a fresh config read: the config can change
+    /// between connect and write, and a cached answer stamped with the wrong
+    /// host is exactly the fail-open the key exists to prevent.
+    pub(crate) fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
     pub fn new(config: BugzillaClientConfig<'_>) -> Result<Self> {
         let BugzillaClientConfig {
             base_url,

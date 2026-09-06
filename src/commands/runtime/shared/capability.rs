@@ -44,12 +44,12 @@ pub(crate) async fn require_server_capability(
     operation: &str,
 ) -> Result<()> {
     let server = server_label(ctx);
-    let cacheable = ctx.inline_server().is_none();
-    let extensions = resolve_extensions(ctx, client, capability, operation, &server).await?;
+    let Resolved { extensions, cached } =
+        resolve_extensions(ctx, client, capability, operation, &server).await?;
     if extensions.iter().any(|name| name == capability) {
         Ok(())
     } else {
-        Err(unsupported(capability, operation, &server, cacheable))
+        Err(unsupported(capability, operation, &server, cached))
     }
 }
 
@@ -87,7 +87,7 @@ async fn resolve_extensions(
     capability: &str,
     operation: &str,
     server: &str,
-) -> Result<Vec<String>> {
+) -> Result<Resolved> {
     // An inline `--server-url` connection has no config entry, so there is
     // nothing to read from and nothing to write back: probe every time.
     let cached_server = if ctx.inline_server().is_some() {
@@ -101,7 +101,10 @@ async fn resolve_extensions(
         ..
     }) = &cached_server
     {
-        return Ok(extensions.clone());
+        return Ok(Resolved {
+            extensions: extensions.clone(),
+            cached: true,
+        });
     }
 
     let advertised = client
@@ -116,10 +119,21 @@ async fn resolve_extensions(
         .collect();
     names.sort_unstable();
 
-    if let Some(server) = cached_server {
-        persist_extensions(ctx, &server, &names);
-    }
-    Ok(names)
+    // `cached` reports what actually happened, not a proxy for it: an inline
+    // connection and an unreadable config both reach here with nothing to
+    // write, and neither should be told its answer was cached.
+    let cached = cached_server
+        .is_some_and(|server| persist_extensions(ctx, &server, client.base_url(), &names));
+    Ok(Resolved {
+        extensions: names,
+        cached,
+    })
+}
+
+/// A resolved capability answer and whether it is backed by the config cache.
+struct Resolved {
+    extensions: Vec<String>,
+    cached: bool,
 }
 
 /// Read the configured server's name and any cached extension list.
@@ -147,7 +161,6 @@ fn cached_server_name_and_extensions(ctx: &CommandContext) -> Option<CachedServe
     };
     Some(CachedServer {
         name: name.to_string(),
-        url: srv.url.clone(),
         extensions: cached,
     })
 }
@@ -155,9 +168,6 @@ fn cached_server_name_and_extensions(ctx: &CommandContext) -> Option<CachedServe
 /// The configured server a capability answer belongs to.
 struct CachedServer {
     name: String,
-    /// URL at the moment of the read — the probe is issued against this, and
-    /// the write is skipped if the entry has since been re-pointed.
-    url: String,
     extensions: Option<Vec<String>>,
 }
 
@@ -177,19 +187,30 @@ fn known_capabilities() -> Vec<String> {
 /// Best-effort: a server removed concurrently, or a config that cannot be
 /// written, costs one extra probe next time and is not worth failing a
 /// successful command over. Logged, not silent.
-fn persist_extensions(ctx: &CommandContext, server: &CachedServer, names: &[String]) {
+/// Cache the probed answer, returning whether it was actually written.
+///
+/// `probed_url` is the client's own base URL — the host the probe was issued
+/// against — not a value re-read from config, which can have changed since the
+/// connection was built.
+fn persist_extensions(
+    ctx: &CommandContext,
+    server: &CachedServer,
+    probed_url: &str,
+    names: &[String],
+) -> bool {
     let server_name = server.name.as_str();
-    let probed_url = server.url.as_str();
+    let mut written = false;
     let result = Config::update_locked_at(ctx.config_path_override(), |config| {
         if let Some(srv) = config.servers.get_mut(server_name) {
-            // The entry may have been re-pointed between the read and this
+            // The entry may have been re-pointed between connect and this
             // write. Stamping the new URL onto an answer probed from the old
             // host is exactly the fail-open the URL binding exists to prevent,
             // so skip instead — costing one extra probe next time.
-            if srv.url == probed_url {
-                srv.server_extensions_url = Some(probed_url.to_string());
+            if srv.url.trim_end_matches('/') == probed_url.trim_end_matches('/') {
+                srv.server_extensions_url = Some(srv.url.clone());
                 srv.server_extensions_known = Some(known_capabilities());
                 srv.server_extensions = Some(names.to_vec());
+                written = true;
             } else {
                 tracing::debug!(
                     "server '{server_name}' was re-pointed during the capability probe; \
@@ -201,7 +222,9 @@ fn persist_extensions(ctx: &CommandContext, server: &CachedServer, names: &[Stri
     });
     if let Err(e) = result {
         tracing::debug!("could not cache server extensions for '{server_name}': {e}");
+        return false;
     }
+    written
 }
 
 fn unsupported(capability: &str, operation: &str, server: &str, cacheable: bool) -> BzrError {

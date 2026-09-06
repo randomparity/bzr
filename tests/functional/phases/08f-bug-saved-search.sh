@@ -18,17 +18,26 @@ echo "── Phase 8f: Bug search --saved-search ──────────�
 
 _SS_NAME="bzr-func-saved-search"
 
-test_begin "bug-search-saved-search-refused-over-rest" "bug search --saved-search refused over REST"
-run_bzr --api rest bug search --saved-search "$_SS_NAME"
+# Ordering matters: the capability answer is cached per server in the shared
+# XDG config this run uses, so the FIRST --saved-search invocation is the only
+# cache miss. Run the XML-RPC case first, so it is the one that actually issues
+# the REST-only `/rest/extensions` probe under `--api xmlrpc`; the REST case
+# then covers the cache-hit path. `RUST_LOG` assertions pin which is which
+# rather than leaving it to position.
+test_begin "bug-search-saved-search-refused-over-xmlrpc" "bug search --saved-search refused over XML-RPC (cache miss, REST probe)"
+RUST_LOG=bzr=debug run_bzr --api xmlrpc bug search --saved-search "$_SS_NAME"
 if assert_exit_code 15 &&
     assert_stderr_contains 'unsupported_server_capability' &&
-    assert_stderr_contains 'RedHat'; then
+    assert_stderr_contains '/rest/extensions'; then
     test_pass
 fi
 
-test_begin "bug-search-saved-search-refused-over-xmlrpc" "bug search --saved-search refused over XML-RPC"
-run_bzr --api xmlrpc bug search --saved-search "$_SS_NAME"
-if assert_exit_code 15 && assert_stderr_contains 'unsupported_server_capability'; then
+test_begin "bug-search-saved-search-refused-over-rest" "bug search --saved-search refused over REST (cache hit)"
+RUST_LOG=bzr=debug run_bzr --api rest bug search --saved-search "$_SS_NAME"
+if assert_exit_code 15 &&
+    assert_stderr_contains 'unsupported_server_capability' &&
+    assert_stderr_contains 'RedHat' &&
+    assert_stderr_not_contains '/rest/extensions'; then
     test_pass
 fi
 
