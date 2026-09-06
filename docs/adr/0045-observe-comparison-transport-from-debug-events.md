@@ -4,6 +4,9 @@
 
 Accepted
 
+> **Amended by [0058](0058-suppress-tracing-ansi-off-terminal.md)** (2026-09-06) — this
+> observation contract requires bzr to write plain text when stderr is not a terminal.
+
 ## Context
 
 ADR 0044 requires every bzr/python-bugzilla comparison to record the transport used. The initial
