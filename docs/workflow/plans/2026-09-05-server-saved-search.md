@@ -387,7 +387,7 @@ three sources fails input validation naming all three; `make lint` and `make tes
    `` `--from-url` and the positional `<QUERY>` argument are mutually exclusive. `` add:
 
    ```markdown
-   `--saved-search` is a third, mutually exclusive query source: it runs a saved search stored in your Bugzilla account, which is unrelated to bzr's local saved queries (see [`bzr query`](#bzr-query)).
+   `--saved-search` is a third, mutually exclusive query source: it runs a saved search stored in your Bugzilla account, which is unrelated to bzr's local saved queries (see [`bzr query`](#bzr-query----saved-query-management)).
 
    > **Note:** Resolving a server-side saved search is a Red Hat Bugzilla extension. A stock Bugzilla accepts `savedsearch` and `sharer_id` and ignores them, so `--saved-search` against such a server returns an unfiltered result rather than an error. Verified against Bugzilla 5.0.6, 5.2, and 5.3.3+.
    ```
