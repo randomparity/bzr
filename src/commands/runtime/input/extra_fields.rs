@@ -68,19 +68,21 @@ fn parse_json_source(source: &str) -> Result<ExtraFields> {
             "--field-json",
         )?
     };
-    // stdin can only be consumed once. When another flag on the same command
-    // line already read it (`--from-json -`, `--description -`, `--comment -`,
-    // or a piped description), this read comes back empty; say so, rather than
-    // reporting an EOF parse error that names neither flag.
     if raw.trim().is_empty() {
+        // stdin is consumable once. `reject_stdin_conflict` catches the flag
+        // combinations up front, but a bug description arriving on a pipe has
+        // no flag of its own, so an empty read still has to name the cause
+        // rather than report an EOF parse error that explains nothing.
+        let message = if source == "-" {
+            "--field-json -: stdin was empty. stdin can only be read once, so this \
+             cannot be combined with another flag or a piped bug description that \
+             also reads it; pass a file path instead"
+                .to_string()
+        } else {
+            format!("--field-json: '{source}' is empty; it must hold a JSON object")
+        };
         return Err(BzrError::input_field(
-            format!(
-                "--field-json: '{source}' produced an empty document. stdin can only be \
-                 read once, so `--field-json -` cannot be combined with another flag \
-                 that reads it (--from-json -, --description -, --description-file -, \
-                 --comment -, --comment-file -, or a piped bug description); pass a \
-                 file path instead"
-            ),
+            message,
             "--field-json",
             Some(source.to_string()),
         ));
@@ -108,7 +110,10 @@ fn parse_json_source(source: &str) -> Result<ExtraFields> {
                 Some(source.to_string()),
             ));
         }
-        insert_unique(&mut out, key, value)?;
+        // serde_json already collapses repeated keys within one document, so
+        // there is nothing left to detect here; cross-source duplicates are
+        // caught in `parse`.
+        out.insert(key, value);
     }
     Ok(out)
 }

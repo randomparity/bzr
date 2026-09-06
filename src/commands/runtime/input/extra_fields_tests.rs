@@ -156,19 +156,19 @@ fn collision_check_is_a_no_op_without_extras() {
     assert!(check_against(&typed, extra).is_ok());
 }
 
-/// stdin can only be read once. When another flag already drained it this read
-/// returns empty, and the diagnostic has to name that cause rather than report
-/// an EOF parse error naming neither flag.
 #[test]
-fn empty_json_source_explains_the_single_stdin_read() {
+fn an_empty_json_file_is_rejected_naming_the_path() {
     let tmp = tempfile::TempDir::new().unwrap();
     let source = write_json(&tmp, "   \n");
     let err = parse(&[], Some(&source)).unwrap_err();
     assert_eq!(err.exit_code(), 7);
     let message = err.to_string();
-    assert!(message.contains("empty document"), "{message}");
-    assert!(message.contains("read once"), "{message}");
-    assert!(message.contains("--from-json -"), "{message}");
+    assert!(message.contains(&source), "{message}");
+    assert!(message.contains("must hold a JSON object"), "{message}");
+    assert!(
+        !message.contains("stdin"),
+        "a file path is not a stdin conflict: {message}"
+    );
 }
 
 #[test]

@@ -1083,9 +1083,10 @@ bzr bug update 12345 --field cf_release=9.7
 bzr bug update 12345 --field-json fields.json   # {"cf_targets": ["a", "b"]}
 ```
 
-`--field-json -` reads the document from stdin, which can only be read once:
-it cannot be combined with `--from-json -`, `--description -`, `--comment -`,
-or a piped bug description. Doing so fails with exit 7 naming the conflict —
+`--field-json -` reads the document from stdin, which can only be read once, so
+it cannot be combined with `--from-json -`, `--description -`,
+`--description-file -`, `--comment -`, `--comment-file -`, or a piped bug
+description. Those combinations are rejected with exit 7 naming both flags —
 pass a file path instead.
 
 `--field KEY=VALUE` splits on the first `=`, so `--field k=a=b` sets `a=b`.
