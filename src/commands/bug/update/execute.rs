@@ -6,15 +6,49 @@
 use crate::client::BugzillaClient;
 use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::mutation::ensure_batch_complete;
-use crate::error::Result;
+use crate::error::{BzrError, Result};
 use crate::output::result_types::{
     write_result, ActionResult, BatchFailure, BatchResult, ResourceKind,
 };
 use crate::output::writers::Writers;
 use crate::types::bug::UpdateBugParams;
+use crate::types::comment::UpdateCommentTagsParams;
 use crate::types::output::OutputFormat;
 
 use super::output::{comment_suffix, write_batch_result, write_update_dry_run};
+
+/// Bugzilla's `Bug.update` `comment_tags` parameter is not reliably honored
+/// across supported server versions (issue #672: confirmed silently ignored
+/// on a live Bugzilla 5.0.6), unlike `Bug.create`'s hard rejection of the
+/// same parameter. Tag the just-posted comment directly via the
+/// confirmed-working `bug/comment/{id}/tags` endpoint instead of relying on
+/// it. `resolve_comment_tags` (in `payload.rs`) guarantees `params.comment`
+/// is `Some` whenever `comment_tags` is non-empty.
+async fn apply_comment_tags(
+    client: &BugzillaClient,
+    bug_id: u64,
+    params: &UpdateBugParams,
+) -> Result<()> {
+    let Some(comment) = params.comment.as_ref() else {
+        return Ok(());
+    };
+    let comments = client.get_comments_since(bug_id, None).await?;
+    let comment_id = comments
+        .iter()
+        .rev()
+        .find(|c| c.text.as_deref() == Some(comment.body.as_str()))
+        .map(|c| c.id)
+        .ok_or_else(|| BzrError::NotFound {
+            resource: "comment",
+            id: bug_id.to_string(),
+        })?;
+    let tag_params = UpdateCommentTagsParams {
+        add: params.comment_tags.clone(),
+        remove: vec![],
+    };
+    client.update_comment_tags(comment_id, &tag_params).await?;
+    Ok(())
+}
 
 async fn update_single(
     client: &BugzillaClient,
@@ -24,6 +58,9 @@ async fn update_single(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     client.update_bug(id, params).await?;
+    if !params.comment_tags.is_empty() {
+        apply_comment_tags(client, id, params).await?;
+    }
     match format {
         OutputFormat::Json | OutputFormat::Ndjson => {
             write_result(
@@ -52,7 +89,14 @@ async fn update_batch(
     let mut failed = Vec::new();
     for &id in ids {
         match client.update_bug(id, params).await {
-            Ok(()) => succeeded.push(id),
+            Ok(()) if params.comment_tags.is_empty() => succeeded.push(id),
+            Ok(()) => match apply_comment_tags(client, id, params).await {
+                Ok(()) => succeeded.push(id),
+                Err(e) => failed.push(BatchFailure {
+                    id,
+                    error: e.to_string(),
+                }),
+            },
             Err(e) => failed.push(BatchFailure {
                 id,
                 error: e.to_string(),

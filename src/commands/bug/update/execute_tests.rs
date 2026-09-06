@@ -4,18 +4,33 @@
 //! short-circuits and the `--expect-unchanged-since` guard running before any
 //! write.
 
-use wiremock::matchers::method;
+use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::commands::runtime::invocation::CommandContext;
 use crate::test_helpers::{setup_test_env, CapturedIo};
-use crate::types::bug::UpdateBugParams;
+use crate::types::bug::{CommentUpdate, UpdateBugParams};
 use crate::types::OutputFormat;
 
 use super::super::test_helpers::{
     forbid_put, mock_get_bug_lct, mock_put_bug_ok, received_put_count,
 };
 use super::{apply_checked, apply_checked_connected, ApplyRequest};
+
+/// Mount the GET the tagging sub-step uses to find the just-posted comment.
+async fn mock_bug_comment(mock: &wiremock::MockServer, bug_id: u64, comment_id: u64, text: &str) {
+    Mock::given(method("GET"))
+        .and(path(format!("/rest/bug/{bug_id}/comment")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": { bug_id.to_string(): { "comments": [{
+                "id": comment_id, "bug_id": bug_id, "text": text,
+                "creator": "user@test.com", "creation_time": "2025-01-01T00:00:00Z",
+                "is_private": false, "count": 0
+            }]}}
+        })))
+        .mount(mock)
+        .await;
+}
 
 #[tokio::test]
 async fn apply_checked_connected_dry_run_skips_expect_unchanged_get() {
@@ -134,4 +149,106 @@ async fn apply_checked_connected_writes_when_guard_passes() {
     let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
     assert_eq!(parsed["action"], "updated");
     assert_eq!(parsed["id"], 42);
+}
+
+fn params_with_comment_tags(body: &str, tags: &[&str]) -> UpdateBugParams {
+    UpdateBugParams {
+        comment: Some(CommentUpdate {
+            body: body.into(),
+            is_private: false,
+        }),
+        comment_tags: tags.iter().map(|t| (*t).to_string()).collect(),
+        ..Default::default()
+    }
+}
+
+#[tokio::test]
+async fn single_update_tags_the_posted_comment_after_a_bug_update_that_ignores_the_field() {
+    // Bug.update's `comment_tags` parameter is not reliably honored (issue
+    // #672), so this must tag the comment via a follow-up GET + PUT
+    // regardless of whether the update response acknowledged the tags.
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_put_bug_ok(&mock, 42).await;
+    mock_bug_comment(&mock, 42, 900, "tagged comment").await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/comment/900/tags"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!(["triaged"])))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let client = crate::client::test_helpers::test_client(&mock.uri());
+    let request = ApplyRequest {
+        ids: vec![42],
+        params: params_with_comment_tags("tagged comment", &["triaged"]),
+        expect_unchanged_since: None,
+    };
+    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let mut io = CapturedIo::new();
+
+    let result = apply_checked_connected(&client, request, &ctx, &mut io.writers()).await;
+
+    assert!(result.is_ok(), "tagging should succeed: {result:?}");
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
+    assert_eq!(parsed["action"], "updated");
+}
+
+#[tokio::test]
+async fn single_update_tag_lookup_failure_fails_the_update() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_put_bug_ok(&mock, 42).await;
+    // No comment matches the posted body: the GET returns an unrelated one.
+    mock_bug_comment(&mock, 42, 900, "a different comment").await;
+    let client = crate::client::test_helpers::test_client(&mock.uri());
+    let request = ApplyRequest {
+        ids: vec![42],
+        params: params_with_comment_tags("tagged comment", &["triaged"]),
+        expect_unchanged_since: None,
+    };
+    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let mut io = CapturedIo::new();
+
+    let err = apply_checked_connected(&client, request, &ctx, &mut io.writers())
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, crate::error::BzrError::NotFound { .. }));
+}
+
+#[tokio::test]
+async fn batch_update_tag_failure_reports_that_id_as_failed() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_put_bug_ok(&mock, 1).await;
+    mock_put_bug_ok(&mock, 2).await;
+    mock_bug_comment(&mock, 1, 901, "tagged comment").await;
+    // Bug 2's comment lookup finds nothing matching: its tag step fails.
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/2/comment"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": {"2": {"comments": []}}})),
+        )
+        .mount(&mock)
+        .await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/comment/901/tags"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!(["triaged"])))
+        .mount(&mock)
+        .await;
+    let client = crate::client::test_helpers::test_client(&mock.uri());
+    let request = ApplyRequest {
+        ids: vec![1, 2],
+        params: params_with_comment_tags("tagged comment", &["triaged"]),
+        expect_unchanged_since: None,
+    };
+    let ctx = CommandContext::new(None, OutputFormat::Json, None).with_assume_yes(true);
+    let mut io = CapturedIo::new();
+
+    let err = apply_checked_connected(&client, request, &ctx, &mut io.writers())
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.exit_code(), 11);
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(io.out_str());
+    assert_eq!(parsed["succeeded"], serde_json::json!([1]));
+    assert_eq!(parsed["failed"][0]["id"], 2);
 }
