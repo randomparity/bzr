@@ -21,12 +21,24 @@ untouched.
 The permitted surface is the shared search parameter type, its two transport mappers, the
 `bug search` CLI and command modules, their test siblings, the CLI reference, the
 python-bugzilla parity report, the saved-search block of the lifecycle comparison script,
-one new functional phase script, and the runner list in `tests/functional/run-tests.sh` that
-the new phase must appear in. That last edit is a necessary consequence of the sourced
-criterion requiring a phase script, not an expansion of it: `tools/check-functional-test-ids.sh`
-compares the runner's `for _phase in` list against the basenames in
-`tests/functional/phases/` and fails `make lint` unless they match. No dependency, config,
-auth, schema, or paging behaviour changes.
+one new functional phase script, and two files that are mechanically coupled to edits the
+criteria require:
+
+- `tests/functional/run-tests.sh` — `tools/check-functional-test-ids.sh` compares the
+  runner's `for _phase in` list against the basenames in `tests/functional/phases/` and
+  fails `make lint` unless they match, so a new phase file is not addable without its
+  runner row.
+- `tests/functional/pybz/container-tests.sh` — its `run_parity_report_fixture` holds every
+  row of `docs/dev/python-bugzilla-parity.md` as a literal string and asserts each appears
+  exactly once, so the parity-row flip is not completable without the matching fixture
+  edit. This file is reached by `make functional-compare`, not by `make lint` or
+  `make test`.
+
+Neither is an expansion of the charter's surface; each is the unavoidable other half of a
+sourced criterion. Both are flagged to the campaign orchestrator, and the second is a
+line-adjacent conflict risk with the concurrently running sibling issue #672, which owns the
+`Comment tags and minor update` row two lines below. No dependency, config, auth, schema, or
+paging behaviour changes.
 
 ## Verified: upstream Bugzilla ignores these parameters
 

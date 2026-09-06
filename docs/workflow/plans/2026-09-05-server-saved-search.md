@@ -59,7 +59,8 @@ conventions dominate. They measure different things.
 | `src/commands/bug/search.rs` | changed | routing the flags into the non-URL branch |
 | `src/commands/bug/search_tests.rs`, `src/commands/bug/mod_tests.rs` | changed | end-to-end request coverage; literal `SearchArgs` sites |
 | `docs/bzr-cli.md` | changed | command tree, prose, examples, options table |
-| `docs/dev/python-bugzilla-parity.md` | changed | the saved-search status row |
+| `docs/dev/python-bugzilla-parity.md` | changed | the saved-search status row and its footnote |
+| `tests/functional/pybz/container-tests.sh` | changed | the literal copy of that row its parity fixture asserts |
 | `tests/functional/compare/01-bug-lifecycle.sh` | changed | dropping the expected-gap marking |
 | `tests/functional/phases/08f-bug-saved-search.sh` | created | functional coverage on a real container |
 | `tests/functional/run-tests.sh` | changed | sourcing the new phase |
@@ -411,11 +412,28 @@ three sources fails input validation naming all three; `make lint` and `make tes
 
    The row still reads `parity`, which is the sourced criterion; the footnote applies this
    design's own disclosure rule to the one durable artifact most likely to be quoted out of
-   context. Change nothing else in that table. If the table proves to be machine-parsed by
-   any check, drop the marker and put the same sentence in a plain paragraph under the table
-   instead.
+   context. Change nothing else in that table.
 
-7. In the `saved-search` block of `tests/functional/compare/01-bug-lifecycle.sh`, replace
+7. **The parity table is machine-checked, so the row change is not complete until its fixture
+   matches.** `run_parity_report_fixture` in `tests/functional/pybz/container-tests.sh`
+   (defined at line 950, invoked at line 3011) holds every row as a literal string and
+   asserts `grep -Fxc "$row" "$report" -eq 1`. Update the `Server saved search` entry at line
+   960 from
+
+   ```text
+   '| Server saved search | `bzr bug search --saved-search` | expected gap (#670) | `compare/01-bug-lifecycle/saved-search` |'
+   ```
+
+   to the new row text, byte for byte including the footnote marker. Touch no other row: the
+   sibling issue #672 owns the `Comment tags and minor update` entry two lines below, and its
+   own change will edit that one.
+
+   Verify with `bash tests/functional/pybz/container-tests.sh` bare — it needs no container
+   for this fixture. Expect exit 0. This file is reached by `make functional-compare` and
+   `make functional-compare-all`, not by `make lint` or `make test`, so nothing else in the
+   ordinary loop catches a mismatch.
+
+8. In the `saved-search` block of `tests/functional/compare/01-bug-lifecycle.sh`, replace
 
    ```bash
        if lifecycle_bzr_gap saved-search "error: unexpected argument '--saved-search' found" \
@@ -431,12 +449,14 @@ three sources fails input validation naming all three; `make lint` and `make tes
    and delete the `    lifecycle_expect_gap 670` line four lines below it. Touch no other
    block in that file.
 
-8. Run `make lint` bare — `check-shell` covers the comparison script. Expect exit 0. Commit:
+9. Run `make lint` bare — `check-shell` covers both shell files. Expect exit 0. Commit:
    `docs(search): document --saved-search and flip the parity row`.
 
 **Acceptance criteria.** The flag-drift check exits 0; the reference documents both flags,
-states the Red Hat caveat, and its footnote names all three sources; the parity row reads
-`parity`; the comparison block calls `lifecycle_bzr` with no `lifecycle_expect_gap 670`.
+states the Red Hat caveat, and its options-table footnote names all three query sources; the
+parity row reads `parity` with a footnote stating what its evidence covers, and
+`bash tests/functional/pybz/container-tests.sh` exits 0 against it; the comparison block
+calls `lifecycle_bzr` with no `lifecycle_expect_gap 670`.
 
 ## Task 4 — functional phase coverage
 
