@@ -50,36 +50,47 @@ The probe issues up to three `GET {base}/rest/user?names={login}` requests:
 
 Three properties of that rule are the decision, not implementation detail.
 
-**1. A leg is evidence only when its outcome means something about auth.** A transport
-failure, an unreadable body, a 5xx, a 404, a redirect, or a JSON object with a truthy
-top-level `error` key ends the probe on any leg: each of those is a response the server
-would have given whatever credential it was shown, so an equality or inequality it produces
-says nothing. On top of that, the **header and query-parameter legs must return 2xx** — a
-credential-bearing request that was refused cannot stand in for the authenticated response.
+**1. A leg is evidence only when its outcome means something about auth, and the two
+credentialed legs are held to a stricter test than the anonymous one.**
 
-The anonymous leg is the deliberate exception: a `401` or `403` there is *kept*, because an
-anonymous caller being refused what a credentialed one receives is the most auth-shaped
-observation the probe can make. Treating it as inconclusive would discard the strongest
-available evidence and void the confirming branch on every `requirelogin` deployment — a
-configuration the enterprise forks this fallback exists for are more likely to run, not
-less. The positive stays pinned by the query-parameter leg regardless: an ignored header
-would have been refused exactly as the anonymous request was.
+*Every* leg is discarded on a transport failure, an unreadable body, or a status that is
+neither a success nor `401`/`403` — a 5xx, a 404, a redirect. Each of those is a response
+the server would have given whatever credential it was shown, so an equality or inequality
+it produces says nothing.
 
-The error-body half of that rule is not hypothetical on the server class this fallback
-serves. `Response::check_bugzilla_200_error` (`src/client/response.rs`) exists because "some
-servers (e.g. IBM LTC Bugzilla) include error fields alongside valid data" in an HTTP 200; a
-status check alone would accept two identical 200-error responses on the header and
-query-parameter legs as agreement. This probe's test is deliberately broader than that
-helper's — any top-level `error` that is neither `false` nor `null` fails the leg, where the
-helper additionally requires the absence of real data. The two answer different questions:
-the helper must not discard a result the user asked for, while this probe only decides
-whether to trust a leg, and the safe answer to an ambiguous leg is no.
+The **header and query-parameter legs** must additionally show the credential was
+*accepted*: a 2xx **and** no truthy top-level `error` key. A credential-bearing request that
+was refused cannot stand in for the authenticated response, and on this server class the
+refusal often arrives as an HTTP 200. `Response::check_bugzilla_200_error`
+(`src/client/response.rs`) exists because "some servers (e.g. IBM LTC Bugzilla) include
+error fields alongside valid data" in a 200; a status check alone would read two identical
+200-error responses on those two legs as agreement. This probe's test is deliberately
+broader than that helper's — any top-level `error` that is neither `false` nor `null` fails
+the leg, where the helper additionally requires the absence of real data. The two answer
+different questions: the helper must not discard a result the user asked for, while this
+probe only decides whether to trust a leg, and the safe answer to an ambiguous leg is no.
 
-**2. The comparison is over the parsed body, not over status-plus-bytes.** Content stability
-is not encoding stability: field ordering, whitespace, or a per-response serialisation
-difference would make two identical records unequal, and the probe would then return `false`
-unconditionally — silently shipping the "remove the fallback" alternative this record
-rejects, while claiming not to. Each body is parsed with
+The **anonymous leg is deliberately not held to that test**, and this is the one place the
+two rules would otherwise collide. An anonymous caller being refused what a credentialed one
+receives is the most auth-shaped observation the probe can make, and Bugzilla delivers that
+refusal as a status *and* an error body together — issue #713's own table records
+`rest/group?names=admin` answering `401` with `code 410` to an anonymous caller. Applying
+the credentialed test to the anonymous leg would therefore discard the refusal twice over —
+once for the status, once for the body — and void the confirming branch on every
+`requirelogin` deployment, a configuration the enterprise forks this fallback exists for are
+more likely to run, not less. So the anonymous leg is accepted with whatever body it
+carries. The positive stays pinned by the query-parameter leg regardless: a header the
+server ignored would have been refused exactly as the anonymous request was, so its body
+would equal the anonymous body and the probe would stop at the second leg.
+
+**2. The comparison is over the parsed body, not over status-plus-bytes.** This is measured,
+not stylistic. Against the project's own `bz50` image (Bugzilla 5.0.6), three identical
+authenticated `GET /rest/user?names=<email>` requests returned **three different byte
+sequences and one identical value** — Perl hash ordering is randomised per response, so JSON
+object keys come back in a different order each time. A byte comparison would therefore have
+found the header and query-parameter legs unequal on essentially every request, returned
+`false` unconditionally, and silently shipped the "remove the fallback" alternative this
+record rejects while claiming not to. Each body is parsed with
 `serde_json::from_str::<serde_json::Value>` and compared structurally; a body that does not
 parse as JSON is compared as raw text, and a parsed body never equals an unparsed one.
 `serde_json`'s own 128-level recursion limit bounds the parse of a server-controlled body.
@@ -95,14 +106,22 @@ from an anonymous one at *this* endpoint, and declines to conclude anything when
 not. The defect being fixed is exactly an assumption of that kind baked into a probe.
 
 The endpoint is `rest/user?names={login}`, with `{login}` the configured email the
-`valid_login` probe already required. The `?names=` query form is chosen so `reqwest`
+`valid_login` probe already required; the `?names=` query form is chosen so `reqwest`
 encodes an email rather than bzr interpolating one into a path. Issue #713 measured the
-**path** form, `rest/user/<login>`, and found the anonymous projection (id and real_name)
-narrower than the authenticated one (the full record including `groups`) on stock Bugzilla
-5.2. That the query form discriminates identically is an assumption at authoring time;
-Bugzilla's `User.get` does apply different restrictions to `names`, `ids` and `match`. The
-functional tier checks it on a real server rather than leaving it asserted — see
-Consequences.
+**path** form, `rest/user/<login>`, on stock Bugzilla 5.2. The query form was measured
+separately, against the project's `bz50` image (Bugzilla 5.0.6), because Bugzilla's
+`User.get` applies different restrictions to `names`, `ids` and `match` and the two forms
+are not equivalent by construction. `GET /rest/user?names=admin@test.bzr` in the three auth
+modes:
+
+| Request | Status | Body |
+|---|---|---|
+| no credentials | 200 | `{"users":[{"name":…,"real_name":…,"id":1}]}` |
+| `X-BUGZILLA-API-KEY` | 200 | byte-identical to the anonymous response |
+| `Bugzilla_api_key` | 200 | full record adding `groups`, `email`, `can_login`, `saved_searches`, `saved_reports` |
+
+So the shipped form discriminates, and the header column reproduces the defect this record
+fixes on a container the project already runs.
 
 ## Consequences
 
@@ -141,23 +160,27 @@ Consequences.
   the functional tier runs upstream Bugzilla (`bz50`, `bz52`, and `bz53` built from
   `bugzilla/bugzilla` `master`), so it exercises only the negative branch. Against a real
   server of that class, the confirming branch is reasoned, not measured.
-- **What the functional tier does establish** is that the probe ran and discriminated: on
-  `bz50`/`bz52` it asserts, from the debug log, that the probe ended by finding the header
-  response equal to the anonymous one. That is what checks the shipped `?names=` form
-  actually reaches a real endpoint and that both legs completed — the assumption property 3
-  leaves open — rather than only that the outcome happened to be `query_param`.
+- **What the functional tier does establish** is that the probe ran and reached its decision
+  on real responses: on `bz50`/`bz52` it asserts, from the debug log, that the probe ended by
+  finding the header response equal to the anonymous one. That keeps the endpoint
+  measurement above from silently rotting — a future image whose `rest/user` stops
+  discriminating, or a probe that dies at leg 1, both change that line — rather than
+  asserting only that the outcome happened to be `query_param`, which four different code
+  paths could produce.
 - **Only `bz50` and `bz52` exercise this code at all.** The `bz53` image serves
   `rest/whoami`, so `detect_whoami_auth` resolves the method and `detect_auth_method`
   returns before the `valid_login` fallback is reached. The functional assertions are
   version-gated to `bz50`/`bz52` and skipped on `bz53`, rather than asserting a value on a
   version where nothing under test runs.
-- **The endpoint's per-request content stability is assumed, not measured.** If any field of
-  a deployment's `rest/user` record varies between two requests — Bugzilla's own
-  `last_seen_date` on authenticated access, or an activity field a customised `User.get`
-  adds — the header and query-parameter legs are unequal and header auth is never confirmed
-  on that server. That is a permanent false negative pinned to exactly the customised class
-  R3 exists for, and it resolves the safe way. Detecting it would mean a fourth request and
-  a stability check, which costs more than the preference it protects.
+- **Per-request content stability holds on the images measured, and is assumed elsewhere.**
+  Three identical authenticated `rest/user` requests against Bugzilla 5.0.6 returned the
+  same value every time, including a stable `groups` array order. On a deployment whose
+  `User.get` does vary per request — Bugzilla's own `last_seen_date` on authenticated
+  access, or an activity field a customised installation adds — the header and
+  query-parameter legs are unequal and header auth is never confirmed there. That is a
+  permanent false negative pinned to exactly the customised class R3 exists for, and it
+  resolves the safe way. Detecting it would mean a fourth request and a stability check,
+  which costs more than the preference it protects.
 - The `whoami` path (Bugzilla 5.3+/BMO-derived) is untouched: `detect_whoami_auth` probes an
   endpoint that returns the caller's own id and treats `id == 0` as anonymous, so it already
   distinguishes what this probe could not.
@@ -205,6 +228,14 @@ Consequences.
   leg — the one non-2xx that *is* an auth observation — and with it the confirming branch on
   every `requirelogin` server. Uniformity bought nothing here except a rule that reads
   tidily.
+- **Apply the credentialed-leg test (2xx and no error body) to the anonymous leg too.**
+  verified: issue #713's measured table records an anonymous `rest/group?names=admin`
+  answering `401` with `code 410` — Bugzilla delivers a refusal as a status *and* an error
+  body together. judgment: this is the same mistake as the bullet above, wearing the body
+  half instead of the status half. It would discard the anonymous refusal twice over and
+  reintroduce exactly the `requirelogin` false negative the previous bullet was rejected for
+  causing. The credentialed legs need the stricter test because their job is to stand in for
+  the authenticated response; the anonymous leg's job is only to be different.
 - **Probe an endpoint anonymous callers cannot read at all.** verified: issue #713's table
   records `rest/group?names=admin` answering 401 (code 410) anonymously and to the header,
   and 200 to query-parameter auth, on stock Bugzilla 5.2. judgment: it needs a group name

@@ -123,7 +123,7 @@ already do that, and it already decides what bzr may read.
 |---|---|
 | Response body → parse | `serde_json::from_str::<serde_json::Value>`, whose 128-level recursion limit bounds a nested server-controlled body. A parse failure is not an error: the body falls back to raw-text comparison. No value is deserialized into a typed struct, rendered, or logged. |
 | Response body → buffering | `Response::text()` buffers the whole body with no size cap; the only bound is the connection's `request_timeout` (`src/tls/mod.rs`). This is identical to the existing `whoami` and `valid_login` probes, which call `.text()` the same way — no new exposure, and no size control claimed. |
-| Response status → decision | Only a success, or a `401`/`403` on the anonymous leg, counts as evidence; every other status ends the probe. The header and query-parameter legs must additionally be `is_success()`. A truthy top-level `error` key fails any leg. |
+| Response status → decision | Only a success, or a `401`/`403`, counts as evidence on any leg; every other status ends the probe. The **credentialed** legs (header, query-parameter) must additionally show the credential was accepted: `is_success()` and no truthy top-level `error` key. The anonymous leg is exempt from that stricter test — Bugzilla delivers a refusal as a status and an error body together, and that refusal is the discrimination the probe is looking for. |
 | Credential → request | Header leg uses the already-validated `HeaderValue`; query-parameter leg uses `reqwest`'s `.query()` encoding. Neither is interpolated into a URL string. |
 | Anonymous leg → server | Carries the configured login as `names=`. The server already holds that value. No credential is attached. |
 | Probe outcome → auth selection | A `false` returns the method `valid_login` proved. Only a positive changes the selection. |
@@ -149,13 +149,17 @@ or Considered & rejected, not restated here:
 |---|---|---|
 | header ignored | same body to header and anonymous, richer one to query-param | `false`, and the query-param leg is never issued |
 | header honoured | rich body to header and query-param, thin body to anonymous | `true` |
-| anonymous refused | rich body to header and query-param, `401` to anonymous | `true` — the refusal is the discrimination |
+| anonymous refused, Bugzilla-shaped | rich body to header and query-param; `401` `{"error": true, "code": 410, …}` to anonymous | `true` — the refusal is the discrimination, body and all |
 | endpoint cannot discriminate | the same body to all three legs | `false` |
 | header leg non-2xx | `401` carrying the same body the query-param leg returns | `false`, and only one request is issued |
 | query-param leg non-2xx | `403` carrying the same body the header leg returns | `false` |
 | anonymous leg fails | `503` to anonymous; header and query-param 200 with the same body | `false` |
 | credentialed legs carry a 200 error | header and query-param both 200 `{"error": true, …}`; anonymous the thin body | `false` |
 | header matches neither | three distinct bodies | `false` |
+
+The anonymous-refusal case uses a **real Bugzilla error body**, not a bodiless 401: a
+bodiless fixture would pass whether or not the anonymous leg is exempt from the
+credentialed-leg error test, and so would not detect the collision between those two rules.
 
 The two existing end-to-end cases in `src/client/auth/mod_tests.rs` are re-pointed from
 `rest/bug` to `rest/user`: `valid_login_query_param_but_header_works_on_api` becomes the R3
