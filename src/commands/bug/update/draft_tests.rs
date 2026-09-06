@@ -22,6 +22,8 @@ fn from_cli_maps_scalar_fields() {
         summary: Some("new summary".into()),
         url: Some("https://example.com/repro".into()),
         target_milestone: Some("5.0".into()),
+        comment_tag: vec!["triaged".into(), "needs-review".into()],
+        minor_update: true,
         ..Default::default()
     };
     let draft = BugUpdateDraft::from_cli(&args);
@@ -38,6 +40,52 @@ fn from_cli_maps_scalar_fields() {
     assert_eq!(draft.summary.as_deref(), Some("new summary"));
     assert_eq!(draft.url.as_deref(), Some("https://example.com/repro"));
     assert_eq!(draft.target_milestone.as_deref(), Some("5.0"));
+    assert_eq!(draft.comment_tags, vec!["triaged", "needs-review"]);
+    assert_eq!(draft.minor_update, Some(true));
+}
+
+#[test]
+fn from_cli_omits_minor_update_when_false() {
+    let args = UpdateArgs {
+        ids: vec![7],
+        minor_update: false,
+        ..Default::default()
+    };
+    let draft = BugUpdateDraft::from_cli(&args);
+    assert_eq!(draft.minor_update, None);
+}
+
+#[test]
+fn overlay_cli_replaces_comment_tags_and_sets_minor_update() {
+    let mut draft = BugUpdateDraft {
+        comment_tags: vec!["json-tag".into()],
+        ..Default::default()
+    };
+    let args = UpdateArgs {
+        ids: vec![7],
+        comment_tag: vec!["cli-tag".into()],
+        minor_update: true,
+        ..Default::default()
+    };
+    draft.overlay_cli(&args);
+    assert_eq!(draft.comment_tags, vec!["cli-tag"]);
+    assert_eq!(draft.minor_update, Some(true));
+}
+
+#[test]
+fn overlay_cli_preserves_json_comment_tags_when_cli_empty() {
+    let mut draft = BugUpdateDraft {
+        comment_tags: vec!["json-tag".into()],
+        minor_update: Some(true),
+        ..Default::default()
+    };
+    let args = UpdateArgs {
+        ids: vec![7],
+        ..Default::default()
+    };
+    draft.overlay_cli(&args);
+    assert_eq!(draft.comment_tags, vec!["json-tag"]);
+    assert_eq!(draft.minor_update, Some(true));
 }
 
 #[test]

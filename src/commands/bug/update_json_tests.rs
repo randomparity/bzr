@@ -83,6 +83,94 @@ async fn batch_update_partial_failure_emits_no_done() {
     );
 }
 
+fn sample_update_request_with_comment_tags(id: u64, tags: &[&str]) -> JsonUpdateRequest {
+    JsonUpdateRequest {
+        id,
+        expect_unchanged_since: None,
+        params: crate::types::bug::UpdateBugParams {
+            comment: Some(crate::types::bug::CommentUpdate {
+                body: "tagged comment".into(),
+                is_private: false,
+            }),
+            comment_tags: tags.iter().map(|t| (*t).to_string()).collect(),
+            ..Default::default()
+        },
+    }
+}
+
+/// Regression: the array `--from-json` batch loop builds its own `Bug.update`
+/// requests (see `update_many_from_json`) rather than routing through
+/// `execute::update_batch`, so it must independently apply `comment_tags` via
+/// the same follow-up tag call or the array form would silently skip tagging
+/// while the CLI-flag and single-object JSON forms both apply it.
+#[tokio::test]
+async fn batch_update_array_form_applies_comment_tags() {
+    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/1"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": [{"id": 1, "changes": {}}]})),
+        )
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1/comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": { "1": { "comments": [{
+                "id": 500, "bug_id": 1, "text": "tagged comment",
+                "creator": "user@test.com", "creation_time": "2025-01-01T00:00:00Z",
+                "is_private": false, "count": 0
+            }]}}
+        })))
+        .mount(&mock)
+        .await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/comment/500/tags"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!(["triaged"])))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let requests = vec![sample_update_request_with_comment_tags(1, &["triaged"])];
+    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let mut io = crate::test_helpers::CapturedIo::new();
+
+    let result = super::update_many_from_json(&requests, &ctx, &mut io.writers()).await;
+
+    assert!(result.is_ok(), "array update should succeed: {result:?}");
+}
+
+#[tokio::test]
+async fn batch_update_array_form_tag_failure_marks_the_comment_tags_step() {
+    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/1"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": [{"id": 1, "changes": {}}]})),
+        )
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1/comment"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"bugs": {"1": {"comments": []}}})),
+        )
+        .mount(&mock)
+        .await;
+    let requests = vec![sample_update_request_with_comment_tags(1, &["triaged"])];
+    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let mut io = crate::test_helpers::CapturedIo::new();
+
+    let result = super::update_many_from_json(&requests, &ctx, &mut io.writers()).await;
+
+    assert!(result.is_err(), "tag-only failure still fails the batch");
+    let data = crate::test_helpers::json_envelope_data(io.out_str());
+    assert_eq!(data["failed"][0]["id"], 1);
+    assert_eq!(data["failed"][0]["step"], "comment_tags");
+}
+
 fn schema_value(name: &str) -> serde_json::Value {
     let (_, body) = crate::commands::schema::SCHEMAS
         .iter()

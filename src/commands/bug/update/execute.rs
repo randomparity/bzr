@@ -12,42 +12,58 @@ use crate::output::result_types::{
 };
 use crate::output::writers::Writers;
 use crate::types::bug::UpdateBugParams;
-use crate::types::comment::UpdateCommentTagsParams;
+use crate::types::comment::{Comment, UpdateCommentTagsParams};
 use crate::types::output::OutputFormat;
 
 use super::output::{comment_suffix, write_batch_result, write_update_dry_run};
+
+/// Select the comment the update just posted. Bugzilla does not reliably
+/// round-trip a comment's body byte-for-byte (observed: trailing whitespace
+/// stripped), so matching by text is unreliable — the newly-posted comment
+/// is always the one with the highest `count`, or the last entry returned
+/// when `count` is absent (comments are returned in chronological order).
+fn find_latest_comment_id(comments: &[Comment]) -> Option<u64> {
+    comments.iter().max_by_key(|c| c.count).map(|c| c.id)
+}
 
 /// Bugzilla's `Bug.update` `comment_tags` parameter is not reliably honored
 /// across supported server versions (issue #672: confirmed silently ignored
 /// on a live Bugzilla 5.0.6), unlike `Bug.create`'s hard rejection of the
 /// same parameter. Tag the just-posted comment directly via the
 /// confirmed-working `bug/comment/{id}/tags` endpoint instead of relying on
-/// it. `resolve_comment_tags` (in `payload.rs`) guarantees `params.comment`
-/// is `Some` whenever `comment_tags` is non-empty.
-async fn apply_comment_tags(
+/// it. Callers gate this on `params.comment_tags` being non-empty, which
+/// `resolve_comment_tags` (in `payload.rs`) guarantees only holds when
+/// `params.comment` is also `Some` — i.e. a comment was just posted for this
+/// call to find.
+pub(crate) async fn apply_comment_tags(
     client: &BugzillaClient,
     bug_id: u64,
     params: &UpdateBugParams,
 ) -> Result<()> {
-    let Some(comment) = params.comment.as_ref() else {
-        return Ok(());
-    };
     let comments = client.get_comments_since(bug_id, None).await?;
-    let comment_id = comments
-        .iter()
-        .rev()
-        .find(|c| c.text.as_deref() == Some(comment.body.as_str()))
-        .map(|c| c.id)
-        .ok_or_else(|| BzrError::NotFound {
-            resource: "comment",
-            id: bug_id.to_string(),
-        })?;
+    let comment_id = find_latest_comment_id(&comments).ok_or_else(|| BzrError::NotFound {
+        resource: "comment",
+        id: bug_id.to_string(),
+    })?;
     let tag_params = UpdateCommentTagsParams {
         add: params.comment_tags.clone(),
         remove: vec![],
     };
     client.update_comment_tags(comment_id, &tag_params).await?;
     Ok(())
+}
+
+/// Warn that a bug's field changes and comment already landed before a
+/// tag-only sub-step failed, so a caller does not retry with the same
+/// `--comment` text — `Bug.update` posts a new comment on every call, so a
+/// retry would duplicate it.
+fn warn_comment_tags_failed(w: &mut Writers<'_>, id: u64, e: &BzrError) {
+    let _ = writeln!(
+        w.err,
+        "warning: updated bug #{id} and posted its comment, but failed to tag it: {e}. \
+         Do not retry with the same --comment text (Bug.update would post a duplicate \
+         comment); use `bzr comment tag` on the existing comment instead."
+    );
 }
 
 async fn update_single(
@@ -59,7 +75,10 @@ async fn update_single(
 ) -> Result<()> {
     client.update_bug(id, params).await?;
     if !params.comment_tags.is_empty() {
-        apply_comment_tags(client, id, params).await?;
+        if let Err(e) = apply_comment_tags(client, id, params).await {
+            warn_comment_tags_failed(w, id, &e);
+            return Err(e);
+        }
     }
     match format {
         OutputFormat::Json | OutputFormat::Ndjson => {
@@ -92,15 +111,12 @@ async fn update_batch(
             Ok(()) if params.comment_tags.is_empty() => succeeded.push(id),
             Ok(()) => match apply_comment_tags(client, id, params).await {
                 Ok(()) => succeeded.push(id),
-                Err(e) => failed.push(BatchFailure {
-                    id,
-                    error: e.to_string(),
-                }),
+                Err(e) => {
+                    warn_comment_tags_failed(w, id, &e);
+                    failed.push(BatchFailure::comment_tags(id, e.to_string()));
+                }
             },
-            Err(e) => failed.push(BatchFailure {
-                id,
-                error: e.to_string(),
-            }),
+            Err(e) => failed.push(BatchFailure::new(id, e.to_string())),
         }
     }
     let batch = BatchResult::new(succeeded, failed);

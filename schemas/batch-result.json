@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/randomparity/bzr/schemas/batch-result.json",
   "title": "BatchResult",
-  "description": "Result of a batch `bug update`.",
+  "description": "Result of a batch `bug update`. A `failed[]` entry carries `step: \"comment_tags\"` when the update itself succeeded and only the follow-up comment-tag call failed.",
   "type": "object",
   "properties": {
     "resource": {
@@ -31,6 +31,11 @@
           },
           "error": {
             "type": "string"
+          },
+          "step": {
+            "description": "Present when the bug's own update already succeeded and only a post-update sub-step failed (currently only \"comment_tags\"); absent when the Bug.update call itself failed. A \"comment_tags\" failure must not be retried with the same --comment text, since Bug.update posts a new comment on every call.",
+            "type": "string",
+            "enum": ["comment_tags"]
           }
         },
         "required": [
