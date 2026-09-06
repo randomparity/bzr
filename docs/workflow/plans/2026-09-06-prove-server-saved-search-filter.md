@@ -881,6 +881,47 @@ which this charter also excludes.
 Any deferral from the branch review is appended here with its owning record path or tracker
 issue.
 
+## Design review status — BLOCKED at the iteration budget
+
+`$trial-loop` (`$gauntlet`, 2 iterations, budget 2) stopped as blocked with a residual
+blocking figure of 2. Iteration 1 raised 8 findings, all `accepted-fixed`; iteration 2
+raised 6, of which two are blocking and **unresolved**. Neither may be treated as settled;
+both need a decision this run did not have the budget to take.
+
+1. **`test_mode_gates_the_saved_search_hook` does not cover Step 1.7** (high). Task 1's
+   Verification claims the case covers both Step 1.6's registry entry and Step 1.7's
+   `make_handler` enabled-modes wiring. It does not: the case builds the enabled-modes set
+   by hand and passes it to `apply_rewrite_hooks`, never reaching `make_handler`. The
+   reviewer applied Steps 1.1–1.8 to a scratch copy and deleted only the Step 1.7 edits —
+   `--self-test` still reported `Ran 51 tests ... OK`. Deleting Step 1.6 instead does redden
+   it. So a missing Step 1.7 would pass `make lint`, `make test` and the proxy self-test,
+   and first surface as `make functional-compare-all` failing the row with
+   `unsupported_server_capability` — the misleading failure this case was written to
+   prevent. Proposed remedy: drive a real request through `make_handler` against a stub
+   backend, reusing the round-trip helper
+   `test_termless_search_returns_production_shaped_code_1000` already uses, and verify the
+   new case by deleting Step 1.7 and confirming it reds.
+2. **Design-to-implementation ratio is 3.1x–3.8x** (high), above the 3x blocking line at
+   every point of this plan's own 330–410 estimate. The reviewer costed the estimate
+   independently at ~353 added lines and confirmed it is honest, so widening it is not
+   available and would be a defeated control. The excess is argument repeated verbatim
+   across the set — the entailment argument three times, the 182-bug `curl` block twice,
+   the bzr-arm-only rationale four times, and Task 1's Verification narrating the seven
+   `ShapeTests` cases Step 1.8 then writes in full. Proposed remedy: state each once and
+   cross-reference, which the reviewer estimates removes 300–400 lines and lands the set
+   near 2.4x.
+
+Four non-blocking findings are also open and unfixed: the "one flag apart" framing in the
+spec and ADR is wrong (the two calls differ by subcommand, term, and flag — the row still
+discriminates, but the recorded reason is not what the code does); the ADR cites
+`/rest/extensions` evidence as being "in Context" where Context carries only the
+`savedsearch` probe; "mirroring the server" is false, since all three images answer a
+termless search with 200 and the whole database while the proxy synthesizes `code 1000`
+itself; and several headings still say "two controls"/"six ShapeTests cases" above lists of
+three and seven — fossils of the revision that dropped the entailed assertion.
+
+Full findings: the `$gauntlet` artifact for run `gauntlet-710-design-run1-4f9c2a71`.
+
 ## Resume facts
 
 - Branch `feat/prove-saved-search-filter-710`; `BASE_BRANCH=main`; worktree
