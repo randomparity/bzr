@@ -1,681 +1,216 @@
 # Server-side saved search — implementation plan
 
-Goal: `bzr bug search --saved-search <NAME> [--sharer <ID>]` sends Bugzilla's `savedsearch`
-and `sharer_id` search parameters over REST and XML-RPC, composing with the existing paging,
-projection, sorting and `--count` flags.
+Goal: `bzr bug search --saved-search <NAME> [--sharer <ID>]` detects Red Hat saved-search
+extension support before dispatch, sends `savedsearch`/`sharer_id` when present, and fails with
+an actionable exit-15 error when absent.
 
-Architecture: two optional fields join the shared `SearchParams` struct
-(`src/types/bug/search.rs`); the two existing transport mappers
-(`src/client/resources/bug.rs`, `src/xmlrpc/resources/bug.rs`) each gain one string and one
-numeric entry in tables they already iterate; `src/cli/bug/search.rs` gains two clap
-arguments and `src/commands/bug/search.rs` routes them into the non-URL parameter branch. No
-new module, type, or transport.
+Spec: `docs/workflow/specs/2026-09-05-server-saved-search-design.md` — decision:
+[ADR 0052](../../adr/0052-detect-vendor-extension-support-before-dispatch.md).
+Branch `feat/saved-search-670`, base `main`, scope token `q670-1c1b8eb2`.
 
-Tech stack: Rust 2021, clap derive, reqwest, wiremock, Bash for the functional harness.
+Expected implementation size: 380–480 changed lines (M) — summed from the file map.
 
-Spec: `docs/workflow/specs/2026-09-05-server-saved-search-design.md`
-Issue: #670 — Branch: `feat/saved-search-670` — Base branch: `main`
-
-Expected implementation size: 300–370 changed lines (M) — summed from the file map below.
-The charter's `$divination` complexity of S describes the decision surface; this band
-describes changed lines, which the repository's test-sibling and functional-phase
-conventions dominate. They measure different things.
+This plan states intent and contracts. It does not dictate line-level code: the previous cycle
+showed that a long prescriptive plan generates defects faster than it prevents them, and this
+repository's guardrails (`make lint` with clippy `-D warnings`, `make test`,
+`make functional-test`, `bash tests/functional/pybz/container-tests.sh`) carry the mechanics.
+Follow the conventions already in each file.
 
 ## Global Constraints
 
-- Guardrails run **bare** — no pipes, no `|| true`; the exit code is the result.
-  `make lint` (fmt, clippy `-D warnings` pedantic with `unwrap_used` denied,
-  check-build-script, check-test-layout, check-functional-test-ids, check-no-spawn,
-  check-release-security-notes, check-shell); `make test` (~3 min); `make functional-test`
-  (~10 min, needs Docker/podman). Iterate with `make test-one T=<substring>`. **Never bare
-  `cargo test`.** Background the long runs and read once; re-invoking on an apparent timeout
-  restarts the suite.
-- Unit tests live in sibling `<name>_tests.rs` files. An inline `mod tests { … }` in `src/`
-  is forbidden and `make check-test-layout` fails on one. API tests use `#[tokio::test]`.
-- User-facing output goes through `Writers`; never `println!`/`eprintln!` in `src/`.
-- Functional test ids match `^[a-z0-9]+(-[a-z0-9]+)*$`, phase filenames
-  `^[0-9]{2}[a-z]?-[a-z0-9]+(-[a-z0-9]+)*$`; phase scripts use 4-space indentation.
-- A new CLI long flag needs its entry in the `## Command Tree` block of `docs/bzr-cli.md` or
-  `agent-skills/tests/flag-drift-check.sh` fails.
-- Owned by the concurrent sibling issue #672, do not touch: `src/cli/bug/create.rs`,
-  `src/cli/bug/update.rs`, `src/commands/bug/update/`, `src/types/bug/payload.rs`,
-  `schemas/`. Shared with it — keep edits minimal and inside this feature's own sections:
-  `docs/bzr-cli.md`, `docs/dev/python-bugzilla-parity.md`,
-  `tests/functional/compare/01-bug-lifecycle.sh`.
+- Guardrails run **bare** — no pipes, no `|| true`. `make lint`; `make test` (~3 min);
+  `make test-one T=<substr>` to iterate; `make functional-test` (~10 min, Docker);
+  `bash tests/functional/pybz/container-tests.sh` (no container needed). **Never bare
+  `cargo test`.** Background long runs and read once.
+- Unit tests live in sibling `<name>_tests.rs` files; inline `mod tests {}` in `src/` is
+  forbidden. API tests use `#[tokio::test]`.
+- Output goes through `Writers`; never `println!`/`eprintln!` in `src/`.
+- Do not touch: `src/cli/bug/create.rs`, `src/cli/bug/update.rs`, `src/commands/bug/update/`,
+  `src/types/bug/payload.rs`, `schemas/bug-*-input.json`, `schemas/batch-result.json`,
+  `schemas/compound-create-result.json`, or any `comment-tag`/`minor-update` site in
+  `tests/functional/pybz/container-tests.sh` including line 962. All belong to issue #672.
+- `src/output/mod.rs:10` `SCHEMA_VERSION` `3.0.1` → `3.0.2` — a known one-line collision with
+  #672 making the identical bump. Make it; do not bump to `3.0.3`; the orchestrator reconciles.
+- `docs/adr/README.md` is not ours. ADR 0052 is already committed; report `index row pending`.
 
 ## File map
 
 | File | | Answerable for |
 |---|---|---|
-| `src/types/bug/search.rs` | changed | the two new `SearchParams` fields, filter-predicate membership |
-| `src/types/bug/search_tests.rs` | changed | filter-predicate coverage |
-| `src/client/resources/bug.rs` | changed | REST query-parameter emission |
-| `src/client/resources/bug_tests.rs` | changed | wiremock proof REST carries both parameters |
-| `src/xmlrpc/resources/bug.rs` | changed | XML-RPC member emission |
-| `src/xmlrpc/resources/bug_tests.rs` | changed | proof the XML-RPC call carries both members |
-| `src/cli/bug/search.rs` | changed | the two clap arguments, constraints, help text |
-| `src/cli/bug/search_tests.rs` | changed | parser-level constraint coverage |
-| `src/commands/bug/search.rs` | changed | routing the flags into the non-URL branch |
-| `src/commands/bug/search_tests.rs`, `src/commands/bug/mod_tests.rs` | changed | end-to-end request coverage; literal `SearchArgs` sites |
-| `docs/bzr-cli.md` | changed | command tree, prose, examples, options table |
-| `docs/dev/python-bugzilla-parity.md` | changed | the saved-search status row and its footnote |
-| `tests/functional/pybz/container-tests.sh` | changed | the whole #670 gap model, seven sites: parity-row literal, stub `run_bzr` arm, baseline counts, eligibility-reset grep, no-op stale-gap count, stale-gaps loop, repeated-transport counts |
-| `tests/functional/compare/01-bug-lifecycle.sh` | changed | dropping the expected-gap marking |
-| `tests/functional/phases/08f-bug-saved-search.sh` | created | functional coverage on a real container |
+| `src/error.rs` (+ sibling) | changed | `UnsupportedServerCapability`, exit 15, `error_type`, structured detail |
+| `schemas/error.json` | changed | `exit_code` max 15, `capability` key |
+| `src/output/mod.rs` | changed | `SCHEMA_VERSION` 3.0.2 |
+| `src/client/auth/mod.rs` (+ sibling) | changed | `DetectedServerSettings.extensions` |
+| `src/client/resources/server.rs` | changed | extension probe used by detection |
+| `src/commands/runtime/shared/connection/detect.rs` (+ sibling) | changed | persisting the capability |
+| `src/config/model.rs` (+ sibling) | changed | `ServerConfig.server_extensions` |
+| `src/types/bug/search.rs` (+ sibling) | changed | `saved_search`, `sharer_id`, both predicates |
+| `src/client/resources/bug.rs` (+ sibling) | changed | REST parameter emission |
+| `src/xmlrpc/resources/bug.rs` (+ sibling) | changed | XML-RPC member emission |
+| `src/cli/bug/search.rs` (+ sibling) | changed | the two flags and their constraints |
+| `src/commands/bug/search.rs` (+ sibling) | changed | capability gate, routing, error |
+| `docs/bzr-cli.md` | changed | command tree, prose, options, exit-code table |
+| `docs/dev/python-bugzilla-parity.md` | changed | reworded saved-search row |
+| `tests/functional/lib.sh` | changed | `expect_gap` unaffected; see Task 5 |
+| `tests/functional/compare/01-bug-lifecycle.sh` | changed | probe expected-exit parameter; saved-search block |
+| `tests/functional/pybz/container-tests.sh` | changed | `saved-search` stub arms and parity row 960 only |
+| `tests/functional/phases/08f-bug-saved-search.sh` | created | detect-and-error against a real container |
 | `tests/functional/run-tests.sh` | changed | sourcing the new phase |
 
-## Task 1 — parameter fields and transport mapping
+## Task 1 — error variant and published contract
 
-**Interfaces.** Consumes nothing. Later tasks rely on two fields added to the existing
-`pub struct SearchParams`. Every in-crate construction site uses functional-update syntax
-(`..Default::default()` or `..params.clone()`), so adding fields does not break them; the
-struct's `#[non_exhaustive]` constrains downstream crates only and is inert here.
+**Verification.** Contract: an unsupported-capability error exits 15 with
+`error_type` `unsupported_server_capability` and carries the capability in its structured
+detail. Mode: focused-test, in `src/error_tests.rs` following the file's existing per-variant
+cases. Red: the variant does not exist (compile failure). Green:
+`make test-one T=unsupported_server_capability`.
 
-```rust
-pub saved_search: Option<String>,
-pub sharer_id: Option<u64>,
+Add `UnsupportedServerCapability { capability: String, detail: String }` to `BzrError` with
+`EXIT_CODE_UNSUPPORTED_CAPABILITY = 15`, its `error_type()` arm, and its `structured_detail()`
+entry (ADR-0014) exposing `capability`. Raise `schemas/error.json`'s `exit_code` `maximum` to
+15 and add the `capability` property with a description naming the variant, matching the
+neighbouring entries' style. Bump `SCHEMA_VERSION` to `3.0.2`.
+
+Check whether a schema-conformance or exit-code test enumerates the variants
+(`rg -l 'EXIT_CODE_COLLISION\|exit_code' src/ tests/ schemas/`) and extend whatever it finds —
+the repository gates published schemas, so an unlisted variant is a failing test, not a silent
+gap.
+
+**Acceptance.** `make lint` and `make test` green; the new variant's exit code and type are
+asserted; `schemas/error.json` admits 15.
+
+## Task 2 — capability detection and caching
+
+**Verification.** Two contracts, both focused-test in
+`src/commands/runtime/shared/connection/detect_tests.rs` and
+`src/client/auth/mod_tests.rs` as their existing cases are organised:
+(a) a successful probe persists the extension list; (b) a failed probe persists nothing and
+leaves any cached value untouched. Red: `extensions` is not a field (compile failure). Green:
+`make test-one T=extension`.
+
+Add `extensions: Option<Vec<String>>` to `DetectedServerSettings` with the same documented
+contract its `server_version` field already carries — `Some` only when `/rest/extensions`
+responded, `None` on transient failure — and populate it in `detect_server_settings` from the
+existing `BugzillaClient::server_extensions()`. Sort the names so the persisted value is
+stable. Add `server_extensions: Option<Vec<String>>` to `ServerConfig` with
+`#[serde(default, skip_serializing_if = "Option::is_none")]`, matching its neighbours, and
+persist it in `persist_detected_settings` under the same `is_some()` guard the version state
+uses.
+
+A probe failure must not be fatal to unrelated commands: detection already tolerates a failed
+version probe, and this follows it.
+
+**Acceptance.** Detection persists a sorted extension list on success and nothing on failure;
+existing config round-trip tests still pass; `make lint` and `make test` green.
+
+## Task 3 — the flags and the capability gate
+
+**Verification.**
+- Clap constraints: four cases in `src/cli/bug/search_tests.rs` using the file's existing
+  `parse_error_kind` — positional-query conflict and `--from-url` conflict
+  (`ErrorKind::ArgumentConflict`), missing `--saved-search` (`MissingRequiredArgument`),
+  non-numeric `--sharer` (`ValueValidation`). Red: clap returns `UnknownArgument` for all four
+  because the flags do not exist, so each assertion fails against its expected kind — do not
+  accept `UnknownArgument` as the intended red, these cases exist only to pin the attributes.
+  Green: `make test-one T=saved_search_conflicts`, `make test-one T=sharer_re`.
+- Wire contract: wiremock tests in `src/client/resources/bug_tests.rs` and
+  `src/xmlrpc/resources/bug_tests.rs` asserting `savedsearch`/`sharer_id` reach the request.
+  Red: unknown field on `SearchParams` (compile failure).
+- Gate contract: in `src/commands/bug/search_tests.rs`, a server advertising no extensions
+  must produce exit 15 **without** issuing a `/rest/bug` request — mount that path with
+  `.expect(0)`, which is what proves the refusal precedes dispatch. A server advertising
+  `RedHat` must dispatch. Red: no gate exists, so the refusal case dispatches and returns `Ok`.
+  Green: `make test-one T=saved_search_requires_extension`.
+- Predicate contract: add a `saved_search` row to each of the two existing per-field tables in
+  `src/types/bug/search_tests.rs` (`search_params_has_filters_for_each_individual_field`,
+  `search_params_has_structured_filters_for_each_individual_field`) rather than a standalone
+  test, so `saved_search` does not become the one field missing from inventories whose
+  assertion messages claim completeness. Red: the rows fail before the predicates learn the
+  field.
+
+Add `saved_search: Option<String>` and `sharer_id: Option<u64>` to `SearchParams`; add both to
+`has_filters()` and `has_structured_filters()`; emit them from both mappers (`savedsearch` in
+each existing option table, `sharer_id` beside `limit`/`offset` in REST and through the
+existing `xmlrpc_id` helper in XML-RPC).
+
+Add `--saved-search` (`conflicts_with_all = ["query", "from_url"]`) and `--sharer`
+(`requires = "saved_search"`, `u64`) to `SearchArgs`, with doc comments that say these are
+server-side saved searches, unrelated to `bzr query`, and require the Red Hat extension.
+Extend `LONG_ABOUT` and its examples. `SearchArgs` has no `Default`, so every struct-literal
+site must gain both fields — there are six, in `src/commands/bug/search_tests.rs` and
+`src/commands/bug/mod_tests.rs`; `cargo build --tests` finds any this misses.
+
+In `src/commands/bug/search.rs`, before connecting, widen the no-query-source input error to
+name all three sources. After connecting and before dispatching, when `--saved-search` is set,
+consult the cached-or-probed extension list and either dispatch or return the Task 1 error —
+the three-outcome table in the spec is the contract, and the undetermined case must be
+distinguishable from the absent case in its message.
+
+**Acceptance.** All four rejections at parse time (exit 2); exit 15 with no `/rest/bug` request
+when the extension is absent; both parameters on the wire when present; `make lint`,
+`make test` green.
+
+## Task 4 — documentation
+
+Update `docs/bzr-cli.md`: the `bug search` command-tree continuation line gains
+`[--saved-search <NAME>] [--sharer <ID>]`; the `bzr bug search` section gains an example, a
+short prose paragraph, two options-table rows, and a note that these require a Bugzilla with
+the Red Hat saved-search extension and exit 15 otherwise; the trailing footnote names all three
+query sources. Add exit 15 to whatever exit-code table the document carries.
+
+Reword `docs/dev/python-bugzilla-parity.md`'s saved-search row to the pre-approved wording, and
+update the byte-identical literal at `tests/functional/pybz/container-tests.sh:960`:
+
+```text
+| Server saved search | `bzr bug search --saved-search` | bzr errors; python-bugzilla returns unfiltered results (#670) | `compare/01-bug-lifecycle/saved-search` |
 ```
 
-**Verification**
-
-- Contract: REST `Bug.search` carries `savedsearch` and `sharer_id` as query parameters.
-  Mode: focused-test. Test: `src/client/resources/bug_tests.rs`,
-  `search_bugs_sends_saved_search_and_sharer_id`. Red: `E0560`, no field `saved_search` on
-  `SearchParams`. Green: `make test-one T=search_bugs_sends_saved_search_and_sharer_id`.
-- Contract: XML-RPC `Bug.search` carries both as call members. Mode: focused-test. Test:
-  `src/xmlrpc/resources/bug_tests.rs`, `search_bugs_sends_saved_search_and_sharer_id_xmlrpc`.
-  Red: the fields exist by this point, so the test compiles and fails on the assertion — the
-  recorded call body contains neither member. Green:
-  `make test-one T=search_bugs_sends_saved_search_and_sharer_id_xmlrpc`.
-- Contract: a saved-search name alone counts for `has_filters` and for
-  `has_structured_filters`. (`has_filters` is a consistency invariant — it has no production
-  caller; `has_structured_filters` is behavioural and gates hybrid mode's XML-RPC retry.)
-  Mode: focused-test. Test: a new `saved_search` row in each of
-  `src/types/bug/search_tests.rs`'s two existing per-field tables,
-  `search_params_has_filters_for_each_individual_field` and
-  `search_params_has_structured_filters_for_each_individual_field`. Red: the rows are added at
-  step 4, before step 5's predicate edits, so each table fails on its new case. Green:
-  `make test-one T=has_filters_for_each` and `make test-one T=has_structured_filters_for_each`.
-
-**Steps**
-
-1. In `src/client/resources/bug_tests.rs`, add `search_bugs_sends_saved_search_and_sharer_id`
-   in the file's existing `#[tokio::test]` + `Mock::given(method("GET")).and(path("/rest/bug"))`
-   style, matching `query_param("savedsearch", "my search")` and
-   `query_param("sharer_id", "112233")`, responding `{"bugs": []}` with `.expect(1)`, and
-   asserting the returned vector is empty. Reuse the file's existing client constructor and
-   imports; add no second helper.
-
-2. Run `make test-one T=search_bugs_sends_saved_search_and_sharer_id`. Expect a compile error
-   naming `saved_search` as an unknown field.
-
-3. In `src/types/bug/search.rs`, add the two fields to `SearchParams` after `quicksearch` and
-   before `include_fields`:
-
-   ```rust
-   /// Name of a server-side saved search (Bugzilla `savedsearch`).
-   ///
-   /// Distinct from bzr's local saved queries (`bzr query`): this names a
-   /// query stored in the Bugzilla account. Resolving it is a Red Hat
-   /// Bugzilla extension; a stock Bugzilla accepts the parameter and
-   /// ignores it, so the search degrades to an unfiltered one.
-   pub saved_search: Option<String>,
-   /// Numeric Bugzilla user ID owning a shared saved search
-   /// (Bugzilla `sharer_id`). Only meaningful alongside `saved_search`.
-   pub sharer_id: Option<u64>,
-   ```
-
-4. Cover the predicates **before** touching them, so the coverage has an observable red.
-   `src/types/bug/search_tests.rs` already owns both contracts as exhaustive per-field tables —
-   `search_params_has_filters_for_each_individual_field` (cases end line 224; its assertion
-   message reads "field `{name}` alone should make has_filters() return true") and
-   `search_params_has_structured_filters_for_each_individual_field` (cases end line 288). Add a
-   row for `saved_search` to each cases slice rather than writing a standalone test, following
-   whatever closure shape the neighbouring rows use, so `saved_search` does not become the one
-   filter field missing from the inventories those messages claim to be.
-
-   Run `make test-one T=has_filters_for_each` and
-   `make test-one T=has_structured_filters_for_each`. Expect both to compile (step 3 added the
-   fields) and fail on the new case, because neither predicate knows the field yet.
-
-5. In `src/types/bug/search.rs`, add `|| self.saved_search.is_some()` to **both**
-   `has_filters` and `has_structured_filters`. Append one sentence to the latter's doc
-   comment saying why `saved_search` is included where `quicksearch` and `summary` are not:
-   those two are excluded because upstream evaluates them through one shared free-text parser,
-   a verified property, whereas no comparable property is known for a fork's saved-search
-   handling — so the retry stays available for the one vendor extension bzr sends, at the cost
-   of one capped round trip on a result that was already empty.
-
-   Run `make test-one T=has_filters_for_each` and
-   `make test-one T=has_structured_filters_for_each`. Expect both to pass.
-
-6. In `src/client/resources/bug.rs`, add `("savedsearch", &params.saved_search)` to the
-   `option_fields` slice in `append_option_params`, after the `quicksearch` entry; and after
-   that function's `offset` block add:
-
-   ```rust
-   if let Some(sharer_id) = params.sharer_id {
-       builder = builder.query(&[("sharer_id", sharer_id)]);
-   }
-   ```
-
-7. Run `make test-one T=search_bugs_sends_saved_search_and_sharer_id`. Expect one pass.
-
-8. In `src/xmlrpc/resources/bug_tests.rs`, add
-   `search_bugs_sends_saved_search_and_sharer_id_xmlrpc`, reusing the mock-server setup and
-   request-body capture of the file's existing `search_bugs_returns_results` verbatim, and
-   asserting the recorded body contains `savedsearch` with the name and `sharer_id` with the
-   integer.
-
-9. Run `make test-one T=search_bugs_sends_saved_search_and_sharer_id_xmlrpc`. Expect a
-   compiling test that fails its assertion: both members absent from the recorded call body.
-
-10. In `src/xmlrpc/resources/bug.rs` `search_bugs`, add
-   `("savedsearch", &params.saved_search)` to the `option_fields` slice after `quicksearch`,
-   and after the `offset` insertion add the line below. Do not hand-write the range check:
-   `src/xmlrpc/resources/mappers.rs` already exports
-   `pub(crate) fn xmlrpc_id(value: u64, label: &str) -> Result<Value>`, which performs this
-   exact `i64::try_from` conversion and raises the input error on overflow, and this file
-   already imports it.
-
-   ```rust
-   if let Some(sharer_id) = params.sharer_id {
-       rpc_params.insert("sharer_id".into(), xmlrpc_id(sharer_id, "sharer ID")?);
-   }
-   ```
-
-11. Run `make test-one T=search_bugs_sends_saved_search_and_sharer_id_xmlrpc`. Expect one
-    pass.
-
-12. Run `make lint` bare. Expect exit 0. Commit:
-    `feat(search): carry saved-search parameters on both transports`.
-
-**Acceptance criteria.** Both transports emit each parameter when set and omit it when
-`None`; both `has_filters()` and `has_structured_filters()` are true for a
-saved-search-only `SearchParams`; `make lint` and `make test` green.
-
-## Task 2 — CLI flags and command routing
-
-**Interfaces.** Consumes Task 1's two `SearchParams` fields. Adds to the existing
-`pub(crate) struct SearchArgs` in `src/cli/bug/search.rs` (`#[derive(Args, Debug)]`, sitting
-beside `query: Option<String>`, `from_url: Option<String>`, `save_as: Option<String>`):
-
-```rust
-pub saved_search: Option<String>,
-pub sharer: Option<u64>,
-```
-
-These feed the existing
-`async fn resolve_client_and_params(args: &SearchArgs, ctx: &CommandContext) -> Result<SearchPlan>`
-in `src/commands/bug/search.rs`, where
-`type SearchPlan = (BugzillaClient, SearchParams, Option<(String, SavedQuery)>)`.
-
-**Verification**
-
-- Contract: `--saved-search` conflicts with the positional query and with `--from-url`;
-  `--sharer` requires `--saved-search`; `--sharer` rejects a non-numeric value. Mode:
-  focused-test. Test: `src/cli/bug/search_tests.rs`, four cases —
-  `saved_search_conflicts_with_positional_query`, `saved_search_conflicts_with_from_url`,
-  `sharer_requires_saved_search`, `sharer_rejects_non_numeric`. Red: the tests **compile**
-  — they reference no Rust field, only argv strings through `Cli::try_parse_from` — and clap
-  returns `ErrorKind::UnknownArgument` for all four because the flags do not exist yet, so
-  each `assert_eq!` fails as `UnknownArgument != <expected kind>`. `UnknownArgument` is
-  itself a rejection, so do not accept it as the intended red: these four tests exist only to
-  pin the `conflicts_with_all` / `requires` attributes, and only the expected kinds prove
-  those. Green: `make test-one T=saved_search_conflicts` and `make test-one T=sharer_re`.
-- Contract: a `--saved-search` invocation puts `savedsearch` and `sharer_id` on the outgoing
-  request and no `quicksearch`. Mode: focused-test. Test: `src/commands/bug/search_tests.rs`,
-  `handle_search_saved_search_passes_saved_search_and_sharer`. Red: written at step 7, after
-  the `SearchArgs` fields exist but before step 8 routes them, so it compiles and the wiremock
-  mount's `.expect(1)` goes unsatisfied — the request carries neither parameter. Green:
-  `make test-one T=handle_search_saved_search_passes`.
-- Contract: `bug search` with no query source fails input validation naming all three
-  sources, before connecting. Mode: focused-test. Test:
-  `src/commands/bug/search_tests.rs`, `handle_search_without_a_query_source_names_all_three`.
-  Red: also written at step 7, before step 8 widens the message, so the assertion that the
-  rendered error contains `--saved-search` fails against the current two-source text. Green:
-  `make test-one T=handle_search_without_a_query_source`.
-
-**Steps**
-
-1. Add the four parser cases to `src/cli/bug/search_tests.rs`. That file already defines
-   `fn search_args(args: &[&str]) -> SearchArgs` and
-   `fn parse_error_kind(args: &[&str]) -> ErrorKind`; use `parse_error_kind` and add no new
-   helper. When a `match` over `ErrorKind` has two arms, name the second variant explicitly —
-   clippy runs with `-D warnings`.
-
-   - `["bzr","bug","search","query text","--saved-search","s"]` → `ErrorKind::ArgumentConflict`
-   - `["bzr","bug","search","--from-url","https://x/buglist.cgi","--saved-search","s"]` →
-     `ErrorKind::ArgumentConflict`
-   - `["bzr","bug","search","--sharer","1"]` → `ErrorKind::MissingRequiredArgument`
-   - `["bzr","bug","search","--saved-search","s","--sharer","abc"]` →
-     `ErrorKind::ValueValidation`
-
-2. Run `make test-one T=saved_search_conflicts` and `make test-one T=sharer_re`. Expect four
-   failures of the form `UnknownArgument != ArgumentConflict` (and the corresponding
-   `MissingRequiredArgument` / `ValueValidation` mismatches), not a compile error. The
-   narrow filters are deliberate: `T=saved_search` would also match Task 1's tests, and each
-   unit test is compiled into both the lib and bin targets, so a broad filter roughly doubles
-   the reported count.
-
-3. In `src/cli/bug/search.rs`, add the two arguments to `SearchArgs` after `save_as`:
-
-   ```rust
-   /// Run a saved search stored on the server (Bugzilla `savedsearch`).
-   ///
-   /// This is a *server-side* saved search — a query stored in your
-   /// Bugzilla account — not one of bzr's local saved queries, which
-   /// are managed with `bzr query`. Mutually exclusive with the
-   /// positional query and with `--from-url`.
-   ///
-   /// Resolving a saved search is a Red Hat Bugzilla extension. A stock
-   /// Bugzilla accepts the parameter and ignores it, so the search
-   /// returns an unfiltered result rather than an error.
-   #[arg(long, conflicts_with_all = ["query", "from_url"])]
-   pub saved_search: Option<String>,
-   /// Numeric Bugzilla user ID of the account that shared the saved
-   /// search (Bugzilla `sharer_id`).
-   ///
-   /// Required only for a search someone else shared with you; Bugzilla
-   /// shows the ID in the saved search's own URL. Requires
-   /// `--saved-search`.
-   #[arg(long, requires = "saved_search")]
-   pub sharer: Option<u64>,
-   ```
-
-4. Step 3 breaks compilation immediately: `SearchArgs` derives `Args` and `Debug` but **not**
-   `Default`, so every struct-literal construction must gain `saved_search: None,` and
-   `sharer: None,` beside `save_as`. There are six such sites —
-   `src/commands/bug/search_tests.rs` lines 21, 359, 526, 595 and
-   `src/commands/bug/mod_tests.rs` lines 32, 175. The other mentions in those files and in
-   `src/cli/mod_tests.rs` are destructuring patterns ending in `..` and need no change. Fix
-   all six now, then run `cargo build --tests` and fix anything this list missed rather than
-   trusting it to be exhaustive.
-
-5. In `src/cli/bug/search.rs` extend `LONG_ABOUT`: after the `--save-as` paragraph insert a
-   paragraph saying that `--saved-search <NAME>` runs a saved search stored in the Bugzilla
-   account, optionally qualified by `--sharer <ID>` when another user shared it; that
-   resolving one is a Red Hat Bugzilla extension, so a stock Bugzilla accepts both parameters
-   and ignores them, returning an unfiltered result; and that these are unrelated to bzr's
-   local saved queries, which `bzr query` manages. Add one line to the `Examples:` block:
-   `bzr bug search --saved-search "my triage list" --sharer 112233`.
-
-6. Run `make test-one T=saved_search_conflicts` and `make test-one T=sharer_re`. Expect the
-   four new parser cases to pass.
-
-7. Add the two command-level tests to `src/commands/bug/search_tests.rs` **now**, before the
-   routing exists, so each has an observable red. Model them on that file's existing
-   `handle_search_quicksearch_passes_limit_and_field_filters` — same `setup_test_env().await`
-   fixture, same `Mock::given(method("GET")).and(path("/rest/bug"))` shape, same
-   `crate::commands::bug::execute(&action, &CommandContext::new(None, OutputFormat::Json,
-   None), &mut io.writers())` call:
-
-   - `handle_search_saved_search_passes_saved_search_and_sharer` — action with `query: None`,
-     `saved_search: Some("my search".into())`, `sharer: Some(112_233)`; match on
-     `query_param("savedsearch", "my search")` and `query_param("sharer_id", "112233")` with
-     `.expect(1)`; assert `Ok`.
-   - `handle_search_without_a_query_source_names_all_three` — action with `query`, `from_url`
-     and `saved_search` all `None`; mount **no** `Mock` at all, which is what proves the error
-     precedes the connection; assert `Err` and that the rendered message contains
-     `--saved-search`.
-
-   Run `make test-one T=handle_search_saved_search_passes` and
-   `make test-one T=handle_search_without_a_query_source`. Expect the first to fail on the
-   unsatisfied `.expect(1)` (the request carries neither parameter) and the second to fail
-   because the current message names only two sources.
-
-8. In `src/commands/bug/search.rs`, replace the query-source resolution inside the
-   `let Some(url_str) = args.from_url.as_deref() else { … }` block. The current body unwraps
-   `args.query` into `query_str` and errors when absent; replace it with a presence check
-   that runs *before* `connect_and_configure`, so an input error still costs no round trip:
-
-   ```rust
-   let Some(url_str) = args.from_url.as_deref() else {
-       if args.query.is_none() && args.saved_search.is_none() {
-           return Err(crate::error::BzrError::input(
-               "a search query, --saved-search, or --from-url is required".into(),
-           ));
-       }
-       let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
-       let params = SearchParams {
-           quicksearch: args.query.clone(),
-           saved_search: args.saved_search.clone(),
-           sharer_id: args.sharer,
-           limit: Some(args.limit.unwrap_or(DEFAULT_SEARCH_LIMIT)),
-           include_fields: canonical_field_list(fields),
-           exclude_fields: canonical_field_list(exclude_fields),
-           order: Some(crate::validation::build_order(
-               args.sort_args.sort.as_deref(),
-               args.sort_args.order,
-           )),
-           ..Default::default()
-       };
-       return Ok((client, params, None));
-   };
-   ```
-
-   Assigning both `quicksearch` and `saved_search` unconditionally is safe because clap has
-   already rejected the combination; exactly one is `Some`.
-
-9. Run `make test-one T=handle_search_saved_search_passes` and
-   `make test-one T=handle_search_without_a_query_source`. Expect both to pass.
-
-10. Run `make lint` bare, then `make test` bare in the background and read the result once.
-    Expect exit 0. Commit: `feat(search): add --saved-search and --sharer flags`.
-
-**Acceptance criteria.** `--saved-search` sets `saved_search` and leaves `quicksearch` unset;
-`--sharer` sets `sharer_id`; the four rejections happen at parse time (exit 2); omitting all
-three sources fails input validation naming all three; `make lint` and `make test` green.
-
-## Task 3 — documentation and comparison status
-
-**Interfaces.** Consumes the flag names from Task 2. Nothing later depends on this task.
-
-**Verification**
-
-- Contract: every command-specific long flag the binary exposes for `bug search` appears in
-  that command's `## Command Tree` block and vice versa. Mode: focused-test. Test:
-  `agent-skills/tests/flag-drift-check.sh`. Red: `command tree is missing --saved-search for
-  \`bug search\``, exit 1. Green: `BZR_BIN=target/debug/bzr sh
-  agent-skills/tests/flag-drift-check.sh` exits 0 with no ERROR lines.
-- Contract: the lifecycle comparison's saved-search block no longer marks #670 an expected
-  gap, and every fixture that modelled that gap agrees. Mode: focused-test. Test:
-  `tests/functional/pybz/container-tests.sh`, which sources the real
-  `tests/functional/compare/01-bug-lifecycle.sh` against a stub `run_bzr` and asserts the
-  PASS/FAIL/GAP counts, the per-slug result lines, and the parity-row literals. Red: step 8
-  runs it with the phase edited (step 7) and the fixture not, and it fails on `lifecycle pass
-  count`, `lifecycle gap count`, and the `saved-search ... GAP (#670)` grep. Green: step 10
-  runs it after step 9's fixture edits and it exits 0. It needs no container.
-
-**Steps**
-
-1. Run `cargo build`, then `BZR_BIN=target/debug/bzr sh
-   agent-skills/tests/flag-drift-check.sh` bare. Expect exit 1 naming both missing flags.
-
-2. In the `## Command Tree` fenced block of `docs/bzr-cli.md`, extend the `bug search` node's
-   continuation line to read:
-
-   ```text
-   │   │          [--saved-search <NAME>] [--sharer <ID>] [--sort <FIELD>] [--order asc|desc]
-   ```
-
-3. Re-run the flag-drift check bare. Expect exit 0 and no ERROR lines.
-
-4. In the `### \`bzr bug search\`` section, add
-   `bzr bug search --saved-search "my triage list" --sharer 112233` to the fenced `bash`
-   examples after the last `--from-url` line, and immediately after the sentence
-   `` `--from-url` and the positional `<QUERY>` argument are mutually exclusive. `` add:
-
-   ```markdown
-   `--saved-search` is a third, mutually exclusive query source: it runs a saved search stored in your Bugzilla account, which is unrelated to bzr's local saved queries (see [`bzr query`](#bzr-query----saved-query-management)).
-
-   > **Note:** Resolving a server-side saved search is a Red Hat Bugzilla extension. A stock Bugzilla accepts `savedsearch` and `sharer_id` and ignores them, so `--saved-search` against such a server returns an unfiltered result rather than an error. Confirmed against Bugzilla 5.0.6, 5.2, and 5.3.3+: none implements the parameters, and each accepts them over REST without error.
-   ```
-
-5. In that section's options table, add after the `--save-as [NAME]` row:
-
-   ```markdown
-   | `--saved-search <NAME>` | No* | | Run a saved search stored on the server (Bugzilla `savedsearch`). Mutually exclusive with `<QUERY>` and `--from-url`. Resolving it requires a Bugzilla with the Red Hat saved-search extension; a stock server ignores the parameter. |
-   | `--sharer <ID>` | No | | Numeric Bugzilla user ID of the account that shared the saved search (Bugzilla `sharer_id`). Requires `--saved-search`. |
-   ```
-
-   and change the trailing footnote to
-   `*One of \`<QUERY>\`, \`--saved-search\`, or \`--from-url\` must be provided.`
-
-6. In `docs/dev/python-bugzilla-parity.md`, change the `Server saved search` row's Status
-   cell from `expected gap (#670)` to `parity [^ss]`, and add a footnote definition
-   immediately after the table:
-
-   ```markdown
-   [^ss]: Both clients send Bugzilla's `savedsearch`/`sharer_id`, which are a Red Hat extension. No supported functional image implements them — each accepts the parameters and returns an unfiltered result — so `compare/01-bug-lifecycle/saved-search` cannot distinguish a resolved saved search from an unfiltered one. The row records parameter parity, not verified resolution.
-   ```
-
-   The row still reads `parity`, which is the sourced criterion; the footnote applies this
-   design's own disclosure rule to the one durable artifact most likely to be quoted out of
-   context. Change nothing else in that table.
-
-7. In the `saved-search` block of `tests/functional/compare/01-bug-lifecycle.sh`, replace
-
-   ```bash
-       if lifecycle_bzr_gap saved-search "error: unexpected argument '--saved-search' found" \
-           bug search --saved-search "$LIFECYCLE_SAVED_SEARCH" &&
-   ```
-
-   with
-
-   ```bash
-       if lifecycle_bzr saved-search bug search --saved-search "$LIFECYCLE_SAVED_SEARCH" &&
-   ```
-
-   and delete the `    lifecycle_expect_gap 670` line at
-   `tests/functional/compare/01-bug-lifecycle.sh:460`, one line after the block's closing `fi`.
-   Touch no other block in that file.
-
-8. Run `bash tests/functional/pybz/container-tests.sh` bare. **This is the Red.** Expect
-   failures on `lifecycle pass count`, `lifecycle gap count`, and the
-   `saved-search ... GAP (#670)` grep — the phase now closes the gap and the fixture still
-   models it. Step 9 makes it green; both go in one commit.
-
-9. **`tests/functional/pybz/container-tests.sh` models the whole #670 gap in seven places, not
-   just the parity row.** It drives the real `01-bug-lifecycle.sh` through a stub `run_bzr`
-   and asserts the resulting counts. Line numbers are from `main` and will drift as you edit;
-   the fixture run in step 10 is the authority.
-
-   a. **Parity row literal, line 960.** `run_parity_report_fixture` (defined line 950, invoked
-      line 3011) holds every parity-report row as a literal and asserts `grep -Fxc` finds each
-      exactly once. Replace
-
-      ```text
-      '| Server saved search | `bzr bug search --saved-search` | expected gap (#670) | `compare/01-bug-lifecycle/saved-search` |'
-      ```
-
-      with the new row text, byte for byte including the footnote marker. Touch no other row:
-      sibling issue #672 owns the `Comment tags and minor update` entry two lines below.
-
-   b. **Stub `run_bzr`, lines 600-613.** Remove `--saved-search` from the unsupported-flag
-      condition and delete its arm from the `case` that assigns `diagnostic`. Add a supported
-      arm on the non-stale path returning the two lifecycle ids, mirroring the stale-path arm
-      at line 625: `printf '[{"id":41},{"id":42}]\n' >"$BZR_STDOUT"` then
-      `fixture_finish_bzr 0`. Leave the stale-path arm at 625 as it is. Without this the
-      converted `lifecycle_bzr` probe takes `lifecycle_bzr_probe`'s `BZR_EXIT -ne 0` branch
-      (`01-bug-lifecycle.sh:53-59`) and calls `test_fail`.
-
-   c. **Baseline counts, lines 790-792.** `assert_equals 5 "$PASS_COUNT"` becomes `6`;
-      `assert_equals 0 "$FAIL_COUNT"` is unchanged; `assert_equals 5 "$GAP_COUNT"` becomes `4`.
-
-   d. **`run_eligibility_reset_control`, line 463.** Its first `grep -Fq` looks for
-      `'[compare/01-bug-lifecycle/saved-search] server saved search ... GAP (#670)'`, a line
-      no longer emitted. Change it to the PASS line the same probe now produces. Keep the
-      second grep (`arbitrary-fields ... FAIL`) as it is: the control's subject is that gap
-      eligibility from the preceding probe does not leak into the injected failure on
-      `arbitrary-fields-create`, and saved-search passing cleanly still exercises that. Do not
-      re-point it at a later slug — the control depends on saved-search running *before*
-      arbitrary-fields in the phase.
-
-   e. **`run_noop_stale_gap_control`, line 480.** `GAP_COUNT -ne 5` becomes `GAP_COUNT -ne 4`.
-
-   f. **`LIFECYCLE_STALE_GAPS` control, lines 932 and 938.** Drop `670` from
-      `for issue in 670 671 672 679 680`, and change `assert_equals 5 "$FAIL_COUNT"` to `4`.
-      `expect_gap` emits `#N appears resolved` only from its PASS arm
-      (`tests/functional/lib.sh:236-243`), and there is no longer a call for 670.
-
-   g. **`run_repeated_transport_control`, line 433.** It sources the phase with
-      `LIFECYCLE_REPEATED_REST_EVENTS=1` and *without* `LIFECYCLE_STALE_GAPS`, so it sees the
-      same non-stale baseline as sub-edit c. Change `$PASS_COUNT -ne 5` to `-ne 6` and
-      `$GAP_COUNT -ne 5` to `-ne 4`. `LIFECYCLE_REPEATED_REST_EVENTS` only duplicates a REST
-      debug event (lines 530-532) and does not alter the saved-search outcome, so without this
-      edit `control_failures` increments and the whole fixture returns 1.
-
-   **Leave the eight-name `for control in …` loop at lines 875-887 alone**, including its
-   single `run_gap_ineligible_control` call at line 884. All eight still make the converted
-   `lifecycle_bzr` probe fail, because `LIFECYCLE_WRONG_PARSER_DIAGNOSTIC` and
-   `LIFECYCLE_EXPECTED_DIAGNOSTIC_EXIT_ONE` have a **second**, dedicated injection point at
-   lines 545-556 that keys on `LIFECYCLE_BZR_CALL_NAME == saved-search`, is not guarded by
-   `LIFECYCLE_STALE_GAPS`, and sets `BZR_EXIT=2` (or 1). With an empty expected diagnostic the
-   probe still takes `lifecycle_bzr_probe`'s `BZR_EXIT -ne 0` branch and still fails.
-
-10. Run `bash tests/functional/pybz/container-tests.sh` bare. **This is the Green.** Expect
-    exit 0. Iterate on step 9 until it is — the reported counts and the named slug lines tell
-    you which sub-edit is wrong.
-
-11. Run `make lint` bare — `check-shell` covers both shell files. Expect exit 0. Commit steps
-    7-9 together: `docs(search): document --saved-search and flip the parity row`.
-
-**Acceptance criteria.** The flag-drift check exits 0; the reference documents both flags,
-states the Red Hat caveat, and its options-table footnote names all three query sources; the
-parity row reads `parity` with a footnote stating what its evidence covers, and
-`bash tests/functional/pybz/container-tests.sh` exits 0 against it; the comparison block
-calls `lifecycle_bzr` with no `lifecycle_expect_gap 670`.
-
-## Task 4 — functional phase coverage
-
-**Interfaces.** Consumes Task 2's flags and Task 3's documentation state. Helpers, each
-confirmed at the path named: `run_bzr`, `run_bzr_raw`, `test_begin`, `test_pass`,
-`assert_success`, `assert_exit_code`, `assert_json_array_min_length` in
-`tests/functional/lib.sh`. `BZ_URL` is a global `tests/functional/run-tests.sh` sets before
-sourcing any phase.
-
-**The phase seeds no fixture, deliberately** — see the spec's Testing section for why. Use a
-literal saved-search name and a literal sharer id so every test always executes and the phase
-reports no SKIP.
-
-**Verification**
-
-- Contract: `bug search --saved-search` is accepted by a real Bugzilla over REST and
-  XML-RPC, composes with `--count`, works credentiallessly, and rejects its four invalid
-  argument combinations. Mode: focused-test. Test:
-  `tests/functional/phases/08f-bug-saved-search.sh`. Red: step 5 runs `make lint` with the
-  phase file created and the runner row not yet added, and `check-functional-test-ids` fails
-  with `only on disk: 08f-bug-saved-search`. Green: step 8's `make functional-test` reports
-  all nine of the phase's ids as PASS, with no SKIP — the phase has no conditional test, so a
-  SKIP would itself be a defect.
-
-**Steps**
-
-1. Create `tests/functional/phases/08f-bug-saved-search.sh` with a header in the style of
-   `08b-bugs-paging.sh`. The header must state plainly what the phase cannot prove:
-
-   ```bash
-   # 08f-bug-saved-search
-   # Sourced by run-tests.sh in order; assumes lib.sh helpers and the
-   # orchestrator preamble (constants, shared globals, cleanup trap).
-   # Reads: BZ_URL. Creates: nothing.
-   # shellcheck shell=bash
-   #
-   # Proves a real Bugzilla accepts --saved-search / --sharer over REST and
-   # XML-RPC, that they compose with --count and the credentialless path,
-   # and that the four invalid argument combinations are rejected at parse
-   # time. Does NOT prove the server resolved the saved search: resolving
-   # `savedsearch` is a Red Hat extension that every supported image here
-   # ignores, which is also why the phase seeds nothing. The wire mapping is
-   # proven by the wiremock tests in src/client/resources/bug_tests.rs and
-   # src/xmlrpc/resources/bug_tests.rs; see
-   # docs/workflow/specs/2026-09-05-server-saved-search-design.md.
-   ```
-
-2. Print the phase banner (`echo "── Phase 8f: Bug search --saved-search ───────────────"`),
-   then declare the two literals, with 4-space indentation throughout the file:
-
-   ```bash
-   _SS_NAME="bzr-func-saved-search"
-   _SS_SHARER=1
-   ```
-
-3. Add five acceptance tests, unconditional:
-
-   ```bash
-   test_begin "bug-search-saved-search-rest" "bug search --saved-search over REST"
-   run_bzr --api rest bug search --saved-search "$_SS_NAME"
-   if assert_success && assert_json_array_min_length '.' 1; then test_pass; fi
-   ```
-
-   The remaining four, same shape:
-
-   - `bug-search-saved-search-xmlrpc` / "bug search --saved-search over XML-RPC" —
-     `run_bzr --api xmlrpc bug search --saved-search "$_SS_NAME"`, then
-     `assert_success && assert_json_array_min_length '.' 1`.
-   - `bug-search-saved-search-count` / "bug search --saved-search composes with --count" —
-     `run_bzr bug search --saved-search "$_SS_NAME" --count`, then `assert_success`.
-   - `bug-search-saved-search-sharer` / "bug search --saved-search --sharer" —
-     `run_bzr bug search --saved-search "$_SS_NAME" --sharer "$_SS_SHARER"`, then
-     `assert_success`.
-   - `credentialless-bug-search-saved-search` / "credentialless bug search --saved-search" —
-     `run_bzr_raw --json --server-url "$BZ_URL" bug search --saved-search "$_SS_NAME"`, then
-     `assert_success`.
-
-4. Add the four rejection tests. Each runs the command and asserts `assert_exit_code 2`:
-
-   ```bash
-   test_begin "bug-search-saved-search-rejects-query" "bug search rejects --saved-search with a query"
-   run_bzr bug search "some text" --saved-search "$_SS_NAME"
-   if assert_exit_code 2; then test_pass; fi
-   ```
-
-   The other three: `bug-search-saved-search-rejects-from-url` running
-   `bug search --from-url "${BZ_URL}/buglist.cgi?bug_id=1" --saved-search "$_SS_NAME"`;
-   `bug-search-sharer-requires-saved-search` running `bug search "some text" --sharer 1`; and
-   `bug-search-sharer-rejects-non-numeric` running
-   `bug search --saved-search "$_SS_NAME" --sharer not-a-number`.
-
-5. Run `make lint` bare. **This is the Red.** Expect `check-functional-test-ids` to fail with
-   `runner/phase file mismatch` and `only on disk: 08f-bug-saved-search`: it `cmp`s the sorted
-   runner list against the `phases/*.sh` basenames.
-
-6. In `tests/functional/run-tests.sh`, add `08f-bug-saved-search` to the `for _phase in \`
-   list, immediately after `08e-bugs-restricted-access`.
-
-7. Run `make lint` bare. Expect exit 0 — `check-functional-test-ids` and `check-shell` both
-   cover the new file.
-
-8. Run `make functional-test` bare in the background and read its result once; it takes
-   roughly 10 minutes. Expect exit 0, all nine new ids PASS, and no SKIP among them.
-
-9. **Reset the container before the comparison run:** `make functional-stop` bare. This is not
-   hygiene — it is a precondition. The saved-search comparison asserts *exact* sorted equality
-   against the two lifecycle bug ids (`lifecycle_ids_are`,
-   `01-bug-lifecycle.sh:189`), and on a stock Bugzilla the search is unfiltered, so the
-   assertion holds only on a container whose bug corpus is those two bugs. Step 8 just created
-   dozens of bugs across phases 08 through 08e, and both `make functional-test` and
-   `make functional-compare` reuse an already-running container
-   (`setup-bugzilla.sh:123`, "Container is already running.") with no database reset. Without
-   the stop, the python-bugzilla precondition fails first and the block reports
-   `saved-search precondition failed`.
-
-10. Run `make functional-compare` bare in the background and read its result once; it restarts
-    a fresh container through `functional-start`. This is the only run that exercises criterion
-    5 end to end — the converted `lifecycle_bzr` probe and its `lifecycle_ids_are` assertion
-    against a real container. Expect `compare/01-bug-lifecycle/saved-search` to report PASS
-    with no GAP. This target runs `tests/functional/run-compare.sh` only;
-    `tests/functional/pybz/container-tests.sh` is reached solely by
-    `make functional-compare-all` (`Makefile:226`), which is why Task 3 runs that file
-    directly.
-
-11. Commit: `test(search): cover --saved-search against a real container`.
-
-**Acceptance criteria.** The phase exists, is sourced by the runner, and its header states
-what it cannot prove; every one of its nine tests reports PASS with no SKIP; `make lint`
-green including `check-functional-test-ids` and `check-shell`; `make functional-test` exits 0;
-`make functional-compare` exits 0 with `compare/01-bug-lifecycle/saved-search` PASS and no
-GAP.
-
-## Rollback and cleanup
-
-Every task is additive plus one new phase script; reverting the branch restores the previous
-behaviour with no data or configuration migration. The phase creates no server-side state at
-all — it seeds no bug and no saved search — so it needs no cleanup beyond the disposable
-functional container itself.
-
-## Deferrals carried from review
-
-This repository keeps no `docs/debt/` directory, so the deferral has no record path. It is
-filed as a follow-up tracker issue from this run's completion report; the issue number is
-reported there rather than back-filled into this plan.
-
-1. **The saved-search comparison assertion is vacuous on every supported image, and is
-   corpus-sensitive.** Both `compare/01-bug-lifecycle/saved-search` clients assert the search
-   returns exactly the two lifecycle bug ids. On upstream Bugzilla that passes because the
-   parameter is ignored *and* the container holds exactly those two bugs — not because a saved
-   search was resolved — which also means the assertion only holds on a freshly started
-   container (hence Task 4 step 9). Already true of the python-bugzilla side before this
-   change; flipping bzr's side inherits it. The honest fix is a Red-Hat-shaped fixture in
-   `tests/functional/redhat-shape-proxy.py`, out of this charter's surface.
+**Verification.** `cargo build` then
+`BZR_BIN=target/debug/bzr sh agent-skills/tests/flag-drift-check.sh` bare — red before the
+command-tree edit (`command tree is missing --saved-search`), green after, exit 0 with no ERROR
+lines.
+
+## Task 5 — comparison harness
+
+The gap stays. Only the mechanism by which it is recorded changes, because bzr's failure is now
+exit 15 rather than a clap parse error.
+
+Give `lifecycle_bzr_probe` in `tests/functional/compare/01-bug-lifecycle.sh` an expected-exit
+parameter defaulting to 2, so `lifecycle_bzr`, `lifecycle_bzr_gap` and
+`lifecycle_bzr_xmlrpc_gap` keep their current behaviour for every other block. Point the
+saved-search block at exit 15 with the new diagnostic. Keep `lifecycle_expect_gap 670`.
+
+In `tests/functional/pybz/container-tests.sh`, update only the `saved-search` stub arms so the
+fake `run_bzr` emits the new diagnostic and exit 15 instead of the unsupported-flag message —
+the dedicated injection near line 545 and the unsupported-flag `case` near line 605. The
+PASS/FAIL/GAP counts do not change, because the slug is still a gap. Touch no
+`comment-tag`/`minor-update` site.
+
+**Verification.** `bash tests/functional/pybz/container-tests.sh` bare. Red after the phase
+edit and before the stub edit: the saved-search slug reports FAIL instead of `GAP (#670)`.
+Green: exit 0, with counts unchanged from `main`.
+
+## Task 6 — functional phase
+
+Create `tests/functional/phases/08f-bug-saved-search.sh` and add it to the `for _phase in` list
+in `tests/functional/run-tests.sh` (`check-functional-test-ids` fails `make lint` until both
+agree — that mismatch is the task's red). Header in the style of `08b-bugs-paging.sh`, four to
+ten lines, stating that no supported image implements the extension so the *success* path
+cannot be exercised here and the wiremock tests carry it.
+
+Nine test ids, none conditional — the phase seeds nothing, so a SKIP would itself be a defect:
+`--saved-search` exits 15 with a message naming the capability, over REST and over XML-RPC; the
+same credentiallessly via `--server-url`; `--sharer` likewise; and the four parse-time
+rejections at exit 2. Use `assert_exit_code` and `assert_stderr_contains`.
+
+**Verification.** `make lint` bare, then `make functional-test` bare in the background, read
+once. Expect exit 0 and every new id PASS with no SKIP. Then `make functional-stop` and
+`make functional-compare` bare — the comparison must still report
+`compare/01-bug-lifecycle/saved-search` as `GAP (#670)`. The stop matters: the compare run's
+assertions are corpus-sensitive and `make functional-test` leaves dozens of bugs behind.
+
+## Deferrals
+
+One, no `docs/debt/` directory in this repository: the saved-search comparison remains vacuous
+on the python-bugzilla side and corpus-sensitive on both. Owned by **issue #710**
+(Red-Hat-shaped proxy fixture), filed by the orchestrator.
