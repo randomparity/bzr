@@ -1423,6 +1423,76 @@ async fn get_bug_links_root_node_surfaces_the_servers_access_error() {
     assert!(matches!(err, BzrError::Api { code: 102, .. }), "{err:?}");
 }
 
+// The direct path is the one some Bugzilla extensions crash on with 100500,
+// which is why `get_bug_rest` retries through search. Moving the links root
+// onto the direct path has to carry that accommodation with it, or `bug links`
+// stops working on the deployments ADR 0015 exists to keep working.
+#[tokio::test]
+async fn get_bug_links_root_node_falls_back_to_search_on_100500() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "error": true,
+            "code": BUGZILLA_INTERNAL_ERROR,
+            "message": "Extension crash"
+        })))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("id", "1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 1, "summary": "root", "status": "NEW",
+                      "depends_on": [2], "duplicates": [3]}]
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let node = client.get_bug_links_root_node(1).await.unwrap();
+    assert_eq!(node.id, 1);
+    assert_eq!(node.depends_on, vec![2]);
+    assert_eq!(node.duplicates, vec![3]);
+}
+
+// ADR 0015's rule travels with the fallback: search omits rows the caller
+// cannot see, so an empty retry means "the fallback could not answer" and must
+// re-surface the original error rather than becoming `NotFound`.
+#[tokio::test]
+async fn get_bug_links_root_node_empty_search_fallback_keeps_the_original_error() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "error": true,
+            "code": BUGZILLA_INTERNAL_ERROR,
+            "message": "Extension crash"
+        })))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("id", "1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({ "bugs": [] })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_bug_links_root_node(1).await.unwrap_err();
+    assert!(
+        matches!(
+            err,
+            BzrError::Api {
+                code: BUGZILLA_INTERNAL_ERROR,
+                ..
+            }
+        ),
+        "{err:?}"
+    );
+    assert!(err.to_string().contains("search fallback"), "{err}");
+}
+
 #[tokio::test]
 async fn get_bug_links_root_node_empty_direct_result_is_not_found() {
     let mock = MockServer::start().await;

@@ -525,7 +525,35 @@ impl BugzillaClient {
             .query(&[("include_fields", LINKS_INCLUDE_FIELDS)]);
         let req = self.apply_auth(req_builder);
         let resp = self.send(req).await?;
-        let data: BugLinksResponse = self.parse_json(resp).await?;
+
+        // The direct endpoint is the one some Bugzilla extensions hook and
+        // crash on with 100500, which is why `get_bug_rest` retries through
+        // search. Moving the root read here carries that retry with it, or
+        // `bug links` stops working on those deployments while the related-id
+        // half of the walk keeps succeeding. The original error travels with
+        // the retry: search omits rows the caller cannot see, so an empty
+        // retry is "the fallback could not answer", never `NotFound`
+        // (issue #504, ADR 0015).
+        let data: BugLinksResponse = match self.parse_json(resp).await {
+            Err(
+                original @ BzrError::Api {
+                    code: BUGZILLA_INTERNAL_ERROR,
+                    ..
+                },
+            ) => {
+                tracing::debug!(
+                    "direct links root lookup returned 100500, retrying via search endpoint"
+                );
+                return self
+                    .get_bug_links_nodes_rest(&[id])
+                    .await?
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| annotate_search_fallback(original, &id.to_string()));
+            }
+            other => other?,
+        };
+
         data.bugs
             .into_iter()
             .next()
