@@ -98,9 +98,24 @@ record says so, so a green row does not imply a fidelity nobody established.
 
 ## Threat model
 
-Not security-relevant under the diff triggers: no `src/` change, no shipped artifact, no
-trust boundary in the product. Two harness-internal boundaries, both already bounded:
-the proxy's parse of a backend response (`_forward` caps bodies at 1 MiB; existing hooks
-already `json.loads` responses, and the new transformer adds no new source), and the proxy's
-own environment (`BZR_FUNC_SAVED_SEARCH_IDS` is harness-set and parsed strictly). No
-credential handling changes; `prepare_auth_forward` is untouched.
+No `src/` change, no shipped artifact, no trust boundary in the product. The change does
+parse input it did not produce, so a `$detect-evil` pass was run on the branch rather than
+skipped; it returned `approve` with no blocking finding. Three harness-internal boundaries:
+
+- **Backend response → proxy JSON parse.** `_forward` reads the backend body with a bare
+  `response.read()` and no size ceiling — `_MAX_REQUEST_BODY` bounds the *inbound client
+  request*, not this. That read is pre-existing and unconditional for every route, so the new
+  transformers add no new read and no new ceiling is owed; what bounds the crossing is that
+  the response producer is the loopback test container the harness itself started. Malformed
+  bodies are handled: `_forward` catches `UnicodeDecodeError` and `json.JSONDecodeError`, and
+  a `bugs` value that is not a list is forwarded untouched rather than coerced.
+- **New parsed route.** `shape_saved_search_extensions` parses `/rest/extensions`, which no
+  pre-existing hook touched. Controls: exact route equality, `isinstance` guards on the
+  decoded value, the mode gate, and the same decode-error handler above.
+- **Proxy environment.** `BZR_FUNC_SAVED_SEARCH_{NAME,IDS,SHARER}` are harness-set, parsed
+  strictly (`isascii` + `isdigit` + positive), and a malformed value disables the fixture
+  rather than raising out of the handler thread.
+
+No credential handling changes; `prepare_auth_forward` is untouched and the new mode leaves
+`bearer_auth_mode` false, so headers forward unaltered. No secret reaches stdout, stderr, or
+an evidence marker.

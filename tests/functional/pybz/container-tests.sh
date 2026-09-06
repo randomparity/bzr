@@ -314,8 +314,13 @@ run_saved_search_seed_fixture() (
     extracted=$(mktemp)
     trap 'rm -f "$extracted"' EXIT
     awk '/^seed_server_saved_search\(\) \{$/,/^\}$/' "$source_file" >"$extracted"
-    if [[ ! -s $extracted ]]; then
-        printf 'could not extract seed_server_saved_search from run-compare.sh\n' >&2
+    # An emptiness check cannot see an over-capture: an awk range whose closing
+    # pattern stops matching runs to end-of-file and would be sourced whole.
+    # Pin both ends instead, so a mis-terminated range fails loudly.
+    if [[ ! -s $extracted ]] ||
+        [[ $(head -1 "$extracted") != 'seed_server_saved_search() {' ]] ||
+        [[ $(tail -1 "$extracted") != '}' ]]; then
+        printf 'seed_server_saved_search did not extract as one complete function\n' >&2
         return 1
     fi
     # shellcheck disable=SC1090 # the extracted function text is generated above.

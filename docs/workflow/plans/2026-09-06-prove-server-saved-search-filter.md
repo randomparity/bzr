@@ -606,8 +606,13 @@ run_saved_search_seed_fixture() (
     extracted=$(mktemp)
     trap 'rm -f "$extracted"' EXIT
     awk '/^seed_server_saved_search\(\) \{$/,/^\}$/' "$source_file" >"$extracted"
-    if [[ ! -s $extracted ]]; then
-        printf 'could not extract seed_server_saved_search from run-compare.sh\n' >&2
+    # An emptiness check cannot see an over-capture: an awk range whose closing
+    # pattern stops matching runs to end-of-file and would be sourced whole.
+    # Pin both ends instead, so a mis-terminated range fails loudly.
+    if [[ ! -s $extracted ]] ||
+        [[ $(head -1 "$extracted") != 'seed_server_saved_search() {' ]] ||
+        [[ $(tail -1 "$extracted") != '}' ]]; then
+        printf 'seed_server_saved_search did not extract as one complete function\n' >&2
         return 1
     fi
     # shellcheck disable=SC1090 # the extracted function text is generated above.
@@ -639,8 +644,9 @@ The `awk`-extract-and-`source` idiom appears nowhere else in this file, so it ea
 It exists to prevent exactly the drift that made this task necessary: the lifecycle fixture's
 `seed_server_saved_search` is a hand-written restatement of the real function, and the arity
 change went untested because nothing compared the two. Running the real text is what makes a
-second copy impossible to drift from. Extraction failing loudly is part of that — the `-s`
-check turns a reformatted function into an error rather than a silently empty test.
+second copy impossible to drift from. Extraction failing loudly is part of that — pinning the first
+and last line turns a reformatted or mis-terminated function into an error rather than a
+silently empty or over-captured test.
 
 `container_runtime` returns `echo`, so the function's last line prints its own argv and the
 query is the final whitespace-separated field; `perl` never runs and no container is touched.
