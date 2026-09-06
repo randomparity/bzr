@@ -28,14 +28,12 @@ criteria require:
   runner's `for _phase in` list against the basenames in `tests/functional/phases/` and
   fails `make lint` unless they match, so a new phase file is not addable without its
   runner row.
-- `tests/functional/pybz/container-tests.sh` — this file models the whole `#670` gap, not
-  just its parity row. It holds every parity-report row as a literal string
-  (`run_parity_report_fixture`), **and** it drives the real
-  `tests/functional/compare/01-bug-lifecycle.sh` through a stub `run_bzr` that answers
-  `--saved-search` with the unsupported-flag diagnostic, **and** it asserts the resulting
-  PASS/FAIL/GAP counts and stale-gap behaviour. Closing the gap without updating all of
-  that leaves `make functional-compare-all` permanently red. The full list of edits is Task
-  3 of the plan.
+- `tests/functional/pybz/container-tests.sh` — this file models the whole `#670` gap across
+  seven sites, not just its parity row: it holds every parity-report row as a literal string,
+  drives the real `tests/functional/compare/01-bug-lifecycle.sh` through a stub `run_bzr` that
+  answers `--saved-search` with the unsupported-flag diagnostic, and asserts the resulting
+  PASS/FAIL/GAP counts in three separate controls. Closing the gap without updating all seven
+  leaves `make functional-compare-all` permanently red. Task 3 of the plan enumerates them.
 
 Neither is an expansion of the charter's surface; each is the unavoidable other half of a
 sourced criterion. Both are flagged to the campaign orchestrator. The second is a
@@ -75,7 +73,13 @@ Red Hat documents `sharer_id` explicitly as a Red Hat Extension, with the sharer
 user id** in its example payload (`{"savedsearch": "MySavedSearch", "sharer_id": 112233}`).
 That establishes the parameter names and the identifier form. It does **not** establish how
 Red Hat's fork implements them, and no check above observed a Red Hat server or read Red
-Hat's source. Nothing in this design depends on the inference.
+Hat's source.
+
+No behaviour against a stock Bugzilla depends on the inference. Two choices are shaped by it
+and are recorded as such: the `u64` form of `--sharer`, taken from Red Hat's documented
+payload, and the inclusion of `saved_search` in `has_structured_filters()`, whose only benefit
+accrues on a server that resolves the parameter — its cost on a stock server is one capped
+retry on an already-empty result.
 
 **What follows regardless.** The transport asymmetry the issue's triage feared — REST
 ignoring the parameters while XML-RPC honours them — is ruled out for upstream by the probes
@@ -223,16 +227,12 @@ the observation that catches a mismatch between the two; it needs no container. 
 
 ## Known limitation of the comparison assertion
 
-Both sides of `compare/01-bug-lifecycle/saved-search` assert the search returns exactly the
-two lifecycle bug ids. On upstream Bugzilla that passes because the parameter is ignored
-*and* the container holds exactly those two bugs at that point — not because a saved search
-was resolved. This is already true of the python-bugzilla side before this change; flipping
-bzr's side inherits it. It is recorded, not fixed: strengthening the assertion would make
-both clients fail against every supported image. See the plan's Deferrals section for the
-owning follow-up.
-
-Because the parity table is the durable, quotable artifact, that row's Status cell carries a
-footnote saying what its evidence can and cannot establish.
+`compare/01-bug-lifecycle/saved-search` asserts an *exact* two-id result, which on a stock
+server holds only when the container's whole bug corpus is those two lifecycle bugs — so the
+comparison must run against a freshly started container, and it proves parameter parity rather
+than saved-search resolution. Recorded in full as Deferral 1 in the plan, with the owning
+follow-up. The parity table's Status cell carries a footnote saying the same, because that row
+is the durable, quotable artifact.
 
 ## Decision record
 
@@ -248,18 +248,10 @@ exits 0, which is bzr faithfully reproducing the server; bzr issues no extra req
 invocation; and bzr cannot warn a user who has not read the documentation, which is accepted
 because the alternative charges every user a round trip to catch the subset who did not.
 
-**Scope of this record: `--saved-search` only.** An earlier draft claimed it as precedent
-governing the four sibling parity gaps (#671, #672, #679, #680). That claim is withdrawn — a
-policy recorded in `docs/workflow/specs/` is not linked from `docs/adr/README.md`, is not
-surfaced to a later reviewer consulting the ADR set, and is invisible to the sibling issue
-running concurrently, so it had no mechanism to bind anything.
-
-The cross-cutting version does belong in `docs/adr/`, by that directory's own criterion
-("choices with viable alternatives where the rationale is worth preserving"). It is not
-written here because ADR numbers are assigned by the campaign orchestrator — concurrent
-sibling issues would otherwise all take the same "next free" number — and no number was
-assigned in time. This run's completion report carries the recommendation, so the decision to
-make it binding stays with the party that can number it.
+**This record governs `--saved-search` only.** The cross-cutting version — the same policy
+binding the sibling parity gaps #671, #672, #679 and #680 — belongs in `docs/adr/` by that
+directory's own criterion, and is recommended in this run's completion report; ADR numbers are
+the campaign orchestrator's to assign, and none was available here.
 
 ## Out of scope
 

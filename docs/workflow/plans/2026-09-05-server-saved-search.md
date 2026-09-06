@@ -16,10 +16,7 @@ Tech stack: Rust 2021, clap derive, reqwest, wiremock, Bash for the functional h
 Spec: `docs/workflow/specs/2026-09-05-server-saved-search-design.md`
 Issue: #670 — Branch: `feat/saved-search-670` — Base branch: `main`
 
-Expected implementation size: 295–420 changed lines (M) — summed from the file map below. Two
-review-driven corrections moved it: cutting the functional phase's seeding fixture removed
-about 25 lines, and the six `container-tests.sh` gap-model edits Task 3 step 7 now requires
-added about 15.
+Expected implementation size: 300–370 changed lines (M) — summed from the file map below.
 The charter's `$divination` complexity of S describes the decision surface; this band
 describes changed lines, which the repository's test-sibling and functional-phase
 conventions dominate. They measure different things.
@@ -62,7 +59,7 @@ conventions dominate. They measure different things.
 | `src/commands/bug/search_tests.rs`, `src/commands/bug/mod_tests.rs` | changed | end-to-end request coverage; literal `SearchArgs` sites |
 | `docs/bzr-cli.md` | changed | command tree, prose, examples, options table |
 | `docs/dev/python-bugzilla-parity.md` | changed | the saved-search status row and its footnote |
-| `tests/functional/pybz/container-tests.sh` | changed | the whole #670 gap model: stub `run_bzr` arm, parity-row literal, PASS/FAIL/GAP counts, and three gap controls |
+| `tests/functional/pybz/container-tests.sh` | changed | the whole #670 gap model, seven sites: parity-row literal, stub `run_bzr` arm, baseline counts, eligibility-reset grep, no-op stale-gap count, stale-gaps loop, repeated-transport counts |
 | `tests/functional/compare/01-bug-lifecycle.sh` | changed | dropping the expected-gap marking |
 | `tests/functional/phases/08f-bug-saved-search.sh` | created | functional coverage on a real container |
 | `tests/functional/run-tests.sh` | changed | sourcing the new phase |
@@ -93,11 +90,12 @@ pub sharer_id: Option<u64>,
 - Contract: a saved-search name alone counts for `has_filters` and for
   `has_structured_filters`. (`has_filters` is a consistency invariant — it has no production
   caller; `has_structured_filters` is behavioural and gates hybrid mode's XML-RPC retry.)
-  Mode: focused-test. Test: `src/types/bug/search_tests.rs`,
-  `saved_search_counts_as_a_filter_and_a_structured_filter`. Red: written before step 4's
-  predicate edits, so both assertions fail on a `SearchParams` whose predicates do not yet
-  know the field. Green:
-  `make test-one T=saved_search_counts_as_a_filter_and_a_structured_filter`.
+  Mode: focused-test. Test: a new `saved_search` row in each of
+  `src/types/bug/search_tests.rs`'s two existing per-field tables,
+  `search_params_has_filters_for_each_individual_field` and
+  `search_params_has_structured_filters_for_each_individual_field`. Red: the rows are added at
+  step 4, before step 5's predicate edits, so each table fails on its new case. Green:
+  `make test-one T=has_filters_for_each` and `make test-one T=has_structured_filters_for_each`.
 
 **Steps**
 
@@ -127,24 +125,18 @@ pub sharer_id: Option<u64>,
    pub sharer_id: Option<u64>,
    ```
 
-4. In `src/types/bug/search_tests.rs`, add the predicate test **before** touching either
-   predicate, so it has an observable red:
+4. Cover the predicates **before** touching them, so the coverage has an observable red.
+   `src/types/bug/search_tests.rs` already owns both contracts as exhaustive per-field tables —
+   `search_params_has_filters_for_each_individual_field` (cases end line 224; its assertion
+   message reads "field `{name}` alone should make has_filters() return true") and
+   `search_params_has_structured_filters_for_each_individual_field` (cases end line 288). Add a
+   row for `saved_search` to each cases slice rather than writing a standalone test, following
+   whatever closure shape the neighbouring rows use, so `saved_search` does not become the one
+   filter field missing from the inventories those messages claim to be.
 
-   ```rust
-   #[test]
-   fn saved_search_counts_as_a_filter_and_a_structured_filter() {
-       let params = SearchParams {
-           saved_search: Some("my search".to_string()),
-           ..Default::default()
-       };
-       assert!(params.has_filters());
-       assert!(params.has_structured_filters());
-   }
-   ```
-
-   Run `make test-one T=saved_search_counts_as_a_filter`. Expect it to compile (step 3 added
-   the fields) and fail on the first assertion, because neither predicate knows the field
-   yet.
+   Run `make test-one T=has_filters_for_each` and
+   `make test-one T=has_structured_filters_for_each`. Expect both to compile (step 3 added the
+   fields) and fail on the new case, because neither predicate knows the field yet.
 
 5. In `src/types/bug/search.rs`, add `|| self.saved_search.is_some()` to **both**
    `has_filters` and `has_structured_filters`. Append one sentence to the latter's doc
@@ -154,7 +146,8 @@ pub sharer_id: Option<u64>,
    handling — so the retry stays available for the one vendor extension bzr sends, at the cost
    of one capped round trip on a result that was already empty.
 
-   Run `make test-one T=saved_search_counts_as_a_filter`. Expect one pass.
+   Run `make test-one T=has_filters_for_each` and
+   `make test-one T=has_structured_filters_for_each`. Expect both to pass.
 
 6. In `src/client/resources/bug.rs`, add `("savedsearch", &params.saved_search)` to the
    `option_fields` slice in `append_option_params`, after the `quicksearch` entry; and after
@@ -389,10 +382,10 @@ three sources fails input validation naming all three; `make lint` and `make tes
   gap, and every fixture that modelled that gap agrees. Mode: focused-test. Test:
   `tests/functional/pybz/container-tests.sh`, which sources the real
   `tests/functional/compare/01-bug-lifecycle.sh` against a stub `run_bzr` and asserts the
-  PASS/FAIL/GAP counts, the per-slug result lines, and the parity-row literals. Red: with the
-  phase edited (step 8) and the fixture not (step 7), the run fails on `lifecycle pass count`,
-  `lifecycle gap count`, and the `saved-search ... GAP (#670)` grep. Green:
-  `bash tests/functional/pybz/container-tests.sh` exits 0. It needs no container.
+  PASS/FAIL/GAP counts, the per-slug result lines, and the parity-row literals. Red: step 8
+  runs it with the phase edited (step 7) and the fixture not, and it fails on `lifecycle pass
+  count`, `lifecycle gap count`, and the `saved-search ... GAP (#670)` grep. Green: step 10
+  runs it after step 9's fixture edits and it exits 0. It needs no container.
 
 **Steps**
 
@@ -441,12 +434,32 @@ three sources fails input validation naming all three; `make lint` and `make tes
    design's own disclosure rule to the one durable artifact most likely to be quoted out of
    context. Change nothing else in that table.
 
-7. **`tests/functional/pybz/container-tests.sh` models the whole #670 gap in five places, not
+7. In the `saved-search` block of `tests/functional/compare/01-bug-lifecycle.sh`, replace
+
+   ```bash
+       if lifecycle_bzr_gap saved-search "error: unexpected argument '--saved-search' found" \
+           bug search --saved-search "$LIFECYCLE_SAVED_SEARCH" &&
+   ```
+
+   with
+
+   ```bash
+       if lifecycle_bzr saved-search bug search --saved-search "$LIFECYCLE_SAVED_SEARCH" &&
+   ```
+
+   and delete the `    lifecycle_expect_gap 670` line at
+   `tests/functional/compare/01-bug-lifecycle.sh:460`, one line after the block's closing `fi`.
+   Touch no other block in that file.
+
+8. Run `bash tests/functional/pybz/container-tests.sh` bare. **This is the Red.** Expect
+   failures on `lifecycle pass count`, `lifecycle gap count`, and the
+   `saved-search ... GAP (#670)` grep — the phase now closes the gap and the fixture still
+   models it. Step 9 makes it green; both go in one commit.
+
+9. **`tests/functional/pybz/container-tests.sh` models the whole #670 gap in seven places, not
    just the parity row.** It drives the real `01-bug-lifecycle.sh` through a stub `run_bzr`
-   and asserts the resulting counts, so closing the gap without updating all of it leaves
-   `make functional-compare-all` permanently red. Make every edit below in the same commit as
-   step 8's comparison-script change. Line numbers are from `main` and will drift as you edit;
-   the fixture run in step 9 is the authority.
+   and asserts the resulting counts. Line numbers are from `main` and will drift as you edit;
+   the fixture run in step 10 is the authority.
 
    a. **Parity row literal, line 960.** `run_parity_report_fixture` (defined line 950, invoked
       line 3011) holds every parity-report row as a literal and asserts `grep -Fxc` finds each
@@ -486,46 +499,27 @@ three sources fails input validation naming all three; `make lint` and `make tes
       `expect_gap` emits `#N appears resolved` only from its PASS arm
       (`tests/functional/lib.sh:236-243`), and there is no longer a call for 670.
 
-   g. **Two `run_gap_ineligible_control` entries, lines 875-887.** Six of the eight injected
-      controls (missing/mixed events, connection failure, server error, malformed result,
-      downstream assertion) still make the converted `lifecycle_bzr` probe fail and stay on
-      `saved-search`. Two do not: `LIFECYCLE_WRONG_PARSER_DIAGNOSTIC` and
-      `LIFECYCLE_EXPECTED_DIAGNOSTIC_EXIT_ONE` only take effect inside the unsupported-flag
-      branch, which `LIFECYCLE_STALE_GAPS=1` skips, so saved-search now passes under them and
-      the control's `... FAIL` assertion breaks. Move those two to a slug that still uses
-      `lifecycle_bzr_gap`:
-      `run_gap_ineligible_control "$control" query-match-types 'whiteboard match types'`
-      (`01-bug-lifecycle.sh:540`). Avoid `update-options` — sibling issue #672 is closing that
-      gap concurrently.
+   g. **`run_repeated_transport_control`, line 433.** It sources the phase with
+      `LIFECYCLE_REPEATED_REST_EVENTS=1` and *without* `LIFECYCLE_STALE_GAPS`, so it sees the
+      same non-stale baseline as sub-edit c. Change `$PASS_COUNT -ne 5` to `-ne 6` and
+      `$GAP_COUNT -ne 5` to `-ne 4`. `LIFECYCLE_REPEATED_REST_EVENTS` only duplicates a REST
+      debug event (lines 530-532) and does not alter the saved-search outcome, so without this
+      edit `control_failures` increments and the whole fixture returns 1.
 
-      Note for the completion report, not for fixing here: those two controls are already
-      weaker than their names suggest, because `run_gap_ineligible_control` forces
-      `LIFECYCLE_STALE_GAPS=1` and that flag skips the very branch they inject into. That is a
-      pre-existing property of the fixture, not something this change introduces.
+   **Leave the eight-name `for control in …` loop at lines 875-887 alone**, including its
+   single `run_gap_ineligible_control` call at line 884. All eight still make the converted
+   `lifecycle_bzr` probe fail, because `LIFECYCLE_WRONG_PARSER_DIAGNOSTIC` and
+   `LIFECYCLE_EXPECTED_DIAGNOSTIC_EXIT_ONE` have a **second**, dedicated injection point at
+   lines 545-556 that keys on `LIFECYCLE_BZR_CALL_NAME == saved-search`, is not guarded by
+   `LIFECYCLE_STALE_GAPS`, and sets `BZR_EXIT=2` (or 1). With an empty expected diagnostic the
+   probe still takes `lifecycle_bzr_probe`'s `BZR_EXIT -ne 0` branch and still fails.
 
-8. In the `saved-search` block of `tests/functional/compare/01-bug-lifecycle.sh`, replace
+10. Run `bash tests/functional/pybz/container-tests.sh` bare. **This is the Green.** Expect
+    exit 0. Iterate on step 9 until it is — the reported counts and the named slug lines tell
+    you which sub-edit is wrong.
 
-   ```bash
-       if lifecycle_bzr_gap saved-search "error: unexpected argument '--saved-search' found" \
-           bug search --saved-search "$LIFECYCLE_SAVED_SEARCH" &&
-   ```
-
-   with
-
-   ```bash
-       if lifecycle_bzr saved-search bug search --saved-search "$LIFECYCLE_SAVED_SEARCH" &&
-   ```
-
-   and delete the `    lifecycle_expect_gap 670` line four lines below it. Touch no other
-   block in that file.
-
-9. Run `bash tests/functional/pybz/container-tests.sh` bare. This is the observation that
-   catches any disagreement between step 7's fixture and step 8's phase edit; it sources the
-   real phase against stubs and needs no container. Expect exit 0. Iterate on step 7 until it
-   is green — the reported counts and the named slug lines tell you which sub-edit is wrong.
-
-10. Run `make lint` bare — `check-shell` covers both shell files. Expect exit 0. Commit:
-    `docs(search): document --saved-search and flip the parity row`.
+11. Run `make lint` bare — `check-shell` covers both shell files. Expect exit 0. Commit steps
+    7-9 together: `docs(search): document --saved-search and flip the parity row`.
 
 **Acceptance criteria.** The flag-drift check exits 0; the reference documents both flags,
 states the Red Hat caveat, and its options-table footnote names all three query sources; the
@@ -550,12 +544,11 @@ reports no SKIP.
 - Contract: `bug search --saved-search` is accepted by a real Bugzilla over REST and
   XML-RPC, composes with `--count`, works credentiallessly, and rejects its four invalid
   argument combinations. Mode: focused-test. Test:
-  `tests/functional/phases/08f-bug-saved-search.sh`. Red: before the phase is added to the
-  runner's list `make functional-test` never runs it, and `make lint` fails through
-  `check-functional-test-ids`, which compares the runner's `for _phase in` list against the
-  phase-directory basenames. Green: `make functional-test` reports all nine of the phase's
-  ids as PASS, with no SKIP — the phase has no conditional test, so a SKIP would itself be a
-  defect.
+  `tests/functional/phases/08f-bug-saved-search.sh`. Red: step 5 runs `make lint` with the
+  phase file created and the runner row not yet added, and `check-functional-test-ids` fails
+  with `only on disk: 08f-bug-saved-search`. Green: step 8's `make functional-test` reports
+  all nine of the phase's ids as PASS, with no SKIP — the phase has no conditional test, so a
+  SKIP would itself be a defect.
 
 **Steps**
 
@@ -624,24 +617,40 @@ reports no SKIP.
    `bug-search-sharer-rejects-non-numeric` running
    `bug search --saved-search "$_SS_NAME" --sharer not-a-number`.
 
-5. In `tests/functional/run-tests.sh`, add `08f-bug-saved-search` to the `for _phase in \`
+5. Run `make lint` bare. **This is the Red.** Expect `check-functional-test-ids` to fail with
+   `runner/phase file mismatch` and `only on disk: 08f-bug-saved-search`: it `cmp`s the sorted
+   runner list against the `phases/*.sh` basenames.
+
+6. In `tests/functional/run-tests.sh`, add `08f-bug-saved-search` to the `for _phase in \`
    list, immediately after `08e-bugs-restricted-access`.
 
-6. Run `make lint` bare — `check-functional-test-ids` and `check-shell` both cover the new
-   file. Expect exit 0.
+7. Run `make lint` bare. Expect exit 0 — `check-functional-test-ids` and `check-shell` both
+   cover the new file.
 
-7. Run `make functional-test` bare in the background and read its result once; it takes
+8. Run `make functional-test` bare in the background and read its result once; it takes
    roughly 10 minutes. Expect exit 0, all nine new ids PASS, and no SKIP among them.
 
-8. Run `make functional-compare` bare in the background and read its result once. This is the
-   only run that exercises criterion 5 end to end — the converted `lifecycle_bzr` probe and
-   its `lifecycle_ids_are` assertion against a real container. Expect
-   `compare/01-bug-lifecycle/saved-search` to report PASS with no GAP. Note that this target
-   runs `tests/functional/run-compare.sh` only; `tests/functional/pybz/container-tests.sh` is
-   reached solely by `make functional-compare-all` (`Makefile:226`), which is why Task 3 step
-   9 runs that file directly.
+9. **Reset the container before the comparison run:** `make functional-stop` bare. This is not
+   hygiene — it is a precondition. The saved-search comparison asserts *exact* sorted equality
+   against the two lifecycle bug ids (`lifecycle_ids_are`,
+   `01-bug-lifecycle.sh:189`), and on a stock Bugzilla the search is unfiltered, so the
+   assertion holds only on a container whose bug corpus is those two bugs. Step 8 just created
+   dozens of bugs across phases 08 through 08e, and both `make functional-test` and
+   `make functional-compare` reuse an already-running container
+   (`setup-bugzilla.sh:123`, "Container is already running.") with no database reset. Without
+   the stop, the python-bugzilla precondition fails first and the block reports
+   `saved-search precondition failed`.
 
-9. Commit: `test(search): cover --saved-search against a real container`.
+10. Run `make functional-compare` bare in the background and read its result once; it restarts
+    a fresh container through `functional-start`. This is the only run that exercises criterion
+    5 end to end — the converted `lifecycle_bzr` probe and its `lifecycle_ids_are` assertion
+    against a real container. Expect `compare/01-bug-lifecycle/saved-search` to report PASS
+    with no GAP. This target runs `tests/functional/run-compare.sh` only;
+    `tests/functional/pybz/container-tests.sh` is reached solely by
+    `make functional-compare-all` (`Makefile:226`), which is why Task 3 runs that file
+    directly.
+
+11. Commit: `test(search): cover --saved-search against a real container`.
 
 **Acceptance criteria.** The phase exists, is sourced by the runner, and its header states
 what it cannot prove; every one of its nine tests reports PASS with no SKIP; `make lint`
@@ -658,20 +667,15 @@ functional container itself.
 
 ## Deferrals carried from review
 
-This repository keeps no `docs/debt/` directory, so neither deferral has a record path. Both
-are filed as follow-up tracker issues from this run's completion report; the issue numbers are
+This repository keeps no `docs/debt/` directory, so the deferral has no record path. It is
+filed as a follow-up tracker issue from this run's completion report; the issue number is
 reported there rather than back-filled into this plan.
 
-1. **The saved-search comparison assertion is vacuous on every supported image.** Both
-   `compare/01-bug-lifecycle/saved-search` clients assert the search returns exactly the two
-   lifecycle bug ids, and on upstream Bugzilla that passes because the parameter is ignored
-   *and* the container happens to hold exactly those two bugs — not because a saved search was
-   resolved. Already true of the python-bugzilla side before this change; flipping bzr's side
-   inherits it. The honest fix is a Red-Hat-shaped fixture in
+1. **The saved-search comparison assertion is vacuous on every supported image, and is
+   corpus-sensitive.** Both `compare/01-bug-lifecycle/saved-search` clients assert the search
+   returns exactly the two lifecycle bug ids. On upstream Bugzilla that passes because the
+   parameter is ignored *and* the container holds exactly those two bugs — not because a saved
+   search was resolved — which also means the assertion only holds on a freshly started
+   container (hence Task 4 step 9). Already true of the python-bugzilla side before this
+   change; flipping bzr's side inherits it. The honest fix is a Red-Hat-shaped fixture in
    `tests/functional/redhat-shape-proxy.py`, out of this charter's surface.
-
-2. **Two gap-ineligibility controls cannot exercise what they inject.**
-   `run_gap_ineligible_control` forces `LIFECYCLE_STALE_GAPS=1`, and that flag skips the
-   unsupported-flag branch that `LIFECYCLE_WRONG_PARSER_DIAGNOSTIC` and
-   `LIFECYCLE_EXPECTED_DIAGNOSTIC_EXIT_ONE` are the only injections into. Pre-existing; this
-   change only relocates the two entries to a slug that still fails under stale gaps.
