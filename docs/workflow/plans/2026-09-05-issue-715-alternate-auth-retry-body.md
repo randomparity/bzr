@@ -14,55 +14,60 @@ drift.
 Tech stack: Rust 2021, `reqwest` (async), `serde`/`serde_json`, `tracing`,
 `wiremock` + `tokio` for tests, Bash for the functional tier.
 
-Expected implementation size: 330–450 changed lines (M) — derived from the file
-map below: two small production edits (~60 and ~40 changed lines), one test
-block of roughly 200 lines in an existing sibling file, and roughly 70 lines
-added to one existing functional phase script.
+Expected implementation size: 350–450 changed lines (M) — counted off the file
+map: `response.rs` ~50 changed lines (a ~30-line helper pair, ~18 lines moved out
+of `check_response_status`), `transport.rs` ~105, ~200 added to
+`src/client/transport_tests.rs`, ~55 added to one existing functional phase
+script. No other file changes: `ErrorResponse` is reused unchanged, so
+`src/client/response_tests.rs` and the ADR-0015-governed HTTP-200 error path stay
+untouched.
 
 ## Global Constraints
 
 - Unit tests live in **sibling `<name>_tests.rs` files** linked from the source
   file via `#[cfg(test)] #[path = "<name>_tests.rs"] mod tests;`. An inline `mod
   tests { ... }` in `src/` is forbidden and `make check-test-layout` enforces
-  it. `src/client/transport_tests.rs` and `src/client/response_tests.rs` already
-  exist and are already linked; add to them, do not create new files.
-- Sibling test files begin with the file-level inner attribute they already
-  carry. `src/client/transport_tests.rs` begins with
-  `#![expect(clippy::unwrap_used)]`. Do not change it.
-- All API tests are `#[tokio::test]`; HTTP is mocked with `wiremock`.
+  it. `src/client/transport_tests.rs` already exists and is already linked; add
+  to it, do not create a new file. Its file-level
+  `#![expect(clippy::unwrap_used)]` stays as it is.
+- All API tests are `#[tokio::test]`; HTTP is mocked with `wiremock` 0.6.5.
 - Clippy pedantic is on and warnings are errors: `unwrap_used` is denied in
-  `src/` (permitted in the sibling test files by their `expect` attribute),
-  `expect_used` and `allow_attributes` warn. Use `#[expect(...)]` with a reason
-  rather than `#[allow(...)]` if one is unavoidable.
-- User-facing output goes through `Writers`; diagnostics go through `tracing`.
-  No `println!`/`eprintln!` in `src/`.
+  `src/`, `expect_used` and `allow_attributes` warn. Prefer `#[expect(...)]` with
+  a reason over `#[allow(...)]` if one is unavoidable.
+- User-facing output goes through `Writers`; diagnostics through `tracing`. No
+  `println!`/`eprintln!` in `src/`.
 - URLs in logs go through `BugzillaClient::safe_url`; body text in logs goes
-  through `crate::bugzilla_auth::redact_api_key`.
+  through `crate::bugzilla_auth::redact_api_key`. Never interpolate a
+  `reqwest::Error` into a log line or a message on a new code path: its `Display`
+  appends ` for url ({url})` with the query string intact
+  (`reqwest-0.12.28/src/error.rs:267`), which on the query-parameter auth path is
+  the API key.
 - Guardrails, run bare (no pipes, no `|| true`):
   - `make lint`
-  - `make test-one T=<substring>` while iterating, `make test-fast` for
-    `--lib` only, `make test` before committing
+  - `make test-one T=<substring>` while iterating, `make test-fast` for `--lib`
+    only, `make test` before committing
   - `make functional-test` for the container tier (~10 minutes; run it in the
     background, never piped through `tail`)
   - never run bare `cargo test`
 - Functional phase scripts use **4-space indent** and are not CI-linted; bare
-  `shfmt` will disagree with the repo's actual style. Match the surrounding
-  file.
+  `shfmt` will disagree with the repo's actual style. Match the surrounding file.
 - Do not edit `docs/adr/README.md`, `src/client/auth/valid_login.rs`, or
   `src/client/auth/mod.rs`.
-- Commits are Conventional Commits 1.0.0. At least one commit must carry
-  `fix(client): …` so the change reaches the generated release notes.
+- Commits are Conventional Commits 1.0.0. At least one must carry `fix(client):
+  …` so the change reaches the generated release notes.
 
 ## File map
 
-| File | Created / Changed | Answerable for |
+| File | Changed | Answerable for |
 |---|---|---|
-| `src/client/response.rs` | Changed | `ErrorResponse` shape; `error_from_status_body`; `bugzilla_error_code` |
-| `src/client/transport.rs` | Changed | The `AlternateAuth` outcome, the authentication-code band, `send_raw`'s three-way branch |
-| `src/client/transport_tests.rs` | Changed | Wiremock proofs that the two 401 bodies diverge |
-| `tests/functional/phases/08e-bugs-restricted-access.sh` | Changed | Contract pinned against a real Bugzilla, authenticated and credentialless |
-| `docs/adr/0057-alternate-auth-retry-classifies-the-refusal.md` | Created | The decision |
-| `docs/workflow/specs/2026-09-05-issue-715-alternate-auth-retry-body-design.md` | Created | The design |
+| `src/client/response.rs` | Yes | `error_from_status_body`; `bugzilla_error_code`; `check_response_status` delegating to the first |
+| `src/client/transport.rs` | Yes | The `AlternateAuth` outcome, the authentication-code band, `send_raw`'s three-way branch |
+| `src/client/transport_tests.rs` | Yes | Wiremock proofs that the two 401 bodies diverge |
+| `tests/functional/phases/08e-bugs-restricted-access.sh` | Yes | Contract pinned against a real Bugzilla, authenticated and credentialless |
+
+`docs/adr/0057-alternate-auth-retry-classifies-the-refusal.md` and
+`docs/workflow/specs/2026-09-05-issue-715-alternate-auth-retry-body-design.md`
+are already written and committed.
 
 ---
 
@@ -74,150 +79,87 @@ caller, so landing it alone would be dead code.
 
 ### Interfaces
 
-Consumed from the existing codebase (each confirmed present at the stated
-signature in this repository at `origin/main`):
+Consumed from the existing codebase, each confirmed present at the stated
+location and signature in this worktree:
 
 - `crate::error::BzrError::Api { code: i64, message: String }` and
-  `BzrError::HttpStatus { status: u16, body: String }` — `src/error.rs:18`
+  `BzrError::HttpStatus { status: u16, body: String }` — `src/error.rs:18`, `:37`
 - `crate::http::diagnostic_body_preview(body: &str) -> String` — `src/http.rs:71`
 - `crate::http::utf8_prefix(body: &str, max_bytes: usize) -> &str` —
   `src/http.rs:62`
 - `crate::bugzilla_auth::redact_api_key(msg: &str) -> String` —
   `src/bugzilla_auth.rs:123`
 - `BugzillaClient::safe_url(url: &reqwest::Url) -> String` —
-  `src/client/transport.rs:180`
+  `src/client/transport.rs:189`
 - `BugzillaClient::apply_alternate_auth(&self, builder: RequestBuilder) ->
   Result<RequestBuilder>` — `src/client/transport.rs:169`
-- `BODY_PREVIEW_MAX_BYTES` — a private constant already in scope in
-  `src/client/response.rs`
+- `struct ErrorResponse { error: bool, code: i64, message: Option<String> }`,
+  module-private in `src/client/response.rs:14`, with `code` defaulting to `-1`
+  via `default_error_code` — **reused unchanged**
+- `BODY_PREVIEW_MAX_BYTES` — module-private constant, `src/client/response.rs:627`
 
 Published for later tasks:
 
 - `BugzillaClient::error_from_status_body(status: reqwest::StatusCode, body:
-  &str) -> BzrError` (`pub(super)`, in `src/client/response.rs`)
+  &str) -> BzrError` (`pub(super)`, `src/client/response.rs`)
 - `BugzillaClient::bugzilla_error_code(body: &str) -> Option<i64>`
-  (`pub(super)`, in `src/client/response.rs`)
+  (`pub(super)`, `src/client/response.rs`)
 - `enum AlternateAuth { Replace(reqwest::Response), Refused(BzrError), Original }`
-  (private to `src/client/transport.rs`)
+  and `fn code_proves_auth_failure(code: i64) -> bool` (both private to
+  `src/client/transport.rs`)
 
 ### Verification
 
 - Contract: *a retried 401 carrying a non-authentication Bugzilla error code
-  replaces the original 401*.
+  replaces the original 401.*
   Mode: focused-test.
   Observable contract: `client.get_json_value("bug/1").await` returns
   `Err(BzrError::Api { code: 120, .. })` when the first attempt answers 401 with
   code 410 and the retry answers 401 with code 120.
   Test: `src/client/transport_tests.rs`,
-  `auth_fallback_relays_a_policy_refusal_from_the_retried_body`.
-  Expected red before the production edit: the assertion on `code == 120` fails,
-  reporting `code: 410`.
+  `auth_fallback_relays_a_policy_refusal_from_the_retried_body` (written in
+  Task 2).
+  Expected red before step 5: the assertion on `code == 120` fails, reporting
+  `410`.
   Green command: `make test-one T=auth_fallback_relays_a_policy_refusal`.
 
 - Contract: *a retried 401 carrying an authentication code leaves the original
-  401 standing*.
+  401 standing.*
   Mode: focused-test.
   Observable contract: `Err(BzrError::Api { code: 410, .. })` when both attempts
   answer 401 with code 410.
-  Test: `src/client/transport_tests.rs`,
-  `auth_fallback_keeps_the_original_401_when_the_retry_also_fails_to_log_in`.
-  Expected red: none before the edit — this test passes on `main` and exists to
-  fail if the new branch over-relays. Confirm it by temporarily inverting the
-  band check (`!code_proves_auth_failure(code)`) and observing it report `120`
-  instead of `410`.
-  Green command:
-  `make test-one T=auth_fallback_keeps_the_original_401_when_the_retry_also`.
+  Test: `auth_fallback_keeps_the_original_401_when_the_retry_also_fails_to_log_in`.
+  Expected red: not red before the edit — it passes on `main` and exists to fail
+  if the new branch over-relays. Confirm it bites by temporarily inverting the
+  band check to `!code_proves_auth_failure(code)` and observing it report `120`.
+  Green command: `make test-one T=auth_fallback_keeps_the_original`.
 
-- Contract: *`ErrorResponse` with no `code` field still reports `-1`*.
+- Contract: *`error_from_status_body` preserves `check_response_status`'s
+  existing behaviour for a body with no `code`.*
   Mode: focused-test.
-  Observable contract: an HTTP 400 body `{"error":true,"message":"boom"}`
-  produces `BzrError::Api { code: -1, message: "boom" }`.
-  Test: `src/client/transport_tests.rs`,
-  `error_body_without_a_code_reports_the_unknown_code_sentinel`.
-  Expected red: fails to compile or reports a different code if
-  `error_from_status_body` drops the `-1` default while moving it.
+  Observable contract: HTTP 400 with `{"error":true,"message":"boom"}` yields
+  `BzrError::Api { code: -1, message: "boom" }`.
+  Test: `error_body_without_a_code_reports_the_unknown_code_sentinel`.
+  Expected red: reports a different code if the move drops `ErrorResponse`'s
+  `-1` default.
   Green command: `make test-one T=error_body_without_a_code`.
+
+- Contract: *the retried-body-unreadable arm leaks no transport error.*
+  Mode: task-test-not-applicable.
+  Changed surface: the `let Ok(body) = retried.text().await else { … }` arm in
+  `retry_with_alternate_auth`. `wiremock` serves a complete response body from an
+  in-process server; it exposes no way to abort a body mid-stream, so no test in
+  this suite can enter the arm. It is held by inspection: the arm's only log line
+  is a fixed string, and it returns `AlternateAuth::Original`, which reports the
+  original response and never the error.
 
 ### Steps
 
-1. Read `src/client/response.rs` around the `ErrorResponse` struct (top of file)
-   and `check_response_status` (near line 450) so the edits below land against
-   the current text.
+1. Read `src/client/response.rs` around `ErrorResponse` (line 14) and
+   `check_response_status` (line 450), and `src/client/transport.rs` in full.
 
-2. In `src/client/response.rs`, change the `ErrorResponse` struct's `code` field
-   so an absent `code` is representable. Replace:
-
-   ```rust
-       #[serde(default = "default_error_code", deserialize_with = "deserialize_code")]
-       code: i64,
-   ```
-
-   with:
-
-   ```rust
-       #[serde(default, deserialize_with = "deserialize_optional_code")]
-       code: Option<i64>,
-   ```
-
-3. In `src/client/response.rs`, replace the `default_error_code` function:
-
-   ```rust
-   fn default_error_code() -> i64 {
-       -1
-   }
-   ```
-
-   with the sentinel constant and the optional-code adapter:
-
-   ```rust
-   /// The code reported for a Bugzilla error envelope that carries no `code`
-   /// field. Bugzilla itself never emits a negative code other than -303 and
-   /// -32000, so this cannot collide with a real one.
-   const UNKNOWN_API_ERROR_CODE: i64 = -1;
-
-   /// `deserialize_code` in an `Option`, so a missing `code` field is `None`
-   /// rather than indistinguishable from a server that sent the sentinel.
-   fn deserialize_optional_code<'de, D: serde::Deserializer<'de>>(
-       deserializer: D,
-   ) -> std::result::Result<Option<i64>, D::Error> {
-       deserialize_code(deserializer).map(Some)
-   }
-   ```
-
-4. In `src/client/response.rs`, replace the body of `check_response_status`'s
-   error branch with a call to the new shared helper. Replace this block:
-
-   ```rust
-               tracing::debug!(
-                   %status,
-                   body = crate::bugzilla_auth::redact_api_key(crate::http::utf8_prefix(
-                       &body,
-                       BODY_PREVIEW_MAX_BYTES,
-                   )),
-                   "API error response"
-               );
-               if let Ok(err) = serde_json::from_str::<ErrorResponse>(&body) {
-                   if err.error {
-                       return Err(BzrError::Api {
-                           code: err.code,
-                           message: err.message.unwrap_or_else(|| status.to_string()),
-                       });
-                   }
-               }
-               return Err(BzrError::HttpStatus {
-                   status: status.as_u16(),
-                   body: crate::http::diagnostic_body_preview(&body),
-               });
-   ```
-
-   with:
-
-   ```rust
-               return Err(Self::error_from_status_body(status, &body));
-   ```
-
-5. In `src/client/response.rs`, immediately after `check_response_status`, add
-   the two shared helpers:
+2. In `src/client/response.rs`, add two `pub(super)` associated functions to the
+   `impl BugzillaClient` block, immediately after `check_response_status`:
 
    ```rust
        /// Classify an HTTP error status and its already-read body into the
@@ -239,7 +181,7 @@ Published for later tasks:
            if let Ok(err) = serde_json::from_str::<ErrorResponse>(body) {
                if err.error {
                    return BzrError::Api {
-                       code: err.code.unwrap_or(UNKNOWN_API_ERROR_CODE),
+                       code: err.code,
                        message: err.message.unwrap_or_else(|| status.to_string()),
                    };
                }
@@ -252,24 +194,37 @@ Published for later tasks:
 
        /// The Bugzilla error code an error body carries, or `None` when the
        /// body is not a Bugzilla error envelope (`error: true`) or carries no
-       /// `code`. `None` means the response offered no signal about *why* it
-       /// was refused.
+       /// `code`. `ErrorResponse` defaults a missing `code` to
+       /// `default_error_code()`, and Bugzilla emits no code of `-1`, so
+       /// reading that sentinel back as `None` cannot swallow a real code.
+       /// `None` means the response offered no signal about *why* it was
+       /// refused.
        pub(super) fn bugzilla_error_code(body: &str) -> Option<i64> {
            let envelope: ErrorResponse = serde_json::from_str(body).ok()?;
-           envelope.error.then_some(envelope.code).flatten()
+           (envelope.error && envelope.code != default_error_code())
+               .then_some(envelope.code)
        }
    ```
 
-6. Run `make test-fast` bare. Expect a green `--lib` run: this step is
-   behaviour-preserving, so every existing test still passes.
+3. In `src/client/response.rs`, replace the tail of `check_response_status`'s
+   error branch — the `tracing::debug!("API error response")` call, the
+   `serde_json::from_str::<ErrorResponse>` block, and the trailing
+   `BzrError::HttpStatus` return, currently lines 470–489 — with the single
+   statement `return Err(Self::error_from_status_body(status, &body));`. Leave
+   the preceding `response.text().await` match, including its `Err(e)` arm,
+   exactly as it is: that arm's text lands in `HttpStatus.body`, which
+   `src/error.rs:37` already redacts.
 
-7. Add the failing test from the Verification inventory's first contract to
-   `src/client/transport_tests.rs` (Task 1's test code is written out in Task 2
-   below; add that test first if you are executing strictly test-first). Run
-   `make test-one T=auth_fallback_relays_a_policy_refusal` bare and confirm it
-   reports `code: 410` where `120` was expected.
+4. Run `make test-fast` bare. Expect a green `--lib` run — steps 2 and 3 are
+   behaviour-preserving, and `ErrorResponse` is unchanged, so no existing test or
+   call site moves.
 
-8. In `src/client/transport.rs`, add the outcome type and the classification
+5. Add Task 2's `auth_fallback_relays_a_policy_refusal_from_the_retried_body`
+   test now if you are executing strictly test-first, and run
+   `make test-one T=auth_fallback_relays_a_policy_refusal` bare. Expect it to
+   fail reporting `code: 410`.
+
+6. In `src/client/transport.rs`, add the outcome type and the classification
    policy immediately above `impl BugzillaClient`:
 
    ```rust
@@ -300,18 +255,8 @@ Published for later tasks:
    }
    ```
 
-9. In `src/client/transport.rs`, replace `send_raw`'s 401 branch. Replace:
-
-   ```rust
-           if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-               if let Some(retried) = self.retry_with_alternate_auth(retry_builder).await? {
-                   return Ok(retried);
-               }
-           }
-           Ok(resp)
-   ```
-
-   with:
+7. In `src/client/transport.rs`, change `send_raw`'s 401 branch from the
+   `if let Some(retried) = …` form to a three-arm match:
 
    ```rust
            if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
@@ -324,111 +269,80 @@ Published for later tasks:
            Ok(resp)
    ```
 
-10. In `src/client/transport.rs`, replace `retry_with_alternate_auth` and delete
-    `alternate_auth_failed`. Replace this whole block:
+   `Refused` returns a `BzrError::Api`, which `send`'s transient-error arm does
+   not match (`is_transient` matches only `BzrError::Http`), so retry behaviour
+   is unchanged.
 
-    ```rust
-        /// On 401, retry the request with the alternate auth method (header ↔ query param).
-        /// Returns `Ok(Some(response))` if the retry should replace the original 401,
-        /// `Ok(None)` if the retry also proved auth failed or wasn't possible, or
-        /// `Err` on transport-level failures.
-        async fn retry_with_alternate_auth(
-            &self,
-            retry_builder: Option<RequestBuilder>,
-        ) -> Result<Option<reqwest::Response>> {
-            if self.auth.is_none() {
-                return Ok(None);
-            }
-            let Some(clone) = retry_builder else {
-                return Ok(None);
-            };
-            tracing::debug!("401 received, retrying with alternate auth method");
-            let retried = self.apply_alternate_auth(clone)?.send().await?;
-            tracing::debug!(
-                url = Self::safe_url(retried.url()),
-                status = %retried.status(),
-                "auth fallback response"
-            );
-            if Self::alternate_auth_failed(retried.status()) {
-                tracing::debug!("auth fallback also failed, returning original 401");
-                return Ok(None);
-            }
-            Ok(Some(retried))
-        }
+8. In `src/client/transport.rs`, replace the whole of
+   `retry_with_alternate_auth` and delete `alternate_auth_failed`:
 
-        fn alternate_auth_failed(status: reqwest::StatusCode) -> bool {
-            status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN
-        }
-    ```
+   ```rust
+       /// On 401, retry the request with the alternate auth method (header ↔
+       /// query param) and classify what came back. Bugzilla maps fifteen
+       /// distinct error codes onto HTTP 401, so the status alone cannot say
+       /// whether the retry failed to authenticate or authenticated and was
+       /// then refused; only the body can (ADR 0057).
+       async fn retry_with_alternate_auth(
+           &self,
+           retry_builder: Option<RequestBuilder>,
+       ) -> Result<AlternateAuth> {
+           if self.auth.is_none() {
+               return Ok(AlternateAuth::Original);
+           }
+           let Some(clone) = retry_builder else {
+               return Ok(AlternateAuth::Original);
+           };
+           tracing::debug!("401 received, retrying with alternate auth method");
+           let retried = self.apply_alternate_auth(clone)?.send().await?;
+           let status = retried.status();
+           tracing::debug!(
+               url = Self::safe_url(retried.url()),
+               status = %status,
+               "auth fallback response"
+           );
+           if status != reqwest::StatusCode::UNAUTHORIZED
+               && status != reqwest::StatusCode::FORBIDDEN
+           {
+               return Ok(AlternateAuth::Replace(retried));
+           }
+           // Reading the body is the only way to tell the two apart, and it
+           // consumes the response — so a refusal is returned as the error it
+           // will be reported as rather than as a response.
+           let Ok(body) = retried.text().await else {
+               // The transport error's `Display` carries the request URL, which
+               // on the query-parameter path holds the API key, so nothing
+               // derived from it is logged. Nothing was learned; the original
+               // stands.
+               tracing::debug!("auth fallback response body unreadable, returning original 401");
+               return Ok(AlternateAuth::Original);
+           };
+           match Self::bugzilla_error_code(&body) {
+               Some(code) if code_proves_auth_failure(code) => {
+                   tracing::debug!(code, "auth fallback also failed to authenticate");
+                   Ok(AlternateAuth::Original)
+               }
+               Some(code) => {
+                   tracing::debug!(code, "auth fallback authenticated; server refused the request");
+                   Ok(AlternateAuth::Refused(Self::error_from_status_body(
+                       status, &body,
+                   )))
+               }
+               None => {
+                   tracing::debug!("auth fallback carried no Bugzilla error code");
+                   Ok(AlternateAuth::Original)
+               }
+           }
+       }
+   ```
 
-    with:
+9. Run `make test-one T=auth_fallback` bare. Expect every `auth_fallback` test to
+   pass, including the one red at step 5.
 
-    ```rust
-        /// On 401, retry the request with the alternate auth method (header ↔
-        /// query param) and classify what came back. Bugzilla maps fifteen
-        /// distinct error codes onto HTTP 401, so the status alone cannot say
-        /// whether the retry failed to authenticate or authenticated and was
-        /// then refused; only the body can (ADR 0057).
-        async fn retry_with_alternate_auth(
-            &self,
-            retry_builder: Option<RequestBuilder>,
-        ) -> Result<AlternateAuth> {
-            if self.auth.is_none() {
-                return Ok(AlternateAuth::Original);
-            }
-            let Some(clone) = retry_builder else {
-                return Ok(AlternateAuth::Original);
-            };
-            tracing::debug!("401 received, retrying with alternate auth method");
-            let retried = self.apply_alternate_auth(clone)?.send().await?;
-            let status = retried.status();
-            tracing::debug!(
-                url = Self::safe_url(retried.url()),
-                status = %status,
-                "auth fallback response"
-            );
-            if status != reqwest::StatusCode::UNAUTHORIZED
-                && status != reqwest::StatusCode::FORBIDDEN
-            {
-                return Ok(AlternateAuth::Replace(retried));
-            }
-            // Reading the body is the only way to tell the two apart, and it
-            // consumes the response — so a refusal is returned as the error it
-            // will be reported as rather than as a response.
-            let Ok(body) = retried.text().await else {
-                // The transport error's `Display` carries the request URL,
-                // which on the query-parameter path holds the API key, so it
-                // is not logged. Nothing was learned; the original stands.
-                tracing::debug!("auth fallback response body unreadable, returning original 401");
-                return Ok(AlternateAuth::Original);
-            };
-            match Self::bugzilla_error_code(&body) {
-                Some(code) if code_proves_auth_failure(code) => {
-                    tracing::debug!(code, "auth fallback also failed to authenticate");
-                    Ok(AlternateAuth::Original)
-                }
-                Some(code) => {
-                    tracing::debug!(code, "auth fallback authenticated; server refused the request");
-                    Ok(AlternateAuth::Refused(Self::error_from_status_body(
-                        status, &body,
-                    )))
-                }
-                None => {
-                    tracing::debug!("auth fallback carried no Bugzilla error code");
-                    Ok(AlternateAuth::Original)
-                }
-            }
-        }
-    ```
+10. Run `make lint` bare. Expect exit 0. If clippy reports `large_enum_variant`
+    on `AlternateAuth`, box the `BzrError` variant rather than adding an
+    `expect` attribute.
 
-11. Run `make test-one T=auth_fallback` bare. Expect every `auth_fallback` test
-    to pass, including the one that was red at step 7.
-
-12. Run `make lint` bare. Expect exit 0. If clippy reports
-    `large_enum_variant` on `AlternateAuth`, box the `BzrError` variant rather
-    than adding an `expect` attribute.
-
-13. Run `make test` bare, in the background. Expect exit 0.
+11. Run `make test` bare, in the background. Expect exit 0.
 
 ### Acceptance criteria
 
@@ -437,8 +351,10 @@ Published for later tasks:
   only for a 401 or 403.
 - `check_response_status` and the retry build their `BzrError` through the same
   `error_from_status_body`.
-- Nothing derived from a `reqwest::Error` reaches a log or an error message on
-  the new body-read path.
+- `ErrorResponse`, `default_error_code`, `check_bugzilla_200_error`, and
+  `src/client/response_tests.rs` are unchanged.
+- Nothing derived from a `reqwest::Error` reaches a log or a message on the new
+  body-read path.
 - `make lint` and `make test` are green.
 
 ---
@@ -451,55 +367,55 @@ stock Bugzilla container does not present.
 
 ### Interfaces
 
-Consumed from Task 1 and the existing test module (each confirmed present):
+Consumed, each confirmed present:
 
 - `crate::client::test_helpers::test_client(base_url: &str) -> BugzillaClient` —
   header auth, `retry_max: 0` — `src/client/test_helpers.rs:13`
-- `crate::client::test_helpers::test_client_query_param(base_url: &str) ->
-  BugzillaClient` — `src/client/test_helpers.rs`
-- `has_no_auth_header(req: &wiremock::Request) -> bool` and
-  `has_no_auth_query_param(req: &wiremock::Request) -> bool` — already defined at
-  the top of `src/client/transport_tests.rs`
 - `BugzillaClient::get_json_value(path: &str) -> Result<serde_json::Value>`
-- `wiremock::{Mock, MockServer, ResponseTemplate}`, `wiremock::matchers::{method,
-  path, query_param}`
+- `wiremock::{Mock, MockServer, ResponseTemplate}` and
+  `wiremock::matchers::{method, path}` — already imported at the top of
+  `src/client/transport_tests.rs`
+- `BzrError`, in scope through the file's `use super::*`
 
 Published for later tasks: nothing.
 
 ### Verification
 
-- Contract: *a retried 401 carrying code 120 is relayed*. Mode: focused-test —
-  `auth_fallback_relays_a_policy_refusal_from_the_retried_body`, red before
-  Task 1 step 8 with `code: 410`, green via
-  `make test-one T=auth_fallback_relays_a_policy_refusal`.
-- Contract: *a retried 401 carrying code 410 is not relayed*. Mode:
-  focused-test — `auth_fallback_keeps_the_original_401_when_the_retry_also_fails_to_log_in`,
-  red under an inverted band check, green via
-  `make test-one T=auth_fallback_keeps_the_original`.
-- Contract: *the authentication band's edges*. Mode: focused-test —
-  `auth_fallback_band_edges_separate_login_failure_from_refusal`, red if the band
-  is written `300..400` exclusive of 399 or inclusive of 400, green via
-  `make test-one T=auth_fallback_band_edges`.
-- Contract: *`-1` is still reported for an envelope with no `code`*. Mode:
-  focused-test — `error_body_without_a_code_reports_the_unknown_code_sentinel`,
-  red if Task 1 step 5 drops the default, green via
-  `make test-one T=error_body_without_a_code`.
+Every entry below is `Mode: focused-test`, in
+`src/client/transport_tests.rs`, green under
+`make test-one T=auth_fallback` (or `T=error_body_without_a_code`).
+
+| Test | Contract | Expected red |
+|---|---|---|
+| `auth_fallback_relays_a_policy_refusal_from_the_retried_body` | retried 401 code 120 wins over original 401 code 410 | before Task 1 step 8: reports `410` |
+| `auth_fallback_keeps_the_original_401_when_the_retry_also_fails_to_log_in` | retried 401 code 410 does not win | under an inverted band check: reports `120` |
+| `auth_fallback_keeps_the_original_401_when_the_retry_carries_no_envelope` | retried 401 with an HTML body does not win | if `bugzilla_error_code` returned a code for unparseable input |
+| `auth_fallback_keeps_the_original_401_when_the_retried_envelope_has_no_code` | retried 401 `{"error":true,"message":…}` does not win | if the `-1` sentinel were not read back as "no signal" |
+| `auth_fallback_relays_a_403_policy_refusal` | retried **403** code 120 wins | if 403 were not classified alongside 401 |
+| `auth_fallback_band_edges_separate_login_failure_from_refusal` | 299 → relayed, 300 → kept, 399 → kept, 400 → relayed | if the band were written `300..400` or `300..=400` |
+| `error_body_without_a_code_reports_the_unknown_code_sentinel` | a plain HTTP 400 `{"error":true,"message":"boom"}` still reports `code: -1` | if Task 1 step 2 dropped `ErrorResponse`'s default |
 
 ### Steps
 
-1. Read `src/client/transport_tests.rs` lines 119–200 to copy the existing
-   two-mock LIFO idiom exactly — the file registers the success mock first and
-   the 401 mock second, because wiremock checks mocks last-registered-first.
+1. Read `src/client/transport_tests.rs:118–194`. **Do not copy the "LIFO"
+   explanation in its comments at lines 135 and 174: it is wrong.** In
+   `wiremock` 0.6.5 (`src/mock_set.rs:63-72`) `handle_request` stable-sorts the
+   mocks by priority and takes the **first** match, and `register`
+   (`src/mock_set.rs:92-96`) pushes in insertion order, so with equal priority
+   the **first-registered** mock wins. Those existing tests work because their
+   first-registered mock carries extra matchers the first request fails, not
+   because of ordering. Correct both comments to say
+   `// registered first; discriminated by the auth matchers, not by order` while
+   you are in the file.
 
-2. Append a helper to `src/client/transport_tests.rs` that mounts a 401 for the
-   header-auth attempt and a caller-chosen response for the query-param retry:
+2. Append this helper, whose ordering is the mechanism the new tests depend on:
 
    ```rust
-   /// Mount the two halves of a 401 alternate-auth fallback: the first attempt
-   /// gets `first`, the alternate-auth retry gets `retried`. Registration order
-   /// and `up_to_n_times(1)` are the idiom the fallback tests above already use
-   /// — wiremock checks mocks last-registered-first, so the capped `first` mock
-   /// serves once and the retry falls through to `retried`.
+   /// Mount the two halves of a 401 alternate-auth fallback on one path. The
+   /// mocks share identical matchers, so ordering alone must separate them:
+   /// wiremock stable-sorts by priority and serves the first match, and equal
+   /// priorities keep insertion order — so `first` is registered first and
+   /// capped at one serve, and the retry falls through to `retried`.
    async fn mount_auth_fallback(
        mock: &MockServer,
        first: ResponseTemplate,
@@ -507,14 +423,14 @@ Published for later tasks: nothing.
    ) {
        Mock::given(method("GET"))
            .and(path("/rest/bug/1"))
-           .respond_with(retried)
+           .respond_with(first)
+           .up_to_n_times(1)
            .expect(1)
            .mount(mock)
            .await;
        Mock::given(method("GET"))
            .and(path("/rest/bug/1"))
-           .respond_with(first)
-           .up_to_n_times(1)
+           .respond_with(retried)
            .expect(1)
            .mount(mock)
            .await;
@@ -529,7 +445,9 @@ Published for later tasks: nothing.
    }
    ```
 
-3. Append the relay test:
+3. Append the relay test, which is the shape every other fallback test in the
+   table follows — mount the pair, call `get_json_value("bug/1")`, match the
+   error:
 
    ```rust
    #[tokio::test]
@@ -560,155 +478,38 @@ Published for later tasks: nothing.
    }
    ```
 
-4. Append the preserved-auth-failure test:
+4. Append the remaining six tests from the Verification table in that same
+   shape. Their retried templates are, in order: `login_required()`;
+   `ResponseTemplate::new(401).set_body_string("<html>Proxy Authentication
+   Required</html>")`; `ResponseTemplate::new(401).set_body_json(json!({"error":
+   true, "message": "refused"}))`; and
+   `ResponseTemplate::new(403).set_body_json(bugzilla_error(120, "refused by
+   policy"))`. The band-edge test loops
+   `for (retried_code, expected) in [(299, 299), (300, 410), (399, 410), (400,
+   400)]`, building a fresh `MockServer` per iteration and asserting
+   `code == expected` with `"retried code {retried_code}"` as the message. The
+   sentinel test mounts a single uncapped 400 mock instead of the pair, because
+   no fallback is involved.
 
-   ```rust
-   #[tokio::test]
-   async fn auth_fallback_keeps_the_original_401_when_the_retry_also_fails_to_log_in() {
-       let mock = MockServer::start().await;
-       mount_auth_fallback(&mock, login_required(), login_required()).await;
-
-       let client = test_client(&mock.uri());
-       let err = client.get_json_value("bug/1").await.unwrap_err();
-       match err {
-           BzrError::Api { code, .. } => assert_eq!(code, 410),
-           other => panic!("expected Api 410, got {other:?}"),
-       }
-   }
-   ```
-
-5. Append the no-signal tests:
-
-   ```rust
-   #[tokio::test]
-   async fn auth_fallback_keeps_the_original_401_when_the_retry_carries_no_envelope() {
-       let mock = MockServer::start().await;
-       mount_auth_fallback(
-           &mock,
-           login_required(),
-           ResponseTemplate::new(401).set_body_string("<html>Proxy Authentication Required</html>"),
-       )
-       .await;
-
-       let client = test_client(&mock.uri());
-       let err = client.get_json_value("bug/1").await.unwrap_err();
-       match err {
-           BzrError::Api { code, .. } => assert_eq!(code, 410),
-           other => panic!("expected the original Api 410, got {other:?}"),
-       }
-   }
-
-   #[tokio::test]
-   async fn auth_fallback_keeps_the_original_401_when_the_retried_envelope_has_no_code() {
-       let mock = MockServer::start().await;
-       mount_auth_fallback(
-           &mock,
-           login_required(),
-           ResponseTemplate::new(401)
-               .set_body_json(serde_json::json!({"error": true, "message": "refused"})),
-       )
-       .await;
-
-       let client = test_client(&mock.uri());
-       let err = client.get_json_value("bug/1").await.unwrap_err();
-       match err {
-           BzrError::Api { code, .. } => assert_eq!(code, 410),
-           other => panic!("expected the original Api 410, got {other:?}"),
-       }
-   }
-   ```
-
-6. Append the 403 and band-edge tests:
-
-   ```rust
-   #[tokio::test]
-   async fn auth_fallback_relays_a_403_policy_refusal() {
-       let mock = MockServer::start().await;
-       mount_auth_fallback(
-           &mock,
-           login_required(),
-           ResponseTemplate::new(403).set_body_json(bugzilla_error(120, "refused by policy")),
-       )
-       .await;
-
-       let client = test_client(&mock.uri());
-       let err = client.get_json_value("bug/1").await.unwrap_err();
-       match err {
-           BzrError::Api { code, .. } => assert_eq!(code, 120),
-           other => panic!("expected the relayed Api 120, got {other:?}"),
-       }
-   }
-
-   #[tokio::test]
-   async fn auth_fallback_band_edges_separate_login_failure_from_refusal() {
-       // 300 and 399 are inside Bugzilla's authentication band; 299 and 400 are
-       // outside it. Each retried code either keeps the original 410 or is
-       // relayed as itself.
-       for (retried_code, expected) in [(299, 299), (300, 410), (399, 410), (400, 400)] {
-           let mock = MockServer::start().await;
-           mount_auth_fallback(
-               &mock,
-               login_required(),
-               ResponseTemplate::new(401).set_body_json(bugzilla_error(retried_code, "refused")),
-           )
-           .await;
-
-           let client = test_client(&mock.uri());
-           let err = client.get_json_value("bug/1").await.unwrap_err();
-           match err {
-               BzrError::Api { code, .. } => {
-                   assert_eq!(code, expected, "retried code {retried_code}");
-               }
-               other => panic!("retried code {retried_code}: expected Api, got {other:?}"),
-           }
-       }
-   }
-   ```
-
-7. Append the sentinel test:
-
-   ```rust
-   #[tokio::test]
-   async fn error_body_without_a_code_reports_the_unknown_code_sentinel() {
-       let mock = MockServer::start().await;
-       Mock::given(method("GET"))
-           .and(path("/rest/bug/1"))
-           .respond_with(
-               ResponseTemplate::new(400)
-                   .set_body_json(serde_json::json!({"error": true, "message": "boom"})),
-           )
-           .mount(&mock)
-           .await;
-
-       let client = test_client(&mock.uri());
-       let err = client.get_json_value("bug/1").await.unwrap_err();
-       match err {
-           BzrError::Api { code, message } => {
-               assert_eq!(code, -1);
-               assert_eq!(message, "boom");
-           }
-           other => panic!("expected Api -1, got {other:?}"),
-       }
-   }
-   ```
-
-8. Run `make test-one T=auth_fallback` and `make test-one T=error_body_without`
+5. Run `make test-one T=auth_fallback` and `make test-one T=error_body_without`
    bare. Expect both green.
 
-9. Prove the relay test bites: temporarily restore the old predicate by
-   replacing the `match Self::bugzilla_error_code(&body)` block in
-   `retry_with_alternate_auth` with `return Ok(AlternateAuth::Original);`, run
-   `make test-one T=auth_fallback_relays_a_policy_refusal` bare, and confirm it
-   fails reporting `code: 410`. Revert the fault with `git checkout --
-   src/client/transport.rs` only if nothing else in that file is uncommitted;
-   otherwise undo the edit by hand. Re-run and confirm green.
+6. Prove the relay test bites. Temporarily replace the
+   `match Self::bugzilla_error_code(&body)` block in `retry_with_alternate_auth`
+   with `return Ok(AlternateAuth::Original);` — the status-only predicate's
+   behaviour — run `make test-one T=auth_fallback_relays_a_policy_refusal` bare,
+   and confirm it fails reporting `code: 410`. Undo the edit by hand (do not
+   `git checkout` the file: it carries uncommitted work) and re-run to confirm
+   green.
 
-10. Run `make lint` and `make test` bare. Expect exit 0.
+7. Run `make lint` and `make test` bare. Expect exit 0.
 
 ### Acceptance criteria
 
-- Seven new `#[tokio::test]` cases in `src/client/transport_tests.rs`, no inline
-  `mod tests` added anywhere.
+- Seven new `#[tokio::test]` cases in `src/client/transport_tests.rs`; no inline
+  `mod tests` anywhere.
+- The two misleading "LIFO" comments at `src/client/transport_tests.rs:135`
+  and `:174` corrected.
 - The relay test observed red under the restored status-only predicate and green
   after reverting the fault.
 - `make check-test-layout` (inside `make lint`) passes.
@@ -718,137 +519,130 @@ Published for later tasks: nothing.
 ## Task 3 — pin the contract against a real Bugzilla
 
 Where this fits: the mandatory functional tier. It cannot reproduce the masking
-— a stock container authenticates the first attempt — so it pins the outcome the
-user must see, in both the authenticated and the credentialless direction.
+— a stock container authenticates the first attempt — and neither direction can
+be reddened by mutating `code_proves_auth_failure`. What it pins is the outcome a
+user must see, in both the authenticated and the credentialless direction, so a
+regression that reintroduces a login-failure message reddens the suite.
 
 ### Interfaces
 
-Consumed from the existing functional harness (each confirmed present in
-`tests/functional/phases/08e-bugs-restricted-access.sh` or
-`tests/functional/lib.sh`):
+Consumed, each confirmed present in `tests/functional/lib.sh` or in
+`tests/functional/phases/08e-bugs-restricted-access.sh`:
 
 - `test_begin <id> <description>`, `test_pass`, `test_fail <msg>`,
   `test_skip <msg>`
-- `run_bzr <args...>`, `run_bzr_raw <args...>`, `assert_exit_code <n>`,
+- `run_bzr <args…>`, `run_bzr_raw <args…>`, `assert_exit_code <n>`,
   `assert_success`
 - `assert_stderr_json <jq-path> <expected>`, `assert_stderr_not_contains <text>`
 - `unique_name <prefix>`
-- `make_bug <args...>` and the `_RA` array of shared create args, both already
-  defined earlier in `08e`
-- `$RESTRICTED_BUG`, `$BZ_URL`, and the `public` server alias, all already
-  established earlier in the run
+- `$RESTRICTED_BUG` (`08e:114`) and the `public` server alias (`08e:164`)
 
 Published for later tasks: nothing.
 
 ### Verification
 
 - Contract: *an authenticated, policy-refused write reports the server's own
-  error and never a login failure*. Mode: focused-test —
-  `08e` test id `authenticated-policy-refusal-is-not-reported-as-a-login-failure`.
-  Expected red: with the status-only predicate restored **and** a server that
-  401s the first attempt; against a stock container it is green either way, and
-  that limit is written into the phase comment rather than claimed away.
+  error and never a login failure.*
+  Mode: focused-test — `08e` test id
+  `authenticated-policy-refusal-is-not-reported-as-a-login-failure`.
+  Expected red: only with the status-only predicate restored **and** a server
+  that 401s the first attempt. Against a stock container it is green either way,
+  which is the same limit `08e`'s #504 tests carry and is written into the phase
+  comment rather than claimed away.
   Green command: `make functional-test`.
-- Contract: *a credentialless write still reports a login failure*. Mode:
-  focused-test — `08e` test id
-  `credentialless-policy-refused-write-still-reports-a-login-failure`. Expected
-  red if the band check is inverted so authentication codes are relayed as
-  refusals. Green command: `make functional-test`.
+- Contract: *a credentialless write reports the server's own answer for an
+  unauthenticated request.*
+  Mode: focused-test — `08e` test id
+  `credentialless-policy-refused-write-reports-the-servers-own-answer`.
+  Expected red: if the `self.auth.is_none()` early return at
+  `src/client/transport.rs:145` were removed, letting an anonymous request be
+  retried and reclassified. It is **not** reddened by mutating
+  `code_proves_auth_failure`, because the band check never runs on this path.
+  Green command: `make functional-test`.
 
 ### Steps
 
 1. Read `tests/functional/phases/08e-bugs-restricted-access.sh` in full,
-   including its header comment and its 4-space indentation.
+   including its header comment and its 4-space indentation. Note the `unset`
+   block at lines 375–377: the new block goes **before** it, after the last test
+   at line 373, so it does not depend on variables the unset has cleared.
 
-2. Extend the header comment block with the #715 scope note, after the existing
-   #504 scope note and before the `echo "── Phase 8e"` line:
+2. Extend the header comment block with a #715 scope note, after the existing
+   #504 scope note and before the `echo "── Phase 8e"` line: state that the 401
+   alternate-auth retry used to judge its outcome by HTTP status alone, that
+   Bugzilla shares that status across fifteen error codes, that a stock Bugzilla
+   cannot reproduce the masking because it needs the first attempt to fail
+   authentication while the retry succeeds (the #713 condition), that the
+   divergent path is driven by wiremock in `src/client/transport_tests.rs`, and
+   that these two tests pin the contract in both directions.
 
-   ```bash
-   # #715 (ADR 0057): the 401 alternate-auth retry used to judge its outcome by
-   # HTTP status alone, so a policy refusal — which Bugzilla returns at 401,
-   # sharing that status with fifteen other error codes — was discarded and the
-   # user was told to log in. Like #504 above, a stock Bugzilla cannot reproduce
-   # the masking: it needs the first attempt to fail authentication while the
-   # retry succeeds, which is the server-side condition in #713. The divergent
-   # path is driven by wiremock in `src/client/transport_tests.rs`. What these
-   # two tests pin is the contract against a real server, in both directions.
-   ```
+3. Before line 375, add the fixture: `UNAVAILABLE_GROUP=$(unique_name
+   unavail-grp)`, then a `test_begin "fixture-group-not-enabled-on-the-product"`
+   block that runs `run_bzr group create --name "$UNAVAILABLE_GROUP"
+   --description "not enabled on any product"` and `assert_success`. Comment
+   that the absence of a `group_control_map` row is deliberate: the group exists
+   and `FuncTestProd` does not permit restricting bugs to it, which is the exact
+   shape Bugzilla refuses with `group_restriction_not_allowed`.
 
-3. Append the fixture that creates a group the product does **not** allow, at
-   the end of the file:
-
-   ```bash
-   # ── #715: a policy refusal is not a login failure ────────────────────
-   UNAVAILABLE_GROUP=$(unique_name unavail-grp)
-
-   test_begin "fixture-group-not-enabled-on-the-product" "fixture: group not enabled on the product"
-   # Deliberately no `group_control_map` row: the group exists, and
-   # FuncTestProd does not permit restricting bugs to it. That is the exact
-   # shape Bugzilla refuses with `group_restriction_not_allowed`.
-   run_bzr group create --name "$UNAVAILABLE_GROUP" --description "not enabled on any product"
-   if assert_success; then test_pass; fi
-   ```
-
-4. Append the authenticated direction:
+4. Add the authenticated direction:
 
    ```bash
    test_begin "authenticated-policy-refusal-is-not-reported-as-a-login-failure" "authenticated policy refusal is not reported as a login failure"
    if [[ -n "$RESTRICTED_BUG" ]]; then
        run_bzr_raw --json bug update "$RESTRICTED_BUG" --groups-add "$UNAVAILABLE_GROUP"
        # The contract #715 broke: the server's own refusal must survive the
-       # alternate-auth fallback. Assert the negative too — "must log in" is
-       # the wrong answer this issue was filed about.
-       if assert_exit_code 4 &&
-           assert_stderr_json '.error.type' "api" &&
-           assert_stderr_not_contains "must log in" &&
-           assert_stderr_not_contains "You must log in"; then
+       # alternate-auth fallback. Assert the negative too — "must log in" is the
+       # wrong answer this issue was filed about.
+       if assert_stderr_json '.error.type' "api" &&
+           assert_stderr_not_contains "must log in"; then
            test_pass
        fi
    else test_skip "no restricted bug"; fi
    ```
 
-   After the first real run, replace the `.error.type` assertion pair with an
-   additional `assert_stderr_json '.error.api_code' "<observed>"` using the code
-   the container actually returned, and record that code in a comment beside it.
-   Do not guess the code before observing it.
+5. Add the credentialless direction, the same shape, running
+   `run_bzr_raw --json --server public bug update "$RESTRICTED_BUG"
+   --groups-add "$UNAVAILABLE_GROUP"` under test id
+   `credentialless-policy-refused-write-reports-the-servers-own-answer`, and
+   asserting `.error.type` is `api`. Comment that with no credentials there is no
+   retry at all — `transport.rs`'s `self.auth.is_none()` guard returns before any
+   body is read — so this direction pins that the guard is intact.
 
-5. Append the credentialless direction:
+6. Run `make functional-test` bare, in the background, and read it on
+   completion. Both new ids must pass. **Record what the container actually
+   returned for each direction**: the exit code and the `.error.api_code`. Do not
+   guess either before observing it — the phase's existing anonymous-read test
+   answers `102`, not `410`, so the credentialless write's answer is a
+   measurement, not a prediction.
 
-   ```bash
-   test_begin "credentialless-policy-refused-write-still-reports-a-login-failure" "credentialless policy-refused write still reports a login failure"
-   if [[ -n "$RESTRICTED_BUG" ]]; then
-       run_bzr_raw --json --server public bug update "$RESTRICTED_BUG" \
-           --groups-add "$UNAVAILABLE_GROUP"
-       # The other direction: with no credentials there is no retry, and a
-       # genuine authentication failure must still read as one.
-       if assert_exit_code 4 && assert_stderr_json '.error.type' "api"; then
-           test_pass
-       fi
-   else test_skip "no restricted bug"; fi
-   ```
+7. Fold the observed values back in: add `assert_exit_code <observed>` and
+   `assert_stderr_json '.error.api_code' "<observed>"` to both tests, with a
+   comment naming the Bugzilla error the code corresponds to. If the authenticated
+   write unexpectedly *succeeds* — a container that accepts an unpermitted group
+   — do not weaken the assertion: `test_fail` with that observation and report it,
+   because the fixture then does not produce a policy refusal and the test proves
+   nothing.
 
-6. Run `make lint` bare — it includes `check-shell` and
+8. Run `make lint` bare — it includes `check-shell` and
    `check-functional-test-ids`, both of which read this file. Expect exit 0. If
    `check-functional-test-ids` objects, match the id convention it enforces
    rather than editing the check.
 
-7. Run `make functional-test` bare, in the background, and read it on
-   completion. Expect exit 0 and the two new test ids reported as passing.
-   Capture the observed `api_code` from the authenticated direction and fold it
-   back into step 4's assertion, then re-run `make functional-test` bare.
+9. Re-run `make functional-test` bare, in the background. Expect exit 0.
 
 ### Acceptance criteria
 
-- Two new test ids in `08e`, both green against a real container.
-- The authenticated direction asserts the observed `api_code`, not a guessed
-  one.
-- The scope limit — a stock server cannot reproduce the masking — is stated in
-  the phase comment, not implied by silence.
+- Two new test ids in `08e`, both green against a real container, both placed
+  before the phase's `unset` block.
+- Both directions assert an observed exit code and `api_code`, not a guessed one.
+- The scope limit — a stock server cannot reproduce the masking, and neither test
+  is reddened by mutating the band — is stated in the phase comment, not implied
+  by silence.
 - `make lint` and `make functional-test` are green.
 
 ---
 
 ## Deferrals carried into implementation
 
-None yet. Any deferral a `$trial-loop` run disposes of on this branch is
-appended here with its owning record path or tracker issue.
+None. Every finding from the design review was `accepted-fixed` or
+`rejected-with-evidence`; see the run's report.

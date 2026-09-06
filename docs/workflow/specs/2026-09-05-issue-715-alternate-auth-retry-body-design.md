@@ -33,9 +33,10 @@ answer the question it is asked, and answers it wrong for the nine.
 `check_response_status` (`src/client/response.rs:450`) then turns the original
 401 into `BzrError::Api { code: 410, message: "You must log in..." }`.
 
-ADR 0015 settles the same principle for `src/client/resources/bug.rs`; it does
-not reach the transport and does not decide which of two disagreeing responses
-wins. ADR 0057 decides that.
+ADR 0015 settles the same principle for the HTTP-200 error path
+(`has_data_fields`, `src/client/response.rs`) and the 100500 search fallback
+(`src/client/resources/bug.rs`). It does not reach the transport and does not
+decide which of two disagreeing responses wins. ADR 0057 decides that.
 
 ## Requirements
 
@@ -58,7 +59,9 @@ wins. ADR 0057 decides that.
   status and body. Exit code, `error.type`, and the structured-error key set are
   unchanged.
 - **R8** — The relayed body is redacted on the same terms as every other error
-  body. No new unredacted logging of a body, URL, or transport error.
+  body, and no transport error's `Display` — which carries the request URL, and
+  so the API key on the query-parameter path — reaches a log or a message on the
+  new code path.
 
 ## Design
 
@@ -100,10 +103,15 @@ for `Refused`. One construction site satisfies R7 by construction rather than by
 duplication that can drift.
 
 `BugzillaClient::bugzilla_error_code(body) -> Option<i64>` returns the code an
-error envelope carries. `ErrorResponse::code` becomes `Option<i64>`, so "no
-`code` field" is representable rather than colliding with the `-1` sentinel;
-`error_from_status_body` applies the `-1` default at the point of use, which is
-the only place it was ever observable.
+error envelope carries, reusing the existing `ErrorResponse` struct unchanged.
+That struct defaults a missing `code` to `-1`, and `bugzilla_error_code` reads
+that sentinel back as `None` — "the server said nothing that distinguishes an
+authentication failure from a refusal". Bugzilla emits no error code of `-1`, so
+the sentinel cannot collide with a real one. Leaving `ErrorResponse` alone
+matters beyond diff size: the same struct is read by
+`check_bugzilla_200_error`, the ADR-0015-governed HTTP-200 error path, and
+changing its `code` to `Option<i64>` would ripple into that path and its tests
+for no gain here.
 
 ### Failure modes
 
@@ -133,20 +141,30 @@ operator's terminal or log, not the server disclosing one.
 **Control per boundary.**
 
 - *Retried body → user-facing error message.* Governed by
-  `error_from_status_body`, the same function the original-response path uses.
-  Length is bounded by `crate::http::diagnostic_body_preview` for the
-  `HttpStatus` arm. The `Api` arm relays the server's `message` field, exactly
-  as it already does for every other Bugzilla error; nothing about a 401 makes
-  that body more dangerous than the 400 bodies already relayed.
+  `error_from_status_body`, the same function the original-response path uses,
+  and then by `BzrError`'s own `Display`, which applies
+  `crate::bugzilla_auth::redact_api_key` to `Api.message` (`src/error.rs:16`)
+  and to `HttpStatus.body` (`src/error.rs:37`). That existing control is what
+  holds R8's user-facing half, and it is also why
+  `check_response_status`'s adjacent `<failed to read response body: {e}>` arm
+  — which does interpolate a `reqwest::Error` and so its URL — does not leak:
+  the text lands in `HttpStatus.body` and is redacted at display. Length is
+  bounded by `crate::http::diagnostic_body_preview` for the `HttpStatus` arm.
+  The `Api` arm relays the server's `message` field, exactly as it already does
+  for every other Bugzilla error; nothing about a 401 makes that body more
+  dangerous than the 400 bodies already relayed.
 - *Retried body → debug log.* Governed by
   `crate::bugzilla_auth::redact_api_key` over
   `crate::http::utf8_prefix(body, BODY_PREVIEW_MAX_BYTES)` — moved into the
   shared helper unchanged, so the retried body gets the identical treatment.
 - *Transport error while reading the retried body.* `reqwest::Error`'s `Display`
-  includes the request URL, which on the query-parameter auth path carries the
-  API key. The body-read failure path therefore logs nothing derived from that
-  error, and returns `Original`. The URL that is logged goes through
-  `Self::safe_url`, which strips the query string.
+  appends ` for url ({url})` with the query string intact
+  (`reqwest-0.12.28/src/error.rs:267`), which on the query-parameter auth path
+  carries the API key. The body-read failure path therefore logs nothing derived
+  from that error, and returns `Original`. The URL it does log goes through
+  `Self::safe_url`, which drops the query string entirely. This arm is verified
+  by inspection rather than by test: wiremock cannot construct a mid-body
+  transport failure, and the plan says so instead of leaving the gap silent.
 - *Classification input.* `bugzilla_error_code` parses with `serde_json` into a
   fixed struct; a body that is not JSON, not an object, or not an error envelope
   yields `None` and the pre-existing behaviour.
@@ -157,8 +175,13 @@ operator's terminal or log, not the server disclosing one.
   like. ADR 0015 accepted that deliberately and this change does not revisit it.
 - The header-auth verification probe that makes the fallback run on every write
   (#713), owned by a separate change.
-- `BzrError::Http`'s own `Display` on other transport paths, which is
-  pre-existing and untouched here.
+- Hardening `redact_api_key` itself. Every `BzrError` variant that can carry
+  server or transport text already routes through it —
+  `Http` via `format_http_error` (`src/error.rs:193`), `Api` (`:16`) and
+  `HttpStatus` (`:37`) via their own `#[error]` attributes — so this change
+  inherits a control it does not need to add. Whether that redactor covers every
+  encoding an API key could take is a pre-existing question about the redactor,
+  not about this path.
 
 ## Testing
 
@@ -173,13 +196,17 @@ different 401 from the second.
   bites**: restoring the status-only predicate makes it report 410.
 - `auth_fallback_keeps_the_original_401_when_the_retry_also_fails_to_log_in` —
   both 401 with code 410. Expect `Api { code: 410 }`.
-- `auth_fallback_keeps_the_original_401_when_the_retry_carries_no_error_envelope`
-  — retry 401 with a non-JSON body. Expect the original's code.
+- `auth_fallback_keeps_the_original_401_when_the_retry_carries_no_envelope` —
+  retry 401 with a non-JSON body. Expect the original's code.
 - `auth_fallback_relays_a_403_policy_refusal` — retry 403 with code 120.
 - `auth_fallback_keeps_the_original_401_when_the_retried_envelope_has_no_code` —
   retry 401 `{"error":true,"message":"..."}`. Expect the original's code.
-- Boundary cases for the band: 300 and 399 keep the original; 299 and 400 are
-  relayed.
+- `auth_fallback_band_edges_separate_login_failure_from_refusal` — 300 and 399
+  keep the original; 299 and 400 are relayed.
+- `error_body_without_a_code_reports_the_unknown_code_sentinel` — a plain HTTP
+  400 error envelope with no `code` still reports `-1`, pinning that moving the
+  construction into `error_from_status_body` preserved `ErrorResponse`'s
+  default.
 
 **Functional (`tests/functional/phases/08e-bugs-restricted-access.sh`).** Pins
 the contract against a real server. A stock Bugzilla authenticates the first
@@ -187,10 +214,19 @@ attempt, so it cannot reproduce the masking — the same scope limit ADR 0015's
 own phase records for #504. Two directions:
 
 - *authenticated policy refusal* — the admin adds a bug to a group that exists
-  but is not enabled on `FuncTestProd`. Expect exit 4, `error.type == "api"`,
-  the server's own `api_code`, and stderr that does not say "log in".
-- *credentialless* — the same write through `--server public`. Expect exit 4 and
-  a login-required answer, proving the genuine-auth-failure direction is intact.
+  but is not enabled on `FuncTestProd`. Expect a non-zero exit, `error.type ==
+  "api"`, the server's own `api_code`, and stderr that does not say "log in".
+- *credentialless* — the same write through `--server public`. Expect the
+  server's own answer for an unauthenticated write, pinned by `api_code`.
+
+Both directions pin an **observed** exit code and `api_code`, not a predicted
+one: the phase's existing anonymous-read test answers `102`, not `410`, so what
+a stock container returns for an anonymous write is a fact to measure before
+asserting. Neither functional test can be reddened by mutating
+`code_proves_auth_failure` — the credentialless path returns at the
+`self.auth.is_none()` guard before any body is read, and the authenticated path
+does not reach the divergent case on a stock server. What they pin is the
+contract; the mutation proof lives in the wiremock tests above.
 
 ## Non-goals
 
