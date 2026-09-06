@@ -77,14 +77,21 @@ Re-measured against merged `main` rather than reasoned about, same three contain
 | 5.2 | `query_param` | 5 (2) / 2 (1) | 5 (2) / 2 (1) |
 | 5.3.3+ | `header` | 5 (2) / 2 (1) | 5 (2) / 2 (1) |
 
-So the default path is complete on every supported version. What remains is reachable only by
-pinning `--auth-method header` against a server whose REST ignores it: on 5.2 that loses private
-content in both default dispatch and `--api rest` (3 of 5 comments, 1 of 2 attachments, exit 0);
-on 5.0.6 only under forced `--api rest`, since 5.0.x maps to `Hybrid`; 5.3.3+ is unaffected.
+So the default path is complete on every supported version **for a config written by a post-#713
+bzr**. Two routes still reach the loss:
 
-That is a user who overrode detection with a value the server does not support — a materially
-weaker condition than a default-path harm. ADR 0059's Consequences carry it; nothing here fixes
-it, and #713 owns the detection that made it reachable by default.
+- **Pinned** — `--auth-method header` against a server whose REST ignores it.
+- **Inherited** — a persisted `auth_method = "header"` written by a pre-#713 bzr. Upgrading does
+  not revisit it. Verified by hand-writing that config for 5.2 and running `bzr comment list`
+  with no flag: 3 of 5 comments, 0 of 2 private, exit 0; bzr re-derived `api_mode` and
+  `server_version` and left `auth_method` alone. ADR 0056 records this population, its remedy
+  (re-run the full `config set-server` line), and its declined automatic migration.
+
+On either route: 5.2 loses private content in both default dispatch and `--api rest`; 5.0.6 only
+under forced `--api rest`, since 5.0.x maps to `Hybrid`; 5.3.3+ is unaffected, since it honours
+the header.
+
+ADR 0059's Consequences carry this; nothing here fixes it, and ADR 0056 owns the inherited route.
 
 ## A second finding: the existing assertions cannot fail
 

@@ -19,15 +19,16 @@
 #     `test` server to --auth-method query_param. Pin header instead
 #     and they return the public subset on 5.0.6 and 5.2 alike, since
 #     neither honours that header on REST.
-#   - Under a pinned header, only >= 5.1 loses it in DEFAULT mode too,
-#     because version_to_api_mode maps 5.0.x to Hybrid and so
-#     dispatches these reads XML-RPC-first there.
-# Not covered here, deliberately: no case pins --auth-method header,
-# the one setting that still loses private content over REST (5.0.6 and
-# 5.2 only). ADR-0059 records it. Since #713 merged, the DEFAULT path
-# persists query_param on those versions and is complete everywhere, so
-# what is uncovered is an explicit override, not the out-of-the-box
-# outcome.
+#   - Under a header auth_method, 5.2 loses it in DEFAULT mode too,
+#     because version_to_api_mode maps 5.0.x to Hybrid and dispatches
+#     these reads XML-RPC-first, while 5.3.3+ honours the header.
+# Not covered here, deliberately: no case uses a header auth_method,
+# the one configuration that still loses private content over REST
+# (5.0.6 and 5.2 only). It is reached either by pinning
+# --auth-method header, or by inheriting one a pre-#713 bzr persisted,
+# which upgrading does not revisit (ADR-0056 owns that population).
+# Since #713 merged, a freshly written config persists query_param on
+# those versions and is complete everywhere. ADR-0059 records both.
 echo "── Phase 14b: Private comments (all dispatch modes) ──────────"
 
 test_begin "comment-add-private" "comment add --private"

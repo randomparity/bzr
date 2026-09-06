@@ -51,18 +51,25 @@ to a REST endpoint that ignores the configured auth method.
   Re-measured against merged `main`, a default `config set-server` now persists `query_param`
   on 5.0.6 and 5.2 and `header` on 5.3.3+, and `comment list` and `attachment list` are
   complete on every supported version in both default and forced-`rest` dispatch.
-- What is left is reachable only by pinning `--auth-method header` against a server whose REST
-  endpoints ignore that header. Measured on merged `main`: on 5.2, both default dispatch and
-  `--api rest` return the public subset (3 of 5 comments, 1 of 2 attachments, exit 0, no
-  diagnostic), because `version_to_api_mode` maps 5.2 to `Rest`; on 5.0.6 only forced
-  `--api rest` loses it, because 5.0.x maps to `Hybrid` and dispatches these reads
-  XML-RPC-first; 5.3.3+ is unaffected either way, since it honours the header. That is a user
-  who overrode detection with a value the server does not support, which is a materially
-  weaker claim than the one this ADR originally made, and it is recorded here rather than
-  fixed: a guard in these two reads would patch a shared condition at one of its callers while
-  every other REST read stayed anonymous, and the list endpoints give it nothing to
-  detect — unlike `attachment download`, whose `GET /rest/bug/attachment/<id>` returns `401`
-  and so already recovers through the transport's auth-method fallback.
+- What is left is reachable two ways, and the second one takes no flag at all. **Pinned:**
+  `--auth-method header` against a server whose REST ignores it. **Inherited:** a persisted
+  `auth_method = "header"` that a pre-#713 bzr wrote into `config.toml`, which upgrading does
+  not revisit — verified against merged `main` by hand-writing that config for 5.2 and running
+  `bzr comment list` with no flag: it returned 3 of 5 comments, 0 of 2 private, exit 0, and
+  re-derived `api_mode` and `server_version` while leaving `auth_method` untouched. ADR 0056
+  owns that population and its remedy ("An already-affected user does not get the fix by
+  upgrading"; re-run the full `config set-server` line), and declined an automatic migration as
+  a separate decision. Nothing here reopens that.
+- On either route the version behaviour is the same. Measured on merged `main`: **5.2** loses
+  private content in both default dispatch and `--api rest` (3 of 5 comments, 1 of 2
+  attachments, exit 0, no diagnostic), because `version_to_api_mode` maps it to `Rest`;
+  **5.0.6** loses it only under forced `--api rest`, because 5.0.x maps to `Hybrid` and
+  dispatches these reads XML-RPC-first; **5.3.3+** is unaffected either way, since it honours
+  the header. This is recorded rather than fixed: a guard in these two reads would patch a
+  shared condition at one of its callers while every other REST read stayed anonymous, and the
+  list endpoints give it nothing to detect — unlike `attachment download`, whose
+  `GET /rest/bug/attachment/<id>` returns `401` and so already recovers through the transport's
+  auth-method fallback.
 
 ## Considered & rejected
 
