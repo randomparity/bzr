@@ -11,10 +11,21 @@
 #
 # Every dispatch mode is covered, REST included: ADR-0059 measured REST
 # as returning private attachments on Bugzilla 5.0.6, 5.2 and 5.3.3+
-# whenever the server honoured the credential. The REST arms pass only
-# because 01-config.sh pins the shared `test` server to
-# --auth-method query_param; under the header auth bzr selects on
-# Bugzilla 5.2 they would return the public subset (issue #713).
+# whenever the server honoured the credential.
+#
+# Two separate facts about the failing case, both from ADR-0059:
+#   - The forced-REST arms pass only because 01-config.sh pins the
+#     shared `test` server to --auth-method query_param. Under the
+#     header auth bzr selects otherwise, they return the public subset
+#     on 5.0.6 and 5.2 alike, since neither honours the header on REST.
+#   - Only >= 5.1 servers are exposed in DEFAULT mode, because
+#     version_to_api_mode maps 5.0.x to Hybrid and so dispatches these
+#     reads XML-RPC-first there.
+# Not covered here, deliberately: no case exercises the unpinned auth
+# method, so the out-of-the-box 5.2 loss is recorded in ADR-0059 and
+# tracked by issue #713, not by any assertion below. The private
+# download cases below cover Hybrid and XML-RPC only; the REST arm of
+# `get_attachment` is evidenced by ADR-0059's measurement, not here.
 #
 # The REST arm additionally omits the `data` field by design
 # (exclude_fields); these assertions check entry visibility, not bodies.

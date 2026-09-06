@@ -183,6 +183,12 @@ impl BugzillaClient {
     /// the transport's auth-method fallback already recovers a private
     /// attachment from a server that ignores the configured auth
     /// method (issues #133, #714).
+    ///
+    /// That last sentence rests on ADR-0059's measurement, not on a
+    /// functional case: the harness pins `query_param` auth, so no
+    /// `401` occurs there and the fallback never fires. A change to
+    /// `retry_with_alternate_auth` could falsify it with nothing
+    /// turning red.
     pub async fn get_attachment(&self, attachment_id: u64) -> Result<Attachment> {
         self.dispatch_xmlrpc_first(
             &format!("attachment fetch (id {attachment_id})"),
