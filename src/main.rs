@@ -158,8 +158,9 @@ fn tracing_filter_directive(quiet: bool, verbose: u8, rust_log_set: bool) -> Opt
 /// re-apply the `NO_COLOR` rule rather than inherit it.
 ///
 /// The stdout `colored` path (see `main`) is decided separately from stdout's
-/// own terminal status, and treats *any* present `NO_COLOR` as off; the two
-/// streams therefore disagree on an empty value. See ADR 0058.
+/// own terminal status, and treats any present `NO_COLOR` as off unless
+/// `CLICOLOR_FORCE=1` outranks it; the two streams therefore disagree on an
+/// empty value. See ADR 0058.
 fn tracing_ansi_enabled(
     no_color_flag: bool,
     no_color_env: Option<&std::ffi::OsStr>,

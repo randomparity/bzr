@@ -69,9 +69,9 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 | `BZR_TABLE_WIDTH` | Explicit table width in display cells (decimal 1 through 65,535). Overrides detected stdout width, including when stdout is redirected. Applies only to table output; json and ndjson ignore it. Invalid values warn and fall back to stdout width detection. Tables may exceed the requested width to preserve their structural minimum. |
 | `BZR_CONFIG` | Full path to an alternate `config.toml`. Overrides the default config directory; overridden by `--config`. |
 | `BZR_TIMEOUT` | Per-request timeout in seconds. Overridden by `--timeout`; invalid values are ignored with a warning. |
-| `NO_COLOR` | Disables stdout color when present at any value (`colored` crate behavior). Suppresses stderr tracing color only when non-empty, so `NO_COLOR=` leaves it on, per the no-color.org convention `tracing-subscriber` follows. |
+| `NO_COLOR` | Disables stdout color when present at any value (`colored` crate behavior), unless `CLICOLOR_FORCE=1` is also set, which outranks it. Suppresses stderr tracing color only when non-empty, so `NO_COLOR=` leaves it on, per the no-color.org convention `tracing-subscriber` follows. |
 | `CLICOLOR` | Set to `0` to disable stdout color (standard convention respected by the `colored` crate). Does not affect the stderr diagnostic stream. |
-| `CLICOLOR_FORCE` | Set to `1` to force stdout color, overriding `CLICOLOR=0`. It has no effect once stdout is redirected, because bzr disables color for a non-TTY stdout first, and it does not affect the stderr diagnostic stream. |
+| `CLICOLOR_FORCE` | Set to `1` to force stdout color, outranking both `CLICOLOR=0` and `NO_COLOR`. It has no effect once stdout is redirected, because bzr disables color for a non-TTY stdout first, and it does not affect the stderr diagnostic stream. |
 | `RUST_LOG` | Override log verbosity (e.g. `bzr=debug`). |
 
 ## Exit Codes

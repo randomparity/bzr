@@ -196,7 +196,12 @@ every other caller.
    (`pybz_sidecar_stop`, `tests/functional/lib.sh:430`, or `<runtime> rm -f <sidecar>`) and retry;
    then `return 1`. `cmd_stop` discards `rm -f` failure and logs "Container removed." regardless,
    so without this check a refused removal makes `reset` silently identical to `start`.
-4. Run `make check-shell` bare. Expect exit 0.
+4. Run `make check-shell` bare. Expect exit 0. It does **not** cover
+   `tests/functional/setup-bugzilla.sh` — `Makefile:149-150` omits that file from both the
+   shellcheck and the `bash -n` list — so this step proves only the `run-compare-all.sh` edit.
+   Lint the `cmd_reset` change with `shellcheck -s bash tests/functional/setup-bugzilla.sh`
+   directly, expecting only the pre-existing SC1091 informational note about the sourced
+   `container-env.sh`. Step 5 is the whole of the behavioural proof for `cmd_reset`.
 5. Run, in this order with no `NO_COLOR` in the environment: `make functional-test`, then
    `make functional-compare`. Expect the comparison run to reach its own summary and to report a
    transport per capability rather than `transport observation is missing`.
