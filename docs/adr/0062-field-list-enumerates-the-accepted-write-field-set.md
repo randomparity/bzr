@@ -153,3 +153,13 @@ Adding a result type is additive under ADR 0007, so `SCHEMA_VERSION` goes 3.0.2 
 - **Have the listing read `ServerConfig.bug_field_names`.** judgment: it would make the
   listing disagree with a fresh probe after the server's catalogue changed, which is the
   one property this feature must not have.
+- **Omit, or separately mark, the names no write can set** (`id`, `creator`,
+  `creation_time`, `last_change_time` from `BUG_FIELDS`; `bug_id` and timestamps from the
+  catalogue). verified: Bugzilla publishes no writability oracle — `FieldDefinition`
+  (`src/client/resources/field.rs:26`) carries `name`, `type`, `is_custom`, and `values`
+  and nothing about writability, which is why ADR 0053 accepts that the server "silently
+  ignores request keys it does not recognise" rather than predicting them. judgment: any
+  split would therefore be a third hand-written table with the same drift this record
+  rejects twice above, and criterion 2 permits omission only if the omitted set is
+  documented — a wider caveat than the one being kept. The consequence is recorded
+  instead, and the listing's claim is stated as "bzr will not refuse this key".

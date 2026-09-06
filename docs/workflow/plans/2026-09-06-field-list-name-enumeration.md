@@ -30,9 +30,13 @@ Transcribed from the spec and `CLAUDE.md`:
   warned.
 - `SCHEMA_VERSION` is live (3.0.0 shipped in v0.9.0). Under ADR 0007 an additive result type is
   a **patch** bump: 3.0.2 → 3.0.3.
-- A new `--json` shape needs five coupled updates or `schema_tests` fails: the schema file, the
-  **sorted** `SCHEMAS` registry, a conformance case, the docs schema list, and the input
-  parser-key drift check (not applicable here — output shape).
+- A new `--json` shape needs five coupled updates: the schema file, the **sorted** `SCHEMAS`
+  registry, a conformance case, the docs schema list, and the input parser-key drift check
+  (not applicable here — output shape). Only the first three are gated by `schema_tests`. The
+  **docs schema list is not gated by anything** — no test, `tools/` script, Makefile target or
+  CI step reads `docs/bzr-cli.md`'s "Available schemas" paragraph — so skipping it fails
+  silently and reaches the published reference. It is checked by hand, in Task 1's acceptance
+  criteria.
 - Adding to the CLI requires updating the `## Command Tree` in `docs/bzr-cli.md`. No new long
   flag is added, so `ROOT_GLOBALS` in `agent-skills/tests/flag-drift-check.sh` is untouched.
 - `flag-drift-check` defaults to `BZR_BIN:-bzr` and resolves the *installed* binary from `PATH`,
@@ -41,9 +45,16 @@ Transcribed from the spec and `CLAUDE.md`:
 - Guardrails, run **bare** — no `| tail`, no `>/dev/null`, no `|| true`: `make lint`,
   `make test`. Iterate with `make test-one T=<substring>` and `make test-fast`. Never bare
   `cargo test`.
-- Functional phase scripts use **4-space** indent and are not CI-linted; bare `shfmt` will
-  mislead. `test_pass` / `test_fail` / `test_skip` are the only counter-moving primitives, and
-  every fixture guard needs an `else` that calls one of them.
+- Functional phase scripts **are** linted in CI, contrary to a widely repeated claim: `make lint`
+  includes `check-shell` (`Makefile:113`), which runs `shellcheck -s bash` and `bash -n` over
+  `tests/functional/phases/*.sh` (`Makefile:149-150`), and `.github/workflows/ci.yml:270` runs
+  `make check-shell` while `ci.yml:47` runs `make check-functional-test-ids` — the latter pins
+  the canonical `test_begin "<slug>" "<description>"` single-line shape and the
+  lowercase-hyphen slug charset. What is **not** covered is `shfmt`: `Makefile:151-152` applies
+  it to `install.sh` and `tools/*.sh` only, so the phase scripts' 4-space indent is not a
+  formatting failure and a bare `shfmt` on one will mislead. `test_pass` / `test_fail` /
+  `test_skip` are the only counter-moving primitives, and every fixture guard needs an `else`
+  that calls one of them.
 - `docs/adr/README.md` is **not** edited: this is a dispatched run and the ADR index is not
   CI-coupled for this batch. Report `index row pending`.
 
@@ -86,7 +97,7 @@ None. (Populated if the design review disposes any finding as `deferred-tracked`
 | `src/commands/schema.rs` | `"field-name"` in the sorted registry |
 | `src/commands/schema_tests.rs` | conformance case |
 | `src/output/mod.rs` | `SCHEMA_VERSION` bump |
-| `docs/bzr-cli.md` | command tree, `field list` section, projection table, schema list, and the stale `--field` discovery paragraph at :1110–1117 |
+| `docs/bzr-cli.md` | command tree, `field list` section, projection table, schema list, and the stale `--field` discovery text at :1108–1116 |
 | `tests/functional/phases/05-fields-classifications.sh` | listing coverage incl. credentialless |
 | `tests/functional/phases/08g-bug-arbitrary-fields.sh` | rejection wording + live agreement oracle |
 
@@ -124,10 +135,14 @@ pub const FIELD_NAME_FIELDS: &[&str] = &["name", "source"];
   `Mode: focused-test` — `src/commands/schema_tests.rs::field_name_conforms`.
   Red before the schema is registered: `schema_for("field-name")` panics with an unknown
   schema. Green: `make test-one T=field_name_conforms`.
-- Contract: `SCHEMAS` stays sorted and the docs list matches it.
-  `Mode: focused-test` — the existing sorted/registry assertions in
-  `src/commands/schema_tests.rs`. Red if `"field-name"` is appended out of order. Green:
-  `make test-one T=schema`.
+- Contract: `SCHEMAS` stays sorted and unique.
+  `Mode: focused-test` — `registry_is_sorted_and_unique` in `src/commands/schema_tests.rs`.
+  Red if `"field-name"` is appended out of order. Green: `make test-one T=schema`.
+- Contract: the docs "Available schemas" list names the new schema.
+  `Mode: task-test-not-applicable` — nothing executable reads that paragraph
+  (`docs/bzr-cli.md`, the "Available schemas" list); it is prose in the published reference
+  with no consumer, and a prose snapshot test is explicitly disallowed. It is an acceptance
+  criterion below instead, checked by hand where the edit is made.
 
 ### Steps
 
@@ -249,6 +264,9 @@ pub const FIELD_NAME_FIELDS: &[&str] = &["name", "source"];
 - `cargo run -- schema field-name` prints the schema.
 - `cargo run -- schema` lists `field-name` between `error` and `field-value`.
 - `SCHEMA_VERSION` is `3.0.3`.
+- **Checked by hand, because nothing gates it:** `docs/bzr-cli.md`'s "Available schemas"
+  paragraph now names `field-name`, in the read-shapes list beside `field-value`. Confirm with
+  `grep -c 'field-name' docs/bzr-cli.md` before moving on — a skipped edit here is silent.
 
 ## Task 2 — `accepted_bug_fields()` and the re-pointed rejection message
 
@@ -298,8 +316,10 @@ from drifting.
    use crate::types::{FieldName, FieldNameSource};
    ```
 
-   `BTreeSet` is already imported; add `BTreeMap` to the same `use std::collections::{…}` line
-   rather than writing a second `use`.
+   Line 13 of that file is the single-item `use std::collections::BTreeSet;` — there is no
+   braced form to extend — so either widen it to `use std::collections::{BTreeMap, BTreeSet};`
+   or add the separate `use std::collections::BTreeMap;` the block above shows. Either is fine;
+   pick one and do not leave both.
 2. Below `is_bzr_known_bug_field`, add:
 
    ```rust
@@ -543,8 +563,11 @@ pub fn write_field_names<W: Write + ?Sized>(
    `use crate::types::{FieldName, FieldNameSource, FieldValue, OutputFormat};`.
 4. In `src/output/resources/field_tests.rs`, add two tests. Both are mechanical rendering
    checks, so write them in the file's established shape rather than from a transcript here:
-   add `write_field_names` to the `use super::{…}` line and `FieldName`, `FieldNameSource` to
-   the `use crate::types::{…}` line, then add a `capture_names(format, projection, rows)`
+   add `write_field_names` to the `use super::{…}` line, `FieldName` and `FieldNameSource` to
+   the `use crate::types::{…}` line, and `FIELD_NAME_FIELDS` as
+   `use crate::types::field::FIELD_NAME_FIELDS;` — Task 1 step 2 deliberately keeps it out of
+   the `crate::types` re-export, matching `FIELD_VALUE_FIELDS`, so that is the only path to it.
+   Then add a `capture_names(format, projection, rows)`
    helper alongside the existing `capture_values` (line 6), which already shows the
    `Vec::new()` → writer → `String::from_utf8(buf).unwrap()` pattern and the
    `crate::validation::fields::FieldProjection::none()` path.
@@ -557,6 +580,12 @@ pub fn write_field_names<W: Write + ?Sized>(
      `FieldProjection::resolve(Some("name"), None, FIELD_NAME_FIELDS).unwrap()`, assert the
      output contains `whiteboard` and does **not** contain `source`. The negative half is the
      assertion that bites: without it the test passes whether or not the projection applied.
+   - `field_name_source_label_matches_serde` — `field_name_source_label` is a **second copy** of
+     the three strings `#[serde(rename_all = "lowercase")]` produces and
+     `schemas/field-name.json` pins, and only a comment holds them together. That is the drift
+     ADR 0062 refuses elsewhere, so assert it instead: for each of the three variants, that
+     `field_name_source_label(v)` equals `serde_json::to_value(v).unwrap().as_str().unwrap()`.
+     Make the helper `pub(super)` or `pub(crate)` so the sibling test file can call it.
 5. Run `make test-one T=write_field_names` bare. Expect both tests green.
 6. `git add -A && git commit -m "feat(field): render the accepted field-name listing"`.
 
@@ -718,9 +747,11 @@ derives `Default`).
 4. Update every existing construction and destructuring site of `FieldAction::List`, all five
    of them, since `name` is now `Option<String>`:
 
-   - `src/commands/field_tests.rs:11` — the `list_with` helper: `name: Some(name.to_string()),`.
-   - `src/commands/field_tests.rs` lines 52, 102, 132, 165 — each inline
-     `name: "…".to_string(),` becomes `name: Some("…".to_string()),`.
+   - `src/commands/field_tests.rs:12` — the `list_with` helper's `name:` field (the
+     `FieldAction::List {` line above it is 11): `name: Some(name.to_string()),`.
+   - `src/commands/field_tests.rs` lines 53, 103, 133, 166 — each inline
+     `name: "…".to_string(),` becomes `name: Some("…".to_string()),`. (The enclosing
+     `let action = FieldAction::List {` lines are 52, 102, 132, 165.)
    - `src/cli/field_tests.rs:41` and `:49` — `assert_eq!(name, "status")` becomes
      `assert_eq!(name.as_deref(), Some("status"))`, and likewise for `"bug_severity"`.
    - `src/cli/mod_tests.rs:1339` — `=> assert_eq!(name, "status")` becomes
@@ -932,7 +963,7 @@ derives `Default`).
 
 5. Confirm the `field-name` entry added to the "Available schemas" paragraph in Task 1 is
    present and in the right place.
-6. **Rewrite the stale `--field` discovery paragraph.** `docs/bzr-cli.md` lines 1108–1117
+6. **Rewrite the stale `--field` discovery paragraph.** `docs/bzr-cli.md` lines 1108–1116
    currently read:
 
    ```
@@ -1071,22 +1102,26 @@ the credentialless path.
    if assert_success && assert_json 'length > 0' true; then test_pass; fi
    ```
 
-4. After that block, add the live agreement oracle:
+4. **At the very end of the phase**, immediately before the `rm -r "$_AF_DIR"` line
+   (currently 08g:157), add the live agreement oracle. Placement matters: the phase's last
+   existing block (08g:145-155) asserts `.whiteboard` is `""` on `$AFID`, so an oracle that
+   writes ahead of it would be relied upon to be ignored by Bugzilla — the design's own caveat
+   3 says bzr cannot prove what the server honours, so do not build a passing assertion on it.
 
    ```bash
    # Acceptance criterion 2 against a real server: anything the listing shows is
-   # accepted. The name is read OUT of the listing rather than hard-coded, so the
-   # assertion bites in both directions — a listing that stopped emitting server-only
-   # names yields an empty name and fails at the guard, and a listing that emitted a
-   # name the validator rejects exits 7 here.
+   # accepted. The name is read OUT of the listing rather than hard-coded in the
+   # comparison, so the assertion bites in both directions — a listing that stopped
+   # emitting server-only names yields an empty name and fails at the guard, and a
+   # listing that emitted a name the validator rejects exits 7 here.
    test_begin "field-list-agrees-with-field-validator" "a server-only name from field list is accepted by --field"
    run_bzr field list
    _AF_SERVER_NAME=""
    if assert_success; then
-       _AF_SERVER_NAME=$(jq -r 'map(select(.source == "server" and .name == "status_whiteboard")) | .[0].name // empty' "$BZR_STDOUT")
+       _AF_SERVER_NAME=$(jq -r 'map(select(.source == "server" and .name == "short_desc")) | .[0].name // empty' "$BZR_STDOUT")
    fi
    if [[ -z "$_AF_SERVER_NAME" ]]; then
-       test_fail "field list did not report status_whiteboard as a server-declared name"
+       test_fail "field list did not report short_desc as a server-declared name"
    elif [[ -z "$AFID" ]]; then
        test_fail "no fixture bug: the --field create above did not succeed"
    else
@@ -1095,9 +1130,18 @@ the credentialless path.
    fi
    ```
 
-   `status_whiteboard` is pinned deliberately: an arbitrary `.[0]` could land on a read-only
-   catalogue field (`bug_id`, a timestamp) that Bugzilla itself refuses, which would make the
-   test red for a reason that has nothing to do with bzr's validator.
+   `short_desc` is pinned deliberately, on three grounds. An arbitrary `.[0]` could land on a
+   read-only catalogue field (`bug_id`, a timestamp) that Bugzilla refuses on its own, which
+   would redden the block for a reason unrelated to bzr's validator. `short_desc` is proven
+   declared by these containers by a currently-passing test in this suite
+   (`05-fields-classifications.sh:36`), not by an ADR alone. And it is not a `BUG_FIELDS`
+   canonical — `summary` is — so `source: server` is the grounded expectation. If Bugzilla
+   does honour it, the only effect is on the fixture bug's summary, which nothing asserts.
+
+4a. Add `_AF_SERVER_NAME` to the phase's `unset` line (currently 08g:158), which today reads
+   `unset _AF _AF_DIR _AF_INITIAL _AF_UPDATED _AF_JSON AFID`. Phase files are sourced into one
+   shell by the runner, so a variable left set leaks into every later phase.
+
 5. Run `make lint` bare. Expect exit 0.
 6. Run `make test` bare. Expect exit 0.
 7. Run `cargo build` bare so the functional harness runs HEAD.
@@ -1110,10 +1154,18 @@ the credentialless path.
    run) and background both per the repository's guardrail-runtime rule. After the green run,
    make one controlled fault: in `src/commands/runtime/shared/field_catalogue.rs`, change
    `accepted_bug_fields_map` to skip the `declared` loop entirely (return only the `BUG_FIELDS`
-   half). Rebuild and re-run `make functional-test`. Expect
-   `field-list-no-argument-lists-both-sources`,
-   `field-list-no-argument-marks-internal-and-rest-names`, and
-   `field-list-agrees-with-field-validator` to **fail**. Revert the fault, rebuild, re-run, and
+   half). Rebuild and re-run `make functional-test`. Expect exactly
+   **four** blocks to fail — `field-list-no-argument-lists-both-sources`,
+   `field-list-no-argument-marks-internal-and-rest-names`,
+   `credentialless-field-list-no-argument` (every row becomes `bzr`, so its
+   `any(.[]; .source == "server")` assertion is false too), and
+   `field-list-agrees-with-field-validator` — and exactly **three** to stay green:
+   `field-list-no-argument-fields-projects-keys`,
+   `field-list-no-argument-fields-unknown-exits-7`, and
+   `undeclared-field-advice-names-a-command-that-works` (whose `length > 0` is still satisfied
+   by the 28 `BUG_FIELDS` rows). Record the full seven-block partition, not a subset: a
+   partial expectation cannot tell a correct fault from a fault that also broke something
+   else. Revert the fault, rebuild, re-run, and
    confirm green. Record both observations — the red list and the green re-run — in the PR body
    and the completion report.
 10. **Confirm the counters moved per phase.** Read the per-phase summary lines from the green

@@ -63,7 +63,9 @@ sources yields exactly one `both` row rather than two rows.
 - Table (`--output table`, the default at a TTY): two columns, `NAME` and `SOURCE`,
   through `write_table_records` like every other table writer.
 - `--json` / `--output ndjson`: the `field-name` shape, through
-  `write_formatted_projected`, so `--fields` / `--exclude-fields` project it.
+  `write_formatted_projected`, so `--fields` / `--exclude-fields` project it. Both JSON-family
+  formats come from that one helper, which the named form already uses, so ndjson needs no
+  coverage of its own beyond the `--json` test.
 
 The listing is never empty: `BUG_FIELDS` contributes 28 rows unconditionally, even
 against a server whose catalogue is empty. There is therefore no empty-listing message,
@@ -156,8 +158,9 @@ The five coupled updates a new `--json` shape requires:
 
 ### Unit
 
-- `src/types/field_tests.rs` — `FieldNameSource` serializes to the three lowercase
-  strings; `FieldName` round-trips.
+- `src/types/field_tests.rs` — `FieldNameSource` serializes to the three lowercase strings,
+  and `FIELD_NAME_FIELDS` equals the serialized key set (mirroring the existing
+  `field_value_fields_matches_serialized_keys`).
 - `src/commands/runtime/shared/field_catalogue_tests.rs` — `accepted_bug_fields` against
   a catalogue that overlaps `BUG_FIELDS` partially: a server-only name, a bzr-only name,
   and an overlapping name each get the right `source`; a duplicate in `declared` yields
@@ -166,10 +169,15 @@ The five coupled updates a new `--json` shape requires:
   `accepted_bug_fields` produced, against a `wiremock` server serving the same catalogue,
   and assert `Ok(())`. This is the executable form of criterion 2 and it discriminates:
   emitting a name neither source backs makes it fail.
-- `src/output/resources/field_tests.rs` — table headers and row order; JSON projection to
-  `name` only.
-- `src/commands/field_tests.rs` — the no-argument form against `wiremock`; the named form
-  unchanged; `--fields source` projects; `--fields bogus` exits 7.
+- `src/output/resources/field_tests.rs` — table headers; JSON projection to `name` only, with
+  the negative half (`source` absent) as the assertion that bites; and the table `source`
+  spelling asserted equal to the serde value, since the writer holds a second copy of those
+  three strings. Row order is asserted where it is produced, in `accepted_bug_fields`, not
+  again at the writer.
+- `src/commands/field_tests.rs` — the no-argument form against `wiremock`, asserting one row
+  of each source; the named form unchanged; and `--fields sort_key` exits 7. `sort_key` rather
+  than a nonsense token: it is a valid key of the *named* form and invalid here, so it fails
+  if the handler validates against the wrong key set, which a nonsense token could not detect.
 - `src/cli/field_tests.rs` — `field list` parses with `name: None`, `field list status`
   with `name: Some`.
 
