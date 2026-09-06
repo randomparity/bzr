@@ -22,6 +22,18 @@ pub(super) fn validate_draft(draft: &BugUpdateDraft, ids: &[u64]) -> Result<()> 
 }
 
 pub(super) fn validate_args(args: &UpdateArgs) -> Result<()> {
+    let dash = |value: Option<&str>| value == Some("-");
+    crate::commands::runtime::input::extra_fields::reject_stdin_conflict(
+        args.field_json.as_deref(),
+        &[
+            ("--from-json -", dash(args.from_json.as_deref())),
+            ("--comment -", dash(args.comment.as_deref())),
+            (
+                "--comment-file -",
+                args.comment_file.as_deref() == Some(std::path::Path::new("-")),
+            ),
+        ],
+    )?;
     validate_draft(&BugUpdateDraft::from_cli(args), &args.ids)
 }
 

@@ -160,6 +160,31 @@ pub(crate) fn check_against<T: serde::Serialize>(
     Ok(extra)
 }
 
+/// Reject `--field-json -` alongside another flag on the same command line that
+/// also reads stdin.
+///
+/// stdin is consumable once, so one of the two would come back empty. Catching
+/// the combination up front names both flags; the empty-document diagnostic in
+/// [`parse`] is the fallback for the sources this cannot see, such as a bug
+/// description arriving on a pipe with no flag of its own.
+pub(crate) fn reject_stdin_conflict(
+    json_source: Option<&str>,
+    competing: &[(&str, bool)],
+) -> Result<()> {
+    if json_source != Some("-") {
+        return Ok(());
+    }
+    for (flag, reads_stdin) in competing {
+        if *reads_stdin {
+            return Err(BzrError::input(format!(
+                "--field-json - cannot be combined with {flag}: stdin can only be read \
+                 once. Pass one of them a file path instead."
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// The union of keys across one or more payloads' extra-field maps, for the
 /// single pre-dispatch catalogue check that covers a whole batch.
 pub(crate) fn key_union<'a>(maps: impl Iterator<Item = &'a ExtraFields>) -> BTreeSet<String> {

@@ -342,6 +342,19 @@ pub(super) async fn handle(
         ..
     } = args;
 
+    let dash = |value: Option<&str>| value == Some("-");
+    crate::commands::runtime::input::extra_fields::reject_stdin_conflict(
+        create_fields.field_json.as_deref(),
+        &[
+            ("--from-json -", dash(from_json.as_deref())),
+            ("--description -", dash(description.as_deref())),
+            (
+                "--description-file -",
+                description_file.as_deref() == Some(std::path::Path::new("-")),
+            ),
+        ],
+    )?;
+
     if let Some(arg) = from_json {
         return super::create_json::handle(args, arg, ctx, w).await;
     }
