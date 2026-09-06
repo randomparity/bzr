@@ -82,6 +82,14 @@ The cache is bound to the URL it was probed from, following `server_extensions_u
 ADR 0052: re-pointing a server name at a different host is a cache miss, so the old host's
 catalogue can never wave through a key the new host does not declare.
 
+That binding was not in the original design. It was found while rebasing onto ADR 0052's
+implementation, which had introduced `server_extensions_url` for the same reason, and it is
+deliberately part of this decision rather than deferred: an unbound cache fails in the
+direction this whole ADR exists to close. The old host's catalogue would accept a key the new
+host never declared, that key would reach the wire, and Bugzilla would discard it silently —
+the exact silent no-op that option B was rejected for. A validation boundary shipped without
+it would not deliver the guarantee its own Decision section states.
+
 Step 3 is what makes the cache safe: a cache miss always forces a fresh probe, so a stale
 cache can never reject a field the server has since declared. The cache is an optimisation
 that cannot change an answer — and, for the same reason, cannot break one: a config bzr
