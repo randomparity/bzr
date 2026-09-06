@@ -51,24 +51,16 @@ Two further observations, both already intended behaviour and not part of this d
 
 ## Change
 
-1. Rewrite the four doc comments that misattribute the cause — `get_comments_since`,
-   `get_attachments`, `get_attachment`, and the `BugzillaClient` struct comment in
-   `src/client/mod.rs` — to state the measured rule: private content is
-   complete whenever the server honoured the credential; XML-RPC is preferred in Hybrid
-   mode because it authenticates in the request body and so is immune to a REST endpoint
-   that ignores the configured auth method. Correct the same claim wherever it is repeated:
-   `docs/bzr-cli.md`'s hybrid-transport paragraph ("REST responses cannot reliably distinguish
-   private data from missing public data on some Bugzilla versions" — the user-facing copy of
-   the wrong explanation), and the header comments of both
-   `tests/functional/phases/15b-comments-private.sh` and `16b-attachments-private.sh`.
-2. Extend `tests/functional/phases/15b-comments-private.sh` and
-   `16b-attachments-private.sh` with default-mode and forced `--api rest` private-content
-   assertions. Today both phases assert only `--api hybrid` and `--api xmlrpc`, which is why
-   nothing held the claim to account. The forced-`rest` assertion runs on every supported
-   version including 5.0, so it refutes the old wording where the old wording made its claim.
+Two parts, both prose-and-tests. Every claim that names the cause is rewritten to the measured
+rule — the doc comments on `get_comments_since`, `get_attachments`, `get_attachment` and the
+`BugzillaClient` struct, `docs/bzr-cli.md`'s hybrid-transport paragraph, and both phase header
+comments. Then `15b-comments-private.sh` and `16b-attachments-private.sh` gain default-mode and
+forced `--api rest` private-content assertions; today they assert only `--api hybrid` and
+`--api xmlrpc`, which is why nothing held the claim to account.
 
-No dispatch, version-mapping, or auth behaviour changes. `dispatch_xmlrpc_first` and
-`version_to_api_mode` are untouched.
+No dispatch, version-mapping, or auth behaviour changes: `dispatch_xmlrpc_first` and
+`version_to_api_mode` are untouched, and nothing about the compiled artifact changes. Exact
+edits and per-case verification live in the plan.
 
 ## Residual, not fixed here — the measured mechanism
 
