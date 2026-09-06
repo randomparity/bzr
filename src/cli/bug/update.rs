@@ -181,7 +181,11 @@ pub(crate) struct UpdateArgs {
     /// `--comment-tag` alone is a usage error (exit 7). `Bug.update`'s
     /// `comment_tags` parameter is not reliably honored across
     /// supported server versions, so this issues a follow-up tag
-    /// call after the update (two API round-trips).
+    /// call after the update (two API round-trips), identifying the
+    /// posted comment by recency. A comment landed by another user or
+    /// process on this bug in that narrow window could be mistagged
+    /// instead — a check-then-write race the same shape as
+    /// `--expect-unchanged-since`'s, disclosed rather than eliminated.
     #[arg(long, value_name = "TAG")]
     pub comment_tag: Vec<String>,
     /// Suppress bugmail notifications for this update.

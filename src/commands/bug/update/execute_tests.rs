@@ -10,12 +10,44 @@ use wiremock::{Mock, ResponseTemplate};
 use crate::commands::runtime::invocation::CommandContext;
 use crate::test_helpers::{setup_test_env, CapturedIo};
 use crate::types::bug::{CommentUpdate, UpdateBugParams};
+use crate::types::comment::Comment;
 use crate::types::OutputFormat;
 
 use super::super::test_helpers::{
     forbid_put, mock_get_bug_lct, mock_put_bug_ok, received_put_count,
 };
-use super::{apply_checked, apply_checked_connected, ApplyRequest};
+use super::{apply_checked, apply_checked_connected, find_latest_comment_id, ApplyRequest};
+
+fn comment_with(id: u64, count: Option<u64>) -> Comment {
+    Comment {
+        id,
+        bug_id: None,
+        text: None,
+        creator: None,
+        creation_time: None,
+        count,
+        is_private: None,
+        attachment_id: None,
+        tags: vec![],
+    }
+}
+
+#[test]
+fn find_latest_comment_id_prefers_highest_count() {
+    let comments = vec![comment_with(50, Some(0)), comment_with(51, Some(1))];
+    assert_eq!(find_latest_comment_id(&comments), Some(51));
+}
+
+#[test]
+fn find_latest_comment_id_falls_back_to_last_when_count_is_absent() {
+    let comments = vec![comment_with(70, None), comment_with(71, None)];
+    assert_eq!(find_latest_comment_id(&comments), Some(71));
+}
+
+#[test]
+fn find_latest_comment_id_none_when_empty() {
+    assert_eq!(find_latest_comment_id(&[]), None);
+}
 
 /// Mount the GET the tagging sub-step uses to find the just-posted comment.
 async fn mock_bug_comment(mock: &wiremock::MockServer, bug_id: u64, comment_id: u64, text: &str) {
