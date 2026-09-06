@@ -716,3 +716,82 @@ async fn auth_fallback_band_edges_separate_login_failure_from_refusal() {
         }
     }
 }
+
+/// A minimal `bug view` payload — enough fields for the view formatter.
+fn view_ok_bug_body(id: u64, summary: &str) -> serde_json::Value {
+    serde_json::json!({
+        "bugs": [{
+            "id": id,
+            "summary": summary,
+            "status": "NEW",
+            "resolution": "",
+            "assigned_to": "nobody@test.com",
+            "priority": "P1",
+            "severity": "normal",
+            "product": "TestProduct",
+            "component": "General",
+            "creation_time": "2025-01-01T00:00:00Z",
+            "last_change_time": "2025-01-01T00:00:00Z"
+        }]
+    })
+}
+
+fn permissive_view_action(ids: &[&str]) -> crate::cli::BugAction {
+    crate::cli::BugAction::View(crate::cli::ViewArgs {
+        ids: ids.iter().map(|s| (*s).to_string()).collect(),
+        permissive: true,
+        web: false,
+        field_args: crate::cli::FieldArgs {
+            fields: None,
+            exclude_fields: None,
+        },
+    })
+}
+
+/// ADR 0057 Consequences: relaying the retry's `api_code` is the one place this
+/// change moves a process exit code. `api_code` is control flow — code 102 is a
+/// per-resource fault `--permissive` skips (`BzrError::is_permissive_bug_view_error`),
+/// while the header attempt's 410 is not — so a batch that previously aborted
+/// with exit 4 now completes with exit 0 and the bug listed as failed. Driving
+/// the command is what makes that observable; asserting the predicate on the
+/// error would never exercise the exit-0 path.
+#[tokio::test]
+async fn relayed_per_resource_refusal_makes_permissive_view_exit_zero_not_four() {
+    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(view_ok_bug_body(1, "first")))
+        .mount(&mock)
+        .await;
+    mount_auth_fallback_on(
+        &mock,
+        "/rest/bug/2",
+        login_required(),
+        ResponseTemplate::new(401).set_body_json(bugzilla_error(
+            102,
+            "You are not authorized to access bug #2",
+        )),
+    )
+    .await;
+
+    let action = permissive_view_action(&["1", "2"]);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ),
+        &mut io.writers(),
+    )
+    .await;
+    let output = io.out_str().to_string();
+    assert!(
+        result.is_ok(),
+        "a relayed per-resource code must be suppressible: {result:?}"
+    );
+    let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
+    assert_eq!(parsed["failed"].as_array().unwrap().len(), 1);
+    assert_eq!(parsed["failed"][0]["id"], "2");
+}
