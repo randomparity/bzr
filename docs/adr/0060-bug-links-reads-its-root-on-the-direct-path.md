@@ -69,9 +69,9 @@ reference oracle the REST arm is asserted against.
 
 ## Consequences
 
-- **Two user-visible exit-code transitions on the REST/Hybrid root read.** Both
-  follow from the direct path faulting where search did not, and both make
-  `bug links` agree with `bug view` on the same id:
+- **Three user-visible exit-code transitions on the REST/Hybrid root read.** The
+  first two follow from the direct path faulting where search did not, and both
+  make `bug links` agree with `bug view` on the same id; the third is below:
 
   1. **A restricted bug the caller cannot see**: exit `2` (`not-found`,
      `bug not found: <id>`) → exit `4` (`api`) with the server's code and
@@ -88,9 +88,31 @@ reference oracle the REST arm is asserted against.
   Exit 2 remains reachable for `bug links` only where the direct read returns an
   empty result with no error payload — the residual case ADR 0015 reserves.
 
-- **A member whose key travels in a header now succeeds where the command
-  failed.** That configuration drew `200`-with-no-rows from search, which no
-  retry could see; it now draws a `401` the alternate-auth retry repairs.
+- **A third transition, on a 100500 deployment.** Where an extension crashes the
+  direct endpoint, an absent or invisible root previously read through search,
+  came back empty, and became exit `2`. It now takes the restored search
+  fallback and re-surfaces the annotated `Api { code: 100500 }` — exit `4` —
+  because ADR 0015 forbids an empty search retry becoming `NotFound`. Correct,
+  deliberate, and enumerated here so the count of user-visible exit-code changes
+  in this decision is three rather than two.
+
+- **A member whose key travels in a header now reads the root where the command
+  previously failed outright — but only the root.** That configuration drew
+  `200`-with-no-rows from search, which no retry could see; the root now draws a
+  `401` the alternate-auth retry repairs. The **related**-id batch still travels
+  with the same header on the search endpoint, which answers it
+  `200 {"bugs":[]}` and never faults, so no retry is possible there. On a server
+  that does not honour `X-BUGZILLA-API-KEY` — which includes the bz50 and bz52
+  images the functional suite runs against; only bz53 maps the header onto
+  `Bugzilla_api_key` — such a caller now gets exit `0` with a **silently
+  truncated** graph where it previously got exit `2`.
+
+  That is a real trade: wrong-but-loud became partly-right-and-quiet. It is
+  accepted here rather than fixed, because a related-id omission is skippable by
+  design (that is what makes the batch legitimate at all) and the root's false
+  claim about the bug's existence was the reported defect. Closing it means
+  giving the related-id read a fault path of its own, which is a larger change
+  than this one and is recorded as follow-up work rather than smuggled in here.
 
 - **One extra request per invocation is not added.** The root was already a
   request of its own — a one-id search — and is now a one-id direct read.
