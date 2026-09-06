@@ -80,7 +80,10 @@ call at all. For the rest, bzr resolves the catalogue before dispatch:
 
 Step 3 is what makes the cache safe: a cache miss always forces a fresh probe, so a stale
 cache can never reject a field the server has since declared. The cache is an optimisation
-that cannot change an answer.
+that cannot change an answer — and, for the same reason, cannot break one: a config bzr
+cannot write is logged and stepped over rather than failing the user's write, and a
+catalogue above a 4096-name ceiling is used for the request and not written at all, so a
+server cannot bloat a file every later invocation parses.
 
 The probe failure preserves the underlying error's class — and therefore its exit code —
 while appending the probe context to the message, using the `annotate_search_fallback`

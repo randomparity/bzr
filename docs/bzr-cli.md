@@ -1098,13 +1098,18 @@ custom fields.
 server's own field catalogue declares it, or when it is a bug field bzr already
 models — Bugzilla's catalogue reports internal column names for many built-ins
 (`status_whiteboard` for `whiteboard`, `short_desc` for `summary`) while the
-write API takes the REST names, so both sets count. A name in neither fails
-with exit 7 naming the field — rather than being accepted by Bugzilla, which silently ignores
-request keys it does not recognise and would report success having changed
-nothing. Run `bzr field list` to see what a server declares. The catalogue is
+write API takes the REST names, so both sets count. A name in neither fails with
+exit 7 naming the field — rather than being accepted by Bugzilla, which silently
+ignores request keys it does not recognise and would report success having
+changed nothing. Run `bzr field list` to see what a server declares.
+
+A key bzr already models needs no request at all; for the rest the catalogue is
 fetched once per server and cached in the config beside the detected auth method
-and API mode; a key the cache does not list always forces a fresh fetch, so a
+and API mode. A key the cache does not list always forces a fresh fetch, so a
 field added on the server since is accepted rather than wrongly rejected.
+
+Combined with `--from-json`, the flags apply on top of the document — and to
+every element of an array form, the same way the other CLI overrides do.
 
 If the catalogue cannot be fetched at all, the write is **refused** rather than
 sent unvalidated. That failure keeps the underlying error's own exit code (4, 5,
