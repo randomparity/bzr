@@ -26,7 +26,7 @@ if [[ -n "$BUG1" ]]; then
     # AND the private one must be visible (is_private: true present).
     if assert_success &&
         assert_json_array_min_length '.' 4 &&
-        [[ "$(jq '[.[] | select(.is_private == true)] | length' "$BZR_STDOUT")" -ge 1 ]]; then
+        assert_json_array_min_length '[.[] | select(.is_private == true)]' 1; then
         test_pass
     fi
 else test_skip "no BUG1"; fi
@@ -36,7 +36,7 @@ if [[ -n "$BUG1" ]]; then
     run_bzr --api xmlrpc comment list "$BUG1"
     if assert_success &&
         assert_json_array_min_length '.' 4 &&
-        [[ "$(jq '[.[] | select(.is_private == true)] | length' "$BZR_STDOUT")" -ge 1 ]]; then
+        assert_json_array_min_length '[.[] | select(.is_private == true)]' 1; then
         test_pass
     fi
 else test_skip "no BUG1"; fi
