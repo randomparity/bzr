@@ -31,6 +31,8 @@ Operate on bugs.
     <text>` (the Nth applies to the Nth attachment). On a post-create sub-step
     failure it prints the new bug ID and exits 11, so the ID is never lost —
     finish the missing step rather than re-filing. See the `bzr-file-bug` skill.
+  - `--comment-tag <tag>` (repeatable) tags the bug's first comment (the
+    description); requires a description from any source, or it's exit 7.
   - `bzr bug create --from-json <path|->`   # one object = one bug; an array batches
 - `bzr bug clone 12345`
   - Override create fields on the clone: `--summary --product --component
@@ -45,6 +47,11 @@ Operate on bugs.
     the field changes, so no second `comment add` call is needed.
     `--comment-private` marks that comment private; it requires one of the two
     (passing it alone is exit 7).
+  - `--comment-tag <tag>` (repeatable) tags the posted comment; requires
+    `--comment`/`--comment-file`, or it's exit 7. Issues a follow-up tag call
+    after the update (Bugzilla's `Bug.update` doesn't reliably honor tags
+    inline) — do not retry with the same `--comment` text if only tagging
+    fails, or the comment posts twice. `--minor-update` suppresses bugmail.
 - `bzr bug resolve 12345 [--as WONTFIX]` (sugar over `update`)
 - `bzr bug close 12345 [--status CLOSED]` / `reopen 12345 [--status REOPENED]`
   (default to stock statuses VERIFIED / CONFIRMED) / `dup 12345 100`

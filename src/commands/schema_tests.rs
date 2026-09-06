@@ -281,6 +281,7 @@ fn compound_create_result_conforms() {
         vec![
             SubStepFailure::comment("comment service unavailable"),
             SubStepFailure::attachment("trace.log", "413 payload too large"),
+            SubStepFailure::comment_tags("comment not found"),
         ],
     );
     assert_conforms("compound-create-result", &to_value(&result));
