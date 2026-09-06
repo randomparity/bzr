@@ -371,8 +371,9 @@ Three properties of the amendment are part of the decision:
   `tests/functional/redhat-shape-proxy.py` rewrites a real `/rest/extensions` response to
   advertise `RedHat`, so a *positive* verdict is provable against a shaped proxy rather than
   only against a stock image. The phase tier can reach it — `lib.sh` exports
-  `redhat_shape_start`/`redhat_shape_stop` and nine phase scripts already call them, so this
-  is **not** a tier boundary.
+  `redhat_shape_start`/`redhat_shape_stop`, and they are called from nine scripts under
+  `tests/functional/phases/` (`rg -l 'redhat_shape_start|redhat_shape_stop'`, 2026-09-06;
+  fourteen across all of `tests/functional/`). So this is **not** a tier boundary.
 
   What blocks the XML-RPC positive path is the proxy's own shape: **it contains no XML-RPC
   handling at all.** `REWRITE_HOOKS` is a tuple of matcher/transformer pairs whose matchers key
