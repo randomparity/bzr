@@ -141,12 +141,17 @@ fn extract_flat_envelope(value: &serde_json::Value) -> Result<Vec<Attachment>> {
 }
 
 impl BugzillaClient {
-    /// In Hybrid mode, attachments are fetched via XML-RPC `Bug.attachments`
-    /// rather than REST. Bugzilla 5.0.x REST silently filters private
-    /// attachments under API-key auth (issue #133), and the truncation is
-    /// not reliably detectable from the REST response — XML-RPC is the
-    /// only path that returns the full set. REST is the fallback when the
-    /// server doesn't expose `xmlrpc.cgi`.
+    /// In Hybrid mode, attachments are fetched via XML-RPC
+    /// `Bug.attachments` rather than REST. Private attachments come
+    /// back over either protocol whenever the server honoured the
+    /// credential; what varies is whether it did. Bugzilla 5.0 and 5.2
+    /// ignore the `X-BUGZILLA-API-KEY` header on REST and answer
+    /// anonymously with `200` and the private attachments removed
+    /// (issues #133, #714). XML-RPC carries the key in the request
+    /// body, so it is unaffected. REST is the fallback when the server
+    /// doesn't expose `xmlrpc.cgi`. The REST arm also omits `data` by
+    /// design (`exclude_fields`) — a payload optimisation, not
+    /// filtering. ADR-0059 records the per-version measurement.
     pub async fn get_attachments(&self, bug_id: u64) -> Result<Vec<Attachment>> {
         self.dispatch_xmlrpc_first(
             &format!("attachment list (bug {bug_id})"),
@@ -172,10 +177,21 @@ impl BugzillaClient {
         )
     }
 
-    /// Like `get_attachments`, dispatches on `api_mode` so that
-    /// `bzr attachment download` of a private attachment works on
-    /// Bugzilla 5.0.x deployments where REST silently filters
-    /// private content under non-admin scope (issue #133).
+    /// Like `get_attachments`, dispatches on `api_mode`. Unlike the
+    /// list read, `GET /rest/bug/attachment/<id>` answers `401` rather
+    /// than a filtered `200` when the request is unauthenticated, so
+    /// the transport's auth-method fallback already recovers a private
+    /// attachment from a server that ignores the configured auth
+    /// method (issues #133, #714).
+    ///
+    /// No functional phase exercises that: the harness pins
+    /// `query_param` auth, so no `401` occurs there and the fallback
+    /// never fires. The fallback itself is pinned at the transport
+    /// level by `auth_fallback_header_to_query_param_on_401` and
+    /// `auth_fallback_query_param_to_header_on_401`
+    /// (`src/client/transport_tests.rs`), which assert the recovered
+    /// payload in both directions; ADR-0059 supplies the end-to-end
+    /// measurement against a live server.
     pub async fn get_attachment(&self, attachment_id: u64) -> Result<Attachment> {
         self.dispatch_xmlrpc_first(
             &format!("attachment fetch (id {attachment_id})"),

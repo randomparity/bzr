@@ -2918,5 +2918,7 @@ REST-first and retries via XML-RPC only when REST returns empty results for a
 query with active filters (product, status, etc.). Direct bug lookups (`bug
 view`) are REST-first and fall back to XML-RPC on server errors but not on
 authentication failures. Comments and attachments are XML-RPC-first in Hybrid
-mode because REST responses cannot reliably distinguish private data from
-missing public data on some Bugzilla versions.
+mode because XML-RPC carries the API key in the request body, so it is
+unaffected by a REST endpoint that ignores the configured auth method. A REST
+reply filtered that way is a normal `200` and cannot be told apart from a bug
+that genuinely has no private comments or attachments. See ADR-0059.
