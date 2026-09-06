@@ -170,9 +170,10 @@ The five coupled updates a new `--json` shape requires:
   and assert `Ok(())`. This is the executable form of criterion 2 and it discriminates:
   emitting a name neither source backs makes it fail.
 - `src/output/resources/field_tests.rs` — table headers; JSON projection to `name` only, with
-  the negative half (`source` absent) as the assertion that bites; and the table `source`
-  spelling asserted equal to the serde value, since the writer holds a second copy of those
-  three strings. Row order is asserted where it is produced, in `accepted_bug_fields`, not
+  the negative half (`source` absent) as the assertion that bites. The table `source` spelling
+  needs no test of its own: `FieldNameSource::as_str` is the single definition, and serde
+  serializes through it via `#[serde(into = "&'static str")]`, so the JSON and table spellings
+  cannot diverge. Row order is asserted where it is produced, in `accepted_bug_fields`, not
   again at the writer.
 - `src/commands/field_tests.rs` — the no-argument form against `wiremock`, asserting one row
   of each source; the named form unchanged; and `--fields sort_key` exits 7. `sort_key` rather
@@ -232,7 +233,7 @@ fixture is a real failure, not a reason to skip.
 | `src/commands/schema.rs` | `"field-name"` in `SCHEMAS` |
 | `src/output/mod.rs` | `SCHEMA_VERSION` 3.0.2 → 3.0.3 |
 | `schemas/field-name.json` | new |
-| `docs/bzr-cli.md` | command tree, `field list` section, projection table, schema list, **and the `--field` section's stale "wider than the set it can currently list" paragraph, which this change falsifies** |
+| `docs/bzr-cli.md` | command tree, `field list` section, projection table, schema list, the `field` group heading and its TOC anchor (the section is no longer value-lookup only), **and the `--field` section's stale "wider than the set it can currently list" paragraph, which this change falsifies** |
 | `tests/functional/phases/05-fields-classifications.sh` | listing coverage |
 | `tests/functional/phases/08g-bug-arbitrary-fields.sh` | message + agreement oracle |
 | sibling `*_tests.rs` of each source file above | unit coverage |

@@ -107,11 +107,39 @@ None. (Populated if the design review disposes any finding as `deferred-tracked`
 
 ```rust
 // src/types/field.rs
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum FieldNameSource { Server, Bzr, Both }
 
-#[derive(Debug, Serialize, Deserialize)]
+/// Why a bug field name is accepted by `--field` / `--field-json` (ADR 0062).
+///
+/// `as_str` is the single definition of the three spellings: serde serializes
+/// through it via `into`, and the table writer calls it directly, so the JSON
+/// and table output cannot name a source differently. `schemas/field-name.json`
+/// pins the same three values and is checked by
+/// `field_name_source_enum_is_closed`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(into = "&'static str")]
+pub enum FieldNameSource {
+    Server,
+    Bzr,
+    Both,
+}
+
+impl FieldNameSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            FieldNameSource::Server => "server",
+            FieldNameSource::Bzr => "bzr",
+            FieldNameSource::Both => "both",
+        }
+    }
+}
+
+impl From<FieldNameSource> for &'static str {
+    fn from(source: FieldNameSource) -> Self {
+        source.as_str()
+    }
+}
+
+#[derive(Debug, Serialize)]
 #[non_exhaustive]
 pub struct FieldName {
     pub name: String,
@@ -120,6 +148,12 @@ pub struct FieldName {
 
 pub const FIELD_NAME_FIELDS: &[&str] = &["name", "source"];
 ```
+
+`#[serde(into = "&'static str")]` requires the type to be `Clone` (it is `Copy`) and needs the
+`From` impl above; that combination is what removes the second copy of the strings rather than
+merely pinning it with a test. Neither type derives `Deserialize`: nothing in production or in
+the tests parses this shape back, and adding it would reintroduce a second spelling through
+`rename_all`.
 
 **Interfaces consumed:** none.
 
@@ -146,8 +180,9 @@ pub const FIELD_NAME_FIELDS: &[&str] = &["name", "source"];
 
 ### Steps
 
-1. In `src/types/field.rs`, below `FIELD_VALUE_FIELDS`, add `FieldNameSource`, `FieldName`, and
-   `FIELD_NAME_FIELDS` exactly as written in the Interfaces block above.
+1. In `src/types/field.rs`, below `FIELD_VALUE_FIELDS`, add `FieldNameSource` with its
+   `as_str` and `From` impls, `FieldName`, and `FIELD_NAME_FIELDS`, exactly as written in the
+   Interfaces block above.
 2. In `src/types/mod.rs`, change line 33 from
    `pub use field::{FieldValue, StatusTransition};` to
    `pub use field::{FieldName, FieldNameSource, FieldValue, StatusTransition};`.
@@ -539,25 +574,20 @@ pub fn write_field_names<W: Write + ?Sized>(
        write_formatted_projected(names, format, projection, out, |names, out| {
            write_table_records(
                FIELD_NAME_HEADERS,
-               names.iter().map(|row| {
-                   vec![row.name.clone(), field_name_source_label(row.source).to_string()]
-               }),
+               names
+                   .iter()
+                   .map(|row| vec![row.name.clone(), row.source.as_str().to_string()]),
                table_width,
                out,
            );
        });
    }
-
-   /// The table spelling of a source, kept identical to the JSON enum values so the two
-   /// output modes name the same thing.
-   fn field_name_source_label(source: FieldNameSource) -> &'static str {
-       match source {
-           FieldNameSource::Server => "server",
-           FieldNameSource::Bzr => "bzr",
-           FieldNameSource::Both => "both",
-       }
-   }
    ```
+
+   The table cell comes from `FieldNameSource::as_str()` (Task 1), which is the same
+   definition serde serializes through, so the writer holds no second copy of the three
+   strings. A local `field_name_source_label` match would be a third hand-maintained copy —
+   exactly the drift ADR 0062 rejects twice — so do not add one.
 
 3. Extend the file's `use crate::types::{FieldValue, OutputFormat};` line to
    `use crate::types::{FieldName, FieldNameSource, FieldValue, OutputFormat};`.
@@ -580,12 +610,9 @@ pub fn write_field_names<W: Write + ?Sized>(
      `FieldProjection::resolve(Some("name"), None, FIELD_NAME_FIELDS).unwrap()`, assert the
      output contains `whiteboard` and does **not** contain `source`. The negative half is the
      assertion that bites: without it the test passes whether or not the projection applied.
-   - `field_name_source_label_matches_serde` — `field_name_source_label` is a **second copy** of
-     the three strings `#[serde(rename_all = "lowercase")]` produces and
-     `schemas/field-name.json` pins, and only a comment holds them together. That is the drift
-     ADR 0062 refuses elsewhere, so assert it instead: for each of the three variants, that
-     `field_name_source_label(v)` equals `serde_json::to_value(v).unwrap().as_str().unwrap()`.
-     Make the helper `pub(super)` or `pub(crate)` so the sibling test file can call it.
+   No third test is needed for the `source` spelling: Task 1 makes `as_str()` the single
+     definition serde serializes through, so `field_name_source_serializes_lowercase` already
+     pins the table cell too.
 5. Run `make test-one T=write_field_names` bare. Expect both tests green.
 6. `git add -A && git commit -m "feat(field): render the accepted field-name listing"`.
 
@@ -963,6 +990,15 @@ derives `Default`).
 
 5. Confirm the `field-name` entry added to the "Available schemas" paragraph in Task 1 is
    present and in the right place.
+5a. **Retitle the `field` group section.** `docs/bzr-cli.md:1554` reads
+   ``## `bzr field` -- Field Value Lookup``, and the table of contents links it at `:15` as
+   `- [field](#bzr-field----field-value-lookup)`. After this change the section documents name
+   enumeration as well as value lookup, so the title names the thing it is not. Change the
+   heading to ``## `bzr field` -- Field Name and Value Lookup`` and the TOC entry to
+   `- [field](#bzr-field----field-name-and-value-lookup)`. Then confirm no other link breaks:
+   `rg -n 'field-value-lookup' docs/ agent-skills/ content` must return nothing — at the time
+   of writing `docs/bzr-cli.md:15` is the only reference, so these two edits are the whole of
+   it.
 6. **Rewrite the stale `--field` discovery paragraph.** `docs/bzr-cli.md` lines 1108–1116
    currently read:
 

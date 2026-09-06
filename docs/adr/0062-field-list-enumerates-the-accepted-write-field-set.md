@@ -119,9 +119,14 @@ Adding a result type is additive under ADR 0007, so `SCHEMA_VERSION` goes 3.0.2 
 
 - **List only the server's catalogue names.** verified: `validate_bug_fields`
   (`src/commands/runtime/shared/field_catalogue.rs`) returns `Ok(())` for any key
-  satisfying `is_bzr_known_bug_field` before it ever probes, so the five REST names ADR
-  0053 names would be accepted while absent from the listing — a direct breach of the
-  issue's second acceptance criterion.
+  satisfying `is_bzr_known_bug_field` before it ever probes, so all 28 `BUG_FIELDS` names —
+  including the five REST spellings ADR 0053 names — would be accepted while absent from the
+  listing. This is not automatically a criterion-2 breach: the criterion permits
+  accepted-but-unlisted names *if the relationship is documented*, and a prose paragraph
+  would satisfy it as worded. judgment: it fails the issue's own delegated open question 1,
+  which states that showing one name set is "a repeat of the asymmetry this issue is about",
+  and it would leave the user's practical answer to "what can I name here" a paragraph rather
+  than a listing.
 - **List only `BUG_FIELDS`.** verified: the same function rejects nothing the catalogue
   declares, and the containers under `tests/functional/` declare internal column names
   that appear in no `BUG_FIELDS` entry — `tests/functional/phases/05-fields-classifications.sh`
