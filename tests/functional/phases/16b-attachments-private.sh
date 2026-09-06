@@ -6,11 +6,19 @@
 # ══════════════════════════════════════════════════════════════════════
 # Phase 15b: Private attachment visibility (#133 hybrid fallback)
 # ══════════════════════════════════════════════════════════════════════
-# Mirrors the issue reporter's deployment: REST silently filters private
-# attachments under non-admin scope, while XML-RPC Bug.attachments returns
-# the full set. The fixture entrypoints already configure insidergroup
-# (for #125), which is also the precondition for private attachments.
-echo "── Phase 15b: Private attachments (Hybrid mode) ──────────────"
+# The fixture entrypoints already configure insidergroup (for #125),
+# which is also the precondition for private attachments existing here.
+#
+# Every dispatch mode is covered, REST included: ADR-0059 measured REST
+# as returning private attachments on Bugzilla 5.0.6, 5.2 and 5.3.3+
+# whenever the server honoured the credential. The REST arms pass only
+# because 01-config.sh pins the shared `test` server to
+# --auth-method query_param; under the header auth bzr selects on
+# Bugzilla 5.2 they would return the public subset (issue #713).
+#
+# The REST arm additionally omits the `data` field by design
+# (exclude_fields); these assertions check entry visibility, not bodies.
+echo "── Phase 15b: Private attachments (all dispatch modes) ───────"
 
 test_begin "attachment-upload-private" "attachment upload --private"
 if [[ -n "$BUG1" ]]; then
@@ -38,6 +46,26 @@ else test_skip "no BUG1"; fi
 test_begin "attachment-list-returns-private-attachment-in-xml-rpc-mode" "attachment list returns private attachment in XML-RPC mode"
 if [[ -n "$BUG1" ]]; then
     run_bzr --api xmlrpc attachment list "$BUG1"
+    if assert_success &&
+        assert_json_array_min_length '.' 3 &&
+        assert_json_array_min_length '[.[] | select(.is_private == true)]' 1; then
+        test_pass
+    fi
+else test_skip "no BUG1"; fi
+
+test_begin "attachment-list-returns-private-attachment-in-default-mode" "attachment list returns private attachment in default mode"
+if [[ -n "$BUG1" ]]; then
+    run_bzr attachment list "$BUG1"
+    if assert_success &&
+        assert_json_array_min_length '.' 3 &&
+        assert_json_array_min_length '[.[] | select(.is_private == true)]' 1; then
+        test_pass
+    fi
+else test_skip "no BUG1"; fi
+
+test_begin "attachment-list-returns-private-attachment-in-rest-mode" "attachment list returns private attachment in REST mode"
+if [[ -n "$BUG1" ]]; then
+    run_bzr --api rest attachment list "$BUG1"
     if assert_success &&
         assert_json_array_min_length '.' 3 &&
         assert_json_array_min_length '[.[] | select(.is_private == true)]' 1; then
