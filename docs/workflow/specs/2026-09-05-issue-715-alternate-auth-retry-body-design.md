@@ -204,7 +204,7 @@ different 401 from the second.
   Expect `Api { code: 410 }` and the original's message. The two bodies must
   differ: with identical bodies both branches build the identical error and the
   test discriminates nothing.
-- `permissive_bug_view_suppresses_a_relayed_per_resource_refusal` — first
+- `relayed_per_resource_refusal_makes_permissive_view_exit_zero_not_four` — first
   attempt 401 code 410, retry 401 code 102, through `bug view --permissive`.
   Expect the batch to complete with the bug listed as failed, pinning R9.
 - `auth_fallback_keeps_the_original_401_when_the_retry_carries_no_envelope` —
