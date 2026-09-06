@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used, clippy::expect_used)]
 
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -294,4 +294,162 @@ async fn server_extensions_returns_map() {
     let ext = client.server_extensions().await.unwrap();
     assert_eq!(ext.extensions.len(), 2);
     assert!(ext.extensions.contains_key("BmpConvert"));
+}
+
+// ── Extensions probe transport (ADR-0052, amended 2026-09-06) ──────────
+//
+// Each case mounts BOTH surfaces with explicit counts, so "the probe went to
+// the other transport" and "no probe was issued" both fail rather than passing
+// silently. The advertised XML-RPC body is the shape a Red Hat server sends.
+
+const XMLRPC_ADVERTISED: &str = concat!(
+    r#"<?xml version="1.0"?><methodResponse><params><param><value><struct>"#,
+    r"<member><name>extensions</name><value><struct>",
+    r"<member><name>RedHat</name><value><struct>",
+    r"<member><name>version</name><value><string>1.0</string></value></member>",
+    r"</struct></value></member>",
+    r"</struct></value></member>",
+    r"</struct></value></param></params></methodResponse>",
+);
+
+/// The body a real Bugzilla returns for an absent REST endpoint — verified
+/// against 5.0.6 and 5.3.3+. It classifies as `BzrError::Api`, which
+/// `is_transport_failure()` does NOT match; this is the shape that makes the
+/// Hybrid fallback unconditional rather than predicate-guarded.
+fn bugzilla_error_envelope() -> serde_json::Value {
+    serde_json::json!({
+        "error": true,
+        "code": 32614,
+        "message": "A REST API resource was not found for 'GET /extensions'."
+    })
+}
+
+async fn mount_rest_extensions(mock: &MockServer, response: ResponseTemplate, expect: u64) {
+    Mock::given(method("GET"))
+        .and(path("/rest/extensions"))
+        .respond_with(response)
+        .expect(expect)
+        .mount(mock)
+        .await;
+}
+
+async fn mount_xmlrpc_extensions(mock: &MockServer, response: ResponseTemplate, expect: u64) {
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(response)
+        .expect(expect)
+        .mount(mock)
+        .await;
+}
+
+fn rest_advertised() -> ResponseTemplate {
+    ResponseTemplate::new(200)
+        .set_body_json(serde_json::json!({"extensions": {"RedHat": {"version": "1.0"}}}))
+}
+
+fn xmlrpc_advertised() -> ResponseTemplate {
+    ResponseTemplate::new(200).set_body_string(XMLRPC_ADVERTISED)
+}
+
+#[tokio::test]
+async fn server_extensions_uses_xmlrpc_under_xmlrpc_mode() {
+    let mock = MockServer::start().await;
+    mount_rest_extensions(&mock, rest_advertised(), 0).await;
+    mount_xmlrpc_extensions(&mock, xmlrpc_advertised(), 1).await;
+
+    let ext = crate::client::test_helpers::test_client_xmlrpc(&mock.uri())
+        .server_extensions()
+        .await
+        .unwrap();
+
+    assert!(ext.extensions.contains_key("RedHat"));
+}
+
+#[tokio::test]
+async fn server_extensions_uses_rest_under_rest_mode() {
+    let mock = MockServer::start().await;
+    mount_rest_extensions(&mock, rest_advertised(), 1).await;
+    mount_xmlrpc_extensions(&mock, xmlrpc_advertised(), 0).await;
+
+    let ext = test_client(&mock.uri()).server_extensions().await.unwrap();
+
+    assert!(ext.extensions.contains_key("RedHat"));
+}
+
+#[tokio::test]
+async fn server_extensions_hybrid_prefers_rest() {
+    let mock = MockServer::start().await;
+    mount_rest_extensions(&mock, rest_advertised(), 1).await;
+    mount_xmlrpc_extensions(&mock, xmlrpc_advertised(), 0).await;
+
+    let ext = crate::client::test_helpers::test_client_hybrid(&mock.uri())
+        .server_extensions()
+        .await
+        .unwrap();
+
+    assert!(ext.extensions.contains_key("RedHat"));
+}
+
+/// The case that bites. A guard of `Err(e) if e.is_transport_failure()` does
+/// NOT fire here, because the envelope classifies as `BzrError::Api` — so this
+/// is the test that distinguishes the unconditional fallback from a predicate.
+#[tokio::test]
+async fn server_extensions_hybrid_falls_back_on_bugzilla_error_envelope() {
+    let mock = MockServer::start().await;
+    mount_rest_extensions(
+        &mock,
+        ResponseTemplate::new(404).set_body_json(bugzilla_error_envelope()),
+        1,
+    )
+    .await;
+    mount_xmlrpc_extensions(&mock, xmlrpc_advertised(), 1).await;
+
+    let ext = crate::client::test_helpers::test_client_hybrid(&mock.uri())
+        .server_extensions()
+        .await
+        .expect("an enveloped REST failure must fall back to XML-RPC");
+
+    assert!(ext.extensions.contains_key("RedHat"));
+}
+
+/// The shape that passes under either rule, kept so the two together *prove*
+/// the fallback is unconditional rather than assume it.
+#[tokio::test]
+async fn server_extensions_hybrid_falls_back_on_bodyless_failure() {
+    let mock = MockServer::start().await;
+    mount_rest_extensions(&mock, ResponseTemplate::new(503), 1).await;
+    mount_xmlrpc_extensions(&mock, xmlrpc_advertised(), 1).await;
+
+    let ext = crate::client::test_helpers::test_client_hybrid(&mock.uri())
+        .server_extensions()
+        .await
+        .expect("a bodyless REST failure must fall back to XML-RPC");
+
+    assert!(ext.extensions.contains_key("RedHat"));
+}
+
+/// Both failing must stay an error: an empty list here would render as a
+/// settled *absent* instead of *undetermined*, which is the one fail-open this
+/// arm could introduce. The message names both attempts, because the `info`
+/// warn-level trace of the REST failure is a trace event, and a `--json`
+/// consumer reads the error body rather than the trace.
+#[tokio::test]
+async fn server_extensions_hybrid_both_transports_failing_is_an_error() {
+    let mock = MockServer::start().await;
+    mount_rest_extensions(
+        &mock,
+        ResponseTemplate::new(404).set_body_json(bugzilla_error_envelope()),
+        1,
+    )
+    .await;
+    mount_xmlrpc_extensions(&mock, ResponseTemplate::new(500), 1).await;
+
+    let err = crate::client::test_helpers::test_client_hybrid(&mock.uri())
+        .server_extensions()
+        .await
+        .expect_err("both transports failing must not yield an empty list");
+
+    let message = err.to_string();
+    assert!(message.contains("REST"), "{message}");
+    assert!(message.contains("XML-RPC"), "{message}");
 }

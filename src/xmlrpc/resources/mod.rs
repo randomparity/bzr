@@ -6,4 +6,5 @@ mod bug_adjacency;
 mod comment;
 mod group;
 mod mappers;
+mod server;
 mod user;

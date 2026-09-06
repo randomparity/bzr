@@ -6,7 +6,7 @@
 //! bzr therefore establishes support before dispatching and refuses otherwise.
 //!
 //! The capability is read from the per-server detection state in config,
-//! probed through `GET /rest/extensions` on a cache miss, and written back —
+//! probed over the transport in use on a cache miss, and written back —
 //! the same shape as the auth-method / API-mode / server-version state that
 //! `connection::detect` already persists.
 
@@ -259,7 +259,7 @@ fn unsupported(subject: &Subject<'_>, cacheable: bool) -> BzrError {
         operation: operation.to_string(),
         detail: format!(
             "server {server} does not implement the Bugzilla '{capability}' \
-             extension (not advertised at /rest/extensions). Stock Bugzilla \
+             extension (not advertised in the server's extension list). Stock Bugzilla \
              accepts this parameter and ignores it, so bzr refuses rather than \
              returning an unfiltered result; use `bzr bug list` filters, or \
              `bzr query` for a saved query stored locally.{cache_note}"
@@ -279,10 +279,9 @@ fn undetermined(subject: &Subject<'_>, error: &BzrError) -> BzrError {
         operation: operation.to_string(),
         detail: format!(
             "could not determine whether server {server} implements the Bugzilla \
-             '{capability}' extension: reading /rest/extensions failed ({error}). \
-             The probe needs the server's REST surface even when --api xmlrpc is \
-             in use. This is not evidence the extension is absent; retry, or \
-             check that REST is reachable"
+             '{capability}' extension: reading the server's extension list failed \
+             ({error}). This is not evidence the extension is absent; retry, or \
+             check that the server is reachable over the API mode in use"
         ),
     }
 }

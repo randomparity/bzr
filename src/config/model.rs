@@ -38,7 +38,7 @@ pub struct ServerConfig {
     pub api_mode: Option<ApiMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub server_version: Option<String>,
-    /// Bugzilla extension names advertised at `/rest/extensions`, sorted.
+    /// Bugzilla extension names the server advertises, sorted.
     ///
     /// Detection state like `auth_method`/`api_mode`/`server_version`: cached
     /// so a vendor-extension capability check (ADR-0052) costs one probe per
