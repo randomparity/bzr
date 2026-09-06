@@ -13,7 +13,7 @@ pub(super) use crate::commands::runtime::mutation::ensure_batch_complete;
 pub(super) use draft::BugUpdateDraft;
 pub(super) use execute::{
     apply_checked, apply_checked_connected, apply_comment_tags, confirm_batch,
-    ensure_unchanged_since, ApplyRequest,
+    ensure_unchanged_since, warn_comment_tags_failed, ApplyRequest,
 };
 pub(super) use output::write_batch_result;
 use payload::build_update_params;
