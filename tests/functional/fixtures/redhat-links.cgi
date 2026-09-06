@@ -10,13 +10,6 @@ if ($path eq '/rest/version') {
     exit 0;
 }
 
-if ($path ne '/rest/bug') {
-    print '{"error":true,"message":"unknown fixture endpoint"}';
-    exit 0;
-}
-
-my %requested = map { $_ => 1 }
-    (($ENV{QUERY_STRING} // '') =~ /(?:^|&)id=(\d+)/g);
 my %bugs = (
     998 => '{"id":998,"summary":"Red Hat duplicate root","status":"CLOSED",'
         . '"duplicates":[{"bug_id":1117050,"summary":"vendor object"}]}',
@@ -25,5 +18,27 @@ my %bugs = (
     1200000 => '{"id":1200000,"summary":"Red Hat duplicate leaf","status":"CLOSED",'
         . '"duplicates":[]}',
 );
+
+# `bug links` reads its root id on the direct endpoint, which faults on a bug
+# the caller cannot see, and batches the related ids through the search
+# endpoint below, where an omission is skippable (issue #719).
+if ($path =~ m{^/rest/bug/(\d+)$}) {
+    my $id = $1;
+    if (exists $bugs{$id}) {
+        print '{"bugs":[' . $bugs{$id} . ']}';
+    }
+    else {
+        print '{"error":true,"code":101,"message":"Bug #' . $id . ' does not exist."}';
+    }
+    exit 0;
+}
+
+if ($path ne '/rest/bug') {
+    print '{"error":true,"message":"unknown fixture endpoint"}';
+    exit 0;
+}
+
+my %requested = map { $_ => 1 }
+    (($ENV{QUERY_STRING} // '') =~ /(?:^|&)id=(\d+)/g);
 my @matches = map { $bugs{$_} } grep { $requested{$_} } sort { $a <=> $b } keys %bugs;
 print '{"bugs":[' . join(',', @matches) . ']}';
