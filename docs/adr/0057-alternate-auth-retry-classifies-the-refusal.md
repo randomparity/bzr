@@ -33,7 +33,8 @@ body of the first attempt, on a request the server had authenticated.
 
 ADR 0015 settles the same principle — a server error is surfaced whenever it is
 the only thing the server told us — but its Decision items bind
-`has_data_fields` and the 100500 search fallback in
+`has_data_fields`, which governs the HTTP-200 error path in
+`src/client/response.rs`, and the 100500 search fallback in
 `src/client/resources/bug.rs`. Neither reaches `src/client/transport.rs`, and
 neither answers the question this path actually raises: when the original
 response and the retry disagree, which one does the user see?
@@ -88,9 +89,19 @@ Concretely:
   `check_response_status` as a response. It travels as the `BzrError` that
   function would have produced, from a helper both paths now share
   (`error_from_status_body`). One construction site, so the two cannot drift.
-- The relayed body reaches the user through the same redaction the ordinary
-  error path uses. Nothing new is logged: the debug line that prints a redacted
-  body preview moves into the shared helper and is emitted once per error.
+- The retried body, previously discarded unread, now reaches the debug log as a
+  redacted preview and the user as an error message. The *number* of preview
+  lines per error is unchanged — the existing line moves into the shared helper
+  — but the *content* is new, and it is server-controlled. Both destinations are
+  already governed: the log line applies
+  `crate::bugzilla_auth::redact_api_key` over a `BODY_PREVIEW_MAX_BYTES` prefix,
+  and `BzrError`'s own `Display` applies the same redaction to `Api.message` and
+  `HttpStatus.body` (`src/error.rs:16`, `:37`). No new control is needed; what is
+  new is that these controls now carry a body they previously never saw.
+- `ErrorResponse` — the deserialization struct the ADR-0015-governed HTTP-200
+  error path also reads — is not changed. `bugzilla_error_code` reuses it and
+  treats its existing "no `code`" sentinel as "no signal", so the 200-error path
+  keeps its behaviour without a second struct or a shared type change.
 - **bzr becomes an existence oracle to the extent the server already is**, on
   the same terms ADR 0015 accepted deliberately. A relayed 120 tells the caller
   the group exists and the product does not allow it; that disclosure is
