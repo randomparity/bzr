@@ -1359,6 +1359,21 @@ class ShapeTests(unittest.TestCase):
             json.loads(body)["extensions"]["RedHat"], {"version": "1.0"}
         )
 
+    def test_unshapeable_body_is_forwarded_unfiltered(self):
+        """A body whose `bugs` the fixture cannot shape is passed through untouched.
+
+        Failing open here is deliberate: the lifecycle row asserts the filtered
+        call equals the seeded subset, so an unfiltered pass-through reddens the
+        row rather than resolving to a plausible-looking empty set.
+        """
+        fixture = ("owned-search", {1}, "")
+        for body in (b'{"bugs":null}', b'{"bugs":{"1":{}}}', b'{"error":true}'):
+            shaped, evidence = shape_saved_search_response(
+                "/rest/bug?savedsearch=owned-search", body, fixture
+            )
+            self.assertEqual(shaped, body)
+            self.assertEqual(evidence, {})
+
     def test_mode_gates_the_saved_search_hook(self):
         path = "/rest/bug?savedsearch=owned-search"
         self.assertEqual(self._saved_search_round_trip(path), [1])

@@ -47,7 +47,7 @@ instructions only.
 
 | File | Change | Answerable for |
 |---|---|---|
-| `tests/functional/redhat-shape-proxy.py` | modify | the `saved-search` mode and its seven `ShapeTests` cases |
+| `tests/functional/redhat-shape-proxy.py` | modify | the `saved-search` mode and its eight `ShapeTests` cases |
 | `tests/functional/run-compare.sh` | modify | `seed_server_saved_search` seeding a one-bug named query |
 | `tests/functional/compare/01-bug-lifecycle.sh` | modify | the row's assertions, the new id helper, the proxied-call wrapper |
 | `tests/functional/pybz/container-tests.sh` | modify | proxy stubs, three failure controls, the seeder fixture, count and row updates |
@@ -63,7 +63,7 @@ PASS→FAIL) `:209`, `redhat_shape_start`/`redhat_shape_stop` setting `REDHAT_SH
 `lifecycle_bzr` `:98`, `lifecycle_bzr_refusal_gap` `:113`, `lifecycle_expect_gap` `:162`,
 `lifecycle_pybz` `:171`, `lifecycle_ids_are` `:208`, `lifecycle_transport_is` `:228`. In
 `container-tests.sh`: `PYBZ_DIR` `:7`, `assert_equals <expected> <actual> <label>` `:11`,
-`run_lifecycle_failure_control <flag> <capability> <label> [value]` `:371`,
+`run_lifecycle_failure_control <flag> <capability> <label> [value] [reason]` `:371`,
 `run_gap_ineligible_control` `:406`, counts 7/0/3 `:831-833`, `stale gap fail count` 3 `:979`,
 parity fixture row `:1001`, and `grep -Fxc "$row"` `:1038`.
 
@@ -82,7 +82,7 @@ line 21 but **not** `import unittest.mock`, and `import unittest` alone does not
 
 ### Verification
 
-Seven contracts, one `ShapeTests` case each, all `Mode: focused-test`, all green under
+Eight contracts, one `ShapeTests` case each, all `Mode: focused-test`, all green under
 `python3 tests/functional/redhat-shape-proxy.py --self-test`. Step 1.8 names each case after
 its contract and carries its code; the expected red for each is that case's assertion failing
 on an unfiltered `[1, 2, 3]` body.
@@ -90,7 +90,7 @@ on an unfiltered `[1, 2, 3]` body.
 `test_mode_gates_the_saved_search_hook` is the one that matters most: it is the only case
 going through `apply_rewrite_hooks` **and** `make_handler`, so it covers Steps 1.6 and 1.7
 rather than the transformer alone. Verified by construction — Steps 1.1–1.8 on a scratch copy
-give `Ran 51 tests ... OK`; deleting only Step 1.7's two edits, or only Step 1.6's registry
+give `Ran 52 tests ... OK`; deleting only Step 1.7's two edits, or only Step 1.6's registry
 line, gives `FAILED (failures=1)` with `AssertionError: Lists differ: [1, 2, 3] != [1]`.
 Re-run all three checks if you change the case.
 
@@ -314,6 +314,21 @@ existing `_start_server` staticmethod:
             json.loads(body)["extensions"]["RedHat"], {"version": "1.0"}
         )
 
+    def test_unshapeable_body_is_forwarded_unfiltered(self):
+        """A body whose `bugs` the fixture cannot shape is passed through untouched.
+
+        Failing open here is deliberate: the lifecycle row asserts the filtered
+        call equals the seeded subset, so an unfiltered pass-through reddens the
+        row rather than resolving to a plausible-looking empty set.
+        """
+        fixture = ("owned-search", {1}, "")
+        for body in (b'{"bugs":null}', b'{"bugs":{"1":{}}}', b'{"error":true}'):
+            shaped, evidence = shape_saved_search_response(
+                "/rest/bug?savedsearch=owned-search", body, fixture
+            )
+            self.assertEqual(shaped, body)
+            self.assertEqual(evidence, {})
+
     def test_mode_gates_the_saved_search_hook(self):
         path = "/rest/bug?savedsearch=owned-search"
         self.assertEqual(self._saved_search_round_trip(path), [1])
@@ -326,9 +341,9 @@ existing `_start_server` staticmethod:
 python3 tests/functional/redhat-shape-proxy.py --self-test
 ```
 
-Expect `Ran 51 tests` and `OK` — 44 existing plus 7.
+Expect `Ran 52 tests` and `OK` — 44 existing plus 8.
 
-**Acceptance criteria.** 51 tests pass. Deleting either Step 1.6 or Step 1.7 reddens
+**Acceptance criteria.** 52 tests pass. Deleting either Step 1.6 or Step 1.7 reddens
 `test_mode_gates_the_saved_search_hook`.
 
 ## Task 2 — seed a strict subset
@@ -433,15 +448,31 @@ Nothing else sets `LIFECYCLE_BZR_URL`, so every existing caller is unaffected.
 # database. Both need containment instead.
 lifecycle_ids_contain() {
     local source="$1" expected="$2"
+    local status
 
     if ! jq -e 'type == "array" and all(.[]; .id | type == "number")' \
         "$source" >/dev/null; then
         test_fail "ID evidence had an invalid structure"
         return 1
     fi
+    # `all` over an empty generator is vacuously true, so an empty expectation
+    # would make this assertion pass against any source at all -- the same
+    # cannot-fail shape this row exists to remove. Reject it structurally
+    # rather than relying on the caller's guards. A malformed expectation makes
+    # --argjson exit non-zero and lands here too.
+    if ! jq -ne --argjson expected "$expected" \
+        '$expected | type == "array" and length > 0' >/dev/null 2>&1; then
+        test_fail "ID expectation was empty or malformed"
+        return 1
+    fi
     jq -e --argjson expected "$expected" \
         '[.[].id] as $ids | all($expected[]; . as $id | $ids | index($id) != null)' \
         "$source" >/dev/null
+    status=$?
+    if [[ $status -gt 1 ]]; then
+        test_fail "could not validate ID containment"
+    fi
+    return "$status"
 }
 ```
 
@@ -697,11 +728,8 @@ All three fail in the precondition chain, so the outcome is an outright FAIL —
     # only proves the row went FAIL, and all three would match that on the generic
     # reason, so pair each with the distinct reason Step 3.4 gives its assertion.
     while IFS='|' read -r control reason <&3; do
-        if ! run_lifecycle_failure_control "$control" saved-search 'server saved search'; then
-            control_failures=$((control_failures + 1))
-        elif ! grep -Fq "$reason" "$fixture_output"; then
-            printf '%s did not redden through its own assertion (%s)\n' \
-                "$control" "$reason" >&2
+        if ! run_lifecycle_failure_control "$control" saved-search 'server saved search' \
+            1 "$reason"; then
             control_failures=$((control_failures + 1))
         fi
     done 3<<'CONTROLS'
@@ -711,8 +739,11 @@ LIFECYCLE_SAVED_SEARCH_PYBZ_FILTERED|python-bugzilla saved-search result was fil
 CONTROLS
 ```
 
-`run_lifecycle_failure_control` writes the phase output to `$fixture_output` and leaves it in
-place, so the `grep` reads the run that control just produced. A quoted heredoc keeps the
+The reason is `run_lifecycle_failure_control`'s optional **fifth** argument, after `value`.
+It belongs inside that function rather than in this loop, because the function prints
+`controlled red:` as its last act — checking attribution afterwards would put that line on
+stdout for a row that reddened elsewhere, the same looks-greener-than-it-is failure this row
+exists to remove. Existing three-argument callers are unaffected. A quoted heredoc keeps the
 reasons literal, and `IFS='|' read` is Bash 3.2-safe.
 
 The **descriptor 3** is load-bearing, not style. The loop body calls
@@ -810,8 +841,10 @@ foreground timeout). Expect `FAILED: 0` for `bz50`, `bz52` and `bz53`, and
 vacuous oracle; a green row alone does not say the control exceeded the filtered result. The
 exchange directory is removed on exit, so the in-run assertions are the evidence.
 
-**Step 6.4.** Run `make lint` and `make test` bare. Neither reaches this change; they run
-because the branch must not regress them.
+**Step 6.4.** Run `make lint` and `make test` bare. `make test` reaches none of this, but
+`make lint` does reach the two shell files through `check-shell` and
+`check-functional-test-ids` — so it is a real gate here, not just a regression guard.
+Nothing lints `redhat-shape-proxy.py`.
 
 **Acceptance criteria.** All three green.
 

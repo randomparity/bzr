@@ -85,7 +85,9 @@ than a neighbour that short-circuits ahead of it.
 | The control really does exceed the subset on seeded data | `make functional-compare-all` | yes |
 | Row green on all three images | `make functional-compare-all` | yes |
 
-`make lint` and `make test` reach none of this; `make functional-compare-all` is the gate.
+`make test` reaches none of this. `make lint` does reach the two shell files, via
+`check-shell` (shellcheck, `bash -n`) and `check-functional-test-ids`; nothing lints
+`redhat-shape-proxy.py`. `make functional-compare-all` is the gate for the behaviour.
 
 ## What this does not prove
 

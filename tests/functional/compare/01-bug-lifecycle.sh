@@ -250,15 +250,31 @@ lifecycle_ids_are() {
 # database. Both need containment instead.
 lifecycle_ids_contain() {
     local source="$1" expected="$2"
+    local status
 
     if ! jq -e 'type == "array" and all(.[]; .id | type == "number")' \
         "$source" >/dev/null; then
         test_fail "ID evidence had an invalid structure"
         return 1
     fi
+    # `all` over an empty generator is vacuously true, so an empty expectation
+    # would make this assertion pass against any source at all -- the same
+    # cannot-fail shape this row exists to remove. Reject it structurally
+    # rather than relying on the caller's guards. A malformed expectation makes
+    # --argjson exit non-zero and lands here too.
+    if ! jq -ne --argjson expected "$expected" \
+        '$expected | type == "array" and length > 0' >/dev/null 2>&1; then
+        test_fail "ID expectation was empty or malformed"
+        return 1
+    fi
     jq -e --argjson expected "$expected" \
         '[.[].id] as $ids | all($expected[]; . as $id | $ids | index($id) != null)' \
         "$source" >/dev/null
+    status=$?
+    if [[ $status -gt 1 ]]; then
+        test_fail "could not validate ID containment"
+    fi
+    return "$status"
 }
 
 lifecycle_transport_is() {

@@ -411,8 +411,11 @@ run_lifecycle_phase_fixture() (
         LIFECYCLE_GENERIC_BZR_UPDATED=0
         : >"$LIFECYCLE_BZR_ARGS"
     }
+    # `reason`, when given, is the assertion-specific test_fail text this control
+    # must redden through. Checked before the success line is printed, so
+    # "controlled red" is never emitted for a row that reddened somewhere else.
     run_lifecycle_failure_control() {
-        local flag="$1" capability="$2" label="$3" value="${4:-1}"
+        local flag="$1" capability="$2" label="$3" value="${4:-1}" reason="${5:-}"
 
         reset_lifecycle_fixture
         printf -v "$flag" %s "$value"
@@ -424,6 +427,11 @@ run_lifecycle_phase_fixture() (
             ! grep -Fq "[compare/01-bug-lifecycle/${capability}] ${label} ... FAIL" \
                 "$fixture_output"; then
             printf '%s control %s unexpectedly passed\n' "$capability" "$flag" >&2
+            return 1
+        fi
+        if [[ -n $reason ]] && ! grep -Fq "$reason" "$fixture_output"; then
+            printf '%s did not redden through its own assertion (%s)\n' \
+                "$flag" "$reason" >&2
             return 1
         fi
         printf 'controlled red: %s %s=%s\n' "$capability" "$flag" "$value"
@@ -985,11 +993,8 @@ run_lifecycle_phase_fixture() (
     # Descriptor 3: the loop body sources the phase, which would otherwise inherit
     # this heredoc on stdin and could silently eat control lines.
     while IFS='|' read -r control reason <&3; do
-        if ! run_lifecycle_failure_control "$control" saved-search 'server saved search'; then
-            control_failures=$((control_failures + 1))
-        elif ! grep -Fq "$reason" "$fixture_output"; then
-            printf '%s did not redden through its own assertion (%s)\n' \
-                "$control" "$reason" >&2
+        if ! run_lifecycle_failure_control "$control" saved-search 'server saved search' \
+            1 "$reason"; then
             control_failures=$((control_failures + 1))
         fi
     done 3<<'CONTROLS'
