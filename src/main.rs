@@ -26,8 +26,15 @@ async fn main() -> ExitCode {
             None => EnvFilter::from_default_env(),
         };
 
+    let stderr_ansi = tracing_ansi_enabled(
+        cli.no_color,
+        std::env::var_os("NO_COLOR").as_deref(),
+        std::io::stderr().is_terminal(),
+    );
+
     tracing_subscriber::fmt()
         .with_env_filter(filter)
+        .with_ansi(stderr_ansi)
         .with_writer(std::io::stderr)
         .init();
 
@@ -141,6 +148,27 @@ fn tracing_filter_directive(quiet: bool, verbose: u8, rust_log_set: bool) -> Opt
         2 => "bzr=debug",
         _ => "bzr=trace",
     })
+}
+
+/// Decide whether the tracing subscriber may write ANSI escapes to stderr.
+///
+/// `tracing_subscriber::fmt` defaults ANSI on unless `NO_COLOR` holds a
+/// non-empty value, and performs no terminal detection at all. An explicit
+/// `with_ansi` call replaces that default outright, so this helper has to
+/// re-apply the `NO_COLOR` rule rather than inherit it.
+///
+/// The stdout `colored` path (see `main`) is decided separately from stdout's
+/// own terminal status, and treats *any* present `NO_COLOR` as off; the two
+/// streams therefore disagree on an empty value. See ADR 0058.
+fn tracing_ansi_enabled(
+    no_color_flag: bool,
+    no_color_env: Option<&std::ffi::OsStr>,
+    stderr_is_terminal: bool,
+) -> bool {
+    if no_color_flag || !stderr_is_terminal {
+        return false;
+    }
+    no_color_env.is_none_or(std::ffi::OsStr::is_empty)
 }
 
 /// Redirect stdout to the platform null device for --quiet mode.
