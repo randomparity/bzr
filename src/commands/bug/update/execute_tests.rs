@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used, clippy::expect_used)]
 //! Direct tests for the `bug update` execution entry points
 //! ([`super::apply_checked`], [`super::apply_checked_connected`]): dry-run
 //! short-circuits and the `--expect-unchanged-since` guard running before any
@@ -450,4 +450,151 @@ fn warn_if_minor_update_unsupported_silent_for_inline_server() {
         "",
         "an inline connection has no relevant cached version to check"
     );
+}
+
+async fn mock_field_catalogue(mock: &wiremock::MockServer, names: &[&str]) {
+    let fields: Vec<serde_json::Value> = names
+        .iter()
+        .map(|n| serde_json::json!({"name": n}))
+        .collect();
+    Mock::given(method("GET"))
+        .and(path("/rest/field/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "fields": fields
+        })))
+        .mount(mock)
+        .await;
+}
+
+fn params_with_extra(key: &str, value: &str) -> UpdateBugParams {
+    UpdateBugParams {
+        extra_fields: [(key.to_string(), serde_json::json!(value))]
+            .into_iter()
+            .collect(),
+        ..Default::default()
+    }
+}
+
+/// The defect this feature exists to prevent: Bugzilla answers 200 to a key it
+/// does not recognise, having changed nothing. bzr must refuse locally, and the
+/// refusal has to land before the PUT — a check that ran after the write would
+/// still report exit 7 while the request had already gone out.
+#[tokio::test]
+async fn apply_checked_connected_refuses_an_undeclared_field_before_any_write() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_field_catalogue(&mock, &["whiteboard"]).await;
+    forbid_put(&mock).await;
+    let client = crate::client::test_helpers::test_client(&mock.uri());
+    let request = ApplyRequest {
+        ids: vec![42],
+        params: params_with_extra("cf_relase", "9.6"),
+        expect_unchanged_since: None,
+    };
+    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let mut io = CapturedIo::new();
+
+    let err = apply_checked_connected(&client, request, &ctx, &mut io.writers())
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.exit_code(), 7, "got {err:?}");
+    assert!(err.to_string().contains("cf_relase"), "{err}");
+    assert_eq!(received_put_count(&mock).await, 0);
+}
+
+#[tokio::test]
+async fn apply_checked_connected_sends_a_declared_extra_field() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mock_field_catalogue(&mock, &["whiteboard", "cf_release"]).await;
+    mock_put_bug_ok(&mock, 42).await;
+    let client = crate::client::test_helpers::test_client(&mock.uri());
+    let request = ApplyRequest {
+        ids: vec![42],
+        params: params_with_extra("cf_release", "9.6"),
+        expect_unchanged_since: None,
+    };
+    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let mut io = CapturedIo::new();
+
+    apply_checked_connected(&client, request, &ctx, &mut io.writers())
+        .await
+        .expect("a declared field is sent");
+
+    let puts: Vec<_> = mock
+        .received_requests()
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|r| r.method.as_str() == "PUT")
+        .collect();
+    assert_eq!(puts.len(), 1);
+    let body: serde_json::Value = serde_json::from_slice(&puts[0].body).unwrap();
+    assert_eq!(
+        body["cf_release"],
+        serde_json::json!("9.6"),
+        "the passthrough key must reach the wire flattened, not nested: {body}"
+    );
+}
+
+/// A failed catalogue probe is not an absent field: the write is refused, the
+/// message names the probe, and the exit code stays that of the transport
+/// failure so it is never confused with the exit-7 undeclared-field refusal.
+#[tokio::test]
+async fn apply_checked_connected_refuses_when_the_catalogue_probe_fails() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/field/bug"))
+        .respond_with(ResponseTemplate::new(503).set_body_string("upstream unavailable"))
+        .mount(&mock)
+        .await;
+    forbid_put(&mock).await;
+    let client = crate::client::test_helpers::test_client(&mock.uri());
+    let request = ApplyRequest {
+        ids: vec![42],
+        params: params_with_extra("cf_release", "9.6"),
+        expect_unchanged_since: None,
+    };
+    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let mut io = CapturedIo::new();
+
+    let err = apply_checked_connected(&client, request, &ctx, &mut io.writers())
+        .await
+        .unwrap_err();
+
+    assert_ne!(err.exit_code(), 7, "got {err:?}");
+    assert!(
+        err.to_string()
+            .contains("bug field catalogue was not retrieved"),
+        "{err}"
+    );
+    assert_eq!(received_put_count(&mock).await, 0);
+}
+
+/// No `--field` means no catalogue probe: the ordinary update path must not
+/// gain a round trip.
+#[tokio::test]
+async fn apply_checked_connected_without_extra_fields_never_probes_the_catalogue() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/field/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"fields": []})))
+        .expect(0)
+        .mount(&mock)
+        .await;
+    mock_put_bug_ok(&mock, 42).await;
+    let client = crate::client::test_helpers::test_client(&mock.uri());
+    let request = ApplyRequest {
+        ids: vec![42],
+        params: UpdateBugParams {
+            status: Some("ASSIGNED".into()),
+            ..Default::default()
+        },
+        expect_unchanged_since: None,
+    };
+    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let mut io = CapturedIo::new();
+
+    apply_checked_connected(&client, request, &ctx, &mut io.writers())
+        .await
+        .expect("plain update should write");
 }

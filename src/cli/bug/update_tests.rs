@@ -254,3 +254,37 @@ fn update_rejects_non_numeric_id() {
         ErrorKind::ValueValidation
     );
 }
+
+#[test]
+fn parse_update_field_is_repeatable_and_keeps_raw_pairs() {
+    let update = update_args(&[
+        "bzr",
+        "bug",
+        "update",
+        "42",
+        "--field",
+        "cf_release=9.7",
+        "--field",
+        "whiteboard=",
+    ]);
+    assert_eq!(
+        update.field,
+        vec!["cf_release=9.7".to_string(), "whiteboard=".to_string()],
+        "an empty value is the clear form and must survive parsing"
+    );
+    assert!(update.field_json.is_none());
+}
+
+#[test]
+fn parse_update_field_json_takes_a_path() {
+    let update = update_args(&["bzr", "bug", "update", "42", "--field-json", "fields.json"]);
+    assert_eq!(update.field_json.as_deref(), Some("fields.json"));
+}
+
+#[test]
+fn parse_update_field_requires_a_value() {
+    assert_eq!(
+        parse_error_kind(&["bzr", "bug", "update", "42", "--field"]),
+        ErrorKind::InvalidValue
+    );
+}
