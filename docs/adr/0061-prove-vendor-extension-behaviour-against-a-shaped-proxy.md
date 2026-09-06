@@ -52,16 +52,12 @@ $ for p in 52766 52531 52679; do \
 (bz50 5.0.6, bz52 5.2, bz53 5.3.3+.) So the advertisement can be a rewrite of a real
 response rather than a synthesized route.
 
-**A note for the next reader, because the issue is where they will start.** Issue #710's
-scope note is inaccurate in three ways, each verified against the tree: `saved-search`
-appears at **17** sites on 17 lines in `tests/functional/pybz/container-tests.sh`, not
-"roughly 19"; the stale-gaps loop is `for issue in 670 679 680`, not
-`670 671 672 679 680` — 671 and 672 were removed when those flags shipped; and the
-agreement between `docs/dev/python-bugzilla-parity.md` and the parity-report fixture is
-**partly guarded**, not unguarded — `run_parity_report_fixture` greps the document for each
-fixture literal with `grep -Fxc "$row"` requiring exactly one whole-line match
-(`container-tests.sh:1037`), run first by `Makefile:231`. Only the reverse direction, a
-document row with no fixture entry, is uncaught.
+Issue #710's scope note is wrong on three counts, recorded here because the issue is where
+the next reader starts: there are **17** `saved-search` sites, not "roughly 19"; the
+stale-gaps loop is `670 679 680` (671 and 672 went when those flags shipped); and the
+parity document/fixture agreement is **partly** guarded, by `grep -Fxc "$row"` in
+`run_parity_report_fixture` (`container-tests.sh:1038`) — only a document row with no
+fixture entry is uncaught.
 
 ## Decision
 

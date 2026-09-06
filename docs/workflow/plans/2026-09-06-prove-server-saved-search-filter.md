@@ -12,11 +12,11 @@ advertises the `RedHat` extension and resolves `savedsearch`/`sharer_id`.
 what the filtered call equals. `pybz/container-tests.sh` sources the real phase script against
 stubs, and is where the controls are proven without a container.
 
-Expected implementation size: 350–430 changed lines (M) — from the file map below: ~205 in
-the proxy (three transformers, hook, wiring, seven `ShapeTests` cases and two test helpers),
-~65 in the lifecycle phase, ~32 in `run-compare.sh`, ~81 in the self-test, 2 record lines. The
-range moved up from 330–410 because the two review remedies added real code — the
-`make_handler` round-trip helper and the seeder fixture — not to move any ratio.
+Expected implementation size: ≈384 changed lines (M). Not a guess: the proxy's **185** was
+measured by applying Steps 1.1–1.8 to a scratch copy and diffing; `run-compare.sh` (23),
+the lifecycle phase (49), the self-test (108) and the parity row (2) come from a mechanical
+application of Tasks 2–5 during review; this revision then adds ≈6 (per-assertion `test_fail`
+reasons), ≈7 (the reason-matched control loop) and ≈4 (the fidelity caveat).
 
 ADR 0061 is the single home for **why**; the spec states the shape. This file is build
 instructions only.
@@ -49,24 +49,21 @@ instructions only.
 | `tests/functional/run-compare.sh` | modify | `seed_server_saved_search` accepting a variable number of bug ids |
 | `tests/functional/compare/01-bug-lifecycle.sh` | modify | the row's assertions, the new id helper, the proxied-call wrapper |
 | `tests/functional/pybz/container-tests.sh` | modify | proxy stubs, three failure controls, the seeder fixture, count and row updates |
-| `docs/dev/python-bugzilla-parity.md` | modify | the `Server saved search` row text |
+| `docs/dev/python-bugzilla-parity.md` | modify | the `Server saved search` row text, and the fidelity caveat below the table |
 
-Existing names this plan borrows, each confirmed present with the assumed signature:
-
-- `_hook_matches(prefixes=(), *, method=None, mode=None)` — `redhat-shape-proxy.py:377`
-- `REWRITE_HOOKS` — `:460`; `apply_rewrite_hooks(method, path, body, enabled_modes)` — `:478`
-- `emit_rewrite_evidence` over `(marker, route, count)` — `:489`; `make_handler` — `:540`
-- `ShapeTests._start_server(backend_port)` (staticmethod, returns `(server, thread)`) — `:1178`
-- `redhat_shape_start <backend_port>` / `redhat_shape_stop`, setting `REDHAT_SHAPE_PORT` —
-  `lib.sh:1438`, `:1460`
-- `lifecycle_bzr_probe` `:57`, `lifecycle_bzr` `:98`, `lifecycle_bzr_refusal_gap` `:113`,
-  `lifecycle_expect_gap` `:162`, `lifecycle_pybz` `:171`, `lifecycle_ids_are` `:208`,
-  `lifecycle_transport_is` `:228` — all `compare/01-bug-lifecycle.sh`
-- `expect_gap` converting FAIL→GAP and PASS→FAIL — `lib.sh:209`
-- `run_lifecycle_failure_control <flag> <capability> <label> [value]` — `container-tests.sh:371`
-- `run_gap_ineligible_control <flag> <capability> <label>` — `:406`
-- `assert_equals <expected> <actual> <label>` — `:11`; `PYBZ_DIR` — `:7`
-- counts 7/0/3 at `:831-833`; `stale gap fail count` 3 at `:979`; parity fixture row at `:1001`
+Every name this plan borrows was confirmed present with the assumed signature. In
+`redhat-shape-proxy.py`: `_hook_matches` `:377`, `REWRITE_HOOKS` `:460`,
+`apply_rewrite_hooks(method, path, body, enabled_modes)` `:478`, `emit_rewrite_evidence` over
+`(marker, route, count)` `:489`, `make_handler` `:540`, and the `ShapeTests._start_server`
+staticmethod returning `(server, thread)` `:1179`. In `lib.sh`: `expect_gap` (FAIL→GAP,
+PASS→FAIL) `:209`, `redhat_shape_start`/`redhat_shape_stop` setting `REDHAT_SHAPE_PORT`
+`:1438`/`:1460`. In `compare/01-bug-lifecycle.sh`: `lifecycle_bzr_probe` `:57`,
+`lifecycle_bzr` `:98`, `lifecycle_bzr_refusal_gap` `:113`, `lifecycle_expect_gap` `:162`,
+`lifecycle_pybz` `:171`, `lifecycle_ids_are` `:208`, `lifecycle_transport_is` `:228`. In
+`container-tests.sh`: `PYBZ_DIR` `:7`, `assert_equals <expected> <actual> <label>` `:11`,
+`run_lifecycle_failure_control <flag> <capability> <label> [value]` `:371`,
+`run_gap_ineligible_control` `:406`, counts 7/0/3 `:831-833`, `stale gap fail count` 3 `:979`,
+parity fixture row `:1001`, and `grep -Fxc "$row"` `:1038`.
 
 ## Task 1 — the proxy's `saved-search` mode
 
@@ -83,27 +80,17 @@ line 21 but **not** `import unittest.mock`, and `import unittest` alone does not
 
 ### Verification
 
-Every contract below is `Mode: focused-test`, proven by one `ShapeTests` case, with the same
-green command: `python3 tests/functional/redhat-shape-proxy.py --self-test`. Step 1.8 carries
-each case's code; the expected red for each is the case's own assertion failing on an
-unfiltered `[1, 2, 3]` body.
+Seven contracts, one `ShapeTests` case each, all `Mode: focused-test`, all green under
+`python3 tests/functional/redhat-shape-proxy.py --self-test`. Step 1.8 names each case after
+its contract and carries its code; the expected red for each is that case's assertion failing
+on an unfiltered `[1, 2, 3]` body.
 
-| Contract | Case |
-|---|---|
-| Advertises `RedHat` at `/rest/extensions` | `test_advertises_red_hat_extension` |
-| `savedsearch` matching the fixture filters to its ids | `test_saved_search_filters_to_fixture_ids` |
-| An unknown `savedsearch` resolves to no bugs | `test_unknown_saved_search_resolves_empty` |
-| `sharer_id` qualifies resolution both ways | `test_sharer_id_qualifies_resolution` |
-| No `savedsearch` parameter leaves the response alone | `test_absent_saved_search_is_untouched` |
-| A malformed ids list disables the fixture | `test_malformed_fixture_ids_disable_filtering` |
-| The hook is reached only when the mode is enabled | `test_mode_gates_the_saved_search_hook` |
-
-The last one is the only case that goes through `apply_rewrite_hooks` **and** `make_handler`,
-which is what makes it cover Steps 1.6 and 1.7 rather than the transformer alone. It was
-verified by construction: applying Steps 1.1–1.8 to a scratch copy gives `Ran 51 tests ... OK`;
-deleting only Step 1.7's two edits gives `FAILED (failures=1)` with
-`AssertionError: Lists differ: [1, 2, 3] != [1]`; deleting only Step 1.6's registry line gives
-the same failure. Re-run those three checks if you change the case.
+`test_mode_gates_the_saved_search_hook` is the one that matters most: it is the only case
+going through `apply_rewrite_hooks` **and** `make_handler`, so it covers Steps 1.6 and 1.7
+rather than the transformer alone. Verified by construction — Steps 1.1–1.8 on a scratch copy
+give `Ran 51 tests ... OK`; deleting only Step 1.7's two edits, or only Step 1.6's registry
+line, gives `FAILED (failures=1)` with `AssertionError: Lists differ: [1, 2, 3] != [1]`.
+Re-run all three checks if you change the case.
 
 **Step 1.1.** Add `import unittest.mock` after `import unittest`, and the constant beside
 `_MAX_REQUEST_BODY`:
@@ -128,9 +115,13 @@ def _saved_search_fixture():
     if not name or not raw_ids:
         return None
     fields = raw_ids.split(",")
-    if not all(field.isdigit() and int(field) > 0 for field in fields):
+    # `.isascii()` before `.isdigit()`: str.isdigit() is true for characters int()
+    # rejects (superscripts, for one), so the bare form raises out of the handler
+    # thread instead of disabling the fixture. Other Unicode digits int() *accepts*
+    # would be taken as ids.
+    if not all(field.isascii() and field.isdigit() and int(field) > 0 for field in fields):
         return None
-    if sharer and not (sharer.isdigit() and int(sharer) > 0):
+    if sharer and not (sharer.isascii() and sharer.isdigit() and int(sharer) > 0):
         return None
     return name, {int(field) for field in fields}, sharer
 ```
@@ -351,8 +342,12 @@ unfiltered search returns, or the row's two sets cannot stand in a superset rela
   builds the `bug_id=` list from all of them. Mode: focused-test. Test:
   `run_saved_search_seed_fixture` (Task 4, Step 4.0), which extracts and sources the **real**
   function and drives it with stubbed container helpers. Expected red: with the old two-id
-  signature, the one-id call returns 2 and the fixture reports
-  `expected seed accepts a single ID to be 0, got 2`. Green:
+  signature the one-id call returns 2, so nothing reaches stdout and the fixture reports
+  ``expected seed builds a single-ID query to be bug_id=41&bug_id_type=anyexact, got ``,
+  preceded on stderr by the old guard's
+  `seed_server_saved_search: expected LOGIN NAME BUG_ID BUG_ID`. (The first two assertions
+  pass against the old seeder — a 2-argument call and a non-decimal id both already return
+  2 — so the third is where it reddens.) Green:
   `bash tests/functional/pybz/container-tests.sh`.
 
 Nothing compares the real function to the lifecycle fixture's hand-written stub today —
@@ -411,15 +406,13 @@ controls on the capture names `saved-search-control` and `saved-search-filtered`
 
 ### Verification
 
-One control per assertion — each must bite through *itself*, not through a neighbour that
-short-circuits ahead of it in the `&&` chain. All three are `Mode: focused-test`, live in
-Task 4, and are green under `bash tests/functional/pybz/container-tests.sh`.
-
-| Contract | Control | Expected red before this task |
-|---|---|---|
-| The filtered call equals the seeded subset, so an ignoring server fails | `LIFECYCLE_SAVED_SEARCH_UNFILTERED` | flag has no effect; `saved-search control … unexpectedly passed` |
-| The control contains both bugs, so the comparison is not vacuous | `LIFECYCLE_SAVED_SEARCH_CONTROL_NARROW` | same message; a control equal to the subset passes, which is the defect being fixed |
-| python-bugzilla's result contains an id the seeded query excludes | `LIFECYCLE_SAVED_SEARCH_PYBZ_FILTERED` | same message |
+Three contracts — the filtered call equals the seeded subset; the control contains both bugs,
+so the comparison is not vacuous; python-bugzilla's result contains an id the seeded query
+excludes. One control each (`LIFECYCLE_SAVED_SEARCH_UNFILTERED`, `…_CONTROL_NARROW`,
+`…_PYBZ_FILTERED`), all `Mode: focused-test`, all living in Task 4 Step 4.6 and green under
+`bash tests/functional/pybz/container-tests.sh`. Expected red before this task, for each:
+`<flag> unexpectedly passed`. Each must bite through *itself*, which is why Step 3.4 gives
+every assertion its own `test_fail` reason and Step 4.6 greps for it.
 
 **Step 3.1.** Let a probe target another URL. In `lifecycle_bzr_probe`, replace the
 `--server-url "$BZ_URL"` argument:
@@ -490,17 +483,20 @@ if [[ -n $LIFECYCLE_BZR_ID && -n $LIFECYCLE_PYBZ_ID ]] &&
     seed_server_saved_search "$COMPARE_ADMIN_EMAIL" "$LIFECYCLE_SAVED_SEARCH" \
         "$LIFECYCLE_BZR_ID" &&
     lifecycle_saved_search_probe saved-search-control bug list --summary "$LIFECYCLE_STEM" &&
-    lifecycle_ids_contain "$COMPARE_EXCHANGE_DIR/saved-search-control.bzr.stdout.json" \
-        "[$LIFECYCLE_BZR_ID,$LIFECYCLE_PYBZ_ID]" &&
+    { lifecycle_ids_contain "$COMPARE_EXCHANGE_DIR/saved-search-control.bzr.stdout.json" \
+        "[$LIFECYCLE_BZR_ID,$LIFECYCLE_PYBZ_ID]" ||
+        { test_fail "saved-search control did not exceed the seeded subset"; false; }; } &&
     lifecycle_saved_search_probe saved-search-filtered \
         bug search --saved-search "$LIFECYCLE_SAVED_SEARCH" &&
-    lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/saved-search-filtered.bzr.stdout.json" \
-        "[$LIFECYCLE_BZR_ID]" &&
+    { lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/saved-search-filtered.bzr.stdout.json" \
+        "[$LIFECYCLE_BZR_ID]" ||
+        { test_fail "saved-search filtered result was not the seeded subset"; false; }; } &&
     lifecycle_pybz saved-search saved_search "$(jq -cn --arg name "$LIFECYCLE_SAVED_SEARCH" \
         '{name:$name}')" &&
     lifecycle_transport_is saved-search pybz XMLRPC &&
-    lifecycle_ids_contain "$COMPARE_EXCHANGE_DIR/saved-search.pybz.result.json" \
-        "[$LIFECYCLE_PYBZ_ID]"; then
+    { lifecycle_ids_contain "$COMPARE_EXCHANGE_DIR/saved-search.pybz.result.json" \
+        "[$LIFECYCLE_PYBZ_ID]" ||
+        { test_fail "python-bugzilla saved-search result was filtered"; false; }; }; then
     if lifecycle_bzr_refusal_gap saved-search '"type":"unsupported_server_capability"' 15 \
         bug search --saved-search "$LIFECYCLE_SAVED_SEARCH" &&
         lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/saved-search.bzr.stdout.json" \
@@ -525,12 +521,19 @@ Four properties of this shape must not be rearranged:
   `lifecycle_gap_reset`.
 - The inner `lifecycle_ids_are` expects `[$LIFECYCLE_BZR_ID]`, the seeded subset, because
   that is what a bzr which stopped refusing would return for the gap to be genuinely stale.
-- **Control uses containment, filtered uses equality, and they are not interchangeable.** The
-  control set is every stem-bearing bug in the run and is not fixed by construction —
-  `01-bug-lifecycle.sh` already creates `"$LIFECYCLE_STEM generic bzr"` and
-  `"$LIFECYCLE_STEM generic pybz"` in the `arbitrary-fields` row, and only that row's
-  position *after* this one keeps the count at two. Do **not** add a third assertion that
-  the two sets differ; ADR 0061 decision part 2 records why it could never fail.
+- **Each of the three new assertions carries its own `test_fail` reason.** Without them all
+  three fall through to the generic `saved-search precondition failed` and the self-test
+  controls can only show that the row reddened, not *which* assertion reddened it — which
+  would make the controls unable to discriminate, the same defect one level up. The
+  `|| { test_fail …; false; }` form keeps the `&&` chain's short-circuit intact, and the
+  existing `elif [[ $TEST_RESULT_PENDING -eq 0 ]]` guard prevents a double count.
+
+Control uses containment and filtered uses equality, and they are not interchangeable: the
+control set is every stem-bearing bug in the run and is not fixed by construction —
+`01-bug-lifecycle.sh` creates `"$LIFECYCLE_STEM generic bzr"` and `"…generic pybz"` in the
+`arbitrary-fields` row, and only that row's position *after* this one keeps the count at two.
+Do **not** add a third assertion that the two sets differ; ADR 0061 decision part 2 records
+why it could never fail.
 
 **Acceptance criteria.** `bash -n` clean. Against a live container the row reports
 `GAP (#670)`; `saved-search-filtered.bzr.stdout.json` holds exactly the bzr id and
@@ -684,14 +687,27 @@ All three fail in the precondition chain, so the outcome is an outright FAIL —
 `run_lifecycle_failure_control`, not `run_gap_ineligible_control`:
 
 ```bash
-    for control in LIFECYCLE_SAVED_SEARCH_UNFILTERED \
-        LIFECYCLE_SAVED_SEARCH_CONTROL_NARROW \
-        LIFECYCLE_SAVED_SEARCH_PYBZ_FILTERED; do
+    # Each control must redden through its OWN assertion. run_lifecycle_failure_control
+    # only proves the row went FAIL, and all three would match that on the generic
+    # reason, so pair each with the distinct reason Step 3.4 gives its assertion.
+    while IFS='|' read -r control reason; do
         if ! run_lifecycle_failure_control "$control" saved-search 'server saved search'; then
             control_failures=$((control_failures + 1))
+        elif ! grep -Fq "$reason" "$fixture_output"; then
+            printf '%s did not redden through its own assertion (%s)\n' \
+                "$control" "$reason" >&2
+            control_failures=$((control_failures + 1))
         fi
-    done
+    done <<'CONTROLS'
+LIFECYCLE_SAVED_SEARCH_CONTROL_NARROW|saved-search control did not exceed the seeded subset
+LIFECYCLE_SAVED_SEARCH_UNFILTERED|saved-search filtered result was not the seeded subset
+LIFECYCLE_SAVED_SEARCH_PYBZ_FILTERED|python-bugzilla saved-search result was filtered
+CONTROLS
 ```
+
+`run_lifecycle_failure_control` writes the phase output to `$fixture_output` and leaves it in
+place, so the `grep` reads the run that control just produced. A quoted heredoc keeps the
+reasons literal, and `read` with `IFS='|'` is Bash 3.2-safe.
 
 **Step 4.7.** Run bare:
 
@@ -699,26 +715,23 @@ All three fail in the precondition chain, so the outcome is an outright FAIL —
 bash tests/functional/pybz/container-tests.sh
 ```
 
-This is exactly what `make functional-compare-all` runs first (`Makefile:231`). Later
-fixtures need a container runtime, so run it where Docker or podman is available. Expect the
-counts above to hold, three new `controlled red: saved-search …` lines, and Step 4.0's four
-assertions.
+Exactly what `make functional-compare-all` runs first (`Makefile:231`); later fixtures need a
+container runtime, so run it where Docker or podman is available.
 
 **Step 4.8.** If a count assertion reports a different value, do not adjust the expected
-number. Read the fixture output and establish which assertion changed the row's outcome; a
+number — read the fixture output and find which assertion changed the row's outcome. A
 changed count means the row's shape changed, which this plan does not intend.
 
-**Acceptance criteria.** Three `controlled red` lines; `run_saved_search_seed_fixture`
-passes; counts unchanged at 7/0/3; the stale-gap scenario still reports `#670 appears
-resolved` with `stale gap fail count` 3.
+**Acceptance criteria.** Three `controlled red` lines, each matched to its own reason;
+`run_saved_search_seed_fixture`'s four assertions pass; counts unchanged at 7/0/3; the
+stale-gap scenario still reports `#670 appears resolved` with `stale gap fail count` 3.
 
 ## Task 5 — the parity record and its fixture copy
 
 Modifies `docs/dev/python-bugzilla-parity.md` and `tests/functional/pybz/container-tests.sh`.
-`run_parity_report_fixture` greps the document for each fixture literal with
-`grep -Fxc "$row"` requiring exactly one whole-line match (`container-tests.sh:1037`), so a
-fixture row missing from the document fails; the reverse is not caught, so both edits are in
-one task.
+`run_parity_report_fixture` requires each fixture literal to match one whole document line
+(`grep -Fxc "$row"`, `container-tests.sh:1038`), so a fixture row missing from the document
+fails; the reverse is not caught, so both edits are in one task.
 
 ### Verification
 
@@ -740,8 +753,28 @@ surrounding single quotes:
         '| Server saved search | `bzr bug search --saved-search` | stock: bzr errors, python-bugzilla returns unfiltered results (#670); Red-Hat-shaped proxy: bzr filters | `compare/01-bug-lifecycle/saved-search` |'
 ```
 
+**Step 5.3.** ADR 0061's decision is that the tier proves this against a shaped proxy **and
+states in the parity record that the arm is a fixture rather than a real server**. Steps 5.1
+and 5.2 do not do that, and the caveat cannot go in the row — the row must stay byte-identical
+to its fixture copy. Append it below the table in `docs/dev/python-bugzilla-parity.md`
+instead, as a blank line and one sentence:
+
+```markdown
+The Red-Hat-shaped proxy arm is a harness fixture built from the vendor's documented
+parameter names (ADR 0061). It proves bzr's behaviour, not that Red Hat Bugzilla resolves a
+named query the same way.
+```
+
+This matters because the same table already carries `| Red Hat component update | …` at line
+33, a row measured against a real server. Without the caveat, "Red-Hat-shaped proxy" in the
+adjacent column reads as the same kind of evidence.
+
+`run_parity_report_fixture` only requires each fixture literal to appear as a whole line in
+the document, so prose after the table does not disturb it.
+
 **Acceptance criteria.** `run_parity_report_fixture` passes — that is the check, and it runs
 first in `make functional-compare-all`. Do not add a separate `diff`; it would duplicate it.
+The document ends with the fidelity caveat.
 
 ## Task 6 — full-tier verification
 
