@@ -216,6 +216,21 @@ the vendor-extension side; the two above do not.
 Issue #724. The original decision above is unchanged; this amends only *how* support is
 established.
 
+**What this amendment does not touch, stated first because it is what a reader most needs.**
+This changes **where the capability answer comes from**, never **whether an undetermined
+capability may proceed**. An undetermined capability still refuses. The refusal, not a warning,
+is the decision — argued at length under *Considered & rejected* above, in the two bullets that
+reject forwarding the parameter with documentation and with a stderr warning. Both remain the
+governing answer and neither is reopened here.
+
+That is worth repeating rather than assuming, because "warn instead of refusing" is the
+*locally obvious* design: it regenerates from the code alone, and three independent review
+passes over the sibling work in #710 proposed it afresh with no knowledge of each other. A
+reader arriving at this record through the transport dispatch below will meet the same
+intuition. The answer is the one the original decision gives: a warning that always fires on
+stock servers and never on Red Hat ones is a capability check already performed, and it leaves
+the exit code at 0 so no script can act on it.
+
 ### Context
 
 The Consequences section above deferred routing the probe through the resolved transport and
