@@ -53,8 +53,13 @@ untouched.
   `shfmt` will disagree with the repo's actual style. Match the surrounding file.
 - Do not edit `docs/adr/README.md`, `src/client/auth/valid_login.rs`, or
   `src/client/auth/mod.rs`.
-- Commits are Conventional Commits 1.0.0. At least one must carry `fix(client):
-  …` so the change reaches the generated release notes.
+- Commits are Conventional Commits 1.0.0. At least one must carry `fix(client):`
+  or `fix(auth):` so the change reaches the generated release notes. Commit
+  **bodies are ignored** by the notes generator, so the user-visible exit-code
+  change (spec R9: a `--permissive` batch can now exit 0 where it exited 4) must
+  appear in a commit **subject**, either the main one or a second commit's. Keep
+  the R9 pinning test in its own commit so the consequence stays separable in the
+  diff if the operator asks for it to be revisited.
 
 ## File map
 
@@ -145,7 +150,7 @@ Published for later tasks:
   Observable contract: with the first attempt answering 401 code 410 and the
   retry answering 401 code 102, `bug view --permissive` over that id completes
   with the bug recorded as failed instead of returning `Err`.
-  Test: `permissive_bug_view_suppresses_a_relayed_per_resource_refusal`.
+  Test: `relayed_per_resource_refusal_makes_permissive_view_exit_zero_not_four`.
   Expected red: before Task 1 step 8 the error is `Api { code: 410 }`, which
   `BzrError::is_permissive_bug_view_error` (`src/error.rs:247`) rejects, so the
   call returns `Err` and the assertion on a completed batch fails.
@@ -416,7 +421,7 @@ Every entry below is `Mode: focused-test`, in
 |---|---|---|
 | `auth_fallback_relays_a_policy_refusal_from_the_retried_body` | retried 401 code 120 wins over original 401 code 410 | before Task 1 step 8: reports `410` |
 | `auth_fallback_keeps_the_original_401_when_the_retry_also_fails_to_log_in` | retried 401 code **300** does not win over original 401 code 410 | under an inverted band check: reports `300` |
-| `permissive_bug_view_suppresses_a_relayed_per_resource_refusal` | retried 401 code 102 is suppressed by `--permissive` instead of aborting the batch (spec R9) | before Task 1 step 8: the batch returns `Err` |
+| `relayed_per_resource_refusal_makes_permissive_view_exit_zero_not_four` | retried 401 code 102 is suppressed by `--permissive` instead of aborting the batch (spec R9) | before Task 1 step 8: the batch returns `Err` |
 | `auth_fallback_keeps_the_original_401_when_the_retry_carries_no_envelope` | retried 401 with an HTML body does not win | if `bugzilla_error_code` returned a code for unparseable input |
 | `auth_fallback_keeps_the_original_401_when_the_retried_envelope_has_no_code` | retried 401 `{"error":true,"message":…}` does not win | if the `-1` sentinel were not read back as "no signal" |
 | `auth_fallback_relays_a_403_policy_refusal` | retried **403** code 120 wins | if 403 were not classified alongside 401 |
