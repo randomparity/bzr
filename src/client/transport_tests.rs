@@ -692,6 +692,89 @@ async fn auth_fallback_relays_a_403_policy_refusal() {
 }
 
 #[tokio::test]
+async fn auth_fallback_keeps_the_original_when_a_403_retry_carries_an_auth_code() {
+    // This is the case that proves FORBIDDEN belongs in the classification
+    // guard. With 403 classified, the retried authentication code keeps the
+    // original 410. Without it, the 403 is Replaced and `check_response_status`
+    // reports the retried 300 — so the two routes disagree here, unlike the
+    // relay case above, where both produce the same Api { code: 120 }.
+    let mock = MockServer::start().await;
+    mount_auth_fallback(
+        &mock,
+        login_required(),
+        ResponseTemplate::new(403).set_body_json(bugzilla_error(
+            300,
+            "The username or password you entered is not valid",
+        )),
+    )
+    .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_json_value("bug/1").await.unwrap_err();
+    match err {
+        BzrError::Api { code, .. } => assert_eq!(code, 410, "the original 401 must stand"),
+        other => panic!("expected the original Api 410, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn auth_fallback_treats_a_retried_410_as_an_authentication_failure() {
+    // Pins the `|| code == LOGIN_REQUIRED` half of the band check, which the
+    // 300..=399 band does not cover. The first attempt answers 300 so the
+    // expected value cannot be produced by the retried body: without the
+    // LOGIN_REQUIRED clause the retried 410 is relayed and the assertion sees
+    // 410 instead of 300. That is #715's own failure mode arriving from the
+    // other direction — "You must log in" reported as a policy refusal.
+    let mock = MockServer::start().await;
+    mount_auth_fallback(
+        &mock,
+        ResponseTemplate::new(401).set_body_json(bugzilla_error(
+            300,
+            "The username or password you entered is not valid",
+        )),
+        ResponseTemplate::new(401).set_body_json(bugzilla_error(410, "You must log in")),
+    )
+    .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_json_value("bug/1").await.unwrap_err();
+    match err {
+        BzrError::Api { code, .. } => assert_eq!(code, 300, "410 is an authentication code"),
+        other => panic!("expected the original Api 300, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn auth_fallback_relays_a_refusal_when_the_original_401_carried_no_envelope() {
+    // The second user-visible transition recorded in ADR 0057: when the first
+    // attempt's 401 carries no Bugzilla envelope — an HTML challenge page from
+    // a fronting proxy, say — and the retry's does, the reported error moves
+    // from `HttpStatus` (exit 5, error.type "http", structured key "status") to
+    // `Api` (exit 4, error.type "api", structured key "api_code"). The retried
+    // envelope is the server's real answer; the bare 401 was not.
+    let mock = MockServer::start().await;
+    mount_auth_fallback(
+        &mock,
+        ResponseTemplate::new(401).set_body_string("<html>Unauthorized</html>"),
+        ResponseTemplate::new(401).set_body_json(bugzilla_error(120, "policy refusal")),
+    )
+    .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_json_value("bug/1").await.unwrap_err();
+    assert_eq!(
+        err.exit_code(),
+        4,
+        "an envelope-carrying retry reports as Api"
+    );
+    assert_eq!(err.error_type(), "api");
+    match err {
+        BzrError::Api { code, .. } => assert_eq!(code, 120),
+        other => panic!("expected the relayed Api 120, got {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn auth_fallback_band_edges_separate_login_failure_from_refusal() {
     // 300 and 399 are inside Bugzilla's documented authentication band, so the
     // original 410 stands. 299 and 400 are outside it and are relayed as
