@@ -43,22 +43,26 @@ to a REST endpoint that ignores the configured auth method.
 - The forced-`rest` assertions run on every supported version, so a future server or client
   change that reintroduces REST-side filtering under working auth turns a phase red instead of
   returning a quietly short list.
-- **The residual is a default, not an opt-in, and this decision does not close it.** On a server
-  `version_to_api_mode` maps to `Rest` whose REST endpoints ignore `X-BUGZILLA-API-KEY` —
-  Bugzilla 5.2, measured — `bzr config set-server` with no `--auth-method` leads to `header`
-  being selected, and `bzr comment list` then returns the public subset with no error. Bugzilla
-  5.0 is not exposed on that path: its `Hybrid` mapping sends both reads XML-RPC-first, and the
-  loss appears there only under a forced `--api rest`. So the silent truncation is the
-  out-of-the-box outcome on `>= 5.1` servers that ignore the header. It is an auth-selection
-  defect: 5.2's `/rest/valid_login` correctly *rejects* the header key (`{"result":false}`),
-  but `verify_header_auth_via_rest` (`src/client/auth/valid_login.rs`) then overrides that with
-  an any-2xx probe on `/rest/bug?limit=1` — and a server answering anonymously returns `200`,
-  so the probe cannot tell "authenticated" from "anonymous but readable". Owned by issue #713.
-  A guard in these two reads
-  would patch a shared root cause at one of its callers while every other REST read stayed
-  anonymous, and the list endpoints give it nothing to detect — unlike `attachment download`,
-  whose `GET /rest/bug/attachment/<id>` returns `401` and so already recovers through the
-  transport's auth-method fallback.
+- **The remaining exposure is an explicitly pinned auth method, not the default path.** When
+  this ADR was first written, `bzr config set-server` with no `--auth-method` selected `header`
+  on stock Bugzilla 5.0/5.2 and the loss was the out-of-the-box outcome. Issue #713 closed that
+  while this change was in review: its differential probe replaced the any-2xx
+  `/rest/bug?limit=1` test that could not tell "authenticated" from "anonymous but readable".
+  Re-measured against merged `main`, a default `config set-server` now persists `query_param`
+  on 5.0.6 and 5.2 and `header` on 5.3.3+, and `comment list` and `attachment list` are
+  complete on every supported version in both default and forced-`rest` dispatch.
+- What is left is reachable only by pinning `--auth-method header` against a server whose REST
+  endpoints ignore that header. Measured on merged `main`: on 5.2, both default dispatch and
+  `--api rest` return the public subset (3 of 5 comments, 1 of 2 attachments, exit 0, no
+  diagnostic), because `version_to_api_mode` maps 5.2 to `Rest`; on 5.0.6 only forced
+  `--api rest` loses it, because 5.0.x maps to `Hybrid` and dispatches these reads
+  XML-RPC-first; 5.3.3+ is unaffected either way, since it honours the header. That is a user
+  who overrode detection with a value the server does not support, which is a materially
+  weaker claim than the one this ADR originally made, and it is recorded here rather than
+  fixed: a guard in these two reads would patch a shared condition at one of its callers while
+  every other REST read stayed anonymous, and the list endpoints give it nothing to
+  detect — unlike `attachment download`, whose `GET /rest/bug/attachment/<id>` returns `401`
+  and so already recovers through the transport's auth-method fallback.
 
 ## Considered & rejected
 
