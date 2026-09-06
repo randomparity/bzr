@@ -78,8 +78,14 @@ mechanism, measured here, is what that statement rests on:
   `--auth-method` leads to `header` being selected, and the resulting default-mode
   `comment list` returns the public subset (3 of 5 entries, 0 of 2 private).
 - 5.2 has no `/rest/whoami` (`404`, code `32614`), so detection falls through to the
-  `valid_login` probe, which tries header first (`src/client/auth/valid_login.rs`); 5.2's
-  `/rest/valid_login` accepts a key that its comment and attachment endpoints then ignore.
+  `valid_login` probe. That probe gets the right answer — `GET /rest/valid_login?login=<addr>`
+  with the header returns `{"result":false}` on 5.0.6 and 5.2, `{"result":true}` on 5.3.3+ —
+  and is then overridden by `verify_header_auth_via_rest`
+  (`src/client/auth/valid_login.rs`), whose any-2xx probe on `/rest/bug?limit=1` reads the
+  `200` a 5.2 returns *anonymously* as proof that header auth works.
+- A discriminator does exist and the probe does not use it: `Set-Cookie:
+  Bugzilla_login_request_cookie` appeared on exactly the anonymously-answered replies and on
+  none of the honoured ones, across all three versions.
 - Bugzilla 5.0.6 is not exposed on that path: `version_to_api_mode` maps it to `Hybrid`, so
   default-mode `comment list` returns 5 / 2 there and the loss needs a forced `--api rest`.
 

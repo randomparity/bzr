@@ -50,8 +50,11 @@ to a REST endpoint that ignores the configured auth method.
   5.0 is not exposed on that path: its `Hybrid` mapping sends both reads XML-RPC-first, and the
   loss appears there only under a forced `--api rest`. So the silent truncation is the
   out-of-the-box outcome on `>= 5.1` servers that ignore the header. It is an auth-selection
-  defect (`src/client/auth/valid_login.rs` probes header first, and 5.2's `/rest/valid_login`
-  accepts a key its resource endpoints ignore), owned by issue #713. A guard in these two reads
+  defect: 5.2's `/rest/valid_login` correctly *rejects* the header key (`{"result":false}`),
+  but `verify_header_auth_via_rest` (`src/client/auth/valid_login.rs`) then overrides that with
+  an any-2xx probe on `/rest/bug?limit=1` — and a server answering anonymously returns `200`,
+  so the probe cannot tell "authenticated" from "anonymous but readable". Owned by issue #713.
+  A guard in these two reads
   would patch a shared root cause at one of its callers while every other REST read stayed
   anonymous, and the list endpoints give it nothing to detect — unlike `attachment download`,
   whose `GET /rest/bug/attachment/<id>` returns `401` and so already recovers through the
@@ -72,9 +75,16 @@ to a REST endpoint that ignores the configured auth method.
   other REST read anonymous, hiding the rest, and it would make these two reads require
   `xmlrpc.cgi` on servers where the current code treats that endpoint as optional.
 - **Detect the truncation and surface it to the caller** (the issue's third direction).
-  verified: `curl -H 'X-BUGZILLA-API-KEY: <key>' <5.2>/rest/bug/<id>/comment` returns `200`
-  carrying only the public comments, with no count, flag, or header distinguishing it from a
-  thread that genuinely has no private comment. There is nothing in the reply to detect.
+  verified: the *body* carries nothing to detect — `curl -H 'X-BUGZILLA-API-KEY: <key>'
+  <5.2>/rest/bug/<id>/comment` returns `200` with only the public comments and no count or
+  flag separating that from a thread with no private comment. The *response headers* do:
+  `Set-Cookie: Bugzilla_login_request_cookie` was present on exactly the replies answered
+  anonymously and absent on exactly the honoured ones, on 5.0.6, 5.2 and 5.3.3+ with no
+  exceptions. judgment: that discriminator says "this request was answered anonymously",
+  which is true of every REST read on such a server, not a fact about comments or
+  attachments — so it belongs beside the auth probe that got the method wrong (issue #713),
+  where one check covers every read. Duplicating it into these two would report the symptom
+  at two of its call sites and leave the rest silent.
 - **Make these two reads fall back when the configured auth method looks unhonoured.**
   judgment: the same root cause reaches every REST read, so the fix belongs in auth-method
   selection (issue #713), not duplicated into the two call sites that happen to expose it most
