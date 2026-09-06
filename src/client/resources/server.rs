@@ -69,11 +69,12 @@ impl BugzillaClient {
                         error = %rest_err,
                         "REST extensions probe failed, retrying via XML-RPC"
                     );
-                    // Name both attempts when both fail: the line above is
-                    // invisible at the default `bzr=warn`, and a user on a
-                    // REST-first connection reading only an XML-RPC error would
-                    // reasonably conclude bzr never tried REST. The variant
-                    // reflects the final attempt; the message carries both.
+                    // Name both attempts when both fail. The warn above is a
+                    // trace event; a `--json` consumer reads the error body and
+                    // never the trace, so without this it would see only an
+                    // XML-RPC failure on a REST-first connection and reasonably
+                    // conclude bzr never tried REST. The variant reflects the
+                    // final attempt; the message carries both.
                     self.xmlrpc_client()
                         .server_extensions()
                         .await

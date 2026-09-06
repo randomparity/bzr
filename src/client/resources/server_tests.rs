@@ -431,7 +431,8 @@ async fn server_extensions_hybrid_falls_back_on_bodyless_failure() {
 /// Both failing must stay an error: an empty list here would render as a
 /// settled *absent* instead of *undetermined*, which is the one fail-open this
 /// arm could introduce. The message names both attempts, because the `info`
-/// log of the REST failure is invisible at the default `bzr=warn`.
+/// warn-level trace of the REST failure is a trace event, and a `--json`
+/// consumer reads the error body rather than the trace.
 #[tokio::test]
 async fn server_extensions_hybrid_both_transports_failing_is_an_error() {
     let mock = MockServer::start().await;

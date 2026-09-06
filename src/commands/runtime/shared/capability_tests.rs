@@ -441,7 +441,7 @@ async fn capability_undetermined_message_does_not_name_rest() {
 }
 
 /// In Hybrid both transports are attempted, so the refusal must say so. The
-/// `info` log of the REST failure is invisible at the default `bzr=warn`, and a
+/// warn-level log of the REST failure is a trace event, not the error body, and a
 /// user on a REST-first connection reading only an XML-RPC error would
 /// reasonably conclude bzr never tried REST.
 #[tokio::test]

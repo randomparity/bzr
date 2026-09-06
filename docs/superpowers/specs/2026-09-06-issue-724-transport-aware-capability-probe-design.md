@@ -66,9 +66,10 @@ phantom-doc defect this change itself creates, in the higher-traffic surface, ha
   `(not advertised at /rest/extensions)` → `(not advertised in the server's extension list)`.
 - The same file, the *undetermined* message: the REST-surface sentence is removed and the
   remedy generalised. **In Hybrid the message must name both attempts**, not only detail the
-  XML-RPC failure — the REST error is logged at `info`, which is invisible at the default
-  `bzr=warn`, and a user on a REST-first connection reading an XML-RPC error would reasonably
-  conclude bzr never tried REST.
+  XML-RPC failure. The REST error is also logged at `warn`, but a log line is a trace event and a
+  `--json` consumer reads the error body and never the trace, so without this a user on a
+  REST-first connection would see only an XML-RPC failure and reasonably conclude bzr never
+  tried REST.
 - `docs/bzr-cli.md:538`, the `bug search --saved-search` note ("bzr checks `/rest/extensions`
   before searching"). The repository's designated CLI reference.
 - `src/cli/bug/search.rs:32`, the `bug search` long-about — `--help` **and** the generated man

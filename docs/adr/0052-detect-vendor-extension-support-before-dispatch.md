@@ -330,9 +330,10 @@ Three properties of the amendment are part of the decision:
   the rustdoc on `ServerConfig::server_extensions`. The third, the `bug search --saved-search`
   note in `docs/bzr-cli.md`, still says the probe reads `/rest/extensions`; it lands separately
   because #718 is editing a different section of that same file. **In Hybrid the *undetermined* message names both attempts**
-  rather than only detailing the XML-RPC failure: the REST error is logged at `info`, which is
-  invisible at the default `bzr=warn`, and a user on a REST-first connection reading an XML-RPC
-  error would otherwise reasonably conclude bzr never tried REST. A **successful** fallback is
+  rather than only detailing the XML-RPC failure. The REST error is also logged at `warn`, but a
+  log line is a trace event and a `--json` consumer reads the error body and never the trace, so
+  without this a user on a REST-first connection would see only an XML-RPC failure and
+  reasonably conclude bzr never tried REST. A **successful** fallback is
   not silent either: the REST failure is logged at `warn`, because it fires only when the probe
   actually failed and would otherwise be the one case with no signal at all — papering over a
   degraded REST surface on every invocation, and masking a bzr-side decode defect that the
@@ -353,6 +354,14 @@ Three properties of the amendment are part of the decision:
   case where `/rest/extensions` specifically fails (a transient 503, a proxy allowlisting
   `/rest/bug` but not `/rest/extensions`) while REST search works. A REST-disabled deployment is
   `--api xmlrpc`, which detection already selects when version probing fails.
+- **The Hybrid fallback deliberately keeps the full request timeout**, rather than the 8-second
+  `XMLRPC_FALLBACK_TIMEOUT` the analogous `search_bugs_hybrid` retry uses. That constant exists
+  to stop an opportunistic retry making the user pay the ceiling twice *when REST already
+  produced a usable answer*. Here REST produced no answer at all, so there is nothing to
+  protect and a short cap would convert a slow-but-working XML-RPC probe into a spurious
+  *undetermined* — a refusal. The cost is that a server stalling both surfaces holds the
+  command for roughly double the previous wait before refusing; that is the right trade for a
+  gate whose failure mode is refusing work the server would have honoured.
 - **A cached answer is now transport-agnostic.** Before this change every probe went over REST,
   so every cached answer was a REST answer. Now an answer probed under `--api xmlrpc` is served
   to a later `--api rest` invocation and the reverse. The fail-open direction is already covered

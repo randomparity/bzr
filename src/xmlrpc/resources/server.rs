@@ -31,9 +31,14 @@ impl XmlRpcClient {
         let extensions = advertised
             .iter()
             .map(|(name, info)| {
+                // Bound the interpolated name: it is server-controlled and
+                // read with no length cap, and both sibling paths bound server
+                // text the same way (`HttpStatus` via `diagnostic_body_preview`,
+                // REST's decode failure via `format_body_preview`).
+                let label = crate::http::utf8_prefix(name, 128);
                 let fields = info.as_struct().ok_or_else(|| {
                     BzrError::XmlRpc(format!(
-                        "expected a struct for extension '{name}' in the response"
+                        "expected a struct for extension '{label}' in the response"
                     ))
                 })?;
                 // Strict, not `mappers::get_str`: that yields `None` for a
@@ -44,7 +49,7 @@ impl XmlRpcClient {
                     Some(Value::String(version)) => Some(version.clone()),
                     Some(_) => {
                         return Err(BzrError::XmlRpc(format!(
-                            "expected a string version for extension '{name}'"
+                            "expected a string version for extension '{label}'"
                         )))
                     }
                 };
