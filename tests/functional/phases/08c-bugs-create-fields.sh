@@ -90,7 +90,9 @@ if assert_success &&
 test_begin "bug-create-groups-restricts-public-access" "bug create --groups restricts public access"
 _GROUP_WB=$(unique_name group-restrict)
 GID=$(make_bug --marker "$_GROUP_WB" "${_CF[@]}" --summary "group create" --groups functest-grp)
-if [[ -n "$GID" ]]; then
+if [[ -z "$GID" ]]; then
+    test_fail "no fixture bug: --groups functest-grp create did not succeed"
+else
     run_bzr bug view "$GID"
     if assert_success && assert_json '.id' "$GID"; then
         run_bzr_raw --json --server public bug view "$GID"
@@ -122,7 +124,9 @@ test_begin "bug-create-with-comment-with-attachment-compound-flags" "bug create 
 CCID=$(make_bug "${_CF[@]}" --summary "compound create" \
     --with-comment "${_CA_MARK} reproduced" \
     --with-attachment "$_CA_FILE" --attachment-description "boot trace log")
-if [[ -n "$CCID" ]]; then
+if [[ -z "$CCID" ]]; then
+    test_fail "no fixture bug: --with-comment --with-attachment create did not succeed"
+else
     run_bzr comment list "$CCID"
     if assert_success && assert_json_contains '[.[].text] | join("\n")' "$_CA_MARK"; then
         run_bzr attachment list "$CCID"
@@ -161,7 +165,9 @@ if assert_exit_code 7; then test_pass; fi
 test_begin "bug-create-comment-tag-round-trips" "bug create --comment-tag tags the first comment"
 _CT_TAG=$(unique_name comment-tag)
 TID=$(make_bug "${_CF[@]}" --summary "comment-tag create" --comment-tag "$_CT_TAG")
-if [[ -n "$TID" ]]; then
+if [[ -z "$TID" ]]; then
+    test_fail "no fixture bug: --comment-tag create did not succeed"
+else
     run_bzr comment list "$TID"
     if assert_success && jq -e --arg tag "$_CT_TAG" \
         'any(.[]; .tags | index($tag))' "$BZR_STDOUT" >/dev/null; then
