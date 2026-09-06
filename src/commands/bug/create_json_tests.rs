@@ -35,6 +35,7 @@ fn plain(
         crate::commands::bug::compound::CompoundPlan {
             comment: None,
             attachments: vec![],
+            comment_tags: vec![],
         },
     )
 }
@@ -313,6 +314,49 @@ fn json_groups_non_empty_cli_override_replaces_json_groups() {
     assert_eq!(merged.groups.into_option(), Some(vec!["cli-group".into()]));
 }
 
+#[test]
+fn comment_tags_require_a_description() {
+    let mut input: JsonCreateBug = serde_json::from_value(serde_json::json!({
+        "product": "P", "component": "C", "summary": "S", "comment_tags": ["triaged"]
+    }))
+    .unwrap();
+
+    let err = input.take_plan().unwrap_err();
+    assert!(matches!(
+        err,
+        BzrError::InputValidation { message: ref m, .. } if m.contains("--comment-tag")
+    ));
+}
+
+#[test]
+fn comment_tags_land_in_the_compound_plan_with_description() {
+    let mut input: JsonCreateBug = serde_json::from_value(serde_json::json!({
+        "product": "P", "component": "C", "summary": "S", "description": "d",
+        "comment_tags": ["triaged", "needs-review"]
+    }))
+    .unwrap();
+
+    let plan = input.take_plan().unwrap();
+    assert_eq!(plan.comment_tags, vec!["triaged", "needs-review"]);
+    // take_plan leaves the scalar description intact for into_params.
+    let params = input.into_params().unwrap();
+    assert_eq!(params.description.as_deref(), Some("d"));
+}
+
+#[test]
+fn comment_tags_non_empty_cli_flag_replaces_json() {
+    let json: JsonCreateBug = serde_json::from_value(serde_json::json!({
+        "description": "d", "comment_tags": ["json-tag"]
+    }))
+    .unwrap();
+    let mut args = from_json_args("input.json");
+    args.comment_tag = vec!["cli-tag".into()];
+
+    let merged = super::overlay_cli(json, &args).unwrap();
+
+    assert_eq!(merged.comment_tags, vec!["cli-tag".to_string()]);
+}
+
 // ── Compound --from-json (comment / attachments) ─────────────────────
 
 #[test]
@@ -380,6 +424,7 @@ async fn array_sub_step_failure_suppresses_done_event() {
                     is_private: false,
                 }),
                 attachments: vec![],
+                comment_tags: vec![],
             },
         ),
     ];
@@ -428,6 +473,7 @@ async fn array_one_good_one_failing_comment_exits_11() {
                     is_private: false,
                 }),
                 attachments: vec![],
+                comment_tags: vec![],
             },
         ),
     ];
@@ -472,6 +518,7 @@ fn from_json_args(path: &str) -> crate::cli::CreateArgs {
         with_comment_file: None,
         with_attachment: vec![],
         attachment_description: vec![],
+        comment_tag: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
     }
 }

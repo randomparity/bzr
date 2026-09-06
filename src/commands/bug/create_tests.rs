@@ -29,6 +29,7 @@ fn create_action() -> BugAction {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -138,6 +139,7 @@ async fn bug_create_sends_parity_fields_in_body() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs {
@@ -190,6 +192,7 @@ async fn bug_create_rejects_malformed_deadline() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs {
@@ -233,6 +236,7 @@ async fn bug_create_missing_product_returns_input_validation() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -274,6 +278,7 @@ async fn bug_create_missing_component_returns_input_validation() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -315,6 +320,7 @@ async fn bug_create_with_unknown_template_errors() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -391,6 +397,7 @@ async fn bug_create_with_template_fills_missing_fields() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -460,6 +467,7 @@ async fn bug_create_template_applies_create_metadata_defaults() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -536,6 +544,7 @@ async fn bug_create_cli_create_metadata_overrides_template() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs {
@@ -607,6 +616,7 @@ async fn bug_create_reads_description_from_file() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -645,6 +655,7 @@ async fn bug_create_description_file_missing_returns_input_validation() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -690,6 +701,7 @@ async fn bug_create_description_file_non_utf8_returns_input_validation() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -732,6 +744,7 @@ async fn bug_create_missing_summary_without_editor_flow_is_rejected() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -929,6 +942,7 @@ fn editor_action_no_summary_no_description() -> BugAction {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -1089,6 +1103,7 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -1121,6 +1136,42 @@ fn resolve_description_conflict_errors() {
     }
 }
 
+#[test]
+fn resolve_comment_tags_requires_description() {
+    let err =
+        super::resolve_comment_tags(&["triaged".to_string()], false, "no description").unwrap_err();
+    assert!(matches!(
+        err,
+        BzrError::InputValidation { message: ref m, .. } if m == "no description"
+    ));
+}
+
+#[test]
+fn resolve_comment_tags_accepts_tags_with_description() {
+    let tags = super::resolve_comment_tags(
+        &["triaged".to_string(), "needs-review".to_string()],
+        true,
+        "unused",
+    )
+    .unwrap();
+    assert_eq!(tags, vec!["triaged", "needs-review"]);
+}
+
+#[test]
+fn resolve_comment_tags_rejects_whitespace_only_tag() {
+    let err = super::resolve_comment_tags(&["   ".to_string()], true, "unused").unwrap_err();
+    assert!(matches!(
+        err,
+        BzrError::InputValidation { message: ref m, .. } if m.contains("--comment-tag")
+    ));
+}
+
+#[test]
+fn resolve_comment_tags_empty_is_fine_without_description() {
+    let tags = super::resolve_comment_tags(&[], false, "unused").unwrap();
+    assert!(tags.is_empty());
+}
+
 // ── Structured input: bug create --from-json (#307) ──────────────────
 
 /// Build a `from_json` create action: `from_json` set, every CLI field at its
@@ -1144,6 +1195,7 @@ fn from_json_action(path: &str) -> BugAction {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -1656,6 +1708,7 @@ fn compound_args(
         depends_on: vec![],
         with_comment: with_comment.map(Into::into),
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment,
         attachment_description: descriptions.into_iter().map(Into::into).collect(),
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -1676,7 +1729,7 @@ fn tmp_attachment(suffix: &str, body: &[u8]) -> tempfile::TempPath {
 fn build_compound_plan_more_descriptions_than_attachments_errors() {
     let att = tmp_attachment(".log", b"x");
     let args = compound_args(vec![att.to_path_buf()], vec!["d1", "d2"], None);
-    let err = super::build_compound_plan(&args).unwrap_err();
+    let err = super::build_compound_plan(&args, vec![]).unwrap_err();
     assert_eq!(err.exit_code(), 7);
     assert!(matches!(err, BzrError::InputValidation { .. }));
 }
@@ -1684,14 +1737,14 @@ fn build_compound_plan_more_descriptions_than_attachments_errors() {
 #[test]
 fn build_compound_plan_description_without_attachment_errors() {
     let args = compound_args(vec![], vec!["orphan"], None);
-    let err = super::build_compound_plan(&args).unwrap_err();
+    let err = super::build_compound_plan(&args, vec![]).unwrap_err();
     assert_eq!(err.exit_code(), 7);
 }
 
 #[test]
 fn build_compound_plan_empty_comment_body_errors() {
     let args = compound_args(vec![], vec![], Some("   "));
-    let err = super::build_compound_plan(&args).unwrap_err();
+    let err = super::build_compound_plan(&args, vec![]).unwrap_err();
     assert_eq!(err.exit_code(), 7);
 }
 
@@ -1704,7 +1757,7 @@ fn build_compound_plan_undescribed_attachment_defaults_summary_to_filename() {
         vec!["first only"],
         None,
     );
-    let plan = super::build_compound_plan(&args).unwrap();
+    let plan = super::build_compound_plan(&args, vec![]).unwrap();
     assert_eq!(plan.attachments.len(), 2);
     assert_eq!(plan.attachments[0].summary, "first only");
     assert_eq!(plan.attachments[1].summary, plan.attachments[1].file_name);

@@ -6,10 +6,41 @@ use wiremock::{Mock, ResponseTemplate};
 use crate::commands::runtime::invocation::CommandContext;
 use crate::error::BzrError;
 use crate::types::attachment::UploadAttachmentParams;
-use crate::types::comment::AddCommentParams;
+use crate::types::comment::{AddCommentParams, Comment};
 use crate::types::output::OutputFormat;
 
-use super::{create_with_sub_steps, CompoundPlan};
+use super::{create_with_sub_steps, find_description_comment_id, CompoundPlan};
+
+fn comment_with(id: u64, count: Option<u64>) -> Comment {
+    Comment {
+        id,
+        bug_id: None,
+        text: None,
+        creator: None,
+        creation_time: None,
+        count,
+        is_private: None,
+        attachment_id: None,
+        tags: vec![],
+    }
+}
+
+#[test]
+fn find_description_comment_id_prefers_count_zero() {
+    let comments = vec![comment_with(50, Some(1)), comment_with(49, Some(0))];
+    assert_eq!(find_description_comment_id(&comments), Some(49));
+}
+
+#[test]
+fn find_description_comment_id_falls_back_to_first_when_count_is_absent() {
+    let comments = vec![comment_with(70, None), comment_with(71, None)];
+    assert_eq!(find_description_comment_id(&comments), Some(70));
+}
+
+#[test]
+fn find_description_comment_id_none_when_empty() {
+    assert_eq!(find_description_comment_id(&[]), None);
+}
 
 fn sample_params() -> crate::types::bug::CreateBugParams {
     crate::types::bug::CreateBugParams {
@@ -28,6 +59,7 @@ fn comment_only_plan() -> CompoundPlan {
             is_private: false,
         }),
         attachments: vec![],
+        comment_tags: vec![],
     }
 }
 
@@ -114,6 +146,88 @@ async fn full_success_emits_plain_action_result() {
     assert!(data.get("failed").is_none(), "data was: {data}");
 }
 
+/// `Bug.create` has no `comment_tags` parameter, so `--comment-tag` on create
+/// tags the description comment via a post-create GET + PUT round trip
+/// (issue #672).
+fn comment_tags_only_plan(tags: &[&str]) -> CompoundPlan {
+    CompoundPlan {
+        comment: None,
+        attachments: vec![],
+        comment_tags: tags.iter().map(|t| (*t).to_string()).collect(),
+    }
+}
+
+async fn mock_description_comment(mock: &wiremock::MockServer, bug_id: u64, comment_id: u64) {
+    Mock::given(method("GET"))
+        .and(path(format!("/rest/bug/{bug_id}/comment")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": { bug_id.to_string(): { "comments": [{
+                "id": comment_id, "bug_id": bug_id, "text": "the description",
+                "creator": "user@test.com", "creation_time": "2025-01-01T00:00:00Z",
+                "is_private": false, "count": 0
+            }]}}
+        })))
+        .mount(mock)
+        .await;
+}
+
+#[tokio::test]
+async fn comment_tags_tag_the_description_comment() {
+    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    mock_create(&mock, 5).await;
+    mock_description_comment(&mock, 5, 200).await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/comment/200/tags"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!(["triaged", "needs-review"])),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    create_with_sub_steps(
+        &sample_params(),
+        comment_tags_only_plan(&["triaged", "needs-review"]),
+        &ctx,
+        &mut io.writers(),
+    )
+    .await
+    .unwrap();
+    let data = crate::test_helpers::json_envelope_data(io.out_str());
+    assert_eq!(data["id"], 5);
+    assert_eq!(data["action"], "created");
+    assert!(data.get("failed").is_none(), "data was: {data}");
+}
+
+#[tokio::test]
+async fn comment_tags_put_failure_exits_11_naming_the_step() {
+    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    mock_create(&mock, 6).await;
+    mock_description_comment(&mock, 6, 201).await;
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/comment/201/tags"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&mock)
+        .await;
+    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let err = create_with_sub_steps(
+        &sample_params(),
+        comment_tags_only_plan(&["triaged"]),
+        &ctx,
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err.exit_code(), 11);
+    assert!(io.err_str().contains('6'), "stderr: {}", io.err_str());
+    let data = crate::test_helpers::json_envelope_data(io.out_str());
+    assert_eq!(data["id"], 6);
+    assert_eq!(data["failed"][0]["step"], "comment_tags");
+}
+
 #[tokio::test]
 async fn attachment_500_exits_11_naming_the_file() {
     let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
@@ -126,6 +240,7 @@ async fn attachment_500_exits_11_naming_the_file() {
     let plan = CompoundPlan {
         comment: None,
         attachments: vec![attachment("trace.log")],
+        comment_tags: vec![],
     };
     let ctx = CommandContext::new(None, OutputFormat::Json, None);
     let mut io = crate::test_helpers::CapturedIo::new();
@@ -155,6 +270,7 @@ async fn dry_run_makes_no_network_calls_and_previews_sub_steps() {
             is_private: false,
         }),
         attachments: vec![attachment("trace.log")],
+        comment_tags: vec![],
     };
     let mut io = crate::test_helpers::CapturedIo::new();
     create_with_sub_steps(&sample_params(), plan, &ctx, &mut io.writers())

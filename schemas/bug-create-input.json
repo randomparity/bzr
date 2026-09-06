@@ -128,6 +128,14 @@
           },
           "examples": [["review?(alice@example.com)"]]
         },
+        "comment_tags": {
+          "description": "Tags applied to the description comment (comment 0). Distinct from `comment` below, which posts a separate comment after the bug is created.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [["triaged"]]
+        },
         "comment": {
           "description": "First comment posted after the bug is created (compound create). A failed comment POST keeps the bug and exits 11.",
           "type": ["object", "null"],

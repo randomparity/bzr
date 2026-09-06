@@ -11,13 +11,7 @@ use super::{write_batch_result, write_update_dry_run};
 
 #[test]
 fn write_batch_result_table_prints_successes_and_failures() {
-    let batch = BatchResult::new(
-        vec![1],
-        vec![BatchFailure {
-            id: 2,
-            error: "boom".into(),
-        }],
-    );
+    let batch = BatchResult::new(vec![1], vec![BatchFailure::new(2, "boom")]);
     let mut io = CapturedIo::new();
 
     write_batch_result(&batch, OutputFormat::Table, true, &mut io.writers());
@@ -28,13 +22,7 @@ fn write_batch_result_table_prints_successes_and_failures() {
 
 #[test]
 fn write_batch_result_json_emits_batch_result_shape() {
-    let batch = BatchResult::new(
-        vec![7],
-        vec![BatchFailure {
-            id: 8,
-            error: "nope".into(),
-        }],
-    );
+    let batch = BatchResult::new(vec![7], vec![BatchFailure::new(8, "nope")]);
     let mut io = CapturedIo::new();
 
     write_batch_result(&batch, OutputFormat::Json, false, &mut io.writers());

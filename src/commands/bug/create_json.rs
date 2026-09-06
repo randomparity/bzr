@@ -54,6 +54,11 @@ struct JsonCreateBug {
     groups: JsonGroups,
     #[serde(default)]
     flags: Vec<String>,
+    /// Tags applied to the description comment (comment 0), forwarded as
+    /// `comment_tags` on `Bug.create`. Distinct from `comment` below, which
+    /// posts a separate compound-create comment after the bug exists.
+    #[serde(default)]
+    comment_tags: Vec<String>,
     /// First comment to post after the bug is created (compound create).
     #[serde(default)]
     comment: Option<JsonComment>,
@@ -143,9 +148,15 @@ impl JsonCreateBug {
             })?;
             attachments.push(params);
         }
+        let comment_tags = super::create::resolve_comment_tags(
+            &std::mem::take(&mut self.comment_tags),
+            self.description.is_some(),
+            "--comment-tag requires a description (set it in the JSON or via --description)",
+        )?;
         Ok(CompoundPlan {
             comment,
             attachments,
+            comment_tags,
         })
     }
 
@@ -236,6 +247,7 @@ fn overlay_cli(mut json: JsonCreateBug, args: &CreateArgs) -> Result<JsonCreateB
         blocks,
         depends_on,
         create_fields,
+        comment_tag,
         ..
     } = args;
     merge_set(&mut json.product, product.as_deref());
@@ -262,6 +274,7 @@ fn overlay_cli(mut json: JsonCreateBug, args: &CreateArgs) -> Result<JsonCreateB
     merge_vec(&mut json.keywords, &create_fields.keywords);
     json.groups.overlay_cli(&create_fields.groups);
     merge_vec(&mut json.flags, &create_fields.flag);
+    merge_vec(&mut json.comment_tags, comment_tag);
     // `blocks`/`depends_on` are `Vec<u64>`; `merge_vec` is `Vec<String>`-typed,
     // so keep the equivalent guard inline.
     if !blocks.is_empty() {

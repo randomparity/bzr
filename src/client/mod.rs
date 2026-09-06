@@ -7,6 +7,7 @@ mod resources;
 mod response;
 mod transport;
 mod version;
+pub(crate) use version::parse_major_minor;
 
 use reqwest::header::HeaderValue;
 use serde::Deserialize;

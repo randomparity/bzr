@@ -153,6 +153,11 @@ async fn update_many_from_json(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     let format = ctx.format();
+    super::update::warn_if_minor_update_unsupported(
+        ctx,
+        requests.iter().any(|request| request.params.minor_update),
+        w,
+    );
     if ctx.dry_run() {
         write_json_array_dry_run(requests, format, w);
         return Ok(());
@@ -177,11 +182,17 @@ async fn update_many_from_json(
     let mut failed = Vec::new();
     for request in requests {
         match client.update_bug(request.id, &request.params).await {
-            Ok(()) => succeeded.push(request.id),
-            Err(e) => failed.push(BatchFailure {
-                id: request.id,
-                error: e.to_string(),
-            }),
+            Ok(()) if request.params.comment_tags.is_empty() => succeeded.push(request.id),
+            Ok(()) => match super::update::apply_comment_tags(&client, request.id, &request.params)
+                .await
+            {
+                Ok(()) => succeeded.push(request.id),
+                Err(e) => {
+                    super::update::warn_comment_tags_failed(w, request.id, &e);
+                    failed.push(BatchFailure::comment_tags(request.id, e.to_string()));
+                }
+            },
+            Err(e) => failed.push(BatchFailure::new(request.id, e.to_string())),
         }
         crate::output::progress::batch_event(
             ctx.progress(),
@@ -218,10 +229,7 @@ async fn preflight_expect_unchanged_since(
         };
         if let Err(e) = super::update::ensure_unchanged_since(client, &[request.id], expected).await
         {
-            failed.push(BatchFailure {
-                id: request.id,
-                error: e.to_string(),
-            });
+            failed.push(BatchFailure::new(request.id, e.to_string()));
         }
     }
     failed

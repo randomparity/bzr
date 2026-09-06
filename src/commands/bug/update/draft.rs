@@ -35,6 +35,9 @@ pub(crate) struct BugUpdateDraft {
     pub(crate) comment_file: Option<std::path::PathBuf>,
     pub(crate) comment_private: Option<bool>,
     #[serde(default)]
+    pub(crate) comment_tags: Vec<String>,
+    pub(crate) minor_update: Option<bool>,
+    #[serde(default)]
     pub(crate) flags: Vec<String>,
     #[serde(default)]
     pub(crate) blocks_add: Vec<u64>,
@@ -88,6 +91,8 @@ impl BugUpdateDraft {
             comment: args.comment.clone(),
             comment_file: args.comment_file.clone(),
             comment_private: args.comment_private.then_some(true),
+            comment_tags: args.comment_tag.clone(),
+            minor_update: args.minor_update.then_some(true),
             flags: args.flag.clone(),
             blocks_add: args.blocks_add.clone(),
             blocks_remove: args.blocks_remove.clone(),
@@ -133,6 +138,8 @@ impl BugUpdateDraft {
             self.comment_file = Some(comment_file.to_path_buf());
         }
         merge_bool_true(&mut self.comment_private, args.comment_private);
+        merge_vec(&mut self.comment_tags, &args.comment_tag);
+        merge_bool_true(&mut self.minor_update, args.minor_update);
         merge_vec(&mut self.flags, &args.flag);
         merge_vec_u64(&mut self.blocks_add, &args.blocks_add);
         merge_vec_u64(&mut self.blocks_remove, &args.blocks_remove);

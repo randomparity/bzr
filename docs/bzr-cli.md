@@ -170,6 +170,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │          [--blocks <IDs>] [--depends-on <IDs>] [--alias <A>] [--url <U>]
 │   │          [--whiteboard <W>] [--target-milestone <T>] [--deadline <DATE>]
 │   │          [--cc <C>...] [--keywords <K>...] [--groups <G>...] [--flag <F>...]
+│   │          [--comment-tag <TAG>...]
 │   │          [--with-comment <TEXT> | --with-comment-file <PATH>]
 │   │          [--with-attachment <PATH>...] [--attachment-description <TEXT>...]
 │   ├── clone <ID> [--summary <S>] [--product <P>] [--component <C>] [--version <V>]
@@ -190,6 +191,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │                   [--cc-add <C>] [--cc-remove <C>] [--groups-add <G>] [--groups-remove <G>]
 │   │                   [--see-also-add <URL>] [--see-also-remove <URL>]
 │   │                   [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
+│   │                   [--comment-tag <TAG>...] [--minor-update]
 │   │                   [--expect-unchanged-since <TIMESTAMP>]
 │   ├── resolve <ID...> [--status <STATUS>] [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>]
 │   │                   [--comment-private] [--expect-unchanged-since <TIMESTAMP>]
@@ -812,6 +814,7 @@ bzr bug create --from-json bugs.json
 | `--groups <G>` | No | | Add the bug to these groups (comma-separated, repeatable) |
 | `--flag <F>` | No | | Set/request a flag using Bugzilla flag syntax (repeatable): `name+`, `name-`, `name?`, `name?(user@example.com)` |
 | `--template <T>` | No | | Name of a saved template to use for default field values |
+| `--comment-tag <TAG>` | No | | Tag the bug's first comment (the description) with this tag (repeatable). Requires a description from any source; using it without one is a usage error (exit 7). `Bug.create` has no `comment_tags` parameter, so this is a post-create sub-step (see [Compound create](#compound-create-comment--attachments)); a failed tag PUT does not roll back the created bug. |
 | `--with-comment <TEXT>` | No | | Post a first comment after the bug is created (compound create). Literal text; no `-`/stdin. Mutually exclusive with `--with-comment-file` and `--from-json`. See [Compound create](#compound-create-comment--attachments). |
 | `--with-comment-file <PATH>` | No | | Post a first comment read from a UTF-8 file. Mutually exclusive with `--with-comment` and `--from-json`. |
 | `--with-attachment <PATH>` | No | | Upload an attachment after the bug is created (repeatable). Content type guessed from the extension. Mutually exclusive with `--from-json`. |
@@ -877,9 +880,9 @@ mutually exclusive with `--from-json`.
 | 2 | Conflicting flags (e.g. `--description` and `--description-file` both set, or a compound flag with `--from-json`) |
 | 4 | Bugzilla API error (e.g. server requires `--op-sys` and it wasn't provided) |
 | 6 | Unreadable `--with-attachment` / JSON `attachments[].file` |
-| 7 | Input validation: missing `--summary` outside the editor flow; missing or unreadable `--description-file`; empty stdin without an explicit description; empty editor buffer; `$EDITOR` exited non-zero; empty `--with-comment` body; more `--attachment-description` than `--with-attachment`; malformed `--from-json` (bad JSON, unknown key, wrong shape, or missing required field) |
+| 7 | Input validation: missing `--summary` outside the editor flow; missing or unreadable `--description-file`; empty stdin without an explicit description; empty editor buffer; `$EDITOR` exited non-zero; empty `--with-comment` body; more `--attachment-description` than `--with-attachment`; `--comment-tag` without a description; malformed `--from-json` (bad JSON, unknown key, wrong shape, or missing required field) |
 | 9 | Authentication failure |
-| 11 | Partial failure: one or more elements of a `--from-json` array failed to create, **or** a compound sub-step (comment/attachment) failed after the bug was created |
+| 11 | Partial failure: one or more elements of a `--from-json` array failed to create, **or** a compound sub-step (comment/attachment/comment_tags) failed after the bug was created |
 
 Agent note: agent workflows should pass `--description` (or `--description-file`) explicitly and supply `--summary`. The `$EDITOR` flow only fires when stdin is a TTY, which is rare in headless / CI invocations.
 
@@ -906,14 +909,14 @@ before the first write, but it is not a reservation.
 - A top-level **object** files one bug and returns the usual `{"resource":"bug","action":"created","id":N}` result.
 - A top-level **array** files one bug per element and returns a partial-failure result `{"resource":"bug","action":"created","created":[...],"failed":[{"index":N,"error":"..."}]}`. If any element fails, the command exits **11** (`BatchPartialFailure`); all input is validated before any bug is created, so a malformed element never half-creates a batch.
 
-Accepted keys match the create flag names: `product`, `component`, `summary`, `version`, `description`, `priority`, `severity`, `assignee`, `op_sys`, `platform`, `alias`, `url`, `whiteboard`, `target_milestone`, `deadline`, `blocks`, `depends_on`, `cc`, `keywords`, `groups`, `flags` (an array of flag-syntax strings). **Unknown keys are rejected** (exit 7) rather than silently ignored, so a typo fails fast. `product`, `component`, and `summary` are required (in the JSON or via a CLI flag). For `groups`, a missing key omits `groups` from the create request, while an explicit empty array sends `"groups":[]`.
+Accepted keys match the create flag names: `product`, `component`, `summary`, `version`, `description`, `priority`, `severity`, `assignee`, `op_sys`, `platform`, `alias`, `url`, `whiteboard`, `target_milestone`, `deadline`, `blocks`, `depends_on`, `cc`, `keywords`, `groups`, `flags` (an array of flag-syntax strings), `comment_tags` (an array of tags applied to the description comment, forwarded as `comment_tags` on `Bug.create`; requires `description` from the JSON or a CLI flag). **Unknown keys are rejected** (exit 7) rather than silently ignored, so a typo fails fast. `product`, `component`, and `summary` are required (in the JSON or via a CLI flag). For `groups`, a missing key omits `groups` from the create request, while an explicit empty array sends `"groups":[]`.
 
 **Compound keys** (the JSON equivalent of the `--with-comment` / `--with-attachment` flags, see [Compound create](#compound-create-comment--attachments)):
 
-- `comment` — object `{"body": "...", "is_private": false}`. Posts a first comment after the bug is created. `body` is required and must be non-empty.
+- `comment` — object `{"body": "...", "is_private": false}`. Posts a first comment after the bug is created. `body` is required and must be non-empty. Distinct from the top-level `comment_tags` key above, which tags the description comment created *with* the bug, not this separate post-create comment.
 - `attachments` — array of objects `{"file": "...", "description": "...", "content_type": "...", "is_patch": false, "is_private": false}`. Each uploads one file after create; `file` is required, the rest are optional (`description` defaults to the filename, `content_type` to the extension guess). Both objects reject unknown keys.
 
-Both keys default to absent, so existing payloads are unaffected. In the array form, a sub-step failure on element *N* does **not** remove that bug's ID from `created`; instead the element is also recorded in `failed` as `{"index":N,"bug_id":M,"step":"comment"|"attachment","file":"...","error":"..."}`. **`created` and `failed` are therefore not disjoint** — `created` lists every bug the server filed, `failed` lists every failure; a created-but-partially-failed element appears in both. Count filed bugs with `created`, detect problems with `failed`. The single-object form with a failed sub-step emits a `compound-create-result` object instead (`bzr schema compound-create-result`).
+Both keys default to absent, so existing payloads are unaffected. `comment_tags` (see above) is a third sub-step on the same recovery model: a failed tag PUT after a successful create also lands in `failed` rather than rolling back. In the array form, a sub-step failure on element *N* does **not** remove that bug's ID from `created`; instead the element is also recorded in `failed` as `{"index":N,"bug_id":M,"step":"comment"|"attachment"|"comment_tags","file":"...","error":"..."}` (`file` is present only for `attachment`). **`created` and `failed` are therefore not disjoint** — `created` lists every bug the server filed, `failed` lists every failure; a created-but-partially-failed element appears in both. Count filed bugs with `created`, detect problems with `failed`. The single-object form with a failed sub-step emits a `compound-create-result` object instead (`bzr schema compound-create-result`).
 
 **Precedence:** an explicit CLI flag overrides the corresponding JSON field, applied uniformly to every element of an array — e.g. `--product Fedora --from-json bugs.json` forces `product` on all entries. `--from-json` is mutually exclusive with `--template` and bypasses the `$EDITOR` flow.
 
@@ -1057,6 +1060,8 @@ bzr bug update --from-json updates.json --json | jq '.data.failed'
 | `--comment <BODY>` | No | Post a comment atomically with the field changes; `-` reads stdin (mutually exclusive with `--comment-file`) |
 | `--comment-file <PATH>` | No | Read the comment body from a UTF-8 file; `-` reads stdin (mutually exclusive with `--comment`; missing or non-UTF-8 paths exit 7) |
 | `--comment-private` | No | Mark the comment private (requires `--comment` or `--comment-file`) |
+| `--comment-tag <TAG>` | No | Tag the comment posted with this update (repeatable). Requires `--comment` or `--comment-file`; using it alone is a usage error (exit 7). `Bug.update`'s `comment_tags` parameter is not reliably honored across supported server versions, so this issues a follow-up tag call after the update (two API round-trips), identifying the posted comment by recency rather than by an ID `Bug.update` never returns. A comment landed by another user or process on the same bug in that narrow window could be mistagged instead — a check-then-write race the same shape as `--expect-unchanged-since`'s, disclosed rather than eliminated. If only the tag call fails, the field changes and comment have already landed: a batch failure for that ID carries `"step":"comment_tags"` (see [Structured update input](#structured-update-input---from-json)'s batch shape) — do **not** retry with the same `--comment` text, since `Bug.update` posts a new comment on every call and a retry would duplicate it; use `bzr comment tag` on the existing comment instead. |
+| `--minor-update` | No | Suppress bugmail notifications for this update (forwards Bugzilla's `minor_update` field). Core upstream functionality with a version floor, not a vendor extension — verified present on Bugzilla 5.3.3, absent on 5.0.6 and 5.2. bzr has no runtime capability detection for this; on a server below the floor it warns on stderr (naming the detected version) and sends the notification anyway rather than failing the update. |
 | `--expect-unchanged-since <TIMESTAMP>` | No | Optimistic-concurrency guard: only apply if the bug's `last_change_time` still equals this value (pass the `last_change_time` from a preceding `bug view`). Re-reads each target before writing and exits 14 (collision) without writing on a mismatch. Client-side, so a narrow check-then-write window remains; with multiple IDs any mismatch aborts the whole batch |
 
 #### Structured update input (`--from-json`)
@@ -1078,7 +1083,9 @@ Accepted update keys are `id`, `status`, `resolution`, `dupe_of`, `alias`,
 `blocks_add`, `blocks_remove`, `depends_on_add`, `depends_on_remove`,
 `keywords_add`, `keywords_remove`, `cc_add`, `cc_remove`, `groups_add`,
 `groups_remove`, `see_also_add`, `see_also_remove`, `comment`,
-`comment_file`, `comment_private`, and `expect_unchanged_since`.
+`comment_file`, `comment_private`, `comment_tags` (an array of tags for the
+posted comment; requires `comment` or `comment_file`), `minor_update`
+(suppresses bugmail notifications), and `expect_unchanged_since`.
 **Unknown keys are rejected** (exit 7).
 
 List fields use the same add/remove semantics as the flags: for example,

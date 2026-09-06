@@ -215,6 +215,17 @@ pub struct UpdateBugParams {
     pub see_also: StringListUpdate,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comment: Option<CommentUpdate>,
+    /// Tags applied to the comment created by `comment` above. Sent on the
+    /// wire as a best-effort hint for servers that honor it, but not relied
+    /// on: `Bug.update`'s `comment_tags` parameter is not reliably honored
+    /// across supported server versions (issue #672), so
+    /// `commands::bug::update::execute::apply_comment_tags` always issues a
+    /// follow-up `bug/comment/{id}/tags` call as the correctness guarantee.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub comment_tags: Vec<String>,
+    /// Suppress bugmail notifications for this update.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub minor_update: bool,
     /// Edit the privacy of comments that are already on the bug.
     /// Keys are comment IDs; values are `true` (mark private) or
     /// `false` (mark public). Used by `attachment upload

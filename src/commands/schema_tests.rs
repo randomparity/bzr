@@ -254,10 +254,10 @@ fn count_result_conforms() {
 fn batch_result_conforms() {
     let batch = BatchResult::new(
         vec![1, 2],
-        vec![BatchFailure {
-            id: 3,
-            error: "boom".into(),
-        }],
+        vec![
+            BatchFailure::new(3, "boom"),
+            BatchFailure::comment_tags(4, "not found"),
+        ],
     );
     assert_conforms("batch-result", &to_value(&batch));
 }
@@ -281,6 +281,7 @@ fn compound_create_result_conforms() {
         vec![
             SubStepFailure::comment("comment service unavailable"),
             SubStepFailure::attachment("trace.log", "413 payload too large"),
+            SubStepFailure::comment_tags("comment not found"),
         ],
     );
     assert_conforms("compound-create-result", &to_value(&result));

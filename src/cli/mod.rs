@@ -343,6 +343,12 @@ pub struct Cli {
     clippy::doc_markdown,
     reason = "doc examples are literal shell commands; wrapping URLs in <> or identifiers in backticks would degrade copy-paste UX"
 )]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Bug(BugAction) carries the largest arg struct in the CLI surface; boxing it would \
+              ripple through every dispatch match arm for a one-time stack-size difference that \
+              matters only while parsing args, not in any hot path"
+)]
 pub(crate) enum Commands {
     /// Operate on bugs: list, view, search, create, clone, update, history.
     ///
