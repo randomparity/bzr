@@ -58,16 +58,16 @@ decide which of two disagreeing responses wins. ADR 0057 decides that.
   built identically to what `check_response_status` produces from the same
   status and body. `error.type`, the structured-error key set, and
   `BzrError::Api`'s own exit code are unchanged.
+- **R8** — The relayed body is redacted on the same terms as every other error
+  body, and no transport error's `Display` — which carries the request URL, and
+  so the API key on the query-parameter path — reaches a log or a message on the
+  new code path.
 - **R9** — Because `api_code` is read as control flow by
   `BzrError::is_permissive_bug_view_error` (`src/error.rs:247`), a relayed code
   102 makes a previously-fatal `bug view --permissive` / `comment list
   --permissive` batch suppressible, moving that batch's process exit from 4 to
   0. That is accepted (ADR 0057, Consequences) and must be pinned by a test, not
   discovered.
-- **R8** — The relayed body is redacted on the same terms as every other error
-  body, and no transport error's `Display` — which carries the request URL, and
-  so the API key on the query-parameter path — reaches a log or a message on the
-  new code path.
 
 ## Design
 
@@ -214,10 +214,11 @@ different 401 from the second.
   retry 401 `{"error":true,"message":"..."}`. Expect the original's code.
 - `auth_fallback_band_edges_separate_login_failure_from_refusal` — 300 and 399
   keep the original; 299 and 400 are relayed.
-- `error_body_without_a_code_reports_the_unknown_code_sentinel` — a plain HTTP
-  400 error envelope with no `code` still reports `-1`, pinning that moving the
-  construction into `error_from_status_body` preserved `ErrorResponse`'s
-  default.
+One further case goes in `src/client/response_tests.rs`, beside the rest of that
+family rather than with the fallback tests, because no fallback is involved:
+`error_body_without_a_code_reports_the_unknown_code_sentinel` — a plain HTTP 400
+error envelope with no `code` still reports `-1`, pinning that moving the
+construction into `error_from_status_body` preserved `ErrorResponse`'s default.
 
 **Functional (`tests/functional/phases/08e-bugs-restricted-access.sh`).** Pins
 the contract against a real server. A stock Bugzilla authenticates the first
