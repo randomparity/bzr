@@ -277,6 +277,12 @@ fn leg_status_is_conclusive(status: reqwest::StatusCode) -> bool {
         || status == reqwest::StatusCode::FORBIDDEN
 }
 
+/// Tail of every decline message. Keeping query-parameter auth is the correct
+/// outcome, but it has a cost the operator should be able to see, and all three
+/// declines owe them the same sentence.
+const KEEPING_QUERY_PARAM: &str = "keeping query-parameter auth -- the API key travels in \
+     request URLs and so reaches the server's access log";
+
 /// Verify that the server actually honours `X-BUGZILLA-API-KEY`, rather than
 /// answering the probe the same way it answers an anonymous caller.
 ///
@@ -297,6 +303,10 @@ pub(super) async fn verify_header_auth_via_rest(
     login: &str,
 ) -> bool {
     let url = format!("{base}/rest/user");
+    // Built once so the re-check below is the same request as the first
+    // anonymous leg by construction: if the two ever drifted apart, the re-check
+    // would be comparing different requests and would prove nothing.
+    let anonymous_request = || http.get(&url).query(&[("names", login)]);
 
     let Some(header_leg) = read_probe_leg(
         http.get(&url)
@@ -313,16 +323,13 @@ pub(super) async fn verify_header_auth_via_rest(
         return false;
     }
 
-    let Some(anonymous_leg) =
-        read_probe_leg(http.get(&url).query(&[("names", login)]), "anonymous").await
-    else {
+    let Some(anonymous_leg) = read_probe_leg(anonymous_request(), "anonymous").await else {
         return false;
     };
     if anonymous_leg.body == header_leg.body {
         tracing::info!(
             "header auth probe on rest/user matched the anonymous response; \
-             the header changed nothing, so keeping query-parameter auth -- \
-             the API key travels in request URLs and so reaches the server's access log"
+             the header changed nothing, so {KEEPING_QUERY_PARAM}"
         );
         return false;
     }
@@ -344,8 +351,7 @@ pub(super) async fn verify_header_auth_via_rest(
     if query_leg.body != header_leg.body {
         tracing::info!(
             "header auth probe on rest/user matched neither the anonymous nor the \
-             authenticated response, so keeping query-parameter auth -- the API key \
-             travels in request URLs and so reaches the server's access log"
+             authenticated response, so {KEEPING_QUERY_PARAM}"
         );
         return false;
     }
@@ -360,12 +366,7 @@ pub(super) async fn verify_header_auth_via_rest(
     // confirm header auth. Re-observe before confirming; a server that genuinely
     // discriminates answers an anonymous caller the same way twice. One extra
     // request, only on the path that is about to return `true`.
-    let Some(recheck) = read_probe_leg(
-        http.get(&url).query(&[("names", login)]),
-        "anonymous re-check",
-    )
-    .await
-    else {
+    let Some(recheck) = read_probe_leg(anonymous_request(), "anonymous re-check").await else {
         return false;
     };
     if recheck.status.is_success() != anonymous_leg.status.is_success()
@@ -374,8 +375,7 @@ pub(super) async fn verify_header_auth_via_rest(
         tracing::info!(
             "header auth probe on rest/user saw the anonymous response change between \
              requests, so the difference was transient rather than authentication; \
-             keeping query-parameter auth -- the API key travels in request URLs and so \
-             reaches the server's access log"
+             {KEEPING_QUERY_PARAM}"
         );
         return false;
     }
