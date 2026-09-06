@@ -307,6 +307,121 @@ run_transport_observation_fixture() (
     fi
 )
 
+# Extract one column-0 shell function from a file, refusing anything that is not a
+# single complete definition. Shared by the fixtures that exercise real functions
+# rather than restating them.
+extract_shell_function() {
+    local name="$1" source_file="$2" destination="$3"
+
+    awk -v fn="^${name}\\\\(\\\\) \\\\{$" '$0 ~ fn, /^\}$/' "$source_file" >"$destination"
+    if [[ ! -s $destination ]] ||
+        [[ $(head -1 "$destination") != "${name}() {" ]] ||
+        [[ $(tail -1 "$destination") != '}' ]]; then
+        printf '%s did not extract as one complete function\n' "$name" >&2
+        return 1
+    fi
+}
+
+# The row's discrimination rests on two guards that no row-level control can reach:
+# lifecycle_require's double-count suppression, and lifecycle_ids_contain's refusal
+# of an empty expectation. Both are exactly the kind of guard this issue exists to
+# stop trusting untested, so they get direct coverage.
+run_lifecycle_assert_helpers_fixture() (
+    local phase="$PYBZ_DIR/../compare/01-bug-lifecycle.sh" extracted evidence status
+    extracted=$(mktemp)
+    evidence=$(mktemp)
+    trap 'rm -f "$extracted" "$evidence"' EXIT
+
+    extract_shell_function lifecycle_require "$phase" "$extracted" || return 1
+    # shellcheck disable=SC1090 # the extracted function text is generated above.
+    source "$extracted"
+    extract_shell_function lifecycle_ids_contain "$phase" "$extracted" || return 1
+    # shellcheck disable=SC1090 # the extracted function text is generated above.
+    source "$extracted"
+
+    FAIL_COUNT=0 TEST_RESULT_PENDING=0
+    test_fail() {
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+        TEST_RESULT_PENDING=1
+        printf '%s\n' "$1" >>"$evidence"
+    }
+
+    # A helper that already recorded its own failure must not be counted twice.
+    self_failing() {
+        test_fail 'inner reason'
+        return 1
+    }
+    set +e
+    lifecycle_require 'outer reason' self_failing
+    status=$?
+    set -e
+    assert_equals 1 "$status" "lifecycle_require propagates the helper's failure"
+    assert_equals 1 "$FAIL_COUNT" "lifecycle_require does not double-count"
+    assert_equals 'inner reason' "$(cat "$evidence")" "lifecycle_require keeps the inner reason"
+
+    # A helper that fails silently must get the caller's reason.
+    FAIL_COUNT=0 TEST_RESULT_PENDING=0
+    : >"$evidence"
+    set +e
+    lifecycle_require 'outer reason' false
+    status=$?
+    set -e
+    assert_equals 1 "$status" "lifecycle_require fails when its helper does"
+    assert_equals 'outer reason' "$(cat "$evidence")" "lifecycle_require names the assertion"
+
+    # An empty expectation would be vacuously satisfied, so it must be rejected.
+    printf '[{"id":41}]\n' >"$extracted"
+    FAIL_COUNT=0 TEST_RESULT_PENDING=0
+    : >"$evidence"
+    set +e
+    lifecycle_ids_contain "$extracted" '[]'
+    status=$?
+    set -e
+    assert_equals 1 "$status" "lifecycle_ids_contain rejects an empty expectation"
+    assert_equals 'ID expectation was empty or malformed' "$(cat "$evidence")" \
+        "lifecycle_ids_contain names the empty expectation"
+
+    set +e
+    lifecycle_ids_contain "$extracted" '[41]'
+    status=$?
+    lifecycle_ids_contain "$extracted" '[42]'
+    local absent=$?
+    set -e
+    assert_equals 0 "$status" "lifecycle_ids_contain accepts a present ID"
+    assert_equals 1 "$absent" "lifecycle_ids_contain rejects an absent ID"
+)
+
+run_saved_search_seed_fixture() (
+    # Source the real function out of run-compare.sh rather than restating it: a
+    # second hand-written copy is what let the arity change go untested before.
+    local source_file="$PYBZ_DIR/../run-compare.sh" extracted status
+    extracted=$(mktemp)
+    trap 'rm -f "$extracted"' EXIT
+    extract_shell_function seed_server_saved_search "$source_file" "$extracted" || return 1
+    # shellcheck disable=SC1090 # the extracted function text is generated above.
+    source "$extracted"
+
+    SCRIPT_DIR=$(cd "$PYBZ_DIR/.." && pwd)
+    container_runtime() { printf 'echo\n'; }
+    bugzilla_container_name() { printf 'fixture-container\n'; }
+
+    set +e
+    seed_server_saved_search admin@test.bzr name >/dev/null 2>&1
+    status=$?
+    set -e
+    assert_equals 2 "$status" "seed rejects a missing bug ID"
+
+    set +e
+    seed_server_saved_search admin@test.bzr name x >/dev/null 2>&1
+    status=$?
+    set -e
+    assert_equals 2 "$status" "seed rejects a non-decimal bug ID"
+
+    assert_equals 'bug_id=41&bug_id_type=anyexact' \
+        "$(seed_server_saved_search admin@test.bzr fixture-name 41 | awk '{print $NF}')" \
+        "seed builds a single-ID query"
+)
+
 run_lifecycle_phase_fixture() (
     local phase="$PYBZ_DIR/../compare/01-bug-lifecycle.sh"
     local fixture_output
@@ -321,7 +436,7 @@ run_lifecycle_phase_fixture() (
     umask 077
     PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
     TEST_ID_PREFIX=compare CURRENT_TEST_GROUP=01-bug-lifecycle BZ_VERSION=bz50
-    BZ_URL=http://127.0.0.1 BZR_COMPARE_API_KEY=fixture-secret
+    BZ_URL=http://127.0.0.1 BZ_PORT=1 BZR_COMPARE_API_KEY=fixture-secret
     COMPARE_ADMIN_EMAIL=admin@test.bzr PYBZ_RUNTIME=fake_lifecycle_runtime
     LIFECYCLE_BZR_ARGS="$COMPARE_EXCHANGE_DIR/bzr.args"
     sleep() { :; }
@@ -335,9 +450,17 @@ run_lifecycle_phase_fixture() (
     }
 
     seed_server_saved_search() {
-        [[ $1 == admin@test.bzr && -n $2 && ${#2} -le 64 &&
-            $3 =~ ^[1-9][0-9]*$ && $4 =~ ^[1-9][0-9]*$ ]]
+        [[ $1 == admin@test.bzr && -n $2 && ${#2} -le 64 && $# -eq 3 &&
+            $3 =~ ^[1-9][0-9]*$ ]]
     }
+
+    redhat_shape_start() {
+        [[ $# -eq 1 && ${BZR_FUNC_REDHAT_MODE:-} == saved-search &&
+            -n ${BZR_FUNC_SAVED_SEARCH_NAME:-} && -n ${BZR_FUNC_SAVED_SEARCH_IDS:-} ]] ||
+            return 1
+        REDHAT_SHAPE_PORT=59999
+    }
+    redhat_shape_stop() { REDHAT_SHAPE_PORT=""; }
 
     fixture_bug() {
         local id="$1" summary="$2"
@@ -368,8 +491,11 @@ run_lifecycle_phase_fixture() (
         LIFECYCLE_GENERIC_BZR_UPDATED=0
         : >"$LIFECYCLE_BZR_ARGS"
     }
+    # `reason`, when given, is the assertion-specific test_fail text this control
+    # must redden through. Checked before the success line is printed, so
+    # "controlled red" is never emitted for a row that reddened somewhere else.
     run_lifecycle_failure_control() {
-        local flag="$1" capability="$2" label="$3" value="${4:-1}"
+        local flag="$1" capability="$2" label="$3" value="${4:-1}" reason="${5:-}"
 
         reset_lifecycle_fixture
         printf -v "$flag" %s "$value"
@@ -381,6 +507,11 @@ run_lifecycle_phase_fixture() (
             ! grep -Fq "[compare/01-bug-lifecycle/${capability}] ${label} ... FAIL" \
                 "$fixture_output"; then
             printf '%s control %s unexpectedly passed\n' "$capability" "$flag" >&2
+            return 1
+        fi
+        if [[ -n $reason ]] && ! grep -Fq "$reason" "$fixture_output"; then
+            printf '%s did not redden through its own assertion (%s)\n' \
+                "$flag" "$reason" >&2
             return 1
         fi
         printf 'controlled red: %s %s=%s\n' "$capability" "$flag" "$value"
@@ -622,6 +753,28 @@ run_lifecycle_phase_fixture() (
                 printf '{}\n' >"$BZR_STDOUT"
             fi
         fi
+        # The proxied control and filtered calls (ADR-0061).
+        # LIFECYCLE_SAVED_SEARCH_UNFILTERED models a proxy or client that stopped
+        # applying the filter; LIFECYCLE_SAVED_SEARCH_CONTROL_NARROW models a control
+        # that no longer exceeds the seeded subset, making the comparison vacuous.
+        if [[ ${LIFECYCLE_BZR_CALL_NAME:-} == saved-search-control ]]; then
+            if [[ ${LIFECYCLE_SAVED_SEARCH_CONTROL_NARROW:-0} -eq 1 ]]; then
+                printf '[{"id":41}]\n' >"$BZR_STDOUT"
+            else
+                printf '[{"id":41},{"id":42}]\n' >"$BZR_STDOUT"
+            fi
+            fixture_finish_bzr 0
+            return 0
+        fi
+        if [[ ${LIFECYCLE_BZR_CALL_NAME:-} == saved-search-filtered ]]; then
+            if [[ ${LIFECYCLE_SAVED_SEARCH_UNFILTERED:-0} -eq 1 ]]; then
+                printf '[{"id":41},{"id":42}]\n' >"$BZR_STDOUT"
+            else
+                printf '[{"id":41}]\n' >"$BZR_STDOUT"
+            fi
+            fixture_finish_bzr 0
+            return 0
+        fi
         # --saved-search is a real flag too (issue #670 shipped), so it does not
         # take the "old bzr" diagnostic branch either. bzr refuses it before
         # dispatch because no supported image advertises the Red Hat extension
@@ -671,7 +824,7 @@ run_lifecycle_phase_fixture() (
         fi
         if [[ ! -s $BZR_STDOUT && ${LIFECYCLE_STALE_GAPS:-0} -eq 1 ]]; then
             case "$args" in
-            *" --saved-search "*) printf '[{"id":41},{"id":42}]\n' >"$BZR_STDOUT" ;;
+            *" --saved-search "*) printf '[{"id":41}]\n' >"$BZR_STDOUT" ;;
             *" bug list "*" --status-whiteboard-type equals "*) printf '[{"id":44}]\n' >"$BZR_STDOUT" ;;
             *" bug tag "*) printf '{}\n' >"$BZR_STDOUT" ;;
             *" bug list "*" --tag "*) printf '[{"id":42}]\n' >"$BZR_STDOUT" ;;
@@ -792,7 +945,12 @@ run_lifecycle_phase_fixture() (
                 result=$(jq '.bugs += [(.bugs[0] | .id=52)]' <<<"$result")
             fi
             ;;
-        saved_search) result='[{"id":41},{"id":42}]' ;;
+        saved_search)
+            # An ignoring server returns the unfiltered set, which includes the
+            # pybz bug the seeded query excludes.
+            result='[{"id":41},{"id":42}]'
+            [[ ${LIFECYCLE_SAVED_SEARCH_PYBZ_FILTERED:-0} -eq 0 ]] || result='[{"id":41}]'
+            ;;
         generic_fields)
             if [[ $(jq -r '.action' <<<"$request") == create ]]; then
                 LIFECYCLE_GENERIC_CREATE_COUNT=${LIFECYCLE_GENERIC_CREATE_COUNT:-0}
@@ -909,6 +1067,21 @@ run_lifecycle_phase_fixture() (
     if ! run_noop_stale_gap_control; then
         control_failures=$((control_failures + 1))
     fi
+    # Each control must redden through its OWN assertion. run_lifecycle_failure_control
+    # only proves the row went FAIL, and all three would match that on the generic
+    # reason, so pair each with the distinct reason the phase gives its assertion.
+    # Descriptor 3: the loop body sources the phase, which would otherwise inherit
+    # this heredoc on stdin and could silently eat control lines.
+    while IFS='|' read -r control reason <&3; do
+        if ! run_lifecycle_failure_control "$control" saved-search 'server saved search' \
+            1 "$reason"; then
+            control_failures=$((control_failures + 1))
+        fi
+    done 3<<'CONTROLS'
+LIFECYCLE_SAVED_SEARCH_CONTROL_NARROW|saved-search control did not exceed the seeded subset
+LIFECYCLE_SAVED_SEARCH_UNFILTERED|saved-search filtered result was not the seeded subset
+LIFECYCLE_SAVED_SEARCH_PYBZ_FILTERED|python-bugzilla saved-search result was filtered
+CONTROLS
     for control in \
         LIFECYCLE_MISSING_BZR_EVENTS \
         LIFECYCLE_MIXED_BZR_EVENTS \
@@ -998,7 +1171,7 @@ run_parity_report_fixture() {
         '| Bug update | `bzr bug update` | parity | `compare/01-bug-lifecycle/update` |'
         '| Bug view | `bzr bug view` | parity | `compare/01-bug-lifecycle/view` |'
         '| Bug history | `bzr bug history` | parity | `compare/01-bug-lifecycle/history` |'
-        '| Server saved search | `bzr bug search --saved-search` | bzr errors; python-bugzilla returns unfiltered results (#670) | `compare/01-bug-lifecycle/saved-search` |'
+        '| Server saved search | `bzr bug search --saved-search` | stock: bzr errors, python-bugzilla returns unfiltered results (#670); Red-Hat-shaped proxy: bzr filters | `compare/01-bug-lifecycle/saved-search` |'
         '| Generic arbitrary fields | `bzr bug create/update --field` | parity | `compare/01-bug-lifecycle/arbitrary-fields` |'
         '| Comment tags and minor update | `bzr bug update --comment-tag --minor-update` | comment tags: parity; minor update — bz50/bz52: warns (no core support, mail sent anyway); bz53: parity | `compare/01-bug-lifecycle/update-options` |'
         '| Whiteboard match types | `bzr bug list --status-whiteboard-type` | expected gap (#679) | `compare/01-bug-lifecycle/query-match-types` |'
@@ -3046,6 +3219,8 @@ run_summary_fixture
 run_product_normalization_fixture
 run_sidecar_wrapper_fixture
 run_transport_observation_fixture
+run_lifecycle_assert_helpers_fixture
+run_saved_search_seed_fixture
 run_lifecycle_phase_fixture
 run_api_key_identity_request_fixture
 run_auth_config_tls_phase_fixture
