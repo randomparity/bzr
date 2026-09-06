@@ -299,3 +299,88 @@ fn create_rejects_non_numeric_blocks() {
         ErrorKind::ValueValidation
     );
 }
+
+#[test]
+fn parse_create_field_is_repeatable_and_keeps_raw_pairs() {
+    let create = create_args(&[
+        "bzr",
+        "bug",
+        "create",
+        "--product",
+        "Fedora",
+        "--component",
+        "kernel",
+        "--summary",
+        "s",
+        "--field",
+        "cf_release=9.6",
+        "--field",
+        "whiteboard=needs-triage",
+    ]);
+    assert_eq!(
+        create.create_fields.field,
+        vec![
+            "cf_release=9.6".to_string(),
+            "whiteboard=needs-triage".to_string()
+        ],
+        "clap must not split, reorder, or deduplicate the pairs"
+    );
+    assert!(create.create_fields.field_json.is_none());
+}
+
+/// The value is not comma-split: a custom field may legitimately hold commas,
+/// and `--field-json` is the typed alternative.
+#[test]
+fn parse_create_field_value_is_not_comma_split() {
+    let create = create_args(&[
+        "bzr",
+        "bug",
+        "create",
+        "--product",
+        "P",
+        "--component",
+        "C",
+        "--summary",
+        "s",
+        "--field",
+        "cf_list=a,b",
+    ]);
+    assert_eq!(create.create_fields.field, vec!["cf_list=a,b".to_string()]);
+}
+
+#[test]
+fn parse_create_field_json_takes_a_path() {
+    let create = create_args(&[
+        "bzr",
+        "bug",
+        "create",
+        "--product",
+        "P",
+        "--component",
+        "C",
+        "--summary",
+        "s",
+        "--field-json",
+        "-",
+    ]);
+    assert_eq!(create.create_fields.field_json.as_deref(), Some("-"));
+}
+
+#[test]
+fn parse_create_field_requires_a_value() {
+    assert_eq!(
+        parse_error_kind(&[
+            "bzr",
+            "bug",
+            "create",
+            "--product",
+            "P",
+            "--component",
+            "C",
+            "--summary",
+            "s",
+            "--field",
+        ]),
+        ErrorKind::InvalidValue
+    );
+}

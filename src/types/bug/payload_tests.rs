@@ -475,3 +475,72 @@ fn create_params_groups_conflict_serializes_current_values_once() {
     let json: serde_json::Value = serde_json::from_str(&raw).unwrap();
     assert_eq!(json["groups"], serde_json::json!(["security"]));
 }
+
+fn extras(pairs: &[(&str, serde_json::Value)]) -> ExtraBugFields {
+    pairs
+        .iter()
+        .map(|(k, v)| ((*k).to_string(), v.clone()))
+        .collect()
+}
+
+#[test]
+fn create_params_extra_fields_flatten_onto_the_wire_payload() {
+    let params = CreateBugParams {
+        extra_fields: extras(&[
+            ("cf_release", serde_json::json!("9.6")),
+            ("cf_targets", serde_json::json!(["a", "b"])),
+        ]),
+        ..minimal_create_params()
+    };
+    let json = serde_json::to_value(params).unwrap();
+
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "product": "Prod",
+            "component": "Comp",
+            "summary": "Sum",
+            "version": "1.0",
+            "cf_release": "9.6",
+            "cf_targets": ["a", "b"],
+        }),
+        "extras sit beside the typed keys, not nested under one"
+    );
+}
+
+#[test]
+fn create_params_empty_extra_fields_add_no_keys() {
+    let json = serde_json::to_value(minimal_create_params()).unwrap();
+    assert_eq!(json.as_object().unwrap().len(), 4);
+}
+
+#[test]
+fn update_params_extra_fields_flatten_onto_the_wire_payload() {
+    let params = UpdateBugParams {
+        summary: Some("new".into()),
+        extra_fields: extras(&[("cf_release", serde_json::json!("9.7"))]),
+        ..Default::default()
+    };
+    let json = serde_json::to_value(params).unwrap();
+
+    assert_eq!(
+        json,
+        serde_json::json!({"summary": "new", "cf_release": "9.7"})
+    );
+}
+
+/// `is_empty` round-trips through serialization, so the flattened map makes a
+/// passthrough-only update count as a change without a separate guard.
+#[test]
+fn update_params_with_only_extra_fields_is_not_empty() {
+    let params = UpdateBugParams {
+        extra_fields: extras(&[("cf_release", serde_json::json!("9.7"))]),
+        ..Default::default()
+    };
+    assert!(!params.is_empty());
+}
+
+#[test]
+fn update_params_with_empty_extra_fields_is_still_empty() {
+    assert!(UpdateBugParams::default().is_empty());
+}
