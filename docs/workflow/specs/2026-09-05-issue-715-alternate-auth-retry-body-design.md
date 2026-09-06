@@ -56,8 +56,14 @@ decide which of two disagreeing responses wins. ADR 0057 decides that.
   today's behaviour: no retry, original response returned.
 - **R7** — A relayed refusal is reported as `BzrError::Api { code, message }`,
   built identically to what `check_response_status` produces from the same
-  status and body. Exit code, `error.type`, and the structured-error key set are
-  unchanged.
+  status and body. `error.type`, the structured-error key set, and
+  `BzrError::Api`'s own exit code are unchanged.
+- **R9** — Because `api_code` is read as control flow by
+  `BzrError::is_permissive_bug_view_error` (`src/error.rs:247`), a relayed code
+  102 makes a previously-fatal `bug view --permissive` / `comment list
+  --permissive` batch suppressible, moving that batch's process exit from 4 to
+  0. That is accepted (ADR 0057, Consequences) and must be pinned by a test, not
+  discovered.
 - **R8** — The relayed body is redacted on the same terms as every other error
   body, and no transport error's `Display` — which carries the request URL, and
   so the API key on the query-parameter path — reaches a log or a message on the
@@ -115,15 +121,14 @@ for no gain here.
 
 ### Failure modes
 
-| Retry outcome | Result |
-|---|---|
-| 2xx / 3xx | `Replace` — unchanged |
-| 4xx/5xx other than 401/403 | `Replace` — unchanged |
-| 401/403, code in `300..=399` or `410` | `Original` — unchanged |
-| 401/403, any other Bugzilla code | `Refused(Api{code, message})` — **new** |
-| 401/403, no envelope or no `code` | `Original` — unchanged |
-| 401/403, body unreadable | `Original` — unchanged, fail-safe |
-| no credentials, or non-cloneable body | `Original` — unchanged |
+ADR 0057's Decision items 1–5 enumerate the classification and are the record;
+R1–R6 above are the same rules stated as testable requirements. The only case
+whose behaviour changes is the fourth: a 401 or 403 carrying a Bugzilla error
+code outside `300..=399` and not `410`, which becomes
+`Refused(Api { code, message })` instead of the discarded response it is today.
+Every other case — a non-401/403 retry, an authentication code, a missing
+envelope, a missing `code`, an unreadable body, an anonymous client, a
+non-cloneable body — keeps exactly the behaviour it has now.
 
 ## Threat model
 
@@ -195,7 +200,13 @@ different 401 from the second.
   `BzrError::Api { code: 120 }` and the 120 message. **This is the test that
   bites**: restoring the status-only predicate makes it report 410.
 - `auth_fallback_keeps_the_original_401_when_the_retry_also_fails_to_log_in` —
-  both 401 with code 410. Expect `Api { code: 410 }`.
+  first attempt 401 code 410, retry 401 code **300** (`invalid_login_or_password`).
+  Expect `Api { code: 410 }` and the original's message. The two bodies must
+  differ: with identical bodies both branches build the identical error and the
+  test discriminates nothing.
+- `permissive_bug_view_suppresses_a_relayed_per_resource_refusal` — first
+  attempt 401 code 410, retry 401 code 102, through `bug view --permissive`.
+  Expect the batch to complete with the bug listed as failed, pinning R9.
 - `auth_fallback_keeps_the_original_401_when_the_retry_carries_no_envelope` —
   retry 401 with a non-JSON body. Expect the original's code.
 - `auth_fallback_relays_a_403_policy_refusal` — retry 403 with code 120.

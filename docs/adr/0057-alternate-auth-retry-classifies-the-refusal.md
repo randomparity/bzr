@@ -54,7 +54,12 @@ Concretely:
    on the band rather than an enumerated set means a deployment or extension that
    adds an authentication code inside it is classified correctly without a bzr
    release. Every other code Bugzilla maps to 401 is a refusal of an
-   authenticated request.
+   authenticated request. bzr reads Bugzilla's "300-400" as the half-open band
+   `300..=399`: `400` is Bugzilla's own `STATUS_BAD_REQUEST` constant and no
+   `WS_ERROR_CODE` entry uses it as an error code. An extension that chose
+   exactly `400` for an authentication error would be relayed as a refusal;
+   widening the band to include it would conflate an error code with a status
+   code for no gain.
 
 2. **A retried 401/403 whose body carries a non-authentication Bugzilla error
    code replaces the original.** The user is told code 120 and its message, not
@@ -68,14 +73,23 @@ Concretely:
    behaviour is the safe reading when the server offered no signal. The same
    applies when the envelope carries no `code`.
 
-4. **The reported error keeps its existing variant and exit code.** A relayed
-   refusal is `BzrError::Api { code, message }`, exactly as
-   `check_response_status` would have built it from the same status and body, so
-   the exit code, the `error.type` and the structured-error keys are unchanged.
-   Only `api_code` and `message` change, and they change from wrong to right.
-   Introducing a distinct variant for policy refusals would move an exit code
-   for no diagnostic gain: `Api` already carries the server's own code, which is
-   the thing that distinguishes them.
+4. **The reported error keeps its existing variant.** A relayed refusal is
+   `BzrError::Api { code, message }`, exactly as `check_response_status` would
+   have built it from the same status and body, so `error.type` and the
+   structured-error key set are unchanged and `BzrError::Api`'s own exit code is
+   unchanged. What changes is `api_code` and `message`, and they change from
+   wrong to right. Introducing a distinct variant for policy refusals would move
+   an exit code for no diagnostic gain: `Api` already carries the server's own
+   code, which is the thing that distinguishes them.
+
+   `api_code` is not display text, so this is not a cosmetic change. bzr reads
+   it as control flow: `BzrError::is_permissive_bug_view_error`
+   (`src/error.rs:247`) treats codes 100, 101 and 102 as per-resource faults
+   that `bug view --permissive` (`src/commands/bug/view.rs:199`) and
+   `comment list --permissive` (`src/commands/comment/list.rs:61`) skip rather
+   than abort on. Code 102 is one of the fifteen Bugzilla maps to 401, so
+   relaying it is the one place this decision moves a process exit code. That is
+   accepted; see Consequences.
 
 5. **The classification is confined to the retry.** The first attempt's body is
    not inspected, and the retry still runs on every 401.
@@ -83,8 +97,19 @@ Concretely:
 ## Consequences
 
 - A caller who is refused on policy grounds now sees the server's code and
-  message. That is the point, and it is the only user-visible change: same
-  variant, same exit code, same structured-error shape.
+  message. Same variant, same `error.type`, same structured-error key set.
+- **One reachable process-exit change, accepted deliberately.**
+  `bzr bug view A,B --permissive` (and `comment list --permissive`) suppress a
+  per-resource fault — codes 100, 101, 102 — and abort on anything else. On a
+  deployment where the first auth method draws a 401 (the #713 shape), a
+  restricted bug previously produced the header attempt's `Api { code: 410 }`,
+  which is not suppressible, so the whole batch aborted with exit 4. It now
+  produces the retry's `Api { code: 102 }`, which is suppressible, so the bug is
+  listed as failed and the command exits 0. That is the behaviour
+  `--permissive` was built for — 102 is the true answer, and the flag exists to
+  skip inaccessible bugs — and the old exit 4 was a consequence of the masking,
+  not a contract. It is pinned by a wiremock test so it is a contract rather
+  than an accident, and it is what the release note has to say.
 - Establishing (2) consumes the retried body, so a refusal cannot travel back to
   `check_response_status` as a response. It travels as the `BzrError` that
   function would have produced, from a helper both paths now share
@@ -135,6 +160,14 @@ Concretely:
   extension can add a code the enumeration would misclassify as an
   authentication failure. The authentication band is the closed half of the
   question and the one Bugzilla documents.
+- **Relay only the retried body's `message` and keep the original's `code`.**
+  This is the one variant under which Decision item 4's exit code would be
+  literally unchanged, since `api_code` is what `is_permissive_bug_view_error`
+  reads. judgment: it reports a code and a message that describe different
+  refusals — `code 410` beside "you are not allowed to restrict bugs to this
+  group" — and `api_code` is the field a machine consumer keys on, so the
+  variant that keeps the exit code stable is the one that lies to the consumer
+  most likely to act on it.
 - **Inspect the *original* 401's body and skip the retry when it already proves
   authentication succeeded.** judgment: a request saved on a path that only runs
   when something is already wrong, at the cost of consuming the original body
