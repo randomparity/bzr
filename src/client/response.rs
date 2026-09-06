@@ -467,28 +467,47 @@ impl BugzillaClient {
                     });
                 }
             };
-            tracing::debug!(
-                %status,
-                body = crate::bugzilla_auth::redact_api_key(crate::http::utf8_prefix(
-                    &body,
-                    BODY_PREVIEW_MAX_BYTES,
-                )),
-                "API error response"
-            );
-            if let Ok(err) = serde_json::from_str::<ErrorResponse>(&body) {
-                if err.error {
-                    return Err(BzrError::Api {
-                        code: err.code,
-                        message: err.message.unwrap_or_else(|| status.to_string()),
-                    });
-                }
-            }
-            return Err(BzrError::HttpStatus {
-                status: status.as_u16(),
-                body: crate::http::diagnostic_body_preview(&body),
-            });
+            return Err(Self::error_from_status_body(status, &body));
         }
         Ok(response)
+    }
+
+    /// Classify an HTTP error status and its already-read body into the error
+    /// bzr reports for it. Shared with the 401 alternate-auth fallback, which
+    /// must consume the retried body to classify it and so cannot hand the
+    /// response back to [`Self::check_response_status`] (ADR 0057).
+    pub(super) fn error_from_status_body(status: reqwest::StatusCode, body: &str) -> BzrError {
+        tracing::debug!(
+            %status,
+            body = crate::bugzilla_auth::redact_api_key(crate::http::utf8_prefix(
+                body,
+                BODY_PREVIEW_MAX_BYTES,
+            )),
+            "API error response"
+        );
+        if let Ok(err) = serde_json::from_str::<ErrorResponse>(body) {
+            if err.error {
+                return BzrError::Api {
+                    code: err.code,
+                    message: err.message.unwrap_or_else(|| status.to_string()),
+                };
+            }
+        }
+        BzrError::HttpStatus {
+            status: status.as_u16(),
+            body: crate::http::diagnostic_body_preview(body),
+        }
+    }
+
+    /// The Bugzilla error code an error body carries, or `None` when the body
+    /// is not a Bugzilla error envelope (`error: true`) or carries no `code`.
+    /// [`ErrorResponse`] defaults a missing `code` to [`default_error_code`],
+    /// and Bugzilla emits no code of `-1`, so reading that sentinel back as
+    /// `None` cannot swallow a real code. `None` means the response offered no
+    /// signal about *why* it was refused.
+    pub(super) fn bugzilla_error_code(body: &str) -> Option<i64> {
+        let envelope: ErrorResponse = serde_json::from_str(body).ok()?;
+        (envelope.error && envelope.code != default_error_code()).then_some(envelope.code)
     }
 }
 
