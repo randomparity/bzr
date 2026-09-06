@@ -197,9 +197,10 @@ async fn probe_valid_login(
 
 /// A verification leg's response, reduced to what the decision needs.
 ///
-/// The status is checked but deliberately not compared: including it would make
-/// each status guard unfalsifiable, since a leg the guard rejects would compare
-/// unequal anyway. See ADR 0056.
+/// A leg's status gates it but is never folded into the compared value: doing so
+/// would make each status guard unfalsifiable, since a leg the guard rejects
+/// would compare unequal anyway. The anonymous re-check compares status class
+/// separately, against the first anonymous observation. See ADR 0056.
 struct ProbeLeg {
     status: reqwest::StatusCode,
     body: ProbeBody,
@@ -250,8 +251,18 @@ impl ProbeLeg {
     /// with a status *and* an error body together (issue #713 measured `401` with
     /// `code 410`), and that refusal is the discrimination the probe is looking
     /// for, not a reason to discard the leg. See ADR 0056.
+    ///
+    /// The body must also have parsed as JSON. Bugzilla's REST API answers
+    /// `rest/user` with JSON, so this rejects nothing legitimate, and it closes
+    /// the mirror of the case the anonymous re-check guards: a middlebox that
+    /// challenges any credential-bearing request with a stable `200` interstitial
+    /// answers both credentialed legs identically while passing the anonymous
+    /// request through, which would otherwise satisfy every condition for
+    /// confirming header auth on a server that honoured neither credential.
     fn credential_accepted(&self) -> bool {
-        self.status.is_success() && !self.body.carries_error()
+        matches!(self.body, ProbeBody::Json(_))
+            && self.status.is_success()
+            && !self.body.carries_error()
     }
 }
 

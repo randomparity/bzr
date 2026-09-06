@@ -59,9 +59,15 @@ the server would have given whatever credential it was shown, so an equality or 
 it produces says nothing.
 
 The **header and query-parameter legs** must additionally show the credential was
-*accepted*: a 2xx **and** no truthy top-level `error` key. A credential-bearing request that
-was refused cannot stand in for the authenticated response, and on this server class the
-refusal often arrives as an HTTP 200. `Response::check_bugzilla_200_error`
+*accepted*: a 2xx, a body that parsed as JSON, **and** no truthy top-level `error` key. A
+credential-bearing request that was refused cannot stand in for the authenticated response,
+and on this server class the refusal often arrives as an HTTP 200. The JSON requirement
+closes the mirror of the case the anonymous re-check guards: a middlebox that challenges any
+credential-bearing request with a stable `200` HTML interstitial, while passing anonymous
+requests to the origin, answers both credentialed legs identically and differently from the
+anonymous leg — satisfying every comparison on a server that honoured neither credential.
+Bugzilla's REST API answers `rest/user` with JSON, so the requirement rejects nothing
+legitimate. `Response::check_bugzilla_200_error`
 (`src/client/response.rs`) exists because "some servers (e.g. IBM LTC Bugzilla) include
 error fields alongside valid data" in a 200; a status check alone would read two identical
 200-error responses on those two legs as agreement. This probe's test is deliberately
@@ -172,17 +178,33 @@ fixes on a container the project already runs.
   `safe_url` rewrites only the exact string reqwest attached and a source chain can render a
   differently-encoded copy.
 
-  The sites were enumerated rather than sampled. Every place in `src/client/auth/` where a
-  `reqwest::Error` can reach output: `log_probe_send_error` and `network_error_outcome` in
-  `mod.rs`; the send and body-read arms of `read_probe_leg`, and the `valid_login` body-read
-  arm, in `valid_login.rs`; and the `whoami` body-read arm in `whoami.rs`. All six now route
-  through the seam. Three were live leaks the query-parameter probes could reach; the two
-  body-read arms attach no URL in reqwest 0.12.28 and are routed for the same reason, since
-  that is a property of a dependency version rather than of this code. Two further paths
-  were checked and need nothing: `tls_hint` appends a constant and never renders the error,
-  and `BzrError::Http`'s display already redacts via `format_http_error`. `whoami.rs` was
-  outside this change's declared surface and was taken deliberately, so that no caller sits
-  outside the shared seam.
+  The sites were enumerated rather than sampled, **within `src/client/auth/`**. Every place
+  there that a `reqwest::Error` can reach output: `log_probe_send_error` and
+  `network_error_outcome` in `mod.rs`; the send and body-read arms of `read_probe_leg`, and
+  the `valid_login` body-read arm, in `valid_login.rs`; and the `whoami` body-read arm in
+  `whoami.rs`. All six route through the seam. Three were live leaks the query-parameter
+  probes could reach; the two body-read arms attach no URL in reqwest 0.12.28 and are routed
+  for the same reason, since that is a property of a dependency version rather than of this
+  code. Two further paths were checked and need nothing: `tls_hint` appends a constant and
+  never renders the error, and `BzrError::Http`'s display already redacts via
+  `format_http_error`. `whoami.rs` was outside this change's declared surface and was taken
+  deliberately, so that no caller sits outside the shared seam.
+
+- **Probe response bodies are redacted before tracing.** `trace_body_preview` bounds a
+  probe body for `-vvv` logging and now routes it through `redact_api_key`. bzr never writes
+  the key into a body, but the query-parameter probes put it in the request URL and an error
+  page from a proxy or CGI::Carp typically echoes the request URI back — and both probes
+  trace the body *before* checking the status, so error pages are exactly what this reaches.
+- **This does not make the whole binary leak-free, and the claim is deliberately bounded to
+  `src/client/auth/`.** One path outside that boundary is made materially worse by this very
+  change and is tracked separately: `src/client/version.rs` logs its transport error with
+  reqwest's `Display` at `warn`, which is the *default* filter level, and
+  `detect_version_and_mode` runs immediately after detection with whatever auth method was
+  chosen. Selecting query-parameter auth correctly — which is the whole point of this
+  record — moves that probe's key from a header into the URL for the entire stock Bugzilla
+  5.0/5.2 population, turning a latent leak into a live one at default verbosity. The fix is
+  one line routing it through the same seam; it falls outside this change's permitted
+  surface and is recorded here so the next reader of this decision meets it.
 - **An already-affected user does not get the fix by upgrading.** The detected method is
   persisted per server in `config.toml`, and a server with both `auth_method` and
   `api_mode` cached is never re-detected — `connect` short-circuits to a TLS probe

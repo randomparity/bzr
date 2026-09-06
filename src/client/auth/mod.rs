@@ -48,8 +48,9 @@
 //! it on real API endpoints. When `valid_login` reports query-param, header auth
 //! is re-verified by a differential probe over `rest/user?names=<login>`, sent
 //! three ways -- with the header, with no credentials, and with the query
-//! parameter `valid_login` proved. Bodies are compared as parsed JSON; the
-//! status is checked but not compared.
+//! parameter `valid_login` proved. Bodies are compared as parsed JSON; a leg's
+//! status gates it but is never folded into the compared value, and the
+//! anonymous re-check compares status class separately.
 //!
 //! | Observation                                                       | Effect           |
 //! |-------------------------------------------------------------------|------------------|
@@ -103,8 +104,19 @@ use super::version::{detect_version_and_mode, detect_version_and_mode_without_au
 
 const AUTH_PROBE_BODY_TRACE_MAX_BYTES: usize = 2048;
 
-fn trace_body_preview(body: &str) -> &str {
-    crate::http::utf8_prefix(body, AUTH_PROBE_BODY_TRACE_MAX_BYTES)
+/// Bound a probe response body for `trace` logging, with the API key removed.
+///
+/// The query-parameter probes put the key in the request URL, and an error page
+/// from a proxy or `CGI::Carp` typically echoes the request URI back in its body —
+/// so a traced body can carry the key even though bzr never wrote it there. Both
+/// probe call sites trace the body before checking the status, so this covers
+/// error pages as well as successful responses. Matches what `response.rs` does
+/// for its own body previews.
+fn trace_body_preview(body: &str) -> String {
+    crate::bugzilla_auth::redact_api_key(crate::http::utf8_prefix(
+        body,
+        AUTH_PROBE_BODY_TRACE_MAX_BYTES,
+    ))
 }
 
 #[derive(Debug, Clone)]

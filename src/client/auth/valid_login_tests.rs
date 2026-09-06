@@ -288,6 +288,86 @@ async fn transient_anonymous_refusal_is_not_confirmed() {
 }
 
 #[tokio::test]
+async fn header_leg_inconclusive_status_is_not_confirmed() {
+    let server = MockServer::start().await;
+    mount_user_legs(
+        &server,
+        ResponseTemplate::new(500),
+        rich_user(),
+        thin_user(),
+    )
+    .await;
+
+    assert!(!header_auth_confirmed(&server).await);
+    assert_eq!(
+        requests_received(&server).await,
+        1,
+        "an inconclusive header leg should end the probe immediately"
+    );
+}
+
+#[tokio::test]
+async fn query_leg_inconclusive_status_is_not_confirmed() {
+    let server = MockServer::start().await;
+    mount_user_legs(
+        &server,
+        rich_user(),
+        ResponseTemplate::new(500),
+        thin_user(),
+    )
+    .await;
+
+    assert!(!header_auth_confirmed(&server).await);
+}
+
+#[tokio::test]
+async fn anonymous_recheck_inconclusive_status_is_not_confirmed() {
+    // The re-check is a leg like any other: an inconclusive answer there means
+    // the anonymous observation could not be reconfirmed, so nothing is proved.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .and(header(AUTH_HEADER_NAME, "test-key"))
+        .respond_with(rich_user())
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .and(query_param(AUTH_QUERY_PARAM, "test-key"))
+        .respond_with(rich_user())
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .respond_with(thin_user())
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+
+    assert!(!header_auth_confirmed(&server).await);
+}
+
+#[tokio::test]
+async fn credential_challenging_middlebox_is_not_confirmed() {
+    // A middlebox that challenges any credential-bearing request with a stable
+    // 200 interstitial, and passes anonymous requests to the origin, answers both
+    // credentialed legs identically while differing from the anonymous leg --
+    // satisfying every comparison, on a server that honoured neither credential.
+    // Requiring a credentialed leg's body to have parsed as JSON closes it.
+    let server = MockServer::start().await;
+    let interstitial =
+        || ResponseTemplate::new(200).set_body_string("<html>please solve this challenge</html>");
+    mount_user_legs(&server, interstitial(), interstitial(), thin_user()).await;
+
+    assert!(!header_auth_confirmed(&server).await);
+}
+
+#[tokio::test]
 async fn transient_two_hundred_anomaly_is_not_confirmed() {
     // The anomaly that makes the anonymous leg differ need not be a refusal: a
     // rate limiter or WAF can answer the second request of a burst with a 200
