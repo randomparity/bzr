@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::cli::LinksArgs;
 use crate::client::BugzillaClient;
-use crate::error::{BzrError, Result};
+use crate::error::Result;
 use crate::output::resources::bug::write_bug_links;
 use crate::output::writers::Writers;
 use crate::types::bug::{BugLink, BugLinksNode, LinkRelation, LINKS_MAX_NODES};
@@ -22,14 +22,10 @@ pub(super) async fn handle(
     } = args;
     let max_depth = if *recursive { *depth } else { 1 };
 
-    let root_nodes = client.get_bug_links_nodes(&[*id]).await?;
-    let root = root_nodes
-        .into_iter()
-        .find(|n| n.id == *id)
-        .ok_or_else(|| BzrError::NotFound {
-            resource: "bug",
-            id: id.to_string(),
-        })?;
+    // The root is read on the faultable direct endpoint so a bug the caller
+    // cannot see reports the server's own error rather than absence (#719).
+    // Related ids keep the batched search read, where an omission is skippable.
+    let root = client.get_bug_links_root_node(*id).await?;
 
     let mut visited: BTreeSet<u64> = BTreeSet::new();
     visited.insert(*id);

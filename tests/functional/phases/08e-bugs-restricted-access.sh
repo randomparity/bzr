@@ -231,6 +231,165 @@ if [[ -n "$RESTRICTED_BUG" ]]; then
     unset _RB_FAILURES
 else test_skip "no restricted bug"; fi
 
+# ── #719: `bug links` reads its root on the faultable direct path ─────
+# Bugzilla's search endpoint filters a bug the caller cannot see into a 200
+# carrying an empty list and no error at all, while the direct endpoint
+# faults. Reading the root through search therefore reported a permission
+# outcome as absence — `bug not found` (exit 2) for a bug `bug view` and
+# `bug history` display in the same session. `--api xmlrpc` already read the
+# faultable path and is the reference oracle these assertions pin REST to.
+
+test_begin "anonymous-links-of-a-restricted-bug-reports-access-not-absence" "anonymous links of a restricted bug reports access, not absence"
+# The credentialless direction. Before the fix this exited 2 with
+# "bug not found"; the search endpoint gave bzr nothing else to report.
+if [[ -n "$RESTRICTED_BUG" ]]; then
+    run_bzr_raw --json --server public bug links "$RESTRICTED_BUG"
+    if assert_exit_code 4 &&
+        assert_stderr_json '.error.type' "api" &&
+        assert_stderr_json '.error.api_code' "102" &&
+        assert_stderr_not_contains "not found"; then
+        test_pass
+    fi
+else test_skip "no restricted bug"; fi
+
+# A second bug in the same group, wired as a dependency of the first. Without
+# an edge the root's graph is empty, and a REST-vs-XML-RPC stdout comparison
+# over two empty graphs asserts nothing about content. One edge makes it
+# discriminating: both arms have to return the same neighbour, not merely the
+# same emptiness.
+RESTRICTED_DEP_BUG=""
+test_begin "fixture-restricted-dependency-edge" "fixture: restricted dependency edge"
+if [[ -n "$RESTRICTED_BUG" ]]; then
+    RESTRICTED_DEP_BUG=$(make_bug "${_RA[@]}" --summary "restricted dependency probe" \
+        --groups "$RESTRICTED_GROUP")
+    if [[ -z "$RESTRICTED_DEP_BUG" ]]; then
+        test_fail "could not create the restricted dependency bug"
+    else
+        run_bzr bug update "$RESTRICTED_BUG" --depends-on-add "$RESTRICTED_DEP_BUG"
+        if assert_success; then test_pass; fi
+    fi
+else test_skip "no restricted bug"; fi
+
+test_begin "group-member-links-the-restricted-bug" "group member links the restricted bug"
+# Criterion 1: the member reads the root and the walk reaches the neighbour.
+#
+# A no-regression guard, not a reproduction of #719: the `restricted` alias
+# authenticates by query parameter, which a stock Bugzilla honours on the search
+# endpoint as well as the direct one, so this direction exited 0 before the fix
+# too. The directions that actually redden on pre-fix code are the anonymous one
+# above, the header-auth one below, and 09c's nonexistent root.
+if [[ -n "$RESTRICTED_BUG" ]] && [[ -n "$RESTRICTED_DEP_BUG" ]]; then
+    run_bzr_raw --json --server restricted bug links "$RESTRICTED_BUG"
+    if assert_exit_code 0 &&
+        assert_json 'length' "1" &&
+        assert_json '.[0].id' "$RESTRICTED_DEP_BUG" &&
+        assert_json '.[0].relation' "depends_on"; then
+        test_pass
+    fi
+else test_skip "no restricted bug or dependency edge"; fi
+
+# A restricted alias authenticating by header. On a stock Bugzilla the direct
+# endpoint answers a header-auth key with 401/102 — which bzr's alternate-auth
+# retry repairs — while the *search* endpoint answers the same credentials 200
+# with no rows, which no retry can see. That asymmetry is the reported defect,
+# so this alias is the configuration where a member's `bug links` actually
+# failed while `bug view` on the same bug succeeded.
+_RESTRICTED_HEADER_OK=0
+test_begin "fixture-restricted-header-auth-alias" "fixture: restricted header-auth alias"
+run_bzr config set-server "restricted-header" --url "$BZ_URL" \
+    --api-key "$RESTRICTED_KEY" --auth-method header \
+    --email "$RESTRICTED_USER" --api rest
+if assert_success; then
+    _RESTRICTED_HEADER_OK=1
+    test_pass
+fi
+
+test_begin "header-auth-member-reads-the-restricted-root" "header-auth member reads the restricted root"
+# The issue's headline scenario, on the images where it is reachable.
+#
+# Reverting the root read to the search endpoint reddens this at exit 2 *only
+# where the server ignores `X-BUGZILLA-API-KEY`* — bz50 and bz52. On bz53 the
+# header is mapped onto `Bugzilla_api_key`, so even the pre-fix search read was
+# credentialed and already exited 0, and this assertion does not discriminate
+# there. The direction that reddens on every image is the anonymous one above,
+# which is why that one carries the defect rather than this one.
+#
+# It asserts the exit code and the root's readability, not the graph's contents,
+# and the boundary is deliberate: the root read draws the 401 that the
+# alternate-auth retry repairs, while the *related*-id batch stays on the search
+# endpoint, which answers the same header credential 200-with-no-rows and never
+# faults. So on this alias the neighbour is silently dropped and REST returns a
+# shorter graph than XML-RPC. That gap is the related-id half of the same
+# structural defect, left in place on purpose (a related-id omission is
+# skippable by design), and it is asserted against on the query-parameter
+# alias below, where both endpoints honour the credential.
+#
+# The two guards are graded deliberately. A missing bug or edge is the
+# best-effort fixture every consumer of $RESTRICTED_BUG in this phase skips on;
+# a failed transport alias is a setup failure this file already treats as one
+# (see the alias fixture above).
+if [[ $_RESTRICTED_HEADER_OK -ne 1 ]] || [[ $_RESTRICTED_ALIASES_OK -ne 1 ]]; then
+    test_fail "restricted transport alias setup failed"
+elif [[ -z "$RESTRICTED_BUG" ]]; then
+    test_skip "no restricted bug"
+else
+    run_bzr_raw --json --server restricted-header bug links "$RESTRICTED_BUG"
+    _RL_REST_EXIT=$BZR_EXIT
+    # This alias is what makes the header-to-query-parameter retry reachable on
+    # `bug links`, and that retry moves the key into the request URL. The phase
+    # guards the query_param alias the same way further down, for the same
+    # reason: a deployment that echoes the URI back in its error text would
+    # surface the key.
+    if ! assert_stderr_not_contains "$RESTRICTED_KEY"; then
+        : # assert_stderr_not_contains already recorded the failure
+    else
+        run_bzr_raw --json --server restricted-xmlrpc bug links "$RESTRICTED_BUG"
+        if [[ $_RL_REST_EXIT -ne 0 ]]; then
+            test_fail "header-auth rest links exited $_RL_REST_EXIT, expected 0"
+        elif [[ $_RL_REST_EXIT -ne $BZR_EXIT ]]; then
+            test_fail "rest exit $_RL_REST_EXIT != xmlrpc exit $BZR_EXIT"
+        else
+            test_pass
+        fi
+    fi
+    unset _RL_REST_EXIT
+fi
+
+test_begin "credentialed-rest-links-match-the-xmlrpc-oracle" "credentialed rest links match the xmlrpc oracle"
+# Criterion 4 with content behind it: on the query-parameter alias both
+# endpoints honour the credential, so the two arms must agree on the whole
+# graph, edge included — not merely on the same emptiness.
+if [[ $_RESTRICTED_ALIASES_OK -ne 1 ]]; then
+    test_fail "restricted transport alias setup failed"
+elif [[ -z "$RESTRICTED_BUG" ]] || [[ -z "$RESTRICTED_DEP_BUG" ]]; then
+    test_skip "no restricted bug or dependency edge"
+else
+    run_bzr_raw --json --server restricted-rest bug links "$RESTRICTED_BUG"
+    _RL_REST_EXIT=$BZR_EXIT
+    _RL_REST_OUT=$(cat "$BZR_STDOUT")
+    # This alias authenticates by query parameter, so its key travels in the
+    # request URL on every one of these reads.
+    _RL_KEY_CLEAN=0
+    assert_stderr_not_contains "$RESTRICTED_KEY" && _RL_KEY_CLEAN=1
+    run_bzr_raw --json --server restricted-xmlrpc bug links "$RESTRICTED_BUG"
+    _RL_XMLRPC_EXIT=$BZR_EXIT
+    _RL_XMLRPC_OUT=$(cat "$BZR_STDOUT")
+    if [[ $_RL_KEY_CLEAN -ne 1 ]]; then
+        : # assert_stderr_not_contains already recorded the failure
+    elif [[ $_RL_REST_EXIT -ne 0 ]]; then
+        test_fail "rest links exited $_RL_REST_EXIT, expected 0"
+    elif [[ $_RL_REST_EXIT -ne $_RL_XMLRPC_EXIT ]]; then
+        test_fail "rest exit $_RL_REST_EXIT != xmlrpc exit $_RL_XMLRPC_EXIT"
+    elif [[ "$_RL_REST_OUT" != "$_RL_XMLRPC_OUT" ]]; then
+        test_fail "rest stdout '$_RL_REST_OUT' != xmlrpc stdout '$_RL_XMLRPC_OUT'"
+    elif ! grep -q "$RESTRICTED_DEP_BUG" <<<"$_RL_REST_OUT"; then
+        test_fail "both arms agreed but neither returned the edge: '$_RL_REST_OUT'"
+    else
+        test_pass
+    fi
+    unset _RL_REST_EXIT _RL_REST_OUT _RL_XMLRPC_EXIT _RL_XMLRPC_OUT _RL_KEY_CLEAN
+fi
+
 # ── Product-level restriction ────────────────────────────────────────
 # "Access restricted product" in the report. A mandatory group control
 # (membercontrol=3) puts every bug in the product into the group
@@ -431,5 +590,6 @@ else test_skip "no restricted bug"; fi
 unset RESTRICTED_USER RESTRICTED_KEY RESTRICTED_GROUP UNAVAILABLE_GROUP
 unset RESTRICTED_PRODUCT RESTRICTED_PROD_BUG _RA
 unset _RESTRICTED_ALIASES_OK _RESTRICTED_MODE
+unset RESTRICTED_DEP_BUG _RESTRICTED_HEADER_OK
 
 echo ""

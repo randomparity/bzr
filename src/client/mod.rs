@@ -65,8 +65,9 @@ enum PreparedAuth {
 /// The client owns the shared HTTP stack, authentication material, API-mode
 /// preference, and XML-RPC adapter used by resource methods. Hybrid behavior is
 /// operation-specific: some reads are REST-first with XML-RPC fallback, while
-/// comments and attachments use XML-RPC first to preserve private-data behavior
-/// that REST responses cannot reliably distinguish.
+/// comments and attachments use XML-RPC first because it carries the API key
+/// in the request body, so it is unaffected by a REST endpoint that ignores
+/// the configured auth method (ADR-0059).
 ///
 /// Update methods use `&str` identifiers for resources that accept name-based
 /// addressing, such as products and users.
