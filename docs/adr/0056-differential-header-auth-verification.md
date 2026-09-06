@@ -190,33 +190,40 @@ fixes on a container the project already runs.
   `safe_url` rewrites only the exact string reqwest attached and a source chain can render a
   differently-encoded copy.
 
-  The sites were enumerated rather than sampled, **within `src/client/auth/`**. Every place
-  there that a `reqwest::Error` can reach output: `log_probe_send_error` and
-  `network_error_outcome` in `mod.rs`; the send and body-read arms of `read_probe_leg`, and
-  the `valid_login` body-read arm, in `valid_login.rs`; and the `whoami` body-read arm in
-  `whoami.rs`. All six route through the seam. Three were live leaks the query-parameter
-  probes could reach; the two body-read arms attach no URL in reqwest 0.12.28 and are routed
-  for the same reason, since that is a property of a dependency version rather than of this
-  code. Two further paths were checked and need nothing: `tls_hint` appends a constant and
-  never renders the error, and `BzrError::Http`'s display already redacts via
-  `format_http_error`. `whoami.rs` was outside this change's declared surface and was taken
-  deliberately, so that no caller sits outside the shared seam.
+  **The enumeration boundary is the set of paths a credential can reach, not the set of
+  files being edited.** That distinction is the durable lesson of this change and it was
+  learned the hard way: the first enumeration drew the line around `src/client/auth/`,
+  stated that boundary honestly, and still missed a site — because `detect_version_and_mode`
+  runs on the line immediately *after* detection returns, carrying the method detection just
+  chose. An honestly-stated wrong boundary is still a wrong boundary.
+
+  Under the corrected boundary, every place a `reqwest::Error` from a credential-bearing
+  request can reach output: `log_probe_send_error` and `network_error_outcome` in
+  `auth/mod.rs`; the send and body-read arms of `read_probe_leg`, and the `valid_login`
+  body-read arm, in `auth/valid_login.rs`; the `whoami` body-read arm in `auth/whoami.rs`;
+  and the send-failure arm of `detect_version_and_mode` in `client/version.rs`. All seven
+  route through the seam. Four were live leaks; the two body-read arms attach no URL in
+  reqwest 0.12.28 and are routed anyway, since that is a property of a dependency version
+  rather than of this code. Two further paths were checked and need nothing: `tls_hint`
+  appends a constant and never renders the error, and `BzrError::Http`'s display already
+  redacts via `format_http_error`.
+
+  The `version.rs` site was the worst of the four and the one this change itself created:
+  it logs at `warn`, the **default** filter level, so it needed no verbosity flag — and
+  correcting the detection is what moved the key there, by selecting query-parameter auth
+  for the whole stock 5.0/5.2 population where the old probe had wrongly selected header
+  auth. Both it and `auth/whoami.rs` were outside this change's originally declared surface
+  and were taken deliberately, so that no caller sits outside the shared seam.
 
 - **Probe response bodies are redacted before tracing.** `trace_body_preview` bounds a
   probe body for `-vvv` logging and now routes it through `redact_api_key`. bzr never writes
   the key into a body, but the query-parameter probes put it in the request URL and an error
   page from a proxy or CGI::Carp typically echoes the request URI back — and both probes
   trace the body *before* checking the status, so error pages are exactly what this reaches.
-- **This does not make the whole binary leak-free, and the claim is deliberately bounded to
-  `src/client/auth/`.** One path outside that boundary is made materially worse by this very
-  change and is tracked separately: `src/client/version.rs` logs its transport error with
-  reqwest's `Display` at `warn`, which is the *default* filter level, and
-  `detect_version_and_mode` runs immediately after detection with whatever auth method was
-  chosen. Selecting query-parameter auth correctly — which is the whole point of this
-  record — moves that probe's key from a header into the URL for the entire stock Bugzilla
-  5.0/5.2 population, turning a latent leak into a live one at default verbosity. The fix is
-  one line routing it through the same seam; it falls outside this change's permitted
-  surface and is recorded here so the next reader of this decision meets it.
+- **This does not claim the whole binary is leak-free.** The enumeration above covers the
+  paths a credential reaches *from auth detection*; nothing here audits the rest of the
+  client. What it does claim is that no site this change makes reachable renders a
+  credential-bearing `reqwest::Error` outside the seam.
 - **An already-affected user does not get the fix by upgrading.** The detected method is
   persisted per server in `config.toml`, and a server with both `auth_method` and
   `api_mode` cached is never re-detected — `connect` short-circuits to a TLS probe
