@@ -49,3 +49,5 @@ rejected.
 | [0049](0049-comment-list-client-side-multi-id-loop.md) | Fetch multi-ID comment sets with a client-side loop | Accepted |
 | [0050](0050-run-comparison-proxies-in-sidecar-namespace.md) | Run comparison proxies in the sidecar namespace | Accepted |
 | [0051](0051-share-adapter-with-bounded-local-proofs.md) | Share one adapter with bounded local proofs | Accepted |
+| [0052](0052-detect-vendor-extension-support-before-dispatch.md) | Detect vendor-extension support before dispatch | Accepted |
+| [0053](0053-server-validated-arbitrary-field-writes.md) | Server-validated arbitrary field writes | Accepted |
