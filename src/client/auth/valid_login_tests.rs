@@ -193,6 +193,116 @@ async fn error_body_leg_is_not_confirmed() {
 }
 
 #[tokio::test]
+async fn differing_key_order_still_confirms() {
+    // Bugzilla randomises JSON object key order per response -- measured on the
+    // project's bz50 image, where three identical authenticated requests returned
+    // three different byte sequences and one identical value. This is the bite
+    // check for comparing parsed values rather than bytes: under a byte
+    // comparison the credentialed legs never match and the probe is permanently
+    // negative. Raw strings, not `set_body_json`, so the key order survives.
+    let server = MockServer::start().await;
+    mount_user_legs(
+        &server,
+        ResponseTemplate::new(200)
+            .set_body_string(r#"{"users":[{"id":1,"real_name":"T","groups":["g"]}]}"#),
+        ResponseTemplate::new(200)
+            .set_body_string(r#"{"users":[{"groups":["g"],"real_name":"T","id":1}]}"#),
+        ResponseTemplate::new(200).set_body_string(r#"{"users":[{"id":1,"real_name":"T"}]}"#),
+    )
+    .await;
+
+    assert!(header_auth_confirmed(&server).await);
+}
+
+#[tokio::test]
+async fn explicit_error_false_is_not_an_error_body() {
+    // `carries_error` must reject only a *truthy* error key. A server that spells
+    // "no error" explicitly still carries real data, and rejecting it would make
+    // the credentialed legs unusable on that server.
+    let server = MockServer::start().await;
+    let ok_with_error_false = || {
+        ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({"error": false, "users": [{"id": 1, "real_name": "T", "groups": ["g"]}]}),
+        )
+    };
+    mount_user_legs(
+        &server,
+        ok_with_error_false(),
+        ok_with_error_false(),
+        thin_user(),
+    )
+    .await;
+
+    assert!(header_auth_confirmed(&server).await);
+}
+
+#[tokio::test]
+async fn non_json_header_body_is_not_confirmed() {
+    // A parsed body never equals an unparsed one, so a server answering the
+    // header leg with something that is not JSON cannot confirm.
+    let server = MockServer::start().await;
+    mount_user_legs(
+        &server,
+        ResponseTemplate::new(200).set_body_string("not json at all"),
+        rich_user(),
+        thin_user(),
+    )
+    .await;
+
+    assert!(!header_auth_confirmed(&server).await);
+}
+
+#[tokio::test]
+async fn transient_anonymous_refusal_is_not_confirmed() {
+    // The anonymous refusal is what the differential rests on when that leg is
+    // non-2xx, so it must repeat. Here the server ignores the header and does not
+    // discriminate (header and query-param bodies are equal), and a single
+    // transient 401 on the anonymous leg would otherwise confirm header auth.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .and(header(AUTH_HEADER_NAME, "test-key"))
+        .respond_with(thin_user())
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .and(query_param(AUTH_QUERY_PARAM, "test-key"))
+        .respond_with(thin_user())
+        .mount(&server)
+        .await;
+    // The anonymous leg is refused once, then answers normally on the re-check.
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .respond_with(ResponseTemplate::new(401))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .respond_with(thin_user())
+        .mount(&server)
+        .await;
+
+    assert!(!header_auth_confirmed(&server).await);
+}
+
+#[tokio::test]
+async fn repeated_anonymous_refusal_is_confirmed() {
+    // The mirror of the case above: a `requirelogin` server refuses the anonymous
+    // caller every time, so the refusal is policy and the confirmation stands.
+    let server = MockServer::start().await;
+    mount_user_legs(&server, rich_user(), rich_user(), bugzilla_error(401)).await;
+
+    assert!(header_auth_confirmed(&server).await);
+    assert_eq!(
+        requests_received(&server).await,
+        4,
+        "a load-bearing anonymous refusal costs one extra re-check request"
+    );
+}
+
+#[tokio::test]
 async fn header_matching_neither_peer_is_not_confirmed() {
     let server = MockServer::start().await;
     mount_user_legs(

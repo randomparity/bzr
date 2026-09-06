@@ -305,9 +305,10 @@ pub(super) async fn verify_header_auth_via_rest(
         return false;
     };
     if anonymous_leg.body == header_leg.body {
-        tracing::debug!(
+        tracing::info!(
             "header auth probe on rest/user matched the anonymous response; \
-             the header changed nothing"
+             the header changed nothing, so keeping query-parameter auth -- \
+             the API key travels in request URLs and so reaches the server's access log"
         );
         return false;
     }
@@ -326,16 +327,43 @@ pub(super) async fn verify_header_auth_via_rest(
         return false;
     }
 
-    if query_leg.body == header_leg.body {
-        tracing::debug!("header auth probe on rest/user matched the authenticated response");
-        true
-    } else {
-        tracing::debug!(
+    if query_leg.body != header_leg.body {
+        tracing::info!(
             "header auth probe on rest/user matched neither the anonymous nor the \
-             authenticated response"
+             authenticated response, so keeping query-parameter auth -- the API key \
+             travels in request URLs and so reaches the server's access log"
         );
-        false
+        return false;
     }
+
+    // When the anonymous leg was refused rather than answered, the refusal *is*
+    // the discrimination this probe rests on -- and a single observation of a
+    // refusal can be a rate limiter or a WAF tripping on the second request of a
+    // burst rather than the server's policy. Without this re-check, a server that
+    // ignores the header and does not discriminate at this endpoint reaches here
+    // with equal header and query-parameter bodies for a reason unrelated to auth,
+    // and one unlucky 401 confirms header auth. Costs one request, on the path
+    // that is about to return `true`, and only when the refusal is load-bearing.
+    if !anonymous_leg.status.is_success() {
+        let Some(recheck) = read_probe_leg(
+            http.get(&url).query(&[("names", login)]),
+            "anonymous re-check",
+        )
+        .await
+        else {
+            return false;
+        };
+        if recheck.status.is_success() || recheck.body != anonymous_leg.body {
+            tracing::info!(
+                "header auth probe on rest/user saw the anonymous refusal not repeat, \
+                 so it was transient rather than policy; keeping query-parameter auth"
+            );
+            return false;
+        }
+    }
+
+    tracing::debug!("header auth probe on rest/user matched the authenticated response");
+    true
 }
 
 /// Send one verification leg and reduce it to a [`ProbeLeg`]. `None` means the
@@ -347,7 +375,12 @@ async fn read_probe_leg(request: reqwest::RequestBuilder, leg: &'static str) -> 
     let response = match request.send().await {
         Ok(response) => response,
         Err(error) => {
-            tracing::debug!("header auth {leg} probe request failed: {error}");
+            // Never format the error verbatim: the query-parameter leg's URL
+            // carries the API key and reqwest appends it to the message.
+            tracing::debug!(
+                "header auth {leg} probe request failed: {}",
+                super::redacted_probe_error(&error)
+            );
             return None;
         }
     };
@@ -359,7 +392,10 @@ async fn read_probe_leg(request: reqwest::RequestBuilder, leg: &'static str) -> 
     let body = match response.text().await {
         Ok(body) => parse_probe_body(&body),
         Err(error) => {
-            tracing::debug!("header auth {leg} probe response read failed: {error}");
+            tracing::debug!(
+                "header auth {leg} probe response read failed: {}",
+                super::redacted_probe_error(&error)
+            );
             return None;
         }
     };

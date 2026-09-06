@@ -83,6 +83,16 @@ carries. The positive stays pinned by the query-parameter leg regardless: a head
 server ignored would have been refused exactly as the anonymous request was, so its body
 would equal the anonymous body and the probe would stop at the second leg.
 
+**A refusal the decision rests on must repeat.** That last argument compares two sequential
+requests and quietly assumes both observed the same server state. They need not: a rate
+limiter or WAF tripping on the second request of a burst produces a one-off `401`, and on a
+server that ignores the header *and* does not discriminate at this endpoint, the header and
+query-parameter legs are then equal for a reason unrelated to auth — so one unlucky refusal
+would confirm header auth, which is the defect this record exists to close, reached by a
+longer route. So when the anonymous leg was non-2xx, and only on the path about to return
+`true`, the anonymous request is re-issued once and must produce the same refusal. One extra
+request, in the one branch where a refusal is the whole of the evidence.
+
 **2. The comparison is over the parsed body, not over status-plus-bytes.** This is measured,
 not stylistic. Against the project's own `bz50` image (Bugzilla 5.0.6), three identical
 authenticated `GET /rest/user?names=<email>` requests returned **three different byte
@@ -139,9 +149,23 @@ fixes on a container the project already runs.
   the API key in URLs — redacted from bzr's own logs by `safe_url()`, still visible to the
   server's access log, exactly as the existing `whoami` and `valid_login` query-parameter
   probes already are.
-- **Detection costs one or two extra round trips**, only in the `valid_login` +
+- **Detection costs one to three extra round trips**, only in the `valid_login` +
   query-parameter branch, and only when auth is not already cached: two requests in the
-  common not-confirmed case, three when header auth is confirmed. The old probe cost one.
+  common not-confirmed case, three when header auth is confirmed against an anonymous leg
+  the server answered, four when it is confirmed against an anonymous *refusal*, which must
+  be re-observed. The old probe cost one.
+- **A decline is announced, not silent.** The probe declining leaves the API key in request
+  URLs, where the server's access log sees it, and ADR-recorded false negatives make that
+  the outcome for a whole class of server. Both terminal declines log at `info` naming that
+  consequence, matching the level the confirming path already used, so `-v` shows an
+  operator why detection chose what it chose. Per-leg diagnostics stay at `debug`.
+- **Probe transport errors are redacted.** `reqwest::Error`'s `Display` appends
+  ` for url (<url>)`, and the query-parameter legs carry the API key in that query string,
+  so formatting such an error verbatim would write the key to stderr on any timeout, reset,
+  or DNS failure. Every probe error in `src/client/auth/` now routes its URL through the
+  request layer's existing `safe_url`, which keeps the origin and path and drops the query.
+  This also fixes the same latent leak in `log_probe_send_error`, which the pre-existing
+  `whoami` and `valid_login` query-parameter probes shared.
 - **An already-affected user does not get the fix by upgrading.** The detected method is
   persisted per server in `config.toml`, and a server with both `auth_method` and
   `api_mode` cached is never re-detected — `connect` short-circuits to a TLS probe

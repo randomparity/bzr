@@ -57,16 +57,21 @@
 //! | any leg's status is neither `2xx` nor `401`/`403`                  | keep query-param |
 //! | the header or query-param leg is non-`2xx`, or carries a 200 error | keep query-param |
 //! | header body == anonymous body                                      | keep query-param |
-//! | header body == query-param body (and != anonymous)                 | prefer header    |
-//! | header body matches neither                                        | keep query-param |
+//! | header body matches neither peer                                   | keep query-param |
+//! | header body == query-param body, anonymous leg answered `2xx`      | prefer header    |
+//! | header body == query-param body, anonymous refusal did not repeat  | keep query-param |
+//! | header body == query-param body, anonymous refusal repeated        | prefer header    |
 //!
 //! A `401`/`403` on the *anonymous* leg is kept deliberately: an anonymous
 //! caller being refused what a credentialed one receives is discrimination, not
 //! an inconclusive leg, and Bugzilla delivers that refusal as a status and an
-//! error body together. A 2xx alone is not evidence either: `rest/bug` answers
-//! 200 anonymously, so the probe this replaced could not fail for the condition
-//! it verified (ADR 0056). Every inconclusive outcome keeps the method
-//! `valid_login` proved.
+//! error body together. Because that refusal is then the whole of the evidence,
+//! it is re-observed once before header auth is preferred -- a one-off rate-limit
+//! or WAF `401` would otherwise confirm header auth on a server that ignores the
+//! header. A 2xx alone is not evidence either: `rest/bug` answers 200
+//! anonymously, so the probe this replaced could not fail for the condition it
+//! verified (ADR 0056). Every inconclusive outcome keeps the method
+//! `valid_login` proved, and both terminal declines say so at `info`.
 //!
 //! ## Cached vs. fresh detection (connection layer)
 //!
@@ -198,18 +203,34 @@ pub async fn detect_server_settings_without_auth(
     })
 }
 
+/// Render a probe transport error with its URL's query string stripped.
+///
+/// `reqwest::Error`'s `Display` appends ` for url (<url>)` whenever a URL is
+/// attached to the error, and the query-parameter probes carry the API key in
+/// that query string. Formatting the error verbatim would therefore write the
+/// key to stderr on any timeout, reset, or DNS failure. Route the URL through
+/// the same `safe_url` redaction the request layer uses.
+pub(super) fn redacted_probe_error(error: &reqwest::Error) -> String {
+    let rendered = format!("{error:#}");
+    match error.url() {
+        Some(url) => rendered.replace(url.as_str(), &super::BugzillaClient::safe_url(url)),
+        None => rendered,
+    }
+}
+
 /// Log a probe's `send()` error, surfacing TLS-certificate problems at `warn`
 /// with a [`crate::tls::tls_hint`] and routing all other transport errors to
 /// `debug`. Shared by the `whoami` and `valid_login` probes so their
 /// network-error handling cannot drift apart (the cause of TD-002).
 fn log_probe_send_error(probe: &str, method: AuthMethod, e: &reqwest::Error) {
+    let rendered = redacted_probe_error(e);
     if crate::tls::is_tls_cert_error(e) {
         tracing::warn!(
             "{}",
-            crate::tls::tls_hint(&format!("{probe} {method} request failed: {e:#}"), e)
+            crate::tls::tls_hint(&format!("{probe} {method} request failed: {rendered}"), e)
         );
     } else {
-        tracing::debug!("{probe} {method} request failed: {e:#}");
+        tracing::debug!("{probe} {method} request failed: {rendered}");
     }
 }
 

@@ -12,6 +12,37 @@ use crate::bugzilla_auth::AUTH_HEADER_NAME;
 use crate::client::test_helpers::test_http_client;
 use crate::error::BzrError;
 
+#[tokio::test]
+async fn probe_transport_error_does_not_leak_the_api_key() {
+    // reqwest's Display appends " for url (<url>)", and the query-parameter probe
+    // legs carry the API key in that query string. A timeout, reset, or DNS
+    // failure would otherwise write the key to stderr under `-vv`.
+    let error = test_http_client()
+        .get("http://127.0.0.1:1/rest/user")
+        .query(&[
+            ("names", "user@example.com"),
+            (crate::bugzilla_auth::AUTH_QUERY_PARAM, "super-secret-key"),
+        ])
+        .send()
+        .await
+        .unwrap_err();
+
+    let rendered = redacted_probe_error(&error);
+
+    assert!(
+        !rendered.contains("super-secret-key"),
+        "probe error leaked the API key: {rendered}"
+    );
+    assert!(
+        !rendered.contains(crate::bugzilla_auth::AUTH_QUERY_PARAM),
+        "probe error leaked the auth query parameter: {rendered}"
+    );
+    assert!(
+        rendered.contains("http://127.0.0.1:1/rest/user"),
+        "probe error should keep the origin and path for diagnosis: {rendered}"
+    );
+}
+
 fn spawn_self_signed_https_server() -> (String, std::thread::JoinHandle<()>) {
     let params = rcgen::CertificateParams::new(vec!["localhost".to_owned()]).unwrap();
     let key_pair = rcgen::KeyPair::generate().unwrap();

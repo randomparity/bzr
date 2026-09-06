@@ -127,6 +127,8 @@ already do that, and it already decides what bzr may read.
 | Credential → request | Header leg uses the already-validated `HeaderValue`; query-parameter leg uses `reqwest`'s `.query()` encoding. Neither is interpolated into a URL string. |
 | Anonymous leg → server | Carries the configured login as `names=`. The server already holds that value. No credential is attached. |
 | Probe outcome → auth selection | A `false` returns the method `valid_login` proved. Only a positive changes the selection. |
+| Transport error → log | `reqwest::Error`'s `Display` appends ` for url (<url>)`, and the query-parameter legs carry the API key there. Every probe error is rendered through `redacted_probe_error`, which routes the URL through the request layer's `safe_url` (origin and path only). Asserted by `probe_transport_error_does_not_leak_the_api_key`. |
+| Anonymous refusal → confirmation | A non-2xx anonymous leg is the whole evidence for discrimination on that path, so it is re-observed once before confirming; a refusal that does not repeat was transient and declines. |
 
 **Explicitly out of scope.** Each of these is a decision recorded in ADR 0056's Consequences
 or Considered & rejected, not restated here:
@@ -156,6 +158,11 @@ or Considered & rejected, not restated here:
 | anonymous leg fails | `503` to anonymous; header and query-param 200 with the same body | `false` |
 | credentialed legs carry a 200 error | header and query-param both 200 `{"error": true, …}`; anonymous the thin body | `false` |
 | header matches neither | three distinct bodies | `false` |
+| key order differs | credentialed legs return the same object with different key order, as raw strings | `true` — the bite check for comparing values, not bytes |
+| explicit `"error": false` | credentialed legs carry `"error": false` beside real data | `true` — only a truthy error disqualifies a leg |
+| header body is not JSON | header returns plain text, query-param returns JSON | `false` |
+| anonymous refusal is transient | anonymous `401` once, then answers normally; header and query-param equal | `false` — the refusal did not repeat |
+| anonymous refusal is policy | anonymous refused every time | `true`, at the cost of one re-check request |
 
 The anonymous-refusal case uses a **real Bugzilla error body**, not a bodiless 401: a
 bodiless fixture would pass whether or not the anonymous leg is exempt from the
