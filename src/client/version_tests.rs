@@ -1,3 +1,5 @@
+#![expect(clippy::unwrap_used)]
+
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -229,4 +231,37 @@ async fn detect_version_non_json_returns_hybrid() {
     .await;
     assert!(version.is_none());
     assert_eq!(mode, ApiMode::Hybrid);
+}
+
+#[tokio::test]
+async fn version_probe_failure_message_does_not_leak_the_api_key() {
+    // This probe runs immediately after auth detection with whatever method it
+    // chose, and under QueryParam the key is in the URL. The caller logs at
+    // `warn`, the default filter level, so an unredacted render needs no
+    // verbosity flag to reach stderr.
+    let error = test_http_client()
+        .get("http://127.0.0.1:1/rest/version")
+        .query(&[(crate::bugzilla_auth::AUTH_QUERY_PARAM, "super-secret-key")])
+        .send()
+        .await
+        .unwrap_err();
+
+    let message = version_probe_failure_message(&error);
+
+    assert!(
+        !message.contains("super-secret-key"),
+        "version probe failure leaked the API key: {message}"
+    );
+    assert!(
+        !message.contains(crate::bugzilla_auth::AUTH_QUERY_PARAM),
+        "version probe failure leaked the auth query parameter: {message}"
+    );
+    assert!(
+        message.contains("falling back to xmlrpc"),
+        "message should still say what happened: {message}"
+    );
+    assert!(
+        message.contains("http://127.0.0.1:1/rest/version"),
+        "message should keep origin and path for diagnosis: {message}"
+    );
 }

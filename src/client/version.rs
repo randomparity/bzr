@@ -77,13 +77,7 @@ async fn detect_version_and_mode_inner(
             {
                 return Err(BzrError::Http(e));
             }
-            tracing::warn!(
-                "{}",
-                crate::tls::tls_hint(
-                    &format!("version detection failed (falling back to xmlrpc): {e}"),
-                    &e,
-                )
-            );
+            tracing::warn!("{}", version_probe_failure_message(&e));
             return Ok((None, ApiMode::XmlRpc));
         }
     };
@@ -150,6 +144,27 @@ fn version_to_api_mode(version: &str) -> ApiMode {
         (Some(_), _) => ApiMode::Rest,
         _ => ApiMode::Hybrid,
     }
+}
+
+/// Build the version-probe failure line, with the API key removed.
+///
+/// Not the raw error: `reqwest::Error`'s `Display` appends ` for url (<url>)`,
+/// and this probe runs with whatever auth method detection just chose — under
+/// [`AuthMethod::QueryParam`] that URL carries the API key. The caller logs this
+/// at `warn`, which is the *default* filter level, so an unredacted render
+/// reaches stderr with no verbosity flag at all.
+///
+/// Extracted so the redaction is pinned at **this** call site. The seam itself
+/// is covered in `client::auth`, but the defect this closes was a call site that
+/// never reached the seam, and helper coverage cannot catch that.
+fn version_probe_failure_message(error: &reqwest::Error) -> String {
+    crate::tls::tls_hint(
+        &format!(
+            "version detection failed (falling back to xmlrpc): {}",
+            crate::client::auth::redacted_probe_error(error)
+        ),
+        error,
+    )
 }
 
 #[cfg(test)]

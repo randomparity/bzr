@@ -26,6 +26,37 @@ if assert_success && assert_json_exists '.id' &&
   assert_json_exists '.server_name' &&
   assert_json '.auth_mode' 'api_key'; then test_pass; fi
 
+# First network use of the `auto` server, which is what runs auth detection --
+# keep this case ahead of `server-auto-whoami`. `config set-server` does no
+# network I/O, so detection has not run before this point. The valid_login
+# fallback asserted on here is only reached when rest/whoami is unavailable;
+# bz53 is built from bugzilla/bugzilla master, which serves whoami, so
+# detect_auth_method returns before the code under test runs.
+test_begin "auto-server-probe-matches-anonymous-response" "header-auth probe compares the anonymous response, then keeps query-param"
+case "$BZ_VERSION" in
+bz53)
+  test_skip "rest/whoami short-circuits the valid_login fallback on $BZ_VERSION"
+  ;;
+*)
+  _SA_PROBE_FAIL=""
+  RUST_LOG=bzr=debug run_bzr --server auto whoami
+  if [[ $BZR_EXIT -ne 0 ]]; then
+    _SA_PROBE_FAIL="detection command exited $BZR_EXIT"
+  elif ! grep -q "matched the anonymous response" "$BZR_STDERR"; then
+    _SA_PROBE_FAIL="header-auth probe did not report comparing the anonymous response"
+  else
+    run_bzr config show
+    if [[ $BZR_EXIT -ne 0 ]]; then
+      _SA_PROBE_FAIL="config show exited $BZR_EXIT"
+    elif ! jq -e '.servers.auto.auth_method == "query_param"' "$BZR_STDOUT" >/dev/null; then
+      _SA_PROBE_FAIL="auto server did not persist query_param auth"
+    fi
+  fi
+  if [[ -z $_SA_PROBE_FAIL ]]; then test_pass; else test_fail "$_SA_PROBE_FAIL"; fi
+  unset _SA_PROBE_FAIL
+  ;;
+esac
+
 test_begin "server-auto-whoami" "--server auto whoami"
 run_bzr_raw --json --server auto whoami
 if assert_success && assert_json_exists '.id'; then test_pass; fi

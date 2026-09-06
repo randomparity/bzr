@@ -12,6 +12,37 @@ use crate::bugzilla_auth::AUTH_HEADER_NAME;
 use crate::client::test_helpers::test_http_client;
 use crate::error::BzrError;
 
+#[tokio::test]
+async fn probe_transport_error_does_not_leak_the_api_key() {
+    // reqwest's Display appends " for url (<url>)", and the query-parameter probe
+    // legs carry the API key in that query string. A timeout, reset, or DNS
+    // failure would otherwise write the key to stderr under `-vv`.
+    let error = test_http_client()
+        .get("http://127.0.0.1:1/rest/user")
+        .query(&[
+            ("names", "user@example.com"),
+            (crate::bugzilla_auth::AUTH_QUERY_PARAM, "super-secret-key"),
+        ])
+        .send()
+        .await
+        .unwrap_err();
+
+    let rendered = redacted_probe_error(&error);
+
+    assert!(
+        !rendered.contains("super-secret-key"),
+        "probe error leaked the API key: {rendered}"
+    );
+    assert!(
+        !rendered.contains(crate::bugzilla_auth::AUTH_QUERY_PARAM),
+        "probe error leaked the auth query parameter: {rendered}"
+    );
+    assert!(
+        rendered.contains("http://127.0.0.1:1/rest/user"),
+        "probe error should keep the origin and path for diagnosis: {rendered}"
+    );
+}
+
 fn spawn_self_signed_https_server() -> (String, std::thread::JoinHandle<()>) {
     let params = rcgen::CertificateParams::new(vec!["localhost".to_owned()]).unwrap();
     let key_pair = rcgen::KeyPair::generate().unwrap();
@@ -167,11 +198,34 @@ async fn valid_login_query_param_but_header_works_on_api() {
         .mount(&server)
         .await;
 
-    // Header auth works on real API endpoints
+    // Header auth works on real API endpoints: the header leg gets the same
+    // authenticated projection the query-param leg does, and both differ from
+    // what an anonymous caller receives.
     Mock::given(method("GET"))
-        .and(path("/rest/bug"))
+        .and(path("/rest/user"))
         .and(header(AUTH_HEADER_NAME, "test-key"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({"users": [{"id": 1, "real_name": "T", "groups": ["g"]}]}),
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({"users": [{"id": 1, "real_name": "T", "groups": ["g"]}]}),
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"users": [{"id": 1, "real_name": "T"}]})),
+        )
         .mount(&server)
         .await;
 
@@ -218,11 +272,91 @@ async fn valid_login_query_param_and_header_fails_on_api() {
         .mount(&server)
         .await;
 
-    // Header auth rejected on real API endpoints
+    // Header auth rejected on real API endpoints: the credentialed header leg is
+    // refused, so it cannot stand in for the authenticated response. Its body
+    // deliberately equals what the query-param leg returns, so the refusal itself
+    // is the only thing preventing a confirmation -- a bodiless 401 would fail
+    // the comparison anyway and prove nothing about the guard.
     Mock::given(method("GET"))
-        .and(path("/rest/bug"))
+        .and(path("/rest/user"))
         .and(header(AUTH_HEADER_NAME, "test-key"))
-        .respond_with(ResponseTemplate::new(401))
+        .respond_with(ResponseTemplate::new(401).set_body_json(
+            serde_json::json!({"users": [{"id": 1, "real_name": "T", "groups": ["g"]}]}),
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({"users": [{"id": 1, "real_name": "T", "groups": ["g"]}]}),
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"users": [{"id": 1, "real_name": "T"}]})),
+        )
+        .mount(&server)
+        .await;
+
+    let result = detect_auth_method(
+        &test_http_client(),
+        &server.uri(),
+        "test-key",
+        Some("user@example.com"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(result, AuthMethod::QueryParam);
+}
+
+#[tokio::test]
+async fn valid_login_query_param_survives_anonymously_readable_endpoint() {
+    // Issue #713: a stock, header-unaware Bugzilla answers the verification
+    // endpoint identically to every caller. The old probe read any 2xx as proof
+    // that header auth worked and discarded the correct query-param result, so
+    // every later REST read ran unauthenticated.
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/valid_login"))
+        .and(header(AUTH_HEADER_NAME, "test-key"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": false})),
+        )
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/valid_login"))
+        .and(query_param("login", "user@example.com"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": true})))
+        .mount(&server)
+        .await;
+
+    // The endpoint answers every caller the same way, header included.
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"users": [{"id": 1, "real_name": "T"}]})),
+        )
         .mount(&server)
         .await;
 
