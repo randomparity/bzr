@@ -17,6 +17,7 @@ fn make_server_config(server_url: &str) -> ServerConfig {
         server_version: None,
         server_extensions: None,
         server_extensions_url: None,
+        server_extensions_known: None,
         tls_insecure: false,
         tls_ca_cert: None,
         tls_pin_sha256: None,

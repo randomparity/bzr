@@ -181,6 +181,8 @@ async fn inline_server_neither_reads_nor_writes_the_cache() {
     crate::config::Config::update_locked_at(Some(&config_path), |config| {
         if let Some(srv) = config.servers.get_mut("test") {
             srv.server_extensions = Some(vec![RED_HAT_EXTENSION.to_string()]);
+            srv.server_extensions_url = Some(srv.url.clone());
+            srv.server_extensions_known = Some(vec![RED_HAT_EXTENSION.to_string()]);
         }
         Ok(())
     })
@@ -221,6 +223,7 @@ async fn cache_probed_from_a_different_url_is_not_trusted() {
         if let Some(srv) = config.servers.get_mut("test") {
             srv.server_extensions = Some(vec![RED_HAT_EXTENSION.to_string()]);
             srv.server_extensions_url = Some("https://elsewhere.example".to_string());
+            srv.server_extensions_known = Some(vec![RED_HAT_EXTENSION.to_string()]);
         }
         Ok(())
     })
@@ -239,4 +242,57 @@ async fn cache_probed_from_a_different_url_is_not_trusted() {
     let (_, srv) = after.resolve_server(None).unwrap();
     assert_eq!(srv.server_extensions.as_deref(), Some([].as_slice()));
     assert_eq!(srv.server_extensions_url.as_deref(), Some(&*mock.uri()));
+    assert_eq!(
+        srv.server_extensions_known.as_deref(),
+        Some([RED_HAT_EXTENSION.to_string()].as_slice())
+    );
+}
+
+/// A cached empty list is a hit, not a miss: the server answered and
+/// advertised nothing. `.expect(0)` proves no second probe is issued.
+#[tokio::test]
+async fn cached_empty_list_is_a_hit_and_refuses_without_probing() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    let config_path = crate::config::Config::path_at(None).unwrap();
+    crate::config::Config::update_locked_at(Some(&config_path), |config| {
+        if let Some(srv) = config.servers.get_mut("test") {
+            srv.server_extensions = Some(vec![]);
+            srv.server_extensions_url = Some(srv.url.clone());
+            srv.server_extensions_known = Some(vec![RED_HAT_EXTENSION.to_string()]);
+        }
+        Ok(())
+    })
+    .unwrap();
+    mount_extensions(&mock, &[RED_HAT_EXTENSION], 0).await;
+
+    let ctx = ctx();
+    let client = connect_and_configure(&ctx).await.unwrap();
+    let err = require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
+        .await
+        .expect_err("a cached empty list means the capability is absent");
+    assert_eq!(err.exit_code(), 15);
+}
+
+/// A cache written against a different capability allowlist cannot answer for
+/// a capability added later, so it must be treated as a miss.
+#[tokio::test]
+async fn cache_written_against_a_different_allowlist_is_not_trusted() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    let config_path = crate::config::Config::path_at(None).unwrap();
+    crate::config::Config::update_locked_at(Some(&config_path), |config| {
+        if let Some(srv) = config.servers.get_mut("test") {
+            srv.server_extensions = Some(vec![]);
+            srv.server_extensions_url = Some(srv.url.clone());
+            srv.server_extensions_known = Some(vec!["SomethingElse".to_string()]);
+        }
+        Ok(())
+    })
+    .unwrap();
+    mount_extensions(&mock, &[RED_HAT_EXTENSION], 1).await;
+
+    let ctx = ctx();
+    let client = connect_and_configure(&ctx).await.unwrap();
+    require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
+        .await
+        .expect("a stale-allowlist cache must be re-probed, not trusted");
 }

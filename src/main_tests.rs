@@ -307,6 +307,12 @@ fn format_dispatch_error_universal_keys_present_and_correct_across_variants() {
             resource: "bug",
             id: "1".into(),
         },
+        BzrError::UnsupportedServerCapability {
+            capability: "RedHat".into(),
+            status: bzr::error::CAPABILITY_ABSENT,
+            operation: "saved search 'triage'".into(),
+            detail: "server does not implement it".into(),
+        },
         BzrError::HttpStatus {
             status: 404,
             body: "nf".into(),
@@ -437,6 +443,12 @@ async fn format_dispatch_error_json_family_matches_published_schema() {
         BzrError::NotFound {
             resource: "bug",
             id: "404".into(),
+        },
+        BzrError::UnsupportedServerCapability {
+            capability: "RedHat".into(),
+            status: bzr::error::CAPABILITY_ABSENT,
+            operation: "saved search 'triage'".into(),
+            detail: "server does not implement it".into(),
         },
         BzrError::HttpStatus {
             status: 404,

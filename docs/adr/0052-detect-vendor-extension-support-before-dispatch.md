@@ -93,6 +93,11 @@ Three consequences of that rule are part of the decision, not implementation det
   is permanently undetermined — even on a fork whose XML-RPC `Bug.search` would honour the
   parameter. The undetermined message says the probe needs the REST surface. Routing the probe
   through the resolved transport is deferred.
+- **The gate checks capability, not identity.** `bug search` is an anonymous-capable command, and
+  the gate does not change that. A saved search names a query stored in an account, so on a server
+  that does implement the extension an uncredentialed `--saved-search` is still dispatched and the
+  server decides what an anonymous caller may resolve. Requiring a credential for this one flag is
+  a separate decision from requiring the capability, and is not taken here.
 - **Raw URL parameters stay ungated.** `bzr bug search --from-url` classifies any unmodelled
   key as a raw passthrough, so a `buglist.cgi` URL carrying `savedsearch`/`sharer_id` — or the
   `cmdtype=runnamed&namedcmd=<name>` form the Bugzilla UI actually produces — reaches the server

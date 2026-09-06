@@ -26,9 +26,8 @@ pub(crate) const RED_HAT_EXTENSION: &str = "RedHat";
 /// only consumer is a membership test against this table.
 const KNOWN_CAPABILITIES: &[&str] = &[RED_HAT_EXTENSION];
 
-/// Server label used in messages. Inline `--server-url` connections have no
-/// configured name, so they are identified as such.
-const INLINE_SERVER_LABEL: &str = "(inline --server-url)";
+/// Label for a server whose configuration could not be read at message time.
+const UNKNOWN_SERVER_LABEL: &str = "(unresolved server)";
 
 /// Ensure `capability` is advertised by the server, or fail before dispatch.
 ///
@@ -45,22 +44,36 @@ pub(crate) async fn require_server_capability(
     operation: &str,
 ) -> Result<()> {
     let server = server_label(ctx);
+    let cacheable = ctx.inline_server().is_none();
     let extensions = resolve_extensions(ctx, client, capability, operation, &server).await?;
     if extensions.iter().any(|name| name == capability) {
         Ok(())
     } else {
-        Err(unsupported(capability, operation, &server))
+        Err(unsupported(capability, operation, &server, cacheable))
     }
 }
 
 /// How the connected server is named in a message.
+///
+/// An inline connection has no configured name, so it is named by the host it
+/// actually probed — sanitized, because an inline URL can carry an API key in
+/// a query parameter.
 fn server_label(ctx: &CommandContext) -> String {
-    if ctx.inline_server().is_some() {
-        return INLINE_SERVER_LABEL.to_string();
+    if let Some(inline) = ctx.inline_server() {
+        // Origin + path only: an inline URL can carry an API key in a query
+        // parameter, and this string reaches stderr and the JSON error body.
+        return match reqwest::Url::parse(&inline.url) {
+            Ok(url) => format!(
+                "at {}{}",
+                url.origin().ascii_serialization(),
+                url.path().trim_end_matches('/')
+            ),
+            Err(_) => UNKNOWN_SERVER_LABEL.to_string(),
+        };
     }
     cached_server_name_and_extensions(ctx).map_or_else(
-        || INLINE_SERVER_LABEL.to_string(),
-        |(name, _)| format!("'{name}'"),
+        || UNKNOWN_SERVER_LABEL.to_string(),
+        |server| format!("'{}'", server.name),
     )
 }
 
@@ -83,7 +96,11 @@ async fn resolve_extensions(
         cached_server_name_and_extensions(ctx)
     };
 
-    if let Some((_, Some(extensions))) = &cached_server {
+    if let Some(CachedServer {
+        extensions: Some(extensions),
+        ..
+    }) = &cached_server
+    {
         return Ok(extensions.clone());
     }
 
@@ -99,8 +116,8 @@ async fn resolve_extensions(
         .collect();
     names.sort_unstable();
 
-    if let Some((server_name, _)) = cached_server {
-        persist_extensions(ctx, &server_name, &names);
+    if let Some(server) = cached_server {
+        persist_extensions(ctx, &server, &names);
     }
     Ok(names)
 }
@@ -110,20 +127,49 @@ async fn resolve_extensions(
 /// A configuration that cannot be read or has no resolvable server is not this
 /// helper's problem to report — the connection it was handed already succeeded —
 /// so it degrades to an uncached probe rather than failing the command here.
-fn cached_server_name_and_extensions(
-    ctx: &CommandContext,
-) -> Option<(String, Option<Vec<String>>)> {
+fn cached_server_name_and_extensions(ctx: &CommandContext) -> Option<CachedServer> {
     let config = Config::load_at(ctx.config_path_override()).ok()?;
     let (name, srv) = config.resolve_server(ctx.server()).ok()?;
-    // Only trust the cache while it still describes this URL. A name
-    // re-pointed at another host must re-probe rather than inherit an answer
-    // that would let the gate pass for a server that never advertised it.
-    let cached = if srv.server_extensions_url.as_deref() == Some(srv.url.as_str()) {
+    // Trust the cache only while it still describes this URL *and* was written
+    // against the same capability allowlist. A name re-pointed at another host
+    // would otherwise inherit an answer that lets the gate pass for a server
+    // that never advertised it; a cache written before a capability was added
+    // to the table would otherwise report it as "not advertised".
+    let url_matches = srv.server_extensions_url.as_deref() == Some(srv.url.as_str());
+    let allowlist_matches = srv
+        .server_extensions_known
+        .as_deref()
+        .is_some_and(|known| known == known_capabilities());
+    let cached = if url_matches && allowlist_matches {
         srv.server_extensions.clone()
     } else {
         None
     };
-    Some((name.to_string(), cached))
+    Some(CachedServer {
+        name: name.to_string(),
+        url: srv.url.clone(),
+        extensions: cached,
+    })
+}
+
+/// The configured server a capability answer belongs to.
+struct CachedServer {
+    name: String,
+    /// URL at the moment of the read — the probe is issued against this, and
+    /// the write is skipped if the entry has since been re-pointed.
+    url: String,
+    extensions: Option<Vec<String>>,
+}
+
+/// `KNOWN_CAPABILITIES` as an owned sorted vector, for comparison against the
+/// snapshot persisted alongside a cached answer.
+fn known_capabilities() -> Vec<String> {
+    let mut known: Vec<String> = KNOWN_CAPABILITIES
+        .iter()
+        .map(|c| (*c).to_string())
+        .collect();
+    known.sort_unstable();
+    known
 }
 
 /// Cache the probed extension list under the config lock.
@@ -131,11 +177,25 @@ fn cached_server_name_and_extensions(
 /// Best-effort: a server removed concurrently, or a config that cannot be
 /// written, costs one extra probe next time and is not worth failing a
 /// successful command over. Logged, not silent.
-fn persist_extensions(ctx: &CommandContext, server_name: &str, names: &[String]) {
+fn persist_extensions(ctx: &CommandContext, server: &CachedServer, names: &[String]) {
+    let server_name = server.name.as_str();
+    let probed_url = server.url.as_str();
     let result = Config::update_locked_at(ctx.config_path_override(), |config| {
         if let Some(srv) = config.servers.get_mut(server_name) {
-            srv.server_extensions_url = Some(srv.url.clone());
-            srv.server_extensions = Some(names.to_vec());
+            // The entry may have been re-pointed between the read and this
+            // write. Stamping the new URL onto an answer probed from the old
+            // host is exactly the fail-open the URL binding exists to prevent,
+            // so skip instead — costing one extra probe next time.
+            if srv.url == probed_url {
+                srv.server_extensions_url = Some(probed_url.to_string());
+                srv.server_extensions_known = Some(known_capabilities());
+                srv.server_extensions = Some(names.to_vec());
+            } else {
+                tracing::debug!(
+                    "server '{server_name}' was re-pointed during the capability probe; \
+                     not caching the result"
+                );
+            }
         }
         Ok(())
     });
@@ -144,7 +204,15 @@ fn persist_extensions(ctx: &CommandContext, server_name: &str, names: &[String])
     }
 }
 
-fn unsupported(capability: &str, operation: &str, server: &str) -> BzrError {
+fn unsupported(capability: &str, operation: &str, server: &str, cacheable: bool) -> BzrError {
+    // Only a configured server has a cached answer to explain; an inline
+    // `--server-url` connection probes every time.
+    let cache_note = if cacheable {
+        " This answer is cached per server: if the server has since been \
+         upgraded, clear `server_extensions` for it in config.toml to re-probe."
+    } else {
+        ""
+    };
     BzrError::UnsupportedServerCapability {
         capability: capability.to_string(),
         status: CAPABILITY_ABSENT,
@@ -154,9 +222,7 @@ fn unsupported(capability: &str, operation: &str, server: &str) -> BzrError {
              extension (not advertised at /rest/extensions). Stock Bugzilla \
              accepts this parameter and ignores it, so bzr refuses rather than \
              returning an unfiltered result; use `bzr bug list` filters, or \
-             `bzr query` for a saved query stored locally. This answer is cached \
-             per server: if the server has since been upgraded, re-run \
-             `bzr config set-server` for it to re-probe"
+             `bzr query` for a saved query stored locally.{cache_note}"
         ),
     }
 }

@@ -50,7 +50,7 @@ if assert_exit_code 15 && assert_stdout_empty; then
     test_pass
 fi
 
-test_begin "credentialless-bug-search-saved-search-refused" "credentialless bug search --saved-search refused"
+test_begin "inline-server-url-bug-search-saved-search-refused" "inline --server-url bug search --saved-search refused"
 run_bzr --server-url "$BZ_URL" bug search --saved-search "$_SS_NAME"
 if assert_exit_code 15 && assert_stderr_contains 'unsupported_server_capability'; then
     test_pass

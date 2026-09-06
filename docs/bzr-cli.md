@@ -2520,6 +2520,8 @@ then read the keys relevant to that type:
 | `api_code` | integer | `api` | The Bugzilla fault code. |
 | `succeeded` / `failed` | integer | `batch_partial_failure` | Counts of elements that succeeded / failed. |
 | `server` / `expected` / `actual` | string | `tls` | The server whose TLS trust changed and the expected vs. presented pin/issuer. |
+| `capability` | string | `unsupported_server_capability` | The server capability (Bugzilla extension) the command required. |
+| `capability_status` | string | `unsupported_server_capability` | `absent` when the server answered and does not advertise the capability; `undetermined` when the capability probe itself failed (retryable). |
 
 ```bash
 # Recover the field an agent must fix after a rejected mutation:

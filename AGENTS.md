@@ -113,11 +113,11 @@ output.
   unvalidated reads, validation-on-load, atomic persistence, stale temp
   cleanup, and permissions hardening. Multiple named servers share one
   default; per-server auth/API/TLS detection state is persisted here.
-- **`error.rs`** — `BzrError` enum (thiserror) with 18 variants: `Http`,
+- **`error.rs`** — `BzrError` enum (thiserror) with 19 variants: `Http`,
   `Config`, `Api`, `Io`, `TomlParse`, `TomlSerialize`, `XmlRpc`, `NotFound`,
   `HttpStatus`, `InputValidation`, `Deserialize`, `Auth`, `DataIntegrity`,
   `BatchPartialFailure`, `Keyring`, `PinMismatch`, `IssuerChanged`,
-  `MidAirCollision`. Each variant has a distinct `exit_code()` and
+  `MidAirCollision`, `UnsupportedServerCapability`. Each variant has a distinct `exit_code()` and
   `error_type()`. `Result<T>` type alias.
 - **`output/`** — `mod.rs` is deliberately _not_ a re-export facade: command
   modules import each writer from its owning leaf module so unused facade

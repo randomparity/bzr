@@ -51,6 +51,12 @@ pub struct ServerConfig {
     /// capabilities, or the pre-dispatch gate fails open.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub server_extensions_url: Option<String>,
+    /// The capability allowlist `server_extensions` was filtered against.
+    /// Only capabilities bzr knows about are stored, so a cache written by an
+    /// older bzr cannot answer for a capability added later — it would report
+    /// a false "not advertised". A mismatch here is treated as a cache miss.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_extensions_known: Option<Vec<String>>,
     /// Accept invalid TLS certificates (self-signed, expired, etc.).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tls_insecure: bool,
