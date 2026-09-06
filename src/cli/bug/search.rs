@@ -29,9 +29,10 @@ auto-generated name. Saved queries are managed with
 Bugzilla account, optionally qualified by `--sharer <ID>` when
 another user shared it. These are unrelated to bzr's local
 saved queries. Resolving one is a Red Hat Bugzilla extension:
-bzr checks `/rest/extensions` first and exits 15 when the
-server does not advertise it, because a stock Bugzilla accepts
-both parameters and silently ignores them.
+bzr checks the server's advertised extension list over the API
+mode in use, and exits 15 when the server does not advertise
+it, because a stock Bugzilla accepts both parameters and
+silently ignores them.
 
 Examples:
 
