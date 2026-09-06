@@ -270,8 +270,8 @@ pub(crate) struct UpdateArgs {
     /// the server does not declare fails with exit 7 naming the field
     /// instead of being silently ignored by Bugzilla. A key that also has
     /// a dedicated flag set on the same command line is a usage error
-    /// (exit 7) rather than a silent winner. Use `bzr field list` to see
-    /// what a server declares.
+    /// (exit 7) rather than a silent winner. `bzr server capabilities`
+    /// lists the custom fields a server declares.
     #[arg(long, value_name = "KEY=VALUE")]
     pub field: Vec<String>,
     /// Set declared fields from a JSON object of names to values.

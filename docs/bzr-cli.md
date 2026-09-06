@@ -1102,7 +1102,15 @@ models — Bugzilla's catalogue reports internal column names for many built-ins
 write API takes the REST names, so both sets count. A name in neither fails with
 exit 7 naming the field — rather than being accepted by Bugzilla, which silently
 ignores request keys it does not recognise and would report success having
-changed nothing. Run `bzr field list` to see what a server declares.
+changed nothing. `bzr server capabilities` lists the custom fields a server
+declares.
+
+The set bzr accepts is wider than the set it can currently list:
+`server capabilities` shows only custom (`is_custom`) fields, so the non-custom
+catalogue names and the `BUG_FIELDS` REST names are accepted without appearing
+in any listing. `bzr field list <name>` enumerates one named field's legal
+*values* and needs the name up front, so it does not close that gap either.
+Issue #718 tracks the missing enumeration command.
 
 A key bzr already models needs no request at all; for the rest the catalogue is
 fetched once per server and cached in the config beside the detected auth method

@@ -47,11 +47,23 @@ fn annotate_probe_failure(original: BzrError) -> BzrError {
     }
 }
 
+/// Point at the command that actually answers "what can I set here".
+///
+/// Not `bzr field list`: it takes a required field name and enumerates that
+/// one field's legal *values*, so a no-argument form is a usage error rather
+/// than a listing. `bzr server capabilities` prints the custom fields the
+/// server declares, which is what this feature is mostly used for.
+///
+/// The wording stops at "custom fields" deliberately. The accepted set is
+/// wider than anything bzr can currently list — it also holds the non-custom
+/// catalogue names and every REST name in `BUG_FIELDS` — so promising that
+/// this command shows "the fields it accepts" would be the same overclaim in
+/// a new place. Issue #718 tracks the missing enumeration command.
 fn undeclared(key: &str) -> BzrError {
     BzrError::input_field(
         format!(
             "--field: this server does not declare a field named '{key}'; \
-             run `bzr field list` to see the fields it accepts"
+             run `bzr server capabilities` to see the custom fields it declares"
         ),
         "--field",
         Some(key.to_string()),

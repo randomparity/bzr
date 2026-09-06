@@ -92,7 +92,10 @@ returns without a network call. Otherwise:
    logged and stepped over — and a catalogue above `MAX_CACHED_FIELD_NAMES` (4096) is not
    cached at all.
 4. Any key still absent → `BzrError::input_field` naming the field, with
-   "run `bzr field list` to see the fields this server declares".
+   "run `bzr server capabilities` to see the custom fields it declares". Not
+   `bzr field list`: it takes a required field name and lists that field's legal
+   values, so a no-argument form is a usage error. The accepted set is wider than
+   either command lists (#718).
 
 Probe-failure annotation preserves the error's class and exit code, following
 `annotate_search_fallback` (`src/client/resources/bug.rs:75`):
