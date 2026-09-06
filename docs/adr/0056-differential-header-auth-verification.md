@@ -48,13 +48,23 @@ The probe issues up to three `GET {base}/rest/user?names={login}` requests:
 3. **Query-parameter** — with `Bugzilla_api_key`, the method `valid_login` proved. Header
    auth is confirmed if and only if this response equals the header response.
 
-**Every leg must complete and return a success status.** A transport failure, an unreadable
-body, or a non-2xx status on *any* of the three ends the probe as not confirmed. This is
-load-bearing rather than tidiness: without it, an anonymous leg that fails transiently
-(503, 429, a proxy error page) is unequal to the header response for a reason that has
-nothing to do with auth, and on a server whose `rest/user` record does not discriminate at
-all the third leg then matches the first — confirming header auth on the strength of an
-error, which is exactly the defect being fixed.
+**Every leg must complete, return a success status, and not carry a Bugzilla error body.**
+A transport failure, an unreadable body, a non-2xx status, or a JSON object with a truthy
+top-level `error` key on *any* of the three ends the probe as not confirmed. This is
+load-bearing rather than tidiness: without it, a leg that fails for a reason unrelated to
+auth is unequal to (or equal to) its peers for that unrelated reason, and on a server whose
+`rest/user` record does not discriminate the third leg then matches the first — confirming
+header auth on the strength of an error, which is exactly the defect being fixed.
+
+The error-body half is not hypothetical on the server class this fallback exists for.
+`Response::check_bugzilla_200_error` (`src/client/response.rs`) exists precisely because
+"some servers (e.g. IBM LTC Bugzilla) include error fields alongside valid data" in an HTTP
+200. A status check alone would accept two identical 200-error responses on the header and
+query-parameter legs as agreement. This probe's test is deliberately broader than that
+helper's — any top-level `error` that is neither `false` nor `null` fails the leg, where the
+helper additionally requires the absence of real data. The two answer different questions:
+the helper must not discard a result the user asked for, while this probe only decides
+whether to trust a leg, and the safe answer to an ambiguous leg is no.
 
 Two further properties are part of the decision:
 
@@ -76,10 +86,12 @@ Two further properties are part of the decision:
    baked into a probe.
 
 The endpoint is `rest/user?names={login}`, with `{login}` the configured email the
-`valid_login` probe already required. Its record has no clock, counter, or server-side
-ordering, so its *content* is stable between two requests — which is what makes a
-comparison meaningful at all — and it is the endpoint whose anonymous and authenticated
-projections issue #713 measured as differing on stock Bugzilla.
+`valid_login` probe already required. Issue #713 measured the equivalent path form,
+`rest/user/<login>`, and found the anonymous projection (id and real_name) narrower than the
+authenticated one (the full record including `groups`) on stock Bugzilla 5.2; the `?names=`
+query form is chosen so `reqwest` encodes an email rather than bzr interpolating one into a
+path. Its per-request *content* stability is an assumption, not a measurement — see
+Consequences.
 
 ## Consequences
 
@@ -113,12 +125,25 @@ projections issue #713 measured as differing on stock Bugzilla.
   TOFU state, so the whole original command must be re-run rather than a fragment of it.
   Invalidating the stale value automatically would mean a persisted-config migration, which
   is a separate decision and is not taken here.
-- **R3 has no test in either tier.** The one server class the fallback exists for —
-  `valid_login` denying a header the server honours — appears in no fixture and in no
-  container the project runs. The unit tests drive `wiremock`, which replays a fixed byte
-  string and proves the comparison logic; the functional tier runs stock Bugzilla, which
-  this record establishes has no header code path and therefore only ever exercises the
-  negative branch. The confirming branch is reasoned, not measured.
+- **R3 has no functional-tier test.** The confirming branch is covered at the unit tier by a
+  synthetic `wiremock` server, which proves the comparison logic. No container the project
+  runs is a server that denies the header via `valid_login` and honours it elsewhere — the
+  functional tier runs upstream Bugzilla (`bz50`, `bz52`, and `bz53` built from
+  `bugzilla/bugzilla` `master`), so it exercises only the negative branch. Against a real
+  server of that class, the confirming branch is reasoned, not measured.
+- **The endpoint's per-request content stability is assumed, not measured.** If any field of
+  a deployment's `rest/user` record varies between two requests — Bugzilla's own
+  `last_seen_date` on authenticated access, or an activity field a customised `User.get`
+  adds — the header and query-parameter legs are unequal and header auth is never confirmed
+  on that server. That is a permanent false negative pinned to exactly the customised,
+  BMO-derived class R3 exists for, and it resolves the safe way (query-parameter auth keeps
+  working) rather than the dangerous one. Detecting it would mean a fourth request and a
+  stability check, which costs more than the preference it protects.
+- **Only `bz50` and `bz52` exercise this code at all.** The `bz53` image serves
+  `rest/whoami`, so `detect_whoami_auth` resolves the method and `detect_auth_method`
+  returns before the `valid_login` fallback is reached. The functional assertion on the
+  detected method is therefore version-gated to `bz50`/`bz52` and skipped on `bz53`, rather
+  than asserting a value on a version where nothing under test runs.
 - **The API key still appears in the query-parameter probe's URL.** Unchanged from the
   existing `whoami` and `valid_login` query-parameter probes and inherent to the method
   being probed.
@@ -161,8 +186,16 @@ projections issue #713 measured as differing on stock Bugzilla.
   same class of mistake as the defect being fixed.
 - **Compare only the anonymous and header responses, preferring header when they differ.**
   judgment: "differs from anonymous" proves the header changed something, not that it
-  authenticated. The third leg is what pins a positive to the response authenticated access
-  actually produces, rather than to any difference at all.
+  authenticated. The query-parameter leg is what pins a positive to the response
+  authenticated access actually produces, rather than to any difference at all.
+- **Compare only the header and query-parameter responses, dropping the anonymous leg.**
+  judgment: two requests always instead of two-or-three, and it gives the right answer on
+  stock Bugzilla, where the header response equals the anonymous projection and differs from
+  the authenticated one. But on a server whose `rest/user` record does not discriminate at
+  all, the header and query-parameter responses are equal for a reason unrelated to auth,
+  and the probe confirms header auth on no evidence — the defect being fixed. The anonymous
+  leg exists to make non-discrimination observable, and it is skipped in no case because it
+  is the second request, not the third.
 - **Probe an endpoint anonymous callers cannot read at all.** verified: issue #713's table
   records `rest/group?names=admin` answering 401 (code 410) anonymously and to the header,
   and 200 to query-parameter auth, on stock Bugzilla 5.2. judgment: it needs a group name

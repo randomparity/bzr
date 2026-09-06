@@ -33,8 +33,12 @@ rule, including what happens when a leg fails or returns a non-2xx status.
 R5. Unit tests cover the honoured-header, ignored-header, non-discriminating-response and
 failed-leg paths, and are shown to bite via a controlled fault.
 
-R6. A functional phase script exercises auto-detected auth against a real container,
-including the credentialless path.
+R6. A functional phase script exercises auto-detected auth against a real container. The
+credentialless surface never reaches auth detection — the `public` server is configured with
+no credentials at all (`tests/functional/phases/01-config.sh:28`), so `detect_auth_method`
+is never called and this probe never runs — so the existing
+`credentialless-bug-view-omits-time-fields` case is the contrast this change is measured
+against and needs no change.
 
 ## Design
 
@@ -63,26 +67,14 @@ Both new arguments are already in scope at the single call site in `detect_auth_
 
 ### Data flow
 
-All three requests are `GET {base}/rest/user` with `names={login}`, differing only in how
-(or whether) they authenticate. Each is reduced to a `(StatusCode, ProbeBody)` pair, where
-`ProbeBody` is the body parsed as `serde_json::Value` when it parses and the raw text
-otherwise. The comparison is over that pair.
+The three legs, their comparison rule, and the requirement that every leg complete with a
+success status and no Bugzilla 200-error body are ADR 0056's Decision; this section records
+only what the code shape adds to it.
 
-**A leg that does not complete with a success status ends the probe as not confirmed.** That
-covers a transport error, an unreadable body, and any non-2xx status, on any of the three
-legs — not only the header one. An anonymous leg that fails for a transient reason would
-otherwise be unequal to the header response for a non-auth reason, and on a server whose
-`rest/user` record does not discriminate the query-parameter leg then matches the header
-leg, confirming header auth on the strength of an error.
-
-1. **Header request** — `X-BUGZILLA-API-KEY: {api_key}`.
-2. **Anonymous request** — no credentials. Pair equal to the header pair → `false` (the
-   header changed nothing, or the endpoint cannot discriminate).
-3. **Query-parameter request** — `Bugzilla_api_key={api_key}`. Return `true` if and only if
-   its pair equals the header pair.
-
-The ordering is deliberate: the two cheap disqualifiers run first, so the common case (a
-server that ignores the header) costs two requests and never issues the third.
+Each leg is reduced to a `(StatusCode, ProbeBody)` pair, where `ProbeBody` is the body parsed
+as `serde_json::Value` when it parses and the raw text otherwise. The ordering is deliberate:
+the two cheap disqualifiers run first (header, then anonymous), so the common case — a server
+that ignores the header — costs two requests and never issues the third.
 
 Constant reuse: `AUTH_HEADER_NAME` and `AUTH_QUERY_PARAM` from `crate::bugzilla_auth`, as
 the existing probes in this module already do. No new endpoint constant is introduced —
@@ -126,7 +118,7 @@ already do that, and it already decides what bzr may read.
 |---|---|
 | Response body → parse | `serde_json::from_str::<serde_json::Value>`, whose 128-level recursion limit bounds a nested server-controlled body. A parse failure is not an error: the body falls back to raw-text comparison. No value is deserialized into a typed struct, rendered, or logged. |
 | Response body → buffering | `Response::text()` buffers the whole body with no size cap; the only bound is the connection's `request_timeout` (`src/tls/mod.rs`). This is identical to the existing `whoami` and `valid_login` probes, which call `.text()` the same way — no new exposure, and no size control claimed. |
-| Response status → decision | Every leg must be `is_success()`; otherwise the probe ends. A non-2xx on any leg never contributes to a positive. |
+| Response status → decision | Every leg must be `is_success()` **and** free of a truthy top-level `error` key; otherwise the probe ends. Neither a non-2xx nor a 200-with-error body on any leg can contribute to a positive. |
 | Credential → request | Header leg uses the already-validated `HeaderValue`; query-parameter leg uses `reqwest`'s `.query()` encoding. Neither is interpolated into a URL string. |
 | Anonymous leg → server | Carries the configured login as `names=`. The server already holds that value. No credential is attached. |
 | Probe outcome → auth selection | A `false` returns the method `valid_login` proved. Only a positive changes the selection. |
@@ -160,13 +152,16 @@ already do that, and it already decides what bzr may read.
 | endpoint cannot discriminate | the same body to all three legs | `false` |
 | header leg non-2xx | 401 to the header leg | `false`, and the other legs are never issued |
 | anonymous leg fails | 503 to the anonymous leg; header and query-param both 200 with the same body | `false` |
+| credentialed legs carry a 200 error | header and query-param both 200 `{"error": true, …}`; anonymous the thin body | `false` |
 | header matches neither | three distinct bodies | `false` |
 
 The two existing end-to-end cases in `src/client/auth/mod_tests.rs` —
 `valid_login_query_param_but_header_works_on_api` and
 `valid_login_query_param_and_header_fails_on_api` — are re-pointed from `rest/bug` to
 `rest/user` with the new response shapes; they continue to assert the detected
-`AuthMethod`, which is the contract, and are the R3 and R1 regression tests respectively.
+`AuthMethod`, which is the contract, and are the R3 and R1 regression tests respectively —
+at the unit tier, against a synthetic server. ADR 0056 records that R3 has no functional-tier
+test, because no container the project runs is a server of that class.
 
 **Bite check (R5).** Replace the probe body with a single header request to
 `rest/user?names={login}` returning `true` on any 2xx — the differential logic removed while
@@ -177,7 +172,15 @@ return `false`, which is what those tests assert.
 
 **Functional (R6).** `tests/functional/phases/02-server-auth.sh` uses the existing `auto`
 server (configured in `01-config.sh` with no `--auth-method`, so detection runs) to assert
-that a stock container resolves to `query_param`, and `08-bugs.sh` asserts that a
-credentialed read through that server returns the permission-gated time fields the existing
-credentialless case asserts are absent. The default `test` server pins
-`--auth-method query_param`, which is why the existing suite never exercised this path.
+that the detected method is `query_param`, **gated to `bz50` and `bz52`**: the `bz53` image
+serves `rest/whoami`, so `detect_whoami_auth` resolves the method and the `valid_login`
+fallback this change lives in is never entered there. On `bz53` the case skips with that
+reason rather than asserting a value nothing under test produced.
+
+`08-bugs.sh` asserts that a credentialed read through the `auto` server returns the
+permission-gated time fields the existing credentialless case asserts are absent. That one
+is version-independent — it asserts the user-visible outcome (the read is authenticated),
+which must hold whichever detection path resolved the method.
+
+The default `test` server pins `--auth-method query_param`, which is why the existing suite
+never exercised this path at all.
