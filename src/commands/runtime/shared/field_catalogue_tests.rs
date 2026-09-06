@@ -107,7 +107,7 @@ async fn undeclared_key_is_refused_at_exit_seven() {
     let message = err.to_string();
     assert!(message.contains("cf_relase"), "names the field: {message}");
     assert!(
-        message.contains("bzr field list"),
+        message.contains("bzr server capabilities"),
         "points at discovery: {message}"
     );
 }

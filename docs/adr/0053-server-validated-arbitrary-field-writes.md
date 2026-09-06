@@ -74,7 +74,7 @@ call at all. For the rest, bzr resolves the catalogue before dispatch:
 2. If every remaining key is present, accept with no network call.
 3. Otherwise probe `GET /rest/field/bug?include_fields=name`, persist the result under the
    config lock, and re-check. A key still absent fails with `InputValidation` (exit 7) naming
-   the field and pointing at `bzr field list`.
+   the field and pointing at `bzr server capabilities`.
 4. A failed probe **refuses the write** with a message that names the catalogue probe as the
    thing that failed, never as an absent field.
 
@@ -121,8 +121,16 @@ The check bounds arbitrariness; it is not a writability oracle, and Bugzilla exp
 endpoint that is one. A declared internal name whose REST write form differs
 (`--field status_whiteboard=x`) passes and is then ignored by `Bug.update`, and a read-only
 field bzr models (`--field id=5`) does the same. Both require deliberately reaching past the
-documented name — `bzr field list` and the flag's own help point at the REST names — and both
+documented name — the flag's own help and this document point at the REST names — and both
 are a far smaller surface than accepting every string.
+
+The set bzr accepts is also wider than the set bzr can list. `bzr server capabilities` shows
+only `is_custom` fields, and `bzr field list` takes a required field name and enumerates that
+one field's legal *values*, so neither enumerates the accepted names: the non-custom catalogue
+names and the `BUG_FIELDS` entries appear in no listing. The rejection message therefore points
+at the custom fields `server capabilities` does show rather than claiming to show everything
+accepted, and that output must not be read as the validator's allow-list. Issue #718 tracks the
+missing enumeration command.
 
 A field the server *removes* after the names were cached is still accepted on a cache hit and
 then silently ignored by Bugzilla — the residual case the cache cannot close, since a hit by

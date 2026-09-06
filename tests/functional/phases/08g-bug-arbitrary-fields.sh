@@ -83,8 +83,17 @@ else
     run_bzr bug update "$AFID" --field "cf_no_such_field_here=1"
     if assert_exit_code 7 &&
         assert_stderr_contains "cf_no_such_field_here" &&
-        assert_stderr_contains "bzr field list"; then test_pass; fi
+        assert_stderr_contains "bzr server capabilities"; then test_pass; fi
 fi
+
+# The rejection above is the one message a user is guaranteed to read, because
+# they only see it when they are already stuck. Advice that fails when followed
+# is a defect, so run the command it names and require it to work. `bzr field
+# list` cannot be that command: it takes a required field name and lists that
+# one field's legal values, so a no-argument form is a clap usage error.
+test_begin "undeclared-field-advice-names-a-command-that-works" "the undeclared-field message names a command that works"
+run_bzr server capabilities
+if assert_success && assert_json_exists '.custom_fields'; then test_pass; fi
 
 test_begin "bug-create-undeclared-field-exits-7" "bug create --field with an undeclared name exits 7"
 run_bzr bug create "${_AF[@]}" --summary "field reject" --field "cf_no_such_field_here=1"
