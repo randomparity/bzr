@@ -113,10 +113,13 @@ const AUTH_PROBE_BODY_TRACE_MAX_BYTES: usize = 2048;
 /// error pages as well as successful responses. Matches what `response.rs` does
 /// for its own body previews.
 fn trace_body_preview(body: &str) -> String {
-    crate::bugzilla_auth::redact_api_key(crate::http::utf8_prefix(
-        body,
-        AUTH_PROBE_BODY_TRACE_MAX_BYTES,
-    ))
+    // Move the cut before any key it would split, *then* redact. Truncating
+    // first defeats the bare-key branch of `redact_api_key`, which matches the
+    // active key by equality and so cannot match a half of it — leaving a
+    // credential prefix in the trace line.
+    let prefix = crate::http::utf8_prefix(body, AUTH_PROBE_BODY_TRACE_MAX_BYTES);
+    let end = crate::bugzilla_auth::safe_api_key_preview_boundary(body, prefix.len());
+    crate::bugzilla_auth::redact_api_key(&body[..end])
 }
 
 #[derive(Debug, Clone)]

@@ -255,10 +255,18 @@ impl ProbeLeg {
     /// The body must also have parsed as JSON. Bugzilla's REST API answers
     /// `rest/user` with JSON, so this rejects nothing legitimate, and it closes
     /// the mirror of the case the anonymous re-check guards: a middlebox that
-    /// challenges any credential-bearing request with a stable `200` interstitial
-    /// answers both credentialed legs identically while passing the anonymous
-    /// request through, which would otherwise satisfy every condition for
-    /// confirming header auth on a server that honoured neither credential.
+    /// challenges any credential-bearing request with a stable `200` **HTML**
+    /// interstitial answers both credentialed legs identically while passing the
+    /// anonymous request through, which would otherwise satisfy every condition
+    /// for confirming header auth on a server that honoured neither credential.
+    ///
+    /// A *JSON-shaped* interstitial still passes this gate. That residual is
+    /// accepted rather than chased: distinguishing it would mean asserting a
+    /// body shape, and ADR 0056 rejects hard-coding what the server's record
+    /// looks like as the same class of mistake this whole probe replaces. Its
+    /// consequence is bounded — on a server that honoured neither credential,
+    /// both methods are equally wrong, so the selection is wrong-but-equivalent
+    /// rather than a privilege change.
     fn credential_accepted(&self) -> bool {
         matches!(self.body, ProbeBody::Json(_))
             && self.status.is_success()
