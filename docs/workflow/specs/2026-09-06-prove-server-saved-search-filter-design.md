@@ -105,16 +105,26 @@ The row then establishes, in order:
 1. **A controlled pair against the Red-Hat-shaped server.** With the proxy running in
    `saved-search` mode, two bzr calls go through it, differing in exactly one thing — the
    `--saved-search` flag:
-   - the **unfiltered control**, `bzr bug list --summary "$LIFECYCLE_STEM"`, returns both
-     lifecycle bugs (the stem is a substring of both `"$LIFECYCLE_STEM [bzr]"` and
-     `"$LIFECYCLE_STEM [pybz]"`). A term is required because the proxy answers a termless
-     `/rest/bug` with Bugzilla's own `code 1000` error, mirroring the server;
-   - the **filtered** call, `bzr bug search --saved-search "$LIFECYCLE_SAVED_SEARCH"`,
-     returns exactly the seeded subset, **and that set differs from the control**.
+   - the **unfiltered control**, `bzr bug list --summary "$LIFECYCLE_STEM"`, is asserted to
+     *contain* both lifecycle bugs (the stem is a substring of both
+     `"$LIFECYCLE_STEM [bzr]"` and `"$LIFECYCLE_STEM [pybz]"`). A term is required because
+     the proxy answers a termless `/rest/bug` with Bugzilla's own `code 1000` error,
+     mirroring the server;
+   - the **filtered** call, `bzr bug search --saved-search "$LIFECYCLE_SAVED_SEARCH"`, is
+     asserted to equal exactly the seeded subset.
 
-   Same server, same path, one flag apart, so the inequality isolates the parameter. It is
-   the assertion issue #710 asks for: a server that ignores the parameter returns the
-   control for both calls and fails here.
+   Same server, same path, one flag apart, so the pair isolates the parameter. A server
+   that ignores it returns the control set for the filtered call and fails the equality.
+
+   Both assertions are load-bearing and each can fail alone, which is why there is no
+   third assertion that the two sets differ: given a control containing both bugs and a
+   filtered result equal to one of them, "they differ" is entailed and could never fail.
+   The control assertion is the one that carries the weight the issue is about — without
+   it, "the filtered call returned the seeded subset" would pass on a database that only
+   ever held the seeded subset, which is precisely the defect being fixed. Containment
+   rather than equality, because the stem-matching set is not fixed by construction: a
+   later row inserted above this one that creates a stem-bearing bug would break an
+   equality assertion for a reason that has nothing to do with saved searches.
 2. **Stock server, both clients** — bzr refuses with
    `"type":"unsupported_server_capability"` and exit 15 (unchanged, ADR 0052); and
    python-bugzilla's result **contains the pybz bug id, which the seeded query excludes**.
@@ -134,9 +144,9 @@ when a later fixture seeds another bug.
 
 Only the bzr arm is proxied; ADR 0061 records why.
 
-Two small helpers are added beside `lifecycle_ids_are`, which is exact-equality only:
-`lifecycle_ids_differ <a> <b>` (the two id sets are not equal) and
-`lifecycle_ids_contain <file> <json-id-array>` (every listed id is present).
+One helper is added beside `lifecycle_ids_are`, which is exact-equality only:
+`lifecycle_ids_contain <file> <json-id-array>`, asserting every listed id is present. It
+serves both the control assertion and the python-bugzilla one.
 
 ### 3. The harness self-test keeps step, and gains two controls
 
@@ -147,9 +157,17 @@ controls, one per new failure direction:
 
 - `LIFECYCLE_SAVED_SEARCH_UNFILTERED` — the proxied bzr call returns the control set
   instead of the seeded subset. The row must go red. This is the deliberately broken
-  filter of the issue's third acceptance criterion.
+  filter of the issue's third acceptance criterion, and it reddens through the filtered
+  equality, which is the assertion the second criterion names.
+- `LIFECYCLE_SAVED_SEARCH_CONTROL_NARROW` — the unfiltered control returns only the bzr
+  bug, so the control no longer exceeds the seeded subset and the comparison would be
+  vacuous. The row must go red. This is the control for the empty-graph failure: an
+  oracle whose two sides cannot differ.
 - `LIFECYCLE_SAVED_SEARCH_PYBZ_FILTERED` — python-bugzilla's result omits the pybz bug,
   i.e. it appears to honour the parameter. The row must go red.
+
+One control per assertion, so each assertion is shown to bite through itself rather than
+through a neighbour.
 
 The existing eight `run_gap_ineligible_control` entries for `saved-search`, the
 `LIFECYCLE_STALE_GAPS` scenario, the slug list, and the PASS/FAIL/GAP counts are
@@ -160,7 +178,10 @@ re-established against the new row rather than assumed to survive it.
 `docs/dev/python-bugzilla-parity.md`'s `Server saved search` row is restated to say what
 the row now proves, and its literal copy in the parity-report fixture
 (`container-tests.sh`, `run_parity_report_fixture`) is updated to the identical string.
-Nothing enforces that agreement, so the plan makes it one task with both edits in it.
+`run_parity_report_fixture` greps the document for each fixture literal with
+`grep -Fxc "$row"` requiring exactly one whole-line match (`container-tests.sh:1037`), so a
+fixture row missing from the document does fail. The reverse — a document row with no
+fixture entry — is not caught, so both edits stay in one task.
 
 ## What this does not prove
 
@@ -177,10 +198,12 @@ so a green row does not imply a fidelity nobody established.
 | Proxy advertises `RedHat` | `ShapeTests` in `redhat-shape-proxy.py` | no |
 | Proxy filters on `savedsearch` | `ShapeTests` | no |
 | Proxy honours/rejects `sharer_id` | `ShapeTests` | no |
-| Proxy leaves traffic alone when the mode is off | `ShapeTests` | no |
+| Proxy leaves traffic alone when the mode is off | `ShapeTests`, through `apply_rewrite_hooks` | no |
+| Seeder accepts one or more ids and rejects the rest | `container-tests.sh` seed fixture | no |
 | The row goes red on an unfiltered proxied result | `container-tests.sh` control | no |
+| The row goes red when the control cannot exceed the subset | `container-tests.sh` control | no |
 | The row goes red if python-bugzilla appears to filter | `container-tests.sh` control | no |
-| Filtered and control sets actually differ on seeded data | `make functional-compare-all` | yes |
+| The control really does exceed the subset on seeded data | `make functional-compare-all` | yes |
 | End-to-end row green on all three images | `make functional-compare-all` | yes |
 
 `make lint` and `make test` reach none of this; `make functional-compare-all` is the gate.

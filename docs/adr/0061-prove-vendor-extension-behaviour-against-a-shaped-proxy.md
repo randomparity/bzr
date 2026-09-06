@@ -53,12 +53,14 @@ Three parts of that are the decision, not implementation detail:
    by filtering the forwarded response to the ids the named query selects.
 
 2. **The seeded query selects a strict subset of what an unfiltered search returns, and
-   the row asserts the filtered set differs from an unfiltered control captured in the
-   same run.** Equality against a fixed expected set is what failed here; a set that
-   happens to equal its own control is a non-discriminating oracle whether or not every
-   assertion in it bites. The two properties — that an assertion fails when broken, and
-   that the sets it compares can differ — are asserted separately, because passing the
-   first says nothing about the second.
+   the row asserts both halves of that separately**: the unfiltered control is asserted to
+   *contain* both lifecycle bugs, and the filtered call is asserted to equal the seeded
+   subset. Each is load-bearing and each can fail alone. The control assertion is the one
+   that matters most and is easiest to leave out: without it, "the filtered call returned
+   the seeded subset" passes on a database that only ever held the seeded subset, which is
+   the exact defect being fixed. A third assertion that the two sets differ would be
+   entailed by these two and could never fail, so the row does not carry one — an
+   assertion that cannot fail is what this record exists to remove, not to add.
 
 3. **Only the bzr arm is routed through the proxy.** The python-bugzilla arm stays on the
    unproxied container and is asserted to return a bug the seeded query excludes, which
@@ -78,8 +80,17 @@ Three parts of that are the decision, not implementation detail:
   a fidelity nobody established.
 - A regression in which bzr stops sending `savedsearch` turns the row red, because the
   proxy filters only when the parameter is present. A regression in which the proxy stops
-  filtering also turns it red, because the filtered set then equals the control. Those are
-  the two failure directions the old row could not see.
+  filtering also turns it red, because the filtered call then returns the control set
+  rather than the seeded subset. Those are the two failure directions the old row could
+  not see.
+- **The fixture filters a page the backend already limited.** `bzr bug search` sends
+  `limit=50` (`DEFAULT_SEARCH_LIMIT`, `src/commands/bug/search.rs:22`) and upstream
+  discards `savedsearch`, so the backend returns its own first page and the proxy filters
+  that. The fixture is therefore sound only while the comparison database stays smaller
+  than a page — which `setup-bugzilla.sh reset` guarantees for both compare targets. On a
+  larger database the seeded bug could fall outside the page and the row would fail
+  confusingly rather than silently, which is the right failure direction but not an
+  obvious one.
 - The two arms now talk to two different servers within one row. That is deliberate — the
   gap being recorded is a stock-server gap and has to be measured on a stock server — but
   it means the row is no longer a single like-for-like comparison, and its assertions name
@@ -105,21 +116,26 @@ Three parts of that are the decision, not implementation detail:
 - **Have the proxy rewrite the request — replace `savedsearch=<name>` with `id=<ids>`
   before forwarding — so the real server does the filtering.** judgment: more faithful,
   but it needs request-URL rewriting in `_forward`, which the hook registry does not
-  carry; the registry is response-only by construction and its docstring says so. The
-  fidelity gained is over a fixture either way, so it buys nothing the response filter
-  does not, at the cost of new plumbing on the forwarding path.
+  carry; the registry is response-only by construction and its docstring says so. It would
+  apply the id restriction before the backend pages, which the response filter cannot —
+  that is the one thing it genuinely buys. It only matters on a database larger than one
+  page, and the comparison tier resets its container, so it is not worth new plumbing on
+  the forwarding path.
 - **Synthesize `GET /rest/extensions` in the handler instead of rewriting the response.**
   verified: all three images return `200 {"extensions":{}}` for that route (command and
   output in Context), so there is a real response to shape. judgment: a synthesized route
   would bypass the backend for a request the backend answers correctly, and would not
   notice if that ever stopped being true.
 - **Route the python-bugzilla arm through the proxy too, so both arms meet a
-  Red-Hat-shaped server.** verified: `saved_search` is a `LEGACY_OPERATIONS` member in
-  `tests/functional/compare/python-bugzilla-adapter.py`, so it refuses a `transport`
-  override and its client is built against the hardcoded `SERVER_URL`; routing it would
-  add a per-operation URL override to the adapter. judgment: it would also delete the
-  row's only measurement of the documented stock-server difference, which is the half of
-  the row that records why bzr and python-bugzilla deliberately diverge.
+  Red-Hat-shaped server.** verified: the adapter runs inside a sidecar container started
+  with `--network container:${bugzilla_container}` (`tests/functional/lib.sh:406`) and
+  talks to the module constant `SERVER_URL = "http://127.0.0.1"`
+  (`python-bugzilla-adapter.py:17`, used at `:824`); the shaped proxy binds a *host*
+  loopback port (`lib.sh:1440`), which a container sharing Bugzilla's network namespace
+  cannot reach. Routing the arm would mean re-networking the sidecar, not just adding a
+  URL override. judgment: it would also delete the row's only measurement of the
+  documented stock-server difference, which is the half of the row that records why bzr
+  and python-bugzilla deliberately diverge.
 - **Assert the python-bugzilla arm returns exactly the unfiltered control set.**
   verified: the unproxied call returns the whole database — 182 bugs on a container that
   has run a full suite — not the lifecycle stem's two bugs. judgment: an equality
