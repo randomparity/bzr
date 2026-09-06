@@ -155,6 +155,33 @@ fn resolve_description(
     Ok(None)
 }
 
+/// Validate `--comment-tag` values against the resolved description.
+/// Bugzilla only applies `comment_tags` to the comment created from
+/// `description` on `Bug.create`, so tags without one are a usage error,
+/// mirroring `bug update`'s "--comment-tag requires --comment or
+/// --comment-file" convention. `no_description_message` lets each create
+/// path (flag-form vs. `--from-json`) name its own description sources.
+pub(super) fn resolve_comment_tags(
+    tags: &[String],
+    has_description: bool,
+    no_description_message: &str,
+) -> Result<Vec<String>> {
+    if !tags.is_empty() && !has_description {
+        return Err(crate::error::BzrError::input(no_description_message.into()));
+    }
+    let mut out = Vec::with_capacity(tags.len());
+    for raw in tags {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return Err(crate::error::BzrError::input(
+                "--comment-tag: list value cannot be empty or whitespace-only".into(),
+            ));
+        }
+        out.push(trimmed.to_string());
+    }
+    Ok(out)
+}
+
 fn load_template(
     name: Option<&str>,
     config_path_override: Option<&std::path::Path>,
@@ -305,6 +332,7 @@ pub(super) async fn handle(
         blocks,
         depends_on,
         create_fields,
+        comment_tag,
         ..
     } = args;
 
@@ -330,6 +358,12 @@ pub(super) async fn handle(
         } else {
             (summary.clone(), resolved_description)
         };
+    let comment_tags = resolve_comment_tags(
+        comment_tag,
+        final_description.is_some(),
+        "--comment-tag requires a bug description (via --description, --description-file, \
+         piped stdin, or $EDITOR)",
+    )?;
 
     let params = CreateBugParams {
         product: merged.product,
@@ -357,6 +391,7 @@ pub(super) async fn handle(
         groups: merged.groups,
         groups_present: false,
         flags,
+        comment_tags,
     };
     // Building the plan reads attachment files and validates the comment body
     // *before* the bug is created, so a bad input never files an unfinishable

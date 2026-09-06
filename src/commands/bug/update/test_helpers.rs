@@ -58,6 +58,27 @@ pub(super) fn make_update_action_with_comment(
     })
 }
 
+pub(super) fn make_update_action_with_comment_tags(
+    ids: Vec<u64>,
+    comment: Option<&str>,
+    comment_tag: Vec<&str>,
+) -> BugAction {
+    BugAction::Update(crate::cli::UpdateArgs {
+        ids,
+        comment: comment.map(String::from),
+        comment_tag: comment_tag.into_iter().map(String::from).collect(),
+        ..Default::default()
+    })
+}
+
+pub(super) fn make_update_action_with_minor_update(ids: Vec<u64>, minor_update: bool) -> BugAction {
+    BugAction::Update(crate::cli::UpdateArgs {
+        ids,
+        minor_update,
+        ..Default::default()
+    })
+}
+
 pub(super) fn make_empty_update_action(ids: Vec<u64>) -> BugAction {
     let mut action = make_update_action(ids);
     if let BugAction::Update(crate::cli::UpdateArgs {

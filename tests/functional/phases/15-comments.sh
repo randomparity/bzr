@@ -366,6 +366,44 @@ if [[ -n "$BUG1" ]]; then
     fi
 else test_skip "no BUG1"; fi
 
+# ─ Issue #672: bug update --comment-tag / --minor-update ─
+
+test_begin "bug-update-comment-tag-and-minor-update" "bug update --comment-tag --minor-update"
+if [[ -n "$BUG1" ]]; then
+    _CT_TAG=$(unique_name comment-tag)
+    run_bzr bug update "$BUG1" --comment "tagged atomic comment" \
+        --comment-tag "$_CT_TAG" --minor-update
+    if assert_success; then
+        run_bzr comment list "$BUG1"
+        if jq -e --arg tag "$_CT_TAG" \
+            'any(.[]; .text == "tagged atomic comment" and (.tags | index($tag)))' \
+            "$BZR_STDOUT" >/dev/null; then
+            test_pass
+        else
+            test_fail "posted comment missing --comment-tag value"
+        fi
+    fi
+    unset _CT_TAG
+else test_skip "no BUG1"; fi
+
+test_begin "bug-update-minor-update-dry-run-request" "bug update --minor-update --dry-run request shape"
+if [[ -n "$BUG1" ]]; then
+    run_bzr --dry-run bug update "$BUG1" --minor-update
+    if assert_success && assert_json '.changes.minor_update' "true"; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "bug-update-comment-tag-without-comment-rejected" "bug update --comment-tag without --comment (exit 7)"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug update "$BUG1" --comment-tag "orphan-tag"
+    if assert_exit_code 7 && assert_stderr_contains "--comment-tag"; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "credentialless-bug-update-minor-update-rejected" "credentialless bug update --minor-update is still an auth failure"
+if [[ -n "$BUG1" ]]; then
+    run_bzr_raw --server public bug update "$BUG1" --minor-update
+    if assert_failure; then test_pass; fi
+else test_skip "no BUG1"; fi
+
 test_begin "bug-update-comment-file" "bug update --comment-file"
 if [[ -n "$BUG1" ]]; then
     tmpfile=$(mktemp)

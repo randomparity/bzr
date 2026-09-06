@@ -22,7 +22,10 @@ atomically with the field changes — a single `Bug.update`
 round-trip rather than a separate `bzr comment add` call. A
 value of `-` for either flag reads the comment from stdin.
 `--comment-private` marks it private. Empty / whitespace-only
-bodies are rejected (exit 7).
+bodies are rejected (exit 7). `--comment-tag <TAG>` (repeatable)
+tags the posted comment; it requires `--comment` or
+`--comment-file`. `--minor-update` suppresses bugmail
+notifications for the whole update.
 
 List-typed fields support `*-add` / `*-remove` pairs for
 incremental edits: `--blocks`, `--depends-on`, `--keywords`,
@@ -56,6 +59,10 @@ of a status change."#;
 
 /// Arguments for `bug update`.
 #[derive(Args, Debug, Default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "update uses independent CLI switches, not one state enum"
+)]
 pub(crate) struct UpdateArgs {
     /// Apply one or more structured bug updates from JSON.
     ///
@@ -168,6 +175,18 @@ pub(crate) struct UpdateArgs {
     /// `--comment-private` alone is a usage error (exit 7).
     #[arg(long)]
     pub comment_private: bool,
+    /// Tag the comment posted with this update (repeatable).
+    ///
+    /// Requires `--comment` or `--comment-file`; using
+    /// `--comment-tag` alone is a usage error (exit 7). Forwards
+    /// Bugzilla's `comment_tags` field on `Bug.update`.
+    #[arg(long, value_name = "TAG")]
+    pub comment_tag: Vec<String>,
+    /// Suppress bugmail notifications for this update.
+    ///
+    /// Forwards Bugzilla's `minor_update` field on `Bug.update`.
+    #[arg(long)]
+    pub minor_update: bool,
     /// Set, request, or clear a flag using Bugzilla flag syntax.
     ///
     /// Repeatable. Accepted forms:

@@ -421,6 +421,68 @@ fn build_update_params_rejects_whitespace_only_comment_file() {
 }
 
 #[test]
+fn build_update_params_carries_comment_tags() {
+    let action = super::super::test_helpers::make_update_action_with_comment_tags(
+        vec![1],
+        Some("hello"),
+        vec!["triaged", "needs-review"],
+    );
+    let (_ids, params) = build_update_params(as_update_args(&action)).unwrap();
+    assert_eq!(params.comment_tags, vec!["triaged", "needs-review"]);
+}
+
+#[test]
+fn build_update_params_rejects_comment_tag_without_comment() {
+    let action = super::super::test_helpers::make_update_action_with_comment_tags(
+        vec![1],
+        None,
+        vec!["triaged"],
+    );
+    let err = build_update_params(as_update_args(&action)).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("--comment-tag"),
+        "error should mention the flag: {msg}"
+    );
+    assert!(matches!(
+        err,
+        crate::error::BzrError::InputValidation { .. }
+    ));
+}
+
+#[test]
+fn build_update_params_rejects_whitespace_only_comment_tag() {
+    let action = super::super::test_helpers::make_update_action_with_comment_tags(
+        vec![1],
+        Some("hello"),
+        vec!["   "],
+    );
+    let err = build_update_params(as_update_args(&action)).unwrap_err();
+    assert!(matches!(
+        err,
+        crate::error::BzrError::InputValidation { message: ref m, .. }
+            if m.contains("--comment-tag")
+    ));
+}
+
+#[test]
+fn build_update_params_carries_minor_update() {
+    let action = super::super::test_helpers::make_update_action_with_minor_update(vec![1], true);
+    let (_ids, params) = build_update_params(as_update_args(&action)).unwrap();
+    assert!(params.minor_update);
+}
+
+#[test]
+fn build_update_params_minor_update_alone_is_a_valid_update() {
+    // `--minor-update` with no other field still serializes a non-empty
+    // payload (`minor_update` skips serialization only when false), so it
+    // must not be rejected as "no fields to update".
+    let action = super::super::test_helpers::make_update_action_with_minor_update(vec![1], true);
+    let result = build_update_params(as_update_args(&action));
+    assert!(result.is_ok(), "expected Ok, got {result:?}");
+}
+
+#[test]
 fn build_update_params_rejects_update_with_no_fields() {
     let action = make_empty_update_action(vec![42]);
     let err = build_update_params(as_update_args(&action)).unwrap_err();
