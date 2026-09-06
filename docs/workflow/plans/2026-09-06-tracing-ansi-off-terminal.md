@@ -85,10 +85,8 @@ crate and reached by `src/main_tests.rs` through its existing `use super::*;`. C
    `CLICOLOR_FORCE=1` govern stdout colour and that the flag disables colour on both streams.
 7. Run `make lint` bare, then `make test` bare in the background. Expect exit 0 from both.
 
-**Acceptance.** For a debug build,
-`BZKEY=x ./target/debug/bzr -vv --server-url http://127.0.0.1:9 --server-api-key-env BZKEY bug view 1 2>capture`
-leaves `grep -c $'\033' capture` printing `0`, while the same command with stderr on a terminal
-still shows colour. `bzr --help` shows the corrected `--no-color` text.
+**Acceptance.** `grep -c $'\033'` over a redirected `bzr -vv` stderr prints `0` on a debug
+build, colour survives on a terminal, and `bzr --help` shows the corrected `--no-color` text.
 
 ## Task 2 — the functional tier proves it and bites on both halves
 
@@ -135,8 +133,7 @@ and guarded the same way by tests already in this file. Defines nothing.
      re-run `make functional-test`. Expect FAIL with
      `transport is not observable from -vv stderr`. Revert; confirm it passes again.
 
-**Acceptance.** The test passes with the fix and fails under each fault for its own distinct
-reason, demonstrated in that order.
+**Acceptance.** The test passes with the fix and fails under each fault for its own reason.
 
 ## Task 3 — the comparison tier runs against a container it created
 
@@ -176,14 +173,14 @@ reason, demonstrated in that order.
    `make functional-compare`. Expect the comparison run to reach its own summary and to report a
    transport per capability rather than `transport observation is missing`.
 
-**Acceptance.** The comparison tier passes from a checkout that has just run the functional tier,
-with no environment variable set by the caller.
+**Acceptance.** The comparison tier passes from a checkout that has just run the functional
+tier, with no environment variable set by the caller.
 
 ## Rollback
 
-Every change is additive or a short substitution; `git revert` of the branch restores the previous
-behaviour with no data, schema, or config migration. A host left holding a stopped container after
-a failed `reset` is repaired by `make functional-start`, as before.
+`git revert` of the branch restores the previous behaviour; no data, schema, or config migration
+is involved. A host left holding a stopped container after a failed `reset` is repaired by
+`make functional-start`, as before.
 
 ## Deferrals
 
