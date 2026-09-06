@@ -1089,9 +1089,12 @@ Bugzilla clears a field. `--field-json` takes a JSON object whose values keep
 their JSON type, which is the way to set multi-select, boolean, and numeric
 custom fields.
 
-**Every key is validated against the server's own field catalogue before
-anything is sent.** A name the server does not declare fails with exit 7 naming
-the field — rather than being accepted by Bugzilla, which silently ignores
+**Every key is validated before anything is sent.** A key is accepted when the
+server's own field catalogue declares it, or when it is a bug field bzr already
+models — Bugzilla's catalogue reports internal column names for many built-ins
+(`status_whiteboard` for `whiteboard`, `short_desc` for `summary`) while the
+write API takes the REST names, so both sets count. A name in neither fails
+with exit 7 naming the field — rather than being accepted by Bugzilla, which silently ignores
 request keys it does not recognise and would report success having changed
 nothing. Run `bzr field list` to see what a server declares. The catalogue is
 fetched once per server and cached in the config beside the detected auth method
@@ -1108,6 +1111,11 @@ key supplied more than once across `--field` and `--field-json`, a
 `--field-json` document that is not a JSON object, and a key that a dedicated
 flag on the same command line already sets (`--whiteboard x --field
 whiteboard=y` is rejected rather than silently resolved).
+
+The check bounds what can be sent; it is not a writability oracle, and Bugzilla
+publishes no endpoint that is one. Passing a declared *internal* name
+(`--field status_whiteboard=x`) or a read-only one (`--field id=5`) is accepted
+and then ignored by the server, so use the REST names this document lists.
 
 `--dry-run` makes no connection, so it neither validates the keys nor writes;
 the previewed payload shows them as they would be sent. The strict `--from-json`

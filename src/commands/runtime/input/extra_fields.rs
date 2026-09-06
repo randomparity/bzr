@@ -46,10 +46,13 @@ fn parse_pair(raw: &str) -> Result<(String, Value)> {
     })?;
     let key = key.trim();
     if key.is_empty() {
+        // Neither the message nor the structured `value` echoes the argument's
+        // value half: a field value can be a secret, and ADR 0007 puts this
+        // object on stderr where agents log it.
         return Err(BzrError::input_field(
-            format!("--field: '{raw}' has an empty field name"),
+            "--field: an argument has an empty field name before its '='".to_string(),
             "--field",
-            Some(raw.to_string()),
+            None,
         ));
     }
     Ok((key.to_string(), Value::String(value.to_string())))

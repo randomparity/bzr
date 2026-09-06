@@ -121,7 +121,8 @@ fi
 test_begin "bug-update-field-dry-run-previews-without-writing" "bug update --field --dry-run previews the passthrough key"
 if [[ -n "$AFID" ]]; then
     run_bzr bug update "$AFID" --field "whiteboard=never-written" --dry-run
-    if assert_success && assert_json '.action' "dry-run"; then
+    if assert_success && assert_json '.action' "dry-run" &&
+        assert_json '.changes.whiteboard' "never-written"; then
         run_bzr bug view "$AFID"
         if assert_json '.whiteboard' ""; then test_pass; fi
     fi

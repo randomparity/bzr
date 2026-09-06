@@ -58,11 +58,20 @@ and it tracks `skip_serializing_if`, so `--field whiteboard=x` is allowed when `
 was not given (the case the comparison harness drives) and rejected when it was. It also
 catches create's always-emitted `product`/`component`/`summary`/`version`.
 
-**Validation and fail-closed probe.** When the merged map is non-empty, bzr resolves the
-catalogue before dispatch:
+**The accepted name set.** Bugzilla's field catalogue reports *internal column* names for
+many built-ins — a live 5.3.3 probe returns `status_whiteboard`, `short_desc`, `rep_platform`,
+`bug_file_loc`, `blocked` — while `Bug.create` and `Bug.update` take the REST names
+(`whiteboard`, `summary`, `platform`, `url`, `blocks`). Custom fields have the same name in
+both. A key is therefore accepted when the server declares it **or** when it is a REST bug
+field bzr itself models, taken from `BUG_FIELDS` (`src/types/bug/fields.rs`), the list already
+maintained for `--fields`. Reusing it needs no second alias table to drift, and a name bzr
+models is one bzr knows the server's REST layer speaks.
+
+**Validation and fail-closed probe.** Keys bzr already models are accepted with no network
+call at all. For the rest, bzr resolves the catalogue before dispatch:
 
 1. Consult `ServerConfig.bug_field_names`, the persisted per-server detection state.
-2. If every requested key is present, accept with no network call.
+2. If every remaining key is present, accept with no network call.
 3. Otherwise probe `GET /rest/field/bug?include_fields=name`, persist the result under the
    config lock, and re-check. A key still absent fails with `InputValidation` (exit 7) naming
    the field and pointing at `bzr field list`.
@@ -105,6 +114,13 @@ python-bugzilla's CLI does not have. The cost is one `GET /rest/field/bug` on th
 `--field` invocation against a server, amortised by the persisted name list;
 `include_fields=name` keeps that response small on installations with hundreds of fields.
 
+The check bounds arbitrariness; it is not a writability oracle, and Bugzilla exposes no
+endpoint that is one. A declared internal name whose REST write form differs
+(`--field status_whiteboard=x`) passes and is then ignored by `Bug.update`, and a read-only
+field bzr models (`--field id=5`) does the same. Both require deliberately reaching past the
+documented name — `bzr field list` and the flag's own help point at the REST names — and both
+are a far smaller surface than accepting every string.
+
 A field the server *removes* after the names were cached is still accepted on a cache hit and
 then silently ignored by Bugzilla — the residual case the cache cannot close, since a hit by
 definition skips the probe. Field removal is rare and destructive on the server side, and
@@ -142,6 +158,16 @@ and `get_bug`), so there is no XML-RPC arm to mirror.
   the cache lives in config. Putting the check in the command runtime keeps that separation.
 - **A process-lifetime cache only, as python-bugzilla does.** verified: bzr is one process per
   invocation, so a process cache never survives to a second `--field` call and saves nothing.
+- **Validate against the catalogue names alone.** verified against a live Bugzilla 5.3.3
+  container: `field/bug` declares `status_whiteboard`, not `whiteboard`, so this rejected
+  `--field whiteboard=...` and left #671 open. Caught by the functional suite, not by any
+  wiremock fixture — a fixture only proves that a shape parses, never that it is the shape a
+  server sends.
+- **Extend `FIELD_ALIASES` (`src/types/field.rs`) with the missing REST-to-internal pairs.**
+  judgment: it is the same information in a hand-written table that would have to be kept in
+  step with Bugzilla, and it silently changes `bzr field list <name>` resolution for commands
+  outside this change's scope. `BUG_FIELDS` already carries the REST names and is already
+  maintained.
 - **Add a `BzrError` variant for the probe failure.** judgment: one call site does not justify
   a nineteenth variant with its own exit code, `error_type`, and structured-detail arm; the
   established class-preserving re-wrap gives a distinct message while keeping the exit code

@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used, clippy::expect_used)]
+#![expect(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use serde_json::json;
 
@@ -51,11 +51,18 @@ fn pair_without_separator_is_rejected() {
     );
 }
 
+/// The diagnostic must not echo the value half: a field value can be a secret
+/// and the structured error object is written to stderr.
 #[test]
-fn empty_key_is_rejected() {
-    let err = parse(&args(["  =value"].as_slice()), None).unwrap_err();
+fn empty_key_is_rejected_without_echoing_the_value() {
+    let err = parse(&args(["  =s3cret"].as_slice()), None).unwrap_err();
     assert_eq!(err.exit_code(), 7);
     assert!(err.to_string().contains("empty field name"), "{err}");
+    assert!(!err.to_string().contains("s3cret"), "{err}");
+    let crate::error::BzrError::InputValidation { value, .. } = &err else {
+        panic!("expected InputValidation, got {err:?}");
+    };
+    assert_eq!(value.as_deref(), None);
 }
 
 #[test]
