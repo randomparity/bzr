@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used, clippy::panic)]
 
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -132,7 +132,10 @@ async fn auth_fallback_header_to_query_param_on_401() {
         .expect(1)
         .mount(&mock)
         .await;
-    // First request returns 401 (registered second, checked first by LIFO)
+    // First request returns 401. wiremock stable-sorts by priority and takes
+    // the FIRST match, so with equal priorities the first-registered mock wins;
+    // what separates these two is the auth matchers above, which the header
+    // attempt fails, not registration order.
     Mock::given(method("GET"))
         .and(path("/rest/user"))
         .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
@@ -171,7 +174,10 @@ async fn auth_fallback_query_param_to_header_on_401() {
         .expect(1)
         .mount(&mock)
         .await;
-    // First request returns 401 (registered second, checked first by LIFO)
+    // First request returns 401. wiremock stable-sorts by priority and takes
+    // the FIRST match, so with equal priorities the first-registered mock wins;
+    // what separates these two is the auth matchers above, which the header
+    // attempt fails, not registration order.
     Mock::given(method("GET"))
         .and(path("/rest/user"))
         .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
@@ -526,4 +532,187 @@ async fn no_retry_when_budget_zero() {
 
     let client = test_client(&mock.uri());
     assert!(client.get_bug("1", None, None).await.is_err());
+}
+
+// ── Alternate-auth body classification (#715, ADR 0057) ─────────────
+
+/// Mount the two halves of a 401 alternate-auth fallback on `route`. The mocks
+/// share identical matchers, so ordering alone separates them: wiremock
+/// stable-sorts by priority and serves the first match, and equal priorities
+/// keep insertion order — so `first` is registered first and capped at one
+/// serve, and the retry falls through to `retried`.
+async fn mount_auth_fallback_on(
+    mock: &MockServer,
+    route: &str,
+    first: ResponseTemplate,
+    retried: ResponseTemplate,
+) {
+    Mock::given(method("GET"))
+        .and(path(route.to_string()))
+        .respond_with(first)
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(route.to_string()))
+        .respond_with(retried)
+        .expect(1)
+        .mount(mock)
+        .await;
+}
+
+/// The common case: the fallback on `/rest/bug/1`.
+async fn mount_auth_fallback(
+    mock: &MockServer,
+    first: ResponseTemplate,
+    retried: ResponseTemplate,
+) {
+    mount_auth_fallback_on(mock, "/rest/bug/1", first, retried).await;
+}
+
+fn bugzilla_error(code: i64, message: &str) -> serde_json::Value {
+    serde_json::json!({"error": true, "code": code, "message": message})
+}
+
+fn login_required() -> ResponseTemplate {
+    ResponseTemplate::new(401).set_body_json(bugzilla_error(410, "You must log in"))
+}
+
+#[tokio::test]
+async fn auth_fallback_relays_a_policy_refusal_from_the_retried_body() {
+    let mock = MockServer::start().await;
+    mount_auth_fallback(
+        &mock,
+        login_required(),
+        ResponseTemplate::new(401).set_body_json(bugzilla_error(
+            120,
+            "you are not allowed to restrict bugs to this group in the 'FuncTestProd' product",
+        )),
+    )
+    .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_json_value("bug/1").await.unwrap_err();
+    match err {
+        BzrError::Api { code, message } => {
+            assert_eq!(code, 120, "the retried body's code must win");
+            assert!(
+                message.contains("not allowed to restrict bugs"),
+                "the retried body's message must win: {message}"
+            );
+        }
+        other => panic!("expected a relayed Api error, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn auth_fallback_keeps_the_original_401_when_the_retry_also_fails_to_log_in() {
+    let mock = MockServer::start().await;
+    // The two bodies must differ, or `Original` and `Refused` would build the
+    // identical error from identical bytes and the test would pass whatever the
+    // band check does. 300 is `invalid_login_or_password`.
+    mount_auth_fallback(
+        &mock,
+        login_required(),
+        ResponseTemplate::new(401).set_body_json(bugzilla_error(
+            300,
+            "The username or password you entered is not valid",
+        )),
+    )
+    .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_json_value("bug/1").await.unwrap_err();
+    match err {
+        BzrError::Api { code, message } => {
+            assert_eq!(code, 410, "an authentication code must not be relayed");
+            assert!(
+                message.contains("must log in"),
+                "the original's message must stand: {message}"
+            );
+        }
+        other => panic!("expected the original Api 410, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn auth_fallback_keeps_the_original_401_when_the_retry_carries_no_envelope() {
+    let mock = MockServer::start().await;
+    mount_auth_fallback(
+        &mock,
+        login_required(),
+        ResponseTemplate::new(401).set_body_string("<html>Proxy Authentication Required</html>"),
+    )
+    .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_json_value("bug/1").await.unwrap_err();
+    match err {
+        BzrError::Api { code, .. } => assert_eq!(code, 410),
+        other => panic!("expected the original Api 410, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn auth_fallback_keeps_the_original_401_when_the_retried_envelope_has_no_code() {
+    let mock = MockServer::start().await;
+    mount_auth_fallback(
+        &mock,
+        login_required(),
+        ResponseTemplate::new(401)
+            .set_body_json(serde_json::json!({"error": true, "message": "refused"})),
+    )
+    .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_json_value("bug/1").await.unwrap_err();
+    match err {
+        BzrError::Api { code, .. } => assert_eq!(code, 410),
+        other => panic!("expected the original Api 410, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn auth_fallback_relays_a_403_policy_refusal() {
+    let mock = MockServer::start().await;
+    mount_auth_fallback(
+        &mock,
+        login_required(),
+        ResponseTemplate::new(403).set_body_json(bugzilla_error(120, "refused by policy")),
+    )
+    .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_json_value("bug/1").await.unwrap_err();
+    match err {
+        BzrError::Api { code, .. } => assert_eq!(code, 120),
+        other => panic!("expected the relayed Api 120, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn auth_fallback_band_edges_separate_login_failure_from_refusal() {
+    // 300 and 399 are inside Bugzilla's documented authentication band, so the
+    // original 410 stands. 299 and 400 are outside it and are relayed as
+    // themselves — 400 in particular, because it is a status code, not a
+    // Bugzilla error code.
+    for (retried_code, expected) in [(299, 299), (300, 410), (399, 410), (400, 400)] {
+        let mock = MockServer::start().await;
+        mount_auth_fallback(
+            &mock,
+            login_required(),
+            ResponseTemplate::new(401).set_body_json(bugzilla_error(retried_code, "refused")),
+        )
+        .await;
+
+        let client = test_client(&mock.uri());
+        let err = client.get_json_value("bug/1").await.unwrap_err();
+        match err {
+            BzrError::Api { code, .. } => {
+                assert_eq!(code, expected, "retried code {retried_code}");
+            }
+            other => panic!("retried code {retried_code}: expected Api, got {other:?}"),
+        }
+    }
 }
