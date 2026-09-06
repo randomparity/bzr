@@ -73,14 +73,21 @@ Concretely:
    behaviour is the safe reading when the server offered no signal. The same
    applies when the envelope carries no `code`.
 
-4. **The reported error keeps its existing variant.** A relayed refusal is
+4. **The reported error is built from the retried body by the same
+   construction the original path uses.** A relayed refusal is
    `BzrError::Api { code, message }`, exactly as `check_response_status` would
-   have built it from the same status and body, so `error.type` and the
-   structured-error key set are unchanged and `BzrError::Api`'s own exit code is
-   unchanged. What changes is `api_code` and `message`, and they change from
-   wrong to right. Introducing a distinct variant for policy refusals would move
-   an exit code for no diagnostic gain: `Api` already carries the server's own
-   code, which is the thing that distinguishes them.
+   have built it from the same status and body. Introducing a distinct variant
+   for policy refusals would move an exit code for no diagnostic gain: `Api`
+   already carries the server's own code, which is the thing that distinguishes
+   them.
+
+   **Where the original 401 was itself a Bugzilla error envelope**, only
+   `api_code` and `message` change, and they change from wrong to right; the
+   variant, `error.type`, the structured-error key set, and the exit code are
+   all unchanged. **Where it was not** — a bare 401, an HTML challenge page from
+   a fronting proxy — the old path produced `BzrError::HttpStatus` and the new
+   one produces `BzrError::Api`, which is a different variant with a different
+   exit code. Both transitions are user-visible; see Consequences.
 
    `api_code` is not display text, so this is not a cosmetic change. bzr reads
    it as control flow: `BzrError::is_permissive_bug_view_error`
@@ -97,8 +104,24 @@ Concretely:
 ## Consequences
 
 - A caller who is refused on policy grounds now sees the server's code and
-  message. Same variant, same `error.type`, same structured-error key set.
-- **One reachable process-exit change, accepted deliberately.**
+  message. Where the original 401 was itself a Bugzilla error envelope — the
+  ordinary case, and the one the issue reported — that is the whole of the
+  change: same variant, same `error.type`, same structured-error key set, same
+  exit code.
+- **Two reachable user-visible transitions, both accepted deliberately.** They
+  are listed here because a record that names one and denies the other is worse
+  than one that names neither.
+- **Transition (a): a bare 401 becomes an API error.** When the first attempt's
+  401 carries no Bugzilla error envelope and the retry's does, the old path
+  reported `BzrError::HttpStatus { status: 401 }` — exit 5, `error.type`
+  `"http"`, structured key `status` — because the original's unparseable body
+  was all it had. The new path reports `BzrError::Api { code, message }` — exit
+  4, `error.type` `"api"`, structured key `api_code`. A `--json` consumer keying
+  on `error.type` or on the presence of `api_code`, or a script keying on exit
+  5, sees the difference. The retried envelope is the server's actual answer and
+  the bare 401 was not, so this is the same principle the rest of this decision
+  rests on; it is pinned by a wiremock test.
+- **Transition (b): a `--permissive` batch can exit 0 where it exited 4.**
   `bzr bug view A,B --permissive` (and `comment list --permissive`) suppress a
   per-resource fault — codes 100, 101, 102 — and abort on anything else. On a
   deployment where the first auth method draws a 401 (the #713 shape), a

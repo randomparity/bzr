@@ -56,8 +56,14 @@ decide which of two disagreeing responses wins. ADR 0057 decides that.
   today's behaviour: no retry, original response returned.
 - **R7** — A relayed refusal is reported as `BzrError::Api { code, message }`,
   built identically to what `check_response_status` produces from the same
-  status and body. `error.type`, the structured-error key set, and
-  `BzrError::Api`'s own exit code are unchanged.
+  status and body. **Where the original 401 was itself a Bugzilla error
+  envelope**, `error.type`, the structured-error key set, and the exit code are
+  unchanged, and only `api_code` and `message` move.
+- **R10** — Where the original 401 carried **no** Bugzilla error envelope and
+  the retry's does, the reported error moves from `BzrError::HttpStatus` (exit
+  5, `error.type` `"http"`, structured key `status`) to `BzrError::Api` (exit 4,
+  `error.type` `"api"`, structured key `api_code`). That is accepted (ADR 0057,
+  Consequences, transition (a)) and must be pinned by a test, not discovered.
 - **R8** — The relayed body is redacted on the same terms as every other error
   body, and no transport error's `Display` — which carries the request URL, and
   so the API key on the query-parameter path — reaches a log or a message on the
