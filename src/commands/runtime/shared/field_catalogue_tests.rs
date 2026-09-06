@@ -243,3 +243,34 @@ async fn a_mixed_key_set_probes_only_for_the_unknown_keys() {
     .await
     .expect("both keys are acceptable");
 }
+
+/// The cache has no role in the answer, so a config it cannot write must not
+/// turn an otherwise valid write into an error.
+#[tokio::test]
+async fn an_unwritable_config_does_not_fail_the_validation() {
+    let (server, tmp, client) = setup(&["cf_release"], 1).await;
+    let config_path = write_config(&tmp, &server.uri(), "");
+    let dir = config_path.parent().unwrap().to_path_buf();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+    }
+
+    let result = validate_bug_fields(&client, &ctx_for(&config_path), &keys(&["cf_release"])).await;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    assert!(
+        result.is_ok(),
+        "a failed cache write must not fail the validation: {result:?}"
+    );
+    assert_eq!(
+        cached_names(&config_path),
+        None,
+        "the write really did fail, so the assertion above is not vacuous"
+    );
+}

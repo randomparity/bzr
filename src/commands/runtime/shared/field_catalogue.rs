@@ -73,23 +73,44 @@ fn cached_names(
         .clone()
 }
 
+/// Upper bound on the number of names cached to disk. The config is parsed on
+/// every invocation, so a server answering with an implausibly large catalogue
+/// must not be able to make every later command slower. bugzilla.redhat.com,
+/// the largest deployment bzr targets, declares a few hundred bug fields; above
+/// this ceiling the names are used for this request and simply not cached.
+const MAX_CACHED_FIELD_NAMES: usize = 4096;
+
 /// Persist freshly probed names under the config lock. Mirrors
 /// `persist_detected_settings`: only a successful probe writes, and a server
 /// that is no longer in config is a logged no-op rather than a resurrection.
+///
+/// Never fails the caller. The cache is an optimisation with no role in the
+/// answer, so a read-only or locked config must not turn an otherwise valid
+/// write into an error — the next invocation simply probes again.
 fn persist_names(
     config_path_override: Option<&std::path::Path>,
     server_name: &str,
     names: &[String],
-) -> Result<()> {
-    Config::update_locked_at(config_path_override, |config| {
+) {
+    if names.len() > MAX_CACHED_FIELD_NAMES {
+        tracing::debug!(
+            "server '{server_name}' declared {} bug fields, above the {MAX_CACHED_FIELD_NAMES} \
+             cache ceiling; not caching",
+            names.len()
+        );
+        return;
+    }
+    let result = Config::update_locked_at(config_path_override, |config| {
         let Some(srv) = config.servers.get_mut(server_name) else {
             tracing::debug!("server '{server_name}' not in config; skipping field-name persist");
             return Ok(());
         };
         srv.bug_field_names = Some(names.to_vec());
         Ok(())
-    })?;
-    Ok(())
+    });
+    if let Err(e) = result {
+        tracing::debug!("could not cache bug field names for '{server_name}': {e}");
+    }
 }
 
 /// True for a bug field name bzr's own REST payloads already use.
@@ -140,7 +161,7 @@ pub(crate) async fn validate_bug_fields(
         .bug_field_names()
         .await
         .map_err(annotate_probe_failure)?;
-    persist_names(config_path, server_name, &declared)?;
+    persist_names(config_path, server_name, &declared);
     let declared: BTreeSet<&str> = declared.iter().map(String::as_str).collect();
     for key in unknown {
         if !declared.contains(key) {

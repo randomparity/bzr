@@ -88,7 +88,9 @@ returns without a network call. Otherwise:
 3. Persist the probed names under the config lock via `Config::update_locked_at`, following
    `persist_detected_settings` (`src/commands/runtime/shared/connection/detect.rs:38`): only
    after a successful probe, and a no-op when the server is not in config (inline `--server-url`
-   or a concurrently removed entry).
+   or a concurrently removed entry). Persistence never fails the caller — a write error is
+   logged and stepped over — and a catalogue above `MAX_CACHED_FIELD_NAMES` (4096) is not
+   cached at all.
 4. Any key still absent → `BzrError::input_field` naming the field, with
    "run `bzr field list` to see the fields this server declares".
 
