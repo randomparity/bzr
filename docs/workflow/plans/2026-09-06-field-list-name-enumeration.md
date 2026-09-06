@@ -1,0 +1,1104 @@
+# Implementation plan — `bzr field list` name enumeration (issue #718)
+
+**Goal.** Give `bzr field list` a no-argument form that enumerates every bug field name a
+`--field` / `--field-json` write will accept, each row marked with why it is accepted.
+
+**Architecture.** `src/cli/field.rs` makes the `List` positional optional. `src/commands/field.rs`
+dispatches on its presence: `Some` keeps today's legal-values path untouched; `None` connects,
+calls the existing `BugzillaClient::bug_field_names()`, folds the result together with
+`BUG_FIELDS` through a new `accepted_bug_fields()` in the module that already owns the
+`--field` accept rule (`src/commands/runtime/shared/field_catalogue.rs`), and prints through a
+new writer in `src/output/resources/field.rs`. The row type and its schema-key list live in
+`src/types/field.rs` beside `FieldValue`.
+
+**Tech stack.** Rust 2021, tokio, clap derive, serde, tabled, wiremock for HTTP mocking, bash
+for the functional harness.
+
+## Global Constraints
+
+Transcribed from the spec and `CLAUDE.md`:
+
+- Unit tests live in sibling `<name>_tests.rs` files linked with
+  `#[cfg(test)] #[path = "<name>_tests.rs"] mod tests;`. Inline `mod tests { … }` in `src/` is
+  rejected by `make check-test-layout`. Sibling files start with the file-level inner attribute
+  the lint needs (`#![expect(clippy::unwrap_used)]`, or the combined form the original used);
+  omit it where the tests do not trigger the lint.
+- User-facing output goes through `Writers` (`w.out` / `w.err`) and the output helpers. Never
+  `println!` / `eprintln!`. Never add `#[expect(clippy::print_stdout)]` or
+  `#[expect(clippy::print_stderr)]` in `src/`.
+- Clippy pedantic, `-D warnings`. `unwrap_used` denied; `expect_used` and `allow_attributes`
+  warned.
+- `SCHEMA_VERSION` is live (3.0.0 shipped in v0.9.0). Under ADR 0007 an additive result type is
+  a **patch** bump: 3.0.2 → 3.0.3.
+- A new `--json` shape needs five coupled updates or `schema_tests` fails: the schema file, the
+  **sorted** `SCHEMAS` registry, a conformance case, the docs schema list, and the input
+  parser-key drift check (not applicable here — output shape).
+- Adding to the CLI requires updating the `## Command Tree` in `docs/bzr-cli.md`. No new long
+  flag is added, so `ROOT_GLOBALS` in `agent-skills/tests/flag-drift-check.sh` is untouched.
+- `flag-drift-check` defaults to `BZR_BIN:-bzr` and resolves the *installed* binary from `PATH`,
+  reporting confident drift in both directions against a stale binary. Always run it as
+  `BZR_BIN="$PWD/target/debug/bzr"`, or through `make skills-test`, which sets it.
+- Guardrails, run **bare** — no `| tail`, no `>/dev/null`, no `|| true`: `make lint`,
+  `make test`. Iterate with `make test-one T=<substring>` and `make test-fast`. Never bare
+  `cargo test`.
+- Functional phase scripts use **4-space** indent and are not CI-linted; bare `shfmt` will
+  mislead. `test_pass` / `test_fail` / `test_skip` are the only counter-moving primitives, and
+  every fixture guard needs an `else` that calls one of them.
+- `docs/adr/README.md` is **not** edited: this is a dispatched run and the ADR index is not
+  CI-coupled for this batch. Report `index row pending`.
+
+Expected implementation size: 450–700 changed lines (M) — derived from the file map below: nine
+source files averaging ~35 changed lines, six sibling test files averaging ~40, one new 30-line
+schema, and ~120 lines of docs and functional phase script.
+
+## Deferrals carried from design review
+
+None. (Populated if the design review disposes any finding as `deferred-tracked`.)
+
+## File map
+
+**Created**
+
+| path | responsible for |
+|------|-----------------|
+| `schemas/field-name.json` | the published `field-name` output contract |
+
+**Modified**
+
+| path | responsible for |
+|------|-----------------|
+| `src/types/field.rs` | `FieldName`, `FieldNameSource`, `FIELD_NAME_FIELDS` |
+| `src/types/field_tests.rs` | their serialization |
+| `src/types/mod.rs` | re-exporting the two new types if the module re-exports `FieldValue` |
+| `src/commands/runtime/shared/field_catalogue.rs` | `accepted_bug_fields()`; `undeclared()` wording |
+| `src/commands/runtime/shared/field_catalogue_tests.rs` | union correctness + the agreement test |
+| `src/output/resources/field.rs` | `write_field_names()` |
+| `src/output/resources/field_tests.rs` | table and JSON rendering |
+| `src/cli/field.rs` | optional positional + doc comment |
+| `src/cli/field_tests.rs` | both parse shapes; replaces `parse_field_list_requires_name` |
+| `src/cli/mod_tests.rs` | its one `FieldAction::List` destructuring site (line 1339) |
+| `src/commands/field.rs` | dispatch on the positional |
+| `src/commands/field_tests.rs` | both command paths against wiremock; five `List` sites |
+| `src/commands/runtime/shared/mod.rs` | re-export `accepted_bug_fields` |
+| `src/commands/schema.rs` | `"field-name"` in the sorted registry |
+| `src/commands/schema_tests.rs` | conformance case |
+| `src/output/mod.rs` | `SCHEMA_VERSION` bump |
+| `docs/bzr-cli.md` | command tree, `field list` section, projection table, schema list |
+| `tests/functional/phases/05-fields-classifications.sh` | listing coverage incl. credentialless |
+| `tests/functional/phases/08g-bug-arbitrary-fields.sh` | rejection wording + live agreement oracle |
+
+## Task 1 — The row type and its schema
+
+**Interfaces produced** (later tasks rely on exactly these):
+
+```rust
+// src/types/field.rs
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FieldNameSource { Server, Bzr, Both }
+
+#[derive(Debug, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct FieldName {
+    pub name: String,
+    pub source: FieldNameSource,
+}
+
+pub const FIELD_NAME_FIELDS: &[&str] = &["name", "source"];
+```
+
+**Interfaces consumed:** none.
+
+**Where it fits:** every later task refers to `FieldName` / `FieldNameSource`.
+
+### Verification
+
+- Contract: `FieldNameSource` serializes to `"server"` / `"bzr"` / `"both"`.
+  `Mode: focused-test` — `src/types/field_tests.rs::field_name_source_serializes_lowercase`.
+  Red before the enum exists: the test file does not compile (`cannot find type
+  FieldNameSource`). Green: `make test-one T=field_name_source_serializes_lowercase`.
+- Contract: `schemas/field-name.json` accepts a serialized `FieldName`.
+  `Mode: focused-test` — `src/commands/schema_tests.rs::field_name_conforms`.
+  Red before the schema is registered: `schema_for("field-name")` panics with an unknown
+  schema. Green: `make test-one T=field_name_conforms`.
+- Contract: `SCHEMAS` stays sorted and the docs list matches it.
+  `Mode: focused-test` — the existing sorted/registry assertions in
+  `src/commands/schema_tests.rs`. Red if `"field-name"` is appended out of order. Green:
+  `make test-one T=schema`.
+
+### Steps
+
+1. In `src/types/field.rs`, below `FIELD_VALUE_FIELDS`, add `FieldNameSource`, `FieldName`, and
+   `FIELD_NAME_FIELDS` exactly as written in the Interfaces block above.
+2. In `src/types/mod.rs`, change line 33 from
+   `pub use field::{FieldValue, StatusTransition};` to
+   `pub use field::{FieldName, FieldNameSource, FieldValue, StatusTransition};`.
+   `FIELD_VALUE_FIELDS` is deliberately **not** re-exported there — `src/commands/field.rs`
+   reaches it as `crate::types::field::FIELD_VALUE_FIELDS` — so leave `FIELD_NAME_FIELDS` out
+   of this line too and reach it the same way, matching the existing convention.
+3. Create `schemas/field-name.json`:
+
+   ```json
+   {
+     "$schema": "https://json-schema.org/draft/2020-12/schema",
+     "$id": "https://github.com/randomparity/bzr/schemas/field-name.json",
+     "title": "FieldName",
+     "description": "A bug field name that `bzr bug create` / `bzr bug update` accept for `--field` / `--field-json`, as emitted by `bzr field list` with no positional argument.",
+     "type": "object",
+     "properties": {
+       "name": {
+         "type": "string",
+         "description": "The field name a --field write accepts."
+       },
+       "source": {
+         "type": "string",
+         "enum": ["server", "bzr", "both"],
+         "description": "Why the name is accepted: `server` = the connected server's field/bug catalogue declares it; `bzr` = bzr models it as a canonical REST bug field; `both` = both."
+       }
+     },
+     "required": ["name", "source"],
+     "additionalProperties": false
+   }
+   ```
+
+4. In `src/commands/schema.rs`, add `"field-name",` to the `SCHEMAS` list **immediately before**
+   `"field-value",`. The list is sorted and a test asserts it.
+5. In `src/output/mod.rs`, change `pub const SCHEMA_VERSION: &str = "3.0.2";` to `"3.0.3"`.
+6. In `src/types/field_tests.rs`, change the first `use` line from
+   `use super::{FieldValue, StatusTransition, FIELD_VALUE_FIELDS};` to
+   `use super::{FieldName, FieldNameSource, FieldValue, StatusTransition, FIELD_NAME_FIELDS, FIELD_VALUE_FIELDS};`
+   and add these two tests. The file already carries `#![expect(clippy::unwrap_used)]`, so
+   `unwrap()` is the idiom here — do not introduce `.expect(...)`.
+
+   ```rust
+   #[test]
+   fn field_name_source_serializes_lowercase() {
+       for (source, expected) in [
+           (FieldNameSource::Server, "server"),
+           (FieldNameSource::Bzr, "bzr"),
+           (FieldNameSource::Both, "both"),
+       ] {
+           let row = FieldName {
+               name: "whiteboard".into(),
+               source,
+           };
+           let value = serde_json::to_value(&row).unwrap();
+           assert_eq!(value["name"], "whiteboard");
+           assert_eq!(value["source"], expected);
+       }
+   }
+
+   /// Mirrors `field_value_fields_matches_serialized_keys` above: the projection
+   /// key list and the serialized object must not drift apart, because
+   /// `--fields` validates against the former and projects the latter.
+   #[test]
+   fn field_name_fields_matches_serialized_keys() {
+       let row = FieldName {
+           name: "status_whiteboard".into(),
+           source: FieldNameSource::Server,
+       };
+       let value = serde_json::to_value(&row).unwrap();
+       let serialized: std::collections::BTreeSet<String> =
+           value.as_object().unwrap().keys().cloned().collect();
+       let declared: std::collections::BTreeSet<String> = FIELD_NAME_FIELDS
+           .iter()
+           .map(|s| (*s).to_string())
+           .collect();
+       assert_eq!(serialized, declared);
+   }
+   ```
+7. In `src/commands/schema_tests.rs`, beside the existing `field_value_conforms` test, add:
+
+   ```rust
+   #[test]
+   fn field_name_conforms() {
+       use crate::types::field::{FieldName, FieldNameSource};
+       let row = FieldName {
+           name: "status_whiteboard".to_string(),
+           source: FieldNameSource::Server,
+       };
+       assert_conforms("field-name", &to_value(&row));
+   }
+   ```
+
+   `assert_conforms` validates top-level keys only, so also assert the enum explicitly:
+
+   ```rust
+   #[test]
+   fn field_name_source_enum_is_closed() {
+       let schema = schema_for("field-name");
+       let variants = &schema["properties"]["source"]["enum"];
+       assert_eq!(variants, &serde_json::json!(["server", "bzr", "both"]));
+   }
+   ```
+
+8. In `docs/bzr-cli.md`, find the "Available schemas:" paragraph (the one listing `field-value`
+   among the read shapes) and insert `field-name` immediately before `field-value` in that
+   sentence.
+9. Run `make test-one T=field_name` bare. Expect the three new tests to pass and no other output
+   than the quiet summary.
+10. Run `make test-one T=schema` bare. Expect green — this proves the registry order and the
+    docs list did not drift.
+11. `git add -A && git commit -m "feat(field): publish the field-name output shape"`.
+
+### Acceptance criteria
+
+- `cargo run -- schema field-name` prints the schema.
+- `cargo run -- schema` lists `field-name` between `envelope` and `field-value`.
+- `SCHEMA_VERSION` is `3.0.3`.
+
+## Task 2 — `accepted_bug_fields()` and the re-pointed rejection message
+
+**Interfaces produced:**
+
+```rust
+// src/commands/runtime/shared/field_catalogue.rs
+pub(crate) fn accepted_bug_fields(declared: &[String]) -> Vec<crate::types::FieldName>
+```
+
+Returns one row per unique name, sorted ascending by `name`, over the union of `declared` and
+every `BUG_FIELDS` canonical name.
+
+**Interfaces consumed:** `FieldName`, `FieldNameSource` (Task 1);
+`crate::types::bug::BUG_FIELDS` with `BugField::canonical(self) -> &'static str`, confirmed
+present at `src/types/bug/fields.rs:176` and `:63`; the module-private
+`is_bzr_known_bug_field(key: &str) -> bool`, already in this file.
+
+**Where it fits:** Task 4's command handler is this function's only production caller. The
+function lives here, not in `commands/field.rs`, because this module already owns the rule that
+decides what `--field` accepts, and co-locating them is what keeps the listing and the validator
+from drifting.
+
+### Verification
+
+- Contract: the union's `source` marking is correct for a server-only name, a bzr-only name, and
+  an overlapping name. `Mode: focused-test` —
+  `field_catalogue_tests.rs::accepted_bug_fields_marks_each_source`. Red before the function
+  exists: compile error, `cannot find function accepted_bug_fields`. Green:
+  `make test-one T=accepted_bug_fields_marks_each_source`.
+- Contract: everything `accepted_bug_fields` lists, `validate_bug_fields` accepts (acceptance
+  criterion 2). `Mode: focused-test` —
+  `field_catalogue_tests.rs::everything_listed_is_accepted`. Red if a row is emitted that
+  neither source backs: `validate_bug_fields` returns `Err(InputValidation)` and the test fails
+  on the unwrapped error. Green: `make test-one T=everything_listed_is_accepted`.
+- Contract: the rejection message names `bzr field list`. `Mode: focused-test` —
+  `field_catalogue_tests.rs` — extend the existing test that asserts the `undeclared` message
+  (search the file for `server capabilities`). Red: it still asserts the old string. Green:
+  `make test-one T=field_catalogue`.
+
+### Steps
+
+1. Open `src/commands/runtime/shared/field_catalogue.rs`. Add to the imports at the top:
+
+   ```rust
+   use std::collections::BTreeMap;
+   use crate::types::{FieldName, FieldNameSource};
+   ```
+
+   `BTreeSet` is already imported; add `BTreeMap` to the same `use std::collections::{…}` line
+   rather than writing a second `use`.
+2. Below `is_bzr_known_bug_field`, add:
+
+   ```rust
+   /// Every bug field name `--field` / `--field-json` accepts, given the names the
+   /// server's catalogue declares, each marked with why it is accepted.
+   ///
+   /// This is the listing half of the contract `validate_bug_fields` enforces: the two
+   /// read the same two sources — the catalogue and `BUG_FIELDS` via
+   /// [`is_bzr_known_bug_field`] — so a name this function emits is a name that function
+   /// accepts. Keeping them in one module is what makes that agreement structural rather
+   /// than a comment (ADR 0062).
+   ///
+   /// `BTreeMap` gives sorted, deduplicated output in one pass and collapses a name
+   /// present in both sources into a single `Both` row.
+   fn accepted_bug_fields_map(declared: &[String]) -> BTreeMap<&str, FieldNameSource> {
+       let mut rows: BTreeMap<&str, FieldNameSource> = BTreeMap::new();
+       for name in declared {
+           rows.insert(name.as_str(), FieldNameSource::Server);
+       }
+       for field in crate::types::bug::BUG_FIELDS {
+           rows.entry(field.canonical())
+               .and_modify(|source| *source = FieldNameSource::Both)
+               .or_insert(FieldNameSource::Bzr);
+       }
+       rows
+   }
+
+   pub(crate) fn accepted_bug_fields(declared: &[String]) -> Vec<FieldName> {
+       accepted_bug_fields_map(declared)
+           .into_iter()
+           .map(|(name, source)| FieldName {
+               name: name.to_string(),
+               source,
+           })
+           .collect()
+   }
+   ```
+
+   Note the `and_modify` arm: a name already inserted from `declared` is upgraded to `Both`
+   rather than overwritten, which is what makes an overlapping name one row and not two.
+3. Replace the whole doc comment and body of `undeclared()` with:
+
+   ```rust
+   /// Point at the command that answers "what can I set here".
+   ///
+   /// `bzr field list` with no argument enumerates the whole accepted set — the server's
+   /// catalogue names and the REST names bzr models — which is exactly the set this
+   /// function guards (ADR 0062). Earlier wording named `bzr server capabilities` and
+   /// stopped at "custom fields", because before #718 no command could show the rest.
+   fn undeclared(key: &str) -> BzrError {
+       BzrError::input_field(
+           format!(
+               "--field: this server does not declare a field named '{key}'; \
+                run `bzr field list` to see every field name this server accepts"
+           ),
+           "--field",
+           Some(key.to_string()),
+       )
+   }
+   ```
+
+4. Open `src/commands/runtime/shared/field_catalogue_tests.rs`. Search it for
+   `server capabilities` and update every assertion of the rejection message to expect
+   `bzr field list` instead. Do not weaken an exact-string assertion into a substring one.
+5. In the same file, add:
+
+   ```rust
+   #[test]
+   fn accepted_bug_fields_marks_each_source() {
+       // `status_whiteboard` is a catalogue-only internal column name; `whiteboard` is a
+       // REST name bzr models that the catalogue does not declare; `keywords` is in both.
+       let declared = vec![
+           "status_whiteboard".to_string(),
+           "keywords".to_string(),
+           "status_whiteboard".to_string(),
+       ];
+       let rows = super::accepted_bug_fields(&declared);
+
+       let find = |name: &str| {
+           rows.iter()
+               .filter(|row| row.name == name)
+               .collect::<Vec<_>>()
+       };
+
+       let sw = find("status_whiteboard");
+       assert_eq!(sw.len(), 1, "a duplicate in `declared` must yield one row");
+       assert_eq!(sw[0].source, crate::types::FieldNameSource::Server);
+
+       let wb = find("whiteboard");
+       assert_eq!(wb.len(), 1);
+       assert_eq!(wb[0].source, crate::types::FieldNameSource::Bzr);
+
+       let kw = find("keywords");
+       assert_eq!(kw.len(), 1);
+       assert_eq!(kw[0].source, crate::types::FieldNameSource::Both);
+
+       let names: Vec<&str> = rows.iter().map(|row| row.name.as_str()).collect();
+       let mut sorted = names.clone();
+       sorted.sort_unstable();
+       assert_eq!(names, sorted, "rows must be sorted by name");
+   }
+
+   #[test]
+   fn accepted_bug_fields_with_empty_catalogue_is_bug_fields_only() {
+       let rows = super::accepted_bug_fields(&[]);
+       assert_eq!(rows.len(), crate::types::bug::BUG_FIELDS.len());
+       assert!(rows
+           .iter()
+           .all(|row| row.source == crate::types::FieldNameSource::Bzr));
+   }
+   ```
+
+6. In the same file, add the agreement test, using the file's existing
+   `setup(names, expected_calls)` / `write_config` / `ctx_for` helpers (lines 45–70) rather
+   than a second mock:
+
+   ```rust
+   /// Acceptance criterion 2 of issue #718, executable: every name the listing emits is a
+   /// name the validator accepts. The oracle discriminates — a row backed by neither
+   /// source makes `validate_bug_fields` return `InputValidation`, and the `expect`
+   /// below fails naming the exact key.
+   ///
+   /// `expected_calls` is 1: the listed set contains catalogue-only names, which are not
+   /// `is_bzr_known_bug_field`, and the fresh config carries no cached names, so the
+   /// validator probes exactly once.
+   #[tokio::test]
+   async fn everything_listed_is_accepted() {
+       let declared_names = ["status_whiteboard", "short_desc", "keywords", "cf_example"];
+       let (server, tmp, client) = setup(&declared_names, 1).await;
+       let config_path = write_config(&tmp, &server.uri(), "");
+
+       let declared: Vec<String> = declared_names.iter().map(|n| (*n).to_string()).collect();
+       let listed: BTreeSet<String> = super::accepted_bug_fields(&declared)
+           .into_iter()
+           .map(|row| row.name)
+           .collect();
+       // The union is strictly wider than either source alone, so this test is
+       // exercising the union rather than a degenerate case.
+       assert!(listed.len() > crate::types::bug::BUG_FIELDS.len());
+       assert!(listed.len() > declared.len());
+
+       validate_bug_fields(&client, &ctx_for(&config_path), &listed)
+           .await
+           .expect("every listed field name must be accepted by the --field validator");
+   }
+   ```
+
+   `validate_bug_fields` is already imported at the top of the file via
+   `use super::{validate_bug_fields, BugzillaClient};`; `BTreeSet` is already imported too.
+   Add `accepted_bug_fields` to that `use super::{…}` line, or call it as
+   `super::accepted_bug_fields` as written above — either is consistent with the file.
+7. Run `make test-one T=field_catalogue` bare. Expect green.
+8. Confirm the oracle bites: temporarily change `or_insert(FieldNameSource::Bzr)` in step 2 to
+   also insert a literal row for a name neither source backs — e.g. add
+   `rows.insert("cf_not_real_at_all", FieldNameSource::Bzr);` before the return — then run
+   `make test-one T=everything_listed_is_accepted` bare and confirm it **fails** naming
+   `cf_not_real_at_all`. Revert the line and re-run to confirm green. Record both observations.
+9. `git add -A && git commit -m "feat(field): derive the accepted write-field set in one place"`.
+
+### Acceptance criteria
+
+- `accepted_bug_fields(&[])` returns 28 rows, all `Bzr`.
+- The rejection message names `bzr field list` and no test still asserts
+  `bzr server capabilities` for it.
+- The controlled-fault observation in step 8 is recorded (red, then green after revert).
+
+## Task 3 — The output writer
+
+**Interfaces produced:**
+
+```rust
+// src/output/resources/field.rs
+pub fn write_field_names<W: Write + ?Sized>(
+    names: &[crate::types::FieldName],
+    format: OutputFormat,
+    projection: &FieldProjection,
+    table_width: Option<usize>,
+    out: &mut W,
+)
+```
+
+**Interfaces consumed:** `FieldName` (Task 1); the file's existing
+`write_formatted_projected` and `write_table_records` imports, both already in scope.
+
+**Where it fits:** Task 4 calls this.
+
+### Verification
+
+- Contract: the table has a `NAME` / `SOURCE` header and one row per entry.
+  `Mode: focused-test` — `src/output/resources/field_tests.rs::write_field_names_table`.
+  Red before the function exists: compile error. Green:
+  `make test-one T=write_field_names_table`.
+- Contract: `--fields name` projects to `{name}` only. `Mode: focused-test` —
+  `src/output/resources/field_tests.rs::write_field_names_json_projects`. Red before the
+  function exists: compile error. Green: `make test-one T=write_field_names_json_projects`.
+
+### Steps
+
+1. In `src/output/resources/field.rs`, add the header constant beside the existing two:
+
+   ```rust
+   const FIELD_NAME_HEADERS: &[&str] = &["NAME", "SOURCE"];
+   ```
+
+2. Add the writer below `write_field_values`:
+
+   ```rust
+   /// Render the bug field names a `--field` write accepts. `source` says why each one is
+   /// accepted; see ADR 0062.
+   pub fn write_field_names<W: Write + ?Sized>(
+       names: &[FieldName],
+       format: OutputFormat,
+       projection: &FieldProjection,
+       table_width: Option<usize>,
+       out: &mut W,
+   ) {
+       write_formatted_projected(names, format, projection, out, |names, out| {
+           write_table_records(
+               FIELD_NAME_HEADERS,
+               names.iter().map(|row| {
+                   vec![row.name.clone(), field_name_source_label(row.source).to_string()]
+               }),
+               table_width,
+               out,
+           );
+       });
+   }
+
+   /// The table spelling of a source, kept identical to the JSON enum values so the two
+   /// output modes name the same thing.
+   fn field_name_source_label(source: FieldNameSource) -> &'static str {
+       match source {
+           FieldNameSource::Server => "server",
+           FieldNameSource::Bzr => "bzr",
+           FieldNameSource::Both => "both",
+       }
+   }
+   ```
+
+3. Extend the file's `use crate::types::{FieldValue, OutputFormat};` line to
+   `use crate::types::{FieldName, FieldNameSource, FieldValue, OutputFormat};`.
+4. In `src/output/resources/field_tests.rs`, add:
+
+   ```rust
+   #[test]
+   fn write_field_names_table() {
+       let rows = vec![
+           FieldName { name: "keywords".to_string(), source: FieldNameSource::Both },
+           FieldName { name: "status_whiteboard".to_string(), source: FieldNameSource::Server },
+       ];
+       let mut out = Vec::new();
+       write_field_names(
+           &rows,
+           OutputFormat::Table,
+           &FieldProjection::none(),
+           None,
+           &mut out,
+       );
+       let text = String::from_utf8(out).expect("utf-8");
+       assert!(text.contains("NAME"));
+       assert!(text.contains("SOURCE"));
+       assert!(text.contains("status_whiteboard"));
+       assert!(text.contains("server"));
+       assert!(text.contains("both"));
+   }
+
+   #[test]
+   fn write_field_names_json_projects() {
+       let rows = vec![FieldName {
+           name: "whiteboard".to_string(),
+           source: FieldNameSource::Bzr,
+       }];
+       let projection = FieldProjection::resolve(Some("name"), None, FIELD_NAME_FIELDS)
+           .expect("name is a known key");
+       let mut out = Vec::new();
+       write_field_names(&rows, OutputFormat::Json, &projection, None, &mut out);
+       let text = String::from_utf8(out).expect("utf-8");
+       assert!(text.contains("whiteboard"));
+       assert!(!text.contains("source"));
+   }
+   ```
+
+   Add whatever `use` lines the file's existing tests use for `FieldProjection` and
+   `OutputFormat`; match them exactly rather than inventing paths.
+5. Run `make test-one T=write_field_names` bare. Expect both tests green.
+6. `git add -A && git commit -m "feat(field): render the accepted field-name listing"`.
+
+### Acceptance criteria
+
+- Table output carries `NAME` and `SOURCE` headers.
+- `--fields name` output contains no `source` key.
+
+## Task 4 — The CLI surface and the command handler
+
+**Interfaces produced:** `FieldAction::List { name: Option<String>, projection: ProjectionArgs }`.
+
+**Interfaces consumed:** `accepted_bug_fields` (Task 2), reached as
+`super::runtime::shared::accepted_bug_fields`; `write_field_names` (Task 3);
+`crate::types::field::FIELD_NAME_FIELDS` (Task 1); the existing
+`BugzillaClient::bug_field_names(&self) -> Result<Vec<String>>`, confirmed `pub(crate)` at
+`src/client/resources/field.rs:82`; the existing
+`crate::commands::runtime::shared::connect_and_configure(ctx)`;
+`ProjectionArgs { fields, exclude_fields }` (`src/cli/fields.rs`, both `pub Option<String>`,
+derives `Default`).
+
+**Where it fits:** the last source task; everything after it is docs and functional coverage.
+
+### Verification
+
+- Contract: `bzr field list` parses with no positional. `Mode: focused-test` —
+  `src/cli/field_tests.rs::parse_field_list_without_a_name_is_the_listing_form`, replacing
+  `parse_field_list_requires_name`. Red before the type changes: clap returns
+  `MissingRequiredArgument` and `field_action` unwraps a parse error. Green:
+  `make test-one T=parse_field_list`.
+- Contract: the no-argument form prints the union from one `field/bug` request.
+  `Mode: focused-test` — `src/commands/field_tests.rs::field_list_no_argument_lists_names`.
+  Red before the handler branch exists: the `None` arm does not compile / the test sees the
+  legal-values output. Green: `make test-one T=field_list_no_argument_lists_names`.
+- Contract: `field list <name>` is unchanged. `Mode: focused-test` — the file's existing
+  `field list` tests, which must pass untouched. Green: `make test-one T=field`.
+- Contract: `--fields bogus` on the no-argument form exits 7. `Mode: focused-test` —
+  `src/commands/field_tests.rs::field_list_no_argument_rejects_unknown_projection`. Red before
+  the branch validates against `FIELD_NAME_FIELDS`: it validates against `FIELD_VALUE_FIELDS`
+  and accepts `sort_key`, which is not a key of this shape. Green:
+  `make test-one T=field_list_no_argument_rejects_unknown_projection`.
+
+### Steps
+
+1. In `src/cli/field.rs`, replace the `List` variant's doc comment and `name` field:
+
+   ```rust
+   /// List the bug field names this server accepts, or the legal values of one field.
+   ///
+   /// With no argument, prints every bug field name `bzr bug create` and
+   /// `bzr bug update` accept for `--field` / `--field-json`, with a `source`
+   /// column saying why each is accepted: `server` when the connected
+   /// server's field catalogue declares it, `bzr` when bzr models it as a
+   /// canonical REST bug field, `both` when both do. Bugzilla's catalogue
+   /// reports internal column names for several built-ins
+   /// (`status_whiteboard`, `short_desc`, `rep_platform`), while the write
+   /// API takes the REST spellings (`whiteboard`, `summary`, `platform`);
+   /// both are accepted and both are listed.
+   ///
+   /// With a field name, prints every value the configured server accepts
+   /// for that field. Common aliases (`status`, `severity`, `priority`,
+   /// `resolution`, ...) are resolved automatically to their underlying
+   /// field names; the canonical names also work. Use this to discover legal
+   /// values before passing `--status`, `--priority`, etc. to
+   /// `bzr bug create` or `bzr bug update`.
+   ///
+   /// Examples:
+   ///
+   ///   bzr field list
+   ///   bzr field list --json
+   ///   bzr field list status
+   ///   bzr field list priority --json
+   ///   bzr field list bug_severity
+   ///
+   /// See bzr-field-aliases(1) for the alias table and
+   /// bzr-bug-create(1) / bzr-bug-update(1) for the commands that
+   /// consume these values.
+   #[command(verbatim_doc_comment)]
+   List {
+       /// Field name (e.g. status, priority, severity, resolution). Omit it to
+       /// list the field names this server accepts instead. Common aliases are
+       /// resolved automatically (status -> `bug_status`, severity ->
+       /// `bug_severity`, etc.)
+       name: Option<String>,
+       #[command(flatten)]
+       projection: crate::cli::ProjectionArgs,
+   },
+   ```
+
+2. In `src/commands/field.rs`, replace the `FieldAction::List` arm with:
+
+   ```rust
+   FieldAction::List { name, projection } => match name {
+       Some(name) => {
+           let projection = crate::validation::fields::projection_for(
+               format,
+               projection.fields.as_deref(),
+               projection.exclude_fields.as_deref(),
+               crate::types::field::FIELD_VALUE_FIELDS,
+               w.err,
+           )?;
+           let client = super::runtime::shared::connect_and_configure(ctx).await?;
+           let values = client.get_field_values(name).await?;
+           if values.is_empty() && format == OutputFormat::Table {
+               let _ = writeln!(w.out, "No values for field '{name}'.");
+           } else {
+               write_field_values(&values, format, &projection, w.table_width(), w.out);
+           }
+       }
+       None => {
+           let projection = crate::validation::fields::projection_for(
+               format,
+               projection.fields.as_deref(),
+               projection.exclude_fields.as_deref(),
+               crate::types::field::FIELD_NAME_FIELDS,
+               w.err,
+           )?;
+           let client = super::runtime::shared::connect_and_configure(ctx).await?;
+           // Always a fresh probe: `ServerConfig.bug_field_names` is a validator
+           // fast path whose staleness is harmless there but would make a
+           // listing disagree with the server (ADR 0062).
+           let declared = client.bug_field_names().await?;
+           let names = super::runtime::shared::accepted_bug_fields(&declared);
+           write_field_names(&names, format, &projection, w.table_width(), w.out);
+       }
+   },
+   ```
+
+3. Update the imports. In `src/commands/field.rs`, add `write_field_names` to the
+   `use crate::output::resources::field::{…}` line. `field_catalogue` is a **private** `mod` in
+   `src/commands/runtime/shared/mod.rs`, re-exported selectively, so widen nothing: add
+   `accepted_bug_fields` to the existing line
+
+   ```rust
+   pub(crate) use field_catalogue::{connect_and_validate_bug_fields, validate_bug_fields};
+   ```
+
+   making it
+
+   ```rust
+   pub(crate) use field_catalogue::{
+       accepted_bug_fields, connect_and_validate_bug_fields, validate_bug_fields,
+   };
+   ```
+
+   and call it as `super::runtime::shared::accepted_bug_fields(&declared)` in the handler —
+   correct step 2's path accordingly.
+4. Update every existing construction and destructuring site of `FieldAction::List`, all five
+   of them, since `name` is now `Option<String>`:
+
+   - `src/commands/field_tests.rs:11` — the `list_with` helper: `name: Some(name.to_string()),`.
+   - `src/commands/field_tests.rs` lines 52, 102, 132, 165 — each inline
+     `name: "…".to_string(),` becomes `name: Some("…".to_string()),`.
+   - `src/cli/field_tests.rs:41` and `:49` — `assert_eq!(name, "status")` becomes
+     `assert_eq!(name.as_deref(), Some("status"))`, and likewise for `"bug_severity"`.
+   - `src/cli/mod_tests.rs:1339` — `=> assert_eq!(name, "status")` becomes
+     `=> assert_eq!(name.as_deref(), Some("status"))`.
+
+5. **Replace** the existing `parse_field_list_requires_name` test in `src/cli/field_tests.rs`.
+   It currently asserts the contract this change deliberately removes:
+
+   ```rust
+   #[test]
+   fn parse_field_list_requires_name() {
+       assert_eq!(
+           parse_error_kind(&["bzr", "field", "list"]),
+           ErrorKind::MissingRequiredArgument
+       );
+   }
+   ```
+
+   becomes
+
+   ```rust
+   /// The no-argument form is the field-name listing (issue #718), so the missing
+   /// positional that used to be a usage error is now a valid invocation.
+   #[test]
+   fn parse_field_list_without_a_name_is_the_listing_form() {
+       match field_action(&["bzr", "field", "list"]) {
+           FieldAction::List { name, .. } => assert_eq!(name, None),
+           FieldAction::Aliases => panic!("expected List"),
+       }
+   }
+   ```
+
+   Name the second variant explicitly, as the file's other two-variant matches do — clippy runs
+   with `-D warnings` and a wildcard arm on a two-variant enum is flagged.
+6. In `src/commands/field_tests.rs`, add two tests for the no-argument form, using the file's
+   `setup_isolated_env()` / `CapturedIo` / `json_envelope_data` idiom exactly as
+   `field_list_returns_values` (line 33) does:
+
+   ```rust
+   async fn mount_catalogue_names(mock: &wiremock::MockServer) {
+       Mock::given(method("GET"))
+           .and(path("/rest/field/bug"))
+           .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+               "fields": [{"name": "status_whiteboard"}, {"name": "keywords"}]
+           })))
+           .mount(mock)
+           .await;
+   }
+
+   #[tokio::test]
+   async fn field_list_no_argument_lists_names() {
+       let (mock, _tmp, config_path) = setup_isolated_env().await;
+       mount_catalogue_names(&mock).await;
+
+       let action = FieldAction::List {
+           name: None,
+           projection: ProjectionArgs::default(),
+       };
+       let mut io = crate::test_helpers::CapturedIo::new();
+       let result = super::execute(
+           &action,
+           &crate::commands::runtime::invocation::CommandContext::new(
+               None,
+               OutputFormat::Json,
+               None,
+           )
+           .with_config_path_override(Some(config_path.clone())),
+           &mut io.writers(),
+       )
+       .await;
+       assert!(result.is_ok(), "no-argument field list: {result:?}");
+       let parsed = crate::test_helpers::json_envelope_data(&io.out_str().to_string());
+       let rows = parsed.as_array().unwrap();
+       let source_of = |name: &str| {
+           rows.iter()
+               .find(|row| row["name"] == name)
+               .map(|row| row["source"].as_str().unwrap().to_string())
+       };
+       // catalogue-only, bzr-only, and overlapping, in one assertion set.
+       assert_eq!(source_of("status_whiteboard").as_deref(), Some("server"));
+       assert_eq!(source_of("whiteboard").as_deref(), Some("bzr"));
+       assert_eq!(source_of("keywords").as_deref(), Some("both"));
+   }
+
+   /// `sort_key` is a valid key of the *named* form and an invalid key of this one, so
+   /// this fails if the handler validates against `FIELD_VALUE_FIELDS` by mistake. A
+   /// nonsense token would be rejected either way and prove nothing.
+   #[tokio::test]
+   async fn field_list_no_argument_rejects_unknown_projection() {
+       let (mock, _tmp, config_path) = setup_isolated_env().await;
+       mount_catalogue_names(&mock).await;
+
+       let action = FieldAction::List {
+           name: None,
+           projection: ProjectionArgs {
+               fields: Some("sort_key".to_string()),
+               ..ProjectionArgs::default()
+           },
+       };
+       let mut io = crate::test_helpers::CapturedIo::new();
+       let result = super::execute(
+           &action,
+           &crate::commands::runtime::invocation::CommandContext::new(
+               None,
+               OutputFormat::Json,
+               None,
+           )
+           .with_config_path_override(Some(config_path.clone())),
+           &mut io.writers(),
+       )
+       .await;
+       let err = result.expect_err("sort_key is not a FieldName key");
+       assert_eq!(err.exit_code(), 7);
+   }
+   ```
+
+   `ProjectionArgs` (`src/cli/fields.rs`) derives `Default` and both fields — `fields` and
+   `exclude_fields`, each `Option<String>` — are `pub`, so the struct-update syntax above
+   compiles as written. `BzrError::exit_code()` returns `EXIT_CODE_INPUT`, which is `7`
+   (`src/error.rs:149`).
+7. Run `make test-one T=field` bare. Expect every new test green and every pre-existing
+   `field list` test still green.
+8. Run `make lint` bare. Expect exit 0.
+9. `git add -A && git commit -m "feat(field): add a no-argument form to bzr field list"`.
+
+### Acceptance criteria
+
+- `cargo run -- field list` against a server prints a `NAME` / `SOURCE` table.
+- `cargo run -- field list status` output is byte-identical to before the change.
+- `make lint` and `make test` are green.
+
+## Task 5 — Documentation
+
+**Interfaces consumed:** the CLI surface from Task 4.
+
+### Verification
+
+- Contract: the Command Tree matches the binary's flag surface.
+  `Mode: focused-test` — `agent-skills/tests/flag-drift-check.sh` with `BZR_BIN` pointed at the
+  freshly built debug binary. Red if the tree's `field list` line still shows a required
+  positional in a way the check parses as a flag mismatch. Green:
+  `BZR_BIN="$PWD/target/debug/bzr" sh agent-skills/tests/flag-drift-check.sh` exits 0.
+- Contract: the projection table lists the keys each form accepts.
+  `Mode: task-test-not-applicable` — the projection table is prose in `docs/bzr-cli.md` with no
+  executable consumer; the drift check compares flags, not table cells, and inventing a prose
+  snapshot test is explicitly disallowed.
+
+### Steps
+
+1. `cargo build` bare, so `target/debug/bzr` matches HEAD before any drift check runs.
+2. In `docs/bzr-cli.md`, in the `## Command Tree`, change
+
+   ```
+   │   └── list <FIELD_NAME> [--fields <F>] [--exclude-fields <F>]
+   ```
+
+   to
+
+   ```
+   │   └── list [<FIELD_NAME>] [--fields <F>] [--exclude-fields <F>]
+   ```
+
+3. In the "Valid field names per verb" table, change the `field list` row from
+
+   ```
+   | `field list` | `name`, `sort_key`, `is_active`, `can_change_to` |
+   ```
+
+   to
+
+   ```
+   | `field list <name>` | `name`, `sort_key`, `is_active`, `can_change_to` |
+   | `field list` (no argument) | `name`, `source` |
+   ```
+
+4. Rewrite the `### bzr field list` section. Keep the existing alias table and its paragraph;
+   add above them a description of the no-argument form:
+
+   - what it lists (every bug field name `--field` / `--field-json` accepts);
+   - the three `source` values and what each means;
+   - the internal-vs-REST name asymmetry, naming the concrete pairs
+     `status_whiteboard`/`whiteboard`, `short_desc`/`summary`, `rep_platform`/`platform`,
+     `bug_file_loc`/`url`, `blocked`/`blocks`, and stating plainly that bzr does **not** pair
+     them in the output — both spellings are listed, both are accepted, and the `source` column
+     is the relationship it does record;
+   - the two caveats from the spec: the listing reflects the catalogue at call time, and listed
+     means bzr will not refuse the key, not that Bugzilla will honour it;
+   - examples:
+
+     ```bash
+     bzr field list
+     bzr --json field list
+     bzr --json field list | jq -r '.data[] | select(.name | startswith("cf_")) | .name'
+     ```
+
+5. Confirm the `field-name` entry added to the "Available schemas" paragraph in Task 1 is
+   present and in the right place.
+6. Run `cd agent-skills && BZR_BIN="$(git rev-parse --show-toplevel)/target/debug/bzr" sh tests/flag-drift-check.sh`
+   bare from the worktree. Expect exit 0 and no drift lines. A run with `BZR_BIN` unset is
+   evidence of nothing — it resolves the installed binary from `PATH`.
+7. `git add -A && git commit -m "docs(field): document the field list name enumeration"`.
+
+### Acceptance criteria
+
+- `flag-drift-check.sh` exits 0 against the freshly built binary.
+- The `field list` section describes both forms and states the non-pairing explicitly.
+
+## Task 6 — Functional coverage
+
+**Interfaces consumed:** the CLI surface from Task 4; the harness helpers `test_begin`,
+`test_pass`, `test_fail`, `run_bzr` (which prepends `--json`), `run_bzr_raw`, `assert_success`,
+`assert_exit_code`, `assert_json`, `assert_stderr_contains`, all defined in
+`tests/functional/lib.sh`.
+
+**Where it fits:** the acceptance criteria require coverage against a real container, including
+the credentialless path.
+
+### Verification
+
+- Contract: the listing enumerates both sources against a real server.
+  `Mode: focused-test` — the new `field-list-no-argument-*` blocks in
+  `tests/functional/phases/05-fields-classifications.sh`. Red observation is produced
+  deliberately in step 9 below. Green: `make functional-test` reports them passing.
+- Contract: a name read out of the listing is accepted by `--field` against a real server.
+  `Mode: focused-test` — the new `field-list-agrees-with-field-validator` block in
+  `tests/functional/phases/08g-bug-arbitrary-fields.sh`. Green: `make functional-test`.
+- Contract: the rejection message names a command that works.
+  `Mode: focused-test` — the amended `undeclared-field-advice-names-a-command-that-works`
+  block in the same file.
+
+### Steps
+
+1. In `tests/functional/phases/05-fields-classifications.sh`, after the `field-aliases` block
+   and before the classification blocks, add (4-space indent throughout):
+
+   ```bash
+   # `field list` with no argument enumerates the whole accepted --field set: the
+   # server's catalogue names and the REST names bzr models (ADR 0062, issue #718).
+   # Asserting BOTH sources appear is what discriminates the union from either half
+   # alone — a catalogue-only regression drops every `bzr` row, and a BUG_FIELDS-only
+   # regression drops every `server` row.
+   test_begin "field-list-no-argument-lists-both-sources" "field list (no argument) lists both sources"
+   run_bzr field list
+   if assert_success &&
+       assert_json 'any(.[]; .source == "server")' true &&
+       assert_json 'any(.[]; .source == "bzr")' true; then test_pass; fi
+
+   # The concrete asymmetry the issue is about: Bugzilla's catalogue reports
+   # `status_whiteboard`, the write API takes `whiteboard`, and both are accepted.
+   # Naming the pair makes this fail on the real regression rather than on an
+   # abstraction of it.
+   test_begin "field-list-no-argument-marks-internal-and-rest-names" "field list marks internal and REST spellings"
+   run_bzr field list
+   if assert_success &&
+       assert_json 'map(select(.name == "status_whiteboard")) | .[0].source' "server" &&
+       assert_json 'map(select(.name == "whiteboard")) | .[0].source' "bzr"; then test_pass; fi
+
+   test_begin "field-list-no-argument-fields-projects-keys" "field list (no argument) --fields projects keys"
+   run_bzr field list --fields name
+   if assert_success && assert_json '.[0] | keys == ["name"]' true; then test_pass; fi
+
+   test_begin "field-list-no-argument-fields-unknown-exits-7" "field list (no argument) --fields unknown exits 7"
+   run_bzr field list --fields sort_key
+   if assert_exit_code 7; then test_pass; fi
+
+   # The catalogue is anonymously readable, so the listing must work with no
+   # credential. `sort_key` above and this block together prove the no-argument form
+   # validates against its own key set rather than FieldValue's.
+   test_begin "credentialless-field-list-no-argument" "credentialless field list (no argument)"
+   run_bzr_raw --json --server public field list
+   if assert_success &&
+       assert_json 'any(.[]; .source == "server")' true &&
+       assert_json 'any(.[]; .source == "bzr")' true; then test_pass; fi
+   ```
+
+   Note `--fields sort_key`: it is a valid key of the *named* form and an invalid key of this
+   one, so the exit-7 assertion fails if the handler validates against the wrong key set. A
+   nonsense token like `bogus_xyz` would pass either way and prove nothing.
+2. In `tests/functional/phases/08g-bug-arbitrary-fields.sh`, in the
+   `bug-update-undeclared-field-exits-7` block, change
+   `assert_stderr_contains "bzr server capabilities"` to
+   `assert_stderr_contains "bzr field list"`.
+3. Replace the `undeclared-field-advice-names-a-command-that-works` block — comment and all —
+   with:
+
+   ```bash
+   # The rejection above is the one message a user is guaranteed to read, because they
+   # only see it when they are already stuck. Advice that fails when followed is a
+   # defect, so run the command it names and require it to work. Since #718 that
+   # command is `bzr field list` with no argument, which enumerates the whole accepted
+   # set rather than the custom-field subset.
+   test_begin "undeclared-field-advice-names-a-command-that-works" "the undeclared-field message names a command that works"
+   run_bzr field list
+   if assert_success && assert_json 'length > 0' true; then test_pass; fi
+   ```
+
+4. After that block, add the live agreement oracle:
+
+   ```bash
+   # Acceptance criterion 2 against a real server: anything the listing shows is
+   # accepted. The name is read OUT of the listing rather than hard-coded, so the
+   # assertion bites in both directions — a listing that stopped emitting server-only
+   # names yields an empty name and fails at the guard, and a listing that emitted a
+   # name the validator rejects exits 7 here.
+   test_begin "field-list-agrees-with-field-validator" "a server-only name from field list is accepted by --field"
+   run_bzr field list
+   _AF_SERVER_NAME=""
+   if assert_success; then
+       _AF_SERVER_NAME=$(jq -r 'map(select(.source == "server" and .name == "status_whiteboard")) | .[0].name // empty' "$BZR_STDOUT")
+   fi
+   if [[ -z "$_AF_SERVER_NAME" ]]; then
+       test_fail "field list did not report status_whiteboard as a server-declared name"
+   elif [[ -z "$AFID" ]]; then
+       test_fail "no fixture bug: the --field create above did not succeed"
+   else
+       run_bzr bug update "$AFID" --field "${_AF_SERVER_NAME}=oracle"
+       if assert_success; then test_pass; fi
+   fi
+   ```
+
+   `status_whiteboard` is pinned deliberately: an arbitrary `.[0]` could land on a read-only
+   catalogue field (`bug_id`, a timestamp) that Bugzilla itself refuses, which would make the
+   test red for a reason that has nothing to do with bzr's validator.
+5. Run `make lint` bare. Expect exit 0.
+6. Run `make test` bare. Expect exit 0.
+7. Run `cargo build` bare so the functional harness runs HEAD.
+8. Run `make functional-test` bare. It takes roughly 10 minutes on a warm Docker/podman host;
+   background it rather than polling. Expect exit 0.
+9. **Confirm the new assertions bite.** After the green run, make one controlled fault and
+   re-run only the affected phase: in `src/commands/runtime/shared/field_catalogue.rs`, change
+   `accepted_bug_fields_map` to skip the `declared` loop entirely (return only the `BUG_FIELDS`
+   half). Rebuild and re-run `make functional-test`. Expect
+   `field-list-no-argument-lists-both-sources`,
+   `field-list-no-argument-marks-internal-and-rest-names`, and
+   `field-list-agrees-with-field-validator` to **fail**. Revert the fault, rebuild, re-run, and
+   confirm green. Record both observations — the red list and the green re-run — in the PR body
+   and the completion report.
+10. **Confirm the counters moved per phase.** Read the per-phase summary lines from the green
+    run and check that phase 5's and phase 8g's totals rose by the number of blocks added
+    (5 and 1 respectively, with one block amended in place). A green aggregate is not evidence
+    that a new block ran.
+11. `git add -A && git commit -m "test(field): cover the field list name enumeration"`.
+
+### Acceptance criteria
+
+- `make functional-test` is green with the new blocks counted, verified per phase.
+- The controlled-fault run turned the three named blocks red and the revert turned them green,
+  and both observations are recorded.
+- Every new fixture guard has an `else` branch calling `test_fail`; no new block can silently
+  evaporate.
+
+## Post-task guardrails
+
+Run bare, in order, before the PR:
+
+1. `make lint`
+2. `make test`
+3. `cargo build` then `make functional-test`
+4. `cd agent-skills && BZR_BIN="$(git rev-parse --show-toplevel)/target/debug/bzr" sh tests/flag-drift-check.sh`
+
+`make skills-test` is **not** required: nothing under `agent-skills/` is modified. Run
+`flag-drift-check.sh` directly instead, with `BZR_BIN` set.
+
+## Rollback
+
+Every task is a single commit on `feat/field-list-names-718` with no migration, no persisted
+state change, and no external write. Reverting the branch restores the prior behaviour exactly;
+the only durable artifact is the `SCHEMA_VERSION` string, which reverts with it.
