@@ -238,6 +238,12 @@ while answering `503` on every `/rest/` path:
   at all?" a real question. What settles it is that the exception is now the *only* REST
   dependency left on an otherwise complete XML-RPC path, and removing it costs about forty
   lines.
+- **Nothing here was hidden, and that is the point.** The *undetermined* message already told
+  the user the probe needs the REST surface even under `--api xmlrpc`, and the limitation was
+  recorded as a consequence of this very record. The gap was stated in the user-facing error,
+  written down as a known cost, and still unactionable — because the only escape it offered was
+  a transport the affected deployment does not expose. A limitation a user can read and cannot
+  act on is a reason to close it, not evidence that disclosure was sufficient.
 
 ### Decision
 

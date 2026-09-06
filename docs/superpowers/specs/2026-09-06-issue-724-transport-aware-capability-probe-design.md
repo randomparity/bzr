@@ -42,9 +42,10 @@ And against a REST-**enabled** container (bz50), with `RUST_LOG=bzr=debug`:
 
 The three facts these establish, and why together they settle the issue's open question, are
 the ADR amendment's Context section. Two of them bear directly on the change below and are
-repeated only as pointers: `src/xmlrpc/resources/bug.rs:29` and `:54` already insert
-`savedsearch` and `sharer_id` into `Bug.search`, and `src/xmlrpc/protocol/parsing.rs:63`
-already normalises the self-closing `<struct />` the containers send.
+repeated only as pointers: `src/xmlrpc/resources/bug.rs:29` and `:53-54` already insert
+`savedsearch` and `sharer_id` into `Bug.search`, and `src/xmlrpc/protocol/parsing.rs:66`
+(`expand_empty_elements = true`) already normalises the self-closing `<struct />` the
+containers send.
 
 ## Change
 
@@ -205,7 +206,7 @@ to bite by seeding a controlled fault, observing red, and reverting.
 
 ## Out of scope
 
-`BugzillaClient::server_version()` (`src/client/resources/server.rs:39`) stays REST-only, so
+`BugzillaClient::server_version()` (`src/client/resources/server.rs:35`) stays REST-only, so
 `bzr server info` against a REST-disabled deployment still fails at the version step.
 `Bugzilla.version` exists over XML-RPC and the fix would be near-identical, but the
 capability gate never calls `server_version()`, so it is not a consequence of any #724
