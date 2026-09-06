@@ -236,19 +236,19 @@ impl SearchParams {
     /// authoritative - retrying via XML-RPC will return the same set
     /// (and may incur a long timeout on servers with slow XML-RPC).
     ///
-    /// `saved_search` *is* included, unlike `quicksearch`. The exclusions above
-    /// rest on a verified property — upstream evaluates both through one shared
-    /// free-text parser. No comparable property is known for a fork's
-    /// saved-search handling, so the retry stays available for the one vendor
-    /// extension bzr sends; it costs one capped round trip on an already-empty
-    /// result.
+    /// `saved_search` is excluded for the same reason: a saved search is
+    /// resolved by one server-side path on both transports, so an empty REST
+    /// result is authoritative. Including it was tried and reverted — the retry
+    /// is time-capped but its *error* is not swallowed (ADR-0015), so on a
+    /// hybrid server with XML-RPC disabled a saved search that legitimately
+    /// matched nothing failed the command with the XML-RPC transport error
+    /// instead of returning an empty list.
     pub fn has_structured_filters(&self) -> bool {
         self.has_mapped_filters()
             || self.cc.is_some()
             || self.alias.is_some()
             || !self.id.is_empty()
             || !self.raw_params.is_empty()
-            || self.saved_search.is_some()
             || self.creation_time.is_some()
             || self.last_change_time.is_some()
     }

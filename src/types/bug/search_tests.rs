@@ -270,7 +270,6 @@ fn search_params_has_structured_filters_for_each_individual_field() {
         ("cc", |p| p.cc = Some("X".into())),
         ("alias", |p| p.alias = Some("X".into())),
         ("id", |p| p.id = vec![1]),
-        ("saved_search", |p| p.saved_search = Some("X".into())),
         ("raw_params", |p| {
             p.raw_params = vec![("f1".into(), "X".into())];
         }),
@@ -372,4 +371,17 @@ fn apply_overrides_default_is_noop() {
     assert_eq!(p.product, vec!["P"]);
     assert_eq!(p.whiteboard, vec!["wip"]);
     assert_eq!(p.creation_time.as_deref(), Some("2026-04-01T00:00:00Z"));
+}
+
+/// `saved_search` is a filter but deliberately not a *structured* one: it must
+/// not arm hybrid mode's XML-RPC retry, whose error is propagated rather than
+/// swallowed, so an empty saved search would fail instead of returning `[]`.
+#[test]
+fn saved_search_is_a_filter_but_not_a_structured_filter() {
+    let params = SearchParams {
+        saved_search: Some("triage".into()),
+        ..Default::default()
+    };
+    assert!(params.has_filters());
+    assert!(!params.has_structured_filters());
 }

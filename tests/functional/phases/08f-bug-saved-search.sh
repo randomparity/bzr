@@ -71,3 +71,9 @@ if assert_exit_code 2; then test_pass; fi
 test_begin "bug-search-sharer-rejects-non-numeric" "bug search --sharer rejects a non-numeric ID"
 run_bzr bug search --saved-search "$_SS_NAME" --sharer not-a-number
 if assert_exit_code 2; then test_pass; fi
+
+test_begin "bug-search-saved-search-rejects-empty-name" "bug search rejects an empty --saved-search name"
+run_bzr bug search --saved-search ""
+if assert_exit_code 7 && assert_stderr_contains 'non-empty'; then
+    test_pass
+fi

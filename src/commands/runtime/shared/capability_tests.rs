@@ -56,9 +56,19 @@ async fn absent_capability_is_refused_with_exit_15() {
 
     assert_eq!(err.exit_code(), 15);
     assert_eq!(err.error_type(), "unsupported_server_capability");
+    assert_eq!(
+        err.structured_detail()
+            .get("capability_status")
+            .and_then(|v| v.as_str()),
+        Some("absent")
+    );
     let message = err.to_string();
     assert!(message.contains("saved search 'triage'"), "{message}");
     assert!(message.contains(RED_HAT_EXTENSION), "{message}");
+    assert!(
+        message.contains("'test'"),
+        "must name the server: {message}"
+    );
 }
 
 /// An empty extension map is a real answer, not a failed probe: the server
@@ -95,9 +105,20 @@ async fn probe_failure_is_undetermined_not_absent() {
         .expect_err("a failed probe must not be treated as support");
 
     assert_eq!(err.exit_code(), 15);
+    assert_eq!(
+        err.structured_detail()
+            .get("capability_status")
+            .and_then(|v| v.as_str()),
+        Some("undetermined"),
+        "a failed probe must be machine-distinguishable from an absent extension"
+    );
     let message = err.to_string();
     assert!(message.contains("could not determine"), "{message}");
     assert!(!message.contains("does not implement"), "{message}");
+    assert!(
+        message.contains("saved search"),
+        "the probe-failure path must still name the operation: {message}"
+    );
 }
 
 /// The second call reads the cached list, so the probe runs once per server.
@@ -121,5 +142,70 @@ async fn probed_extensions_are_cached_for_the_next_call() {
     assert_eq!(
         srv.server_extensions.as_deref(),
         Some([RED_HAT_EXTENSION.to_string()].as_slice())
+    );
+}
+
+/// Only capabilities bzr acts on are cached. The probe response is
+/// server-controlled and unbounded; persisting it verbatim would write
+/// arbitrary server text into the user's config for no gain.
+#[tokio::test]
+async fn only_known_capabilities_are_persisted() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    let noise: Vec<String> = (0..50).map(|i| format!("Noise{i}")).collect();
+    let mut names: Vec<&str> = noise.iter().map(String::as_str).collect();
+    names.push(RED_HAT_EXTENSION);
+    mount_extensions(&mock, &names, 1).await;
+
+    let ctx = ctx();
+    let client = connect_and_configure(&ctx).await.unwrap();
+    require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
+        .await
+        .unwrap();
+
+    let config = crate::config::Config::load_at(ctx.config_path_override()).unwrap();
+    let (_, srv) = config.resolve_server(None).unwrap();
+    assert_eq!(
+        srv.server_extensions.as_deref(),
+        Some([RED_HAT_EXTENSION.to_string()].as_slice()),
+        "server-advertised names outside the known set must not be persisted"
+    );
+}
+
+/// An inline `--server-url` connection has no config entry: it must neither
+/// trust nor write the named server's cached answer.
+#[tokio::test]
+async fn inline_server_neither_reads_nor_writes_the_cache() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    // Seed the *named* server's cache as supporting the capability.
+    let config_path = crate::config::Config::path_at(None).unwrap();
+    crate::config::Config::update_locked_at(Some(&config_path), |config| {
+        if let Some(srv) = config.servers.get_mut("test") {
+            srv.server_extensions = Some(vec![RED_HAT_EXTENSION.to_string()]);
+        }
+        Ok(())
+    })
+    .unwrap();
+    let _ = &tmp;
+
+    // The inline server advertises nothing.
+    mount_extensions(&mock, &[], 1).await;
+    let ctx = ctx().with_inline_server(Some(crate::commands::runtime::invocation::InlineServer {
+        url: mock.uri(),
+        api_key_env: None,
+        email: None,
+        tls: crate::commands::runtime::invocation::InlineTlsOptions::default(),
+    }));
+    let client = connect_and_configure(&ctx).await.unwrap();
+    let err = require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
+        .await
+        .expect_err("the inline server advertises nothing, so it must be refused");
+    assert_eq!(err.exit_code(), 15);
+
+    let after = crate::config::Config::load_at(Some(&config_path)).unwrap();
+    let (_, srv) = after.resolve_server(None).unwrap();
+    assert_eq!(
+        srv.server_extensions.as_deref(),
+        Some([RED_HAT_EXTENSION.to_string()].as_slice()),
+        "an inline invocation must not overwrite the named server's cache"
     );
 }

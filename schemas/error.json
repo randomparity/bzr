@@ -43,6 +43,11 @@
           "type": "string",
           "description": "MidAirCollision: the token the client sent, now stale."
         },
+        "capability_status": {
+          "type": "string",
+          "enum": ["absent", "undetermined"],
+          "description": "UnsupportedServerCapability: `absent` when the server answered and does not advertise the capability, `undetermined` when the capability probe itself failed (retryable)."
+        },
         "capability": {
           "type": "string",
           "description": "UnsupportedServerCapability: the server capability (Bugzilla extension) the request required."

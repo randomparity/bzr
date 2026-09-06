@@ -92,6 +92,11 @@ pub enum BzrError {
     UnsupportedServerCapability {
         /// The capability that was required, e.g. the Bugzilla extension name.
         capability: String,
+        /// `absent` when the server answered and does not advertise the
+        /// capability; `undetermined` when the probe itself failed. A consumer
+        /// must be able to tell a settled refusal from a retryable one without
+        /// parsing `message`.
+        status: &'static str,
         /// What the user was trying to do, for the message's first clause.
         operation: String,
         /// Why it could not proceed and what to do instead.
@@ -150,6 +155,11 @@ const EXIT_CODE_KEYRING: i32 = 12;
 const EXIT_CODE_TLS: i32 = 13;
 const EXIT_CODE_COLLISION: i32 = 14;
 const EXIT_CODE_UNSUPPORTED_CAPABILITY: i32 = 15;
+
+/// `status` for an [`BzrError::UnsupportedServerCapability`] the server answered.
+pub const CAPABILITY_ABSENT: &str = "absent";
+/// `status` for an [`BzrError::UnsupportedServerCapability`] whose probe failed.
+pub const CAPABILITY_UNDETERMINED: &str = "undetermined";
 
 /// Bugzilla internal server error code (HTTP 500 with code 100500).
 /// Used for retry logic in hybrid mode when extensions crash.
@@ -318,8 +328,11 @@ impl BzrError {
                 map.insert("succeeded".into(), Value::from(*succeeded as u64));
                 map.insert("failed".into(), Value::from(*failed as u64));
             }
-            BzrError::UnsupportedServerCapability { capability, .. } => {
+            BzrError::UnsupportedServerCapability {
+                capability, status, ..
+            } => {
                 map.insert("capability".into(), Value::from(capability.clone()));
+                map.insert("capability_status".into(), Value::from(*status));
             }
             BzrError::MidAirCollision {
                 id,

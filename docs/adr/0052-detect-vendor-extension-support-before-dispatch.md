@@ -33,7 +33,12 @@ this record.
 ## Decision
 
 **bzr establishes that the server supports a vendor extension before dispatching a request
-that depends on it, and fails with an actionable error when it does not.**
+whose vendor parameter bzr itself constructs, and fails with an actionable error when the
+server does not advertise it.**
+
+That qualifier is load-bearing. bzr also forwards unrecognised URL parameters verbatim
+(`bzr bug search --from-url`, and the saved queries `--save-as` persists for `bzr query run`),
+and those paths are not gated — see Consequences.
 
 Support is determined from `GET /rest/extensions`, which bzr already consumes through
 `BugzillaClient::server_extensions()` into `ServerExtensions`. Red Hat Bugzilla advertises a
@@ -52,9 +57,10 @@ Three consequences of that rule are part of the decision, not implementation det
    refuse to dispatch, so neither produces a silently wrong result, but they do not claim to
    know the same thing. This follows ADR 0015: bzr does not mask what the server actually did.
 
-3. **The error names the capability, the server, and the remedy**, per the repository's
-   fail-fast rule — operation, input, fix. It states that the parameter is a Red Hat extension
-   and that stock Bugzilla does not implement it, so the user learns why rather than only that.
+3. **The error names the operation, the server, the capability, and the remedy**, per the
+   repository's fail-fast rule. It carries a machine-readable `capability` and
+   `capability_status` (`absent` or `undetermined`) in its structured detail, so a consumer can
+   tell a settled refusal from a retryable one without parsing the message.
 
 ## Consequences
 
@@ -72,8 +78,25 @@ Three consequences of that rule are part of the decision, not implementation det
   request its server would have honoured. That false negative is the accepted cost, and it is
   the mirror of what passthrough gets wrong: passthrough is silently wrong on most servers,
   detection is loudly wrong on few.
-- `ServerConfig` gains a persisted field, so a stored capability can go stale when a server is
-  upgraded. It is refreshed on the same terms as the other detection state.
+- `ServerConfig` gains a persisted field, and a cached answer has no TTL. A server *upgraded in
+  place* to add the extension keeps being refused until the cache is cleared, which
+  `bzr config set-server` does by replacing the entry. This is worse than a stale `api_mode` or
+  `auth_method`, which surface as a visible connection failure rather than a plausible-looking
+  refusal, so the refusal message says the answer is cached and how to re-probe. Only
+  capabilities bzr acts on are stored — the probe response is server-controlled and unbounded,
+  and persisting it verbatim would write arbitrary server text into the user's config.
+- **The probe is REST-only.** `GET /rest/extensions` is issued whatever the resolved API mode,
+  so on a deployment with REST disabled the capability can never be established and the feature
+  is permanently undetermined — even on a fork whose XML-RPC `Bug.search` would honour the
+  parameter. The undetermined message says the probe needs the REST surface. Routing the probe
+  through the resolved transport is deferred.
+- **Raw URL parameters stay ungated.** `bzr bug search --from-url` classifies any unmodelled
+  key as a raw passthrough, so a `buglist.cgi` URL carrying `savedsearch`/`sharer_id` — or the
+  `cmdtype=runnamed&namedcmd=<name>` form the Bugzilla UI actually produces — reaches the server
+  without a capability check, and can be persisted by `--save-as` and replayed by
+  `bzr query run`. Gating raw passthrough would require bzr to model every vendor parameter it
+  currently forwards blindly; this decision does not attempt that, and the documentation says so
+  rather than implying the protection is universal.
 - Sibling issues #671, #672, #679 and #680 inherit this rule and the mechanism, rather than
   each re-deciding.
 

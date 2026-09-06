@@ -445,7 +445,7 @@ bzr bug list --version 9.4 --version 9.5 --op-sys Linux
 ```
 
 `platform` is the canonical Bugzilla hardware-field name for search, bug
-objects, create, update, and clone. Schema 3.0.1 publishes and accepts only the
+objects, create, update, and clone. Schema 3.0.2 publishes and accepts only the
 canonical `platform` spelling.
 
 ### `bzr bug view`
@@ -531,7 +531,7 @@ bzr bug search --saved-search "team list" --sharer 112233
 
 `--saved-search` is a third, mutually exclusive query source: it runs a saved search stored in your Bugzilla account, which is unrelated to bzr's local saved queries (see [`bzr query`](#bzr-query----saved-query-management)).
 
-> **Note:** Resolving a server-side saved search is a Red Hat Bugzilla extension. bzr checks `/rest/extensions` before searching and exits 15 when the server does not advertise it, rather than returning an unfiltered result — a stock Bugzilla accepts `savedsearch`/`sharer_id` and silently ignores them. Confirmed against Bugzilla 5.0.6, 5.2 and 5.3.3+: none implements the parameters. If the check itself cannot be completed, bzr says so distinctly instead of claiming the extension is absent.
+> **Note:** Resolving a server-side saved search is a Red Hat Bugzilla extension. bzr checks `/rest/extensions` before searching and exits 15 when the server does not advertise it, rather than returning an unfiltered result — a stock Bugzilla accepts `savedsearch`/`sharer_id` and silently ignores them. Confirmed against Bugzilla 5.0.6, 5.2 and 5.3.3+: none implements the parameters. If the check itself cannot be completed, bzr says so distinctly instead of claiming the extension is absent; the structured error carries `capability_status` (`absent` or `undetermined`) so a script can tell the two apart. The check applies to `--saved-search`; parameters passed through `--from-url` (including a `buglist.cgi` saved-search URL) are forwarded verbatim and are **not** gated.
 
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
@@ -668,11 +668,11 @@ table always includes the fixed fields `ID`, `SUMMARY`, `STATUS`, `RESOLUTION`,
 `BLOCKS`, and `DEPENDS ON`; the two adjacency columns are complete,
 comma-separated ID lists.
 
-Under `--json`, the usual `3.0.1` envelope contains a closed result object:
+Under `--json`, the usual `3.0.2` envelope contains a closed result object:
 
 ```json
 {
-  "schema_version": "3.0.1",
+  "schema_version": "3.0.2",
   "data": {
     "requests": [
       {"requested": "00123", "bug_id": 123},
@@ -2470,7 +2470,7 @@ Every pretty `--json` response is wrapped in a stable envelope:
 
 ```json
 {
-  "schema_version": "3.0.1",
+  "schema_version": "3.0.2",
   "data": <the command's payload>
 }
 ```
@@ -2485,7 +2485,7 @@ bzr --json schema | jq -r '.schema_version'   # the contract version itself
 ```
 
 `--json` error output carries the version too, beside an `error` object:
-`{"schema_version":"3.0.1","error":{"type":...,"message":...,"exit_code":...}}`.
+`{"schema_version":"3.0.2","error":{"type":...,"message":...,"exit_code":...}}`.
 
 Two outputs are deliberately **not** enveloped:
 

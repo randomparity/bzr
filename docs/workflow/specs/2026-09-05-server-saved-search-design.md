@@ -78,8 +78,8 @@ Three outcomes, and they are deliberately three rather than two:
 | Probe | Extension | Behaviour |
 |---|---|---|
 | responded | `RedHat` present | dispatch the search |
-| responded | `RedHat` absent | refuse: unsupported capability, exit 15 |
-| failed | unknown | refuse: capability undetermined, exit 15, naming the transport failure |
+| responded | `RedHat` absent | refuse: `capability_status: absent`, exit 15 |
+| failed | unknown | refuse: `capability_status: undetermined`, exit 15, naming the transport failure |
 
 Collapsing the third into the second would let a transient network fault masquerade as a
 statement about the server. ADR 0015 already forbids bzr masking what the server actually did.
@@ -135,9 +135,12 @@ beside `limit`/`offset`. XML-RPC appends `savedsearch` to its `option_fields` ta
 `sharer_id` through the existing `xmlrpc_id` range check. Both omit an absent parameter.
 
 `saved_search` joins `has_filters()` (a consistency invariant — the predicate has no production
-caller) and `has_structured_filters()` (behavioural: it keeps the hybrid XML-RPC retry
-available for the one vendor extension bzr sends, at the cost of one capped round trip on a
-result that was already empty).
+caller) but **not** `has_structured_filters()`. Including it was tried and reverted during
+review: that predicate arms hybrid mode's XML-RPC retry on an empty REST result, and while the
+retry is time-capped its *error* is propagated rather than swallowed (ADR-0015). On a hybrid
+server with XML-RPC disabled, a saved search that legitimately matched nothing therefore failed
+the command with a transport error instead of returning `[]`. A saved search is resolved by one
+server-side path on both transports, so the empty REST result is authoritative anyway.
 
 ## Comparison harness
 

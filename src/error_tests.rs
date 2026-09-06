@@ -551,6 +551,7 @@ fn structured_detail_does_not_republish_raw_server_text() {
 fn unsupported_server_capability_has_distinct_exit_code_and_type() {
     let err = BzrError::UnsupportedServerCapability {
         capability: "RedHat".to_string(),
+        status: crate::error::CAPABILITY_ABSENT,
         operation: "saved search 'triage'".to_string(),
         detail: "server does not implement the Red Hat saved-search extension".to_string(),
     };

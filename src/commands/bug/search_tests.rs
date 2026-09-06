@@ -969,3 +969,34 @@ async fn handle_search_without_a_query_source_names_all_three() {
     assert!(message.contains("--saved-search"), "{message}");
     assert!(message.contains("--from-url"), "{message}");
 }
+
+/// An empty name would pass the query-source guard and the capability gate,
+/// then reach the server as `savedsearch=`, which Bugzilla discards — an
+/// unfiltered search reported as a saved one. Rejected at the input boundary,
+/// before any request: the `.expect(0)` mounts are what prove that.
+#[tokio::test]
+async fn handle_search_rejects_an_empty_saved_search_name() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/extensions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "extensions": {"RedHat": {"version": "0.3"}}
+        })))
+        .expect(0)
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    for name in ["", "   "] {
+        let err = run_action(&saved_search_action(name, None))
+            .await
+            .expect_err("an empty saved-search name must be rejected");
+        assert_eq!(err.exit_code(), 7, "name {name:?}");
+        assert!(err.to_string().contains("non-empty"), "{err}");
+    }
+}

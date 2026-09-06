@@ -13,12 +13,22 @@
 use crate::client::BugzillaClient;
 use crate::commands::runtime::invocation::CommandContext;
 use crate::config::Config;
-use crate::error::{BzrError, Result};
+use crate::error::{BzrError, Result, CAPABILITY_ABSENT, CAPABILITY_UNDETERMINED};
 
 /// The Bugzilla extension that provides saved-search resolution on Red Hat
 /// Bugzilla. Presence of this extension is a *proxy* for a patched
 /// `Bug.search`, not proof of one — see ADR-0052's consequences.
 pub(crate) const RED_HAT_EXTENSION: &str = "RedHat";
+
+/// Capabilities bzr can act on. Only these are cached: the probe response is
+/// server-controlled and unbounded, and persisting the whole advertised list
+/// would write arbitrary server text into the user's config for no gain — the
+/// only consumer is a membership test against this table.
+const KNOWN_CAPABILITIES: &[&str] = &[RED_HAT_EXTENSION];
+
+/// Server label used in messages. Inline `--server-url` connections have no
+/// configured name, so they are identified as such.
+const INLINE_SERVER_LABEL: &str = "(inline --server-url)";
 
 /// Ensure `capability` is advertised by the server, or fail before dispatch.
 ///
@@ -34,12 +44,24 @@ pub(crate) async fn require_server_capability(
     capability: &str,
     operation: &str,
 ) -> Result<()> {
-    let extensions = resolve_extensions(ctx, client, capability).await?;
+    let server = server_label(ctx);
+    let extensions = resolve_extensions(ctx, client, capability, operation, &server).await?;
     if extensions.iter().any(|name| name == capability) {
         Ok(())
     } else {
-        Err(unsupported(capability, operation))
+        Err(unsupported(capability, operation, &server))
     }
+}
+
+/// How the connected server is named in a message.
+fn server_label(ctx: &CommandContext) -> String {
+    if ctx.inline_server().is_some() {
+        return INLINE_SERVER_LABEL.to_string();
+    }
+    cached_server_name_and_extensions(ctx).map_or_else(
+        || INLINE_SERVER_LABEL.to_string(),
+        |(name, _)| format!("'{name}'"),
+    )
 }
 
 /// Cached-or-probed extension names for the connected server.
@@ -50,6 +72,8 @@ async fn resolve_extensions(
     ctx: &CommandContext,
     client: &BugzillaClient,
     capability: &str,
+    operation: &str,
+    server: &str,
 ) -> Result<Vec<String>> {
     // An inline `--server-url` connection has no config entry, so there is
     // nothing to read from and nothing to write back: probe every time.
@@ -63,12 +87,15 @@ async fn resolve_extensions(
         return Ok(extensions.clone());
     }
 
-    let mut names: Vec<String> = client
+    let advertised = client
         .server_extensions()
         .await
-        .map_err(|e| undetermined(capability, &e))?
-        .extensions
-        .into_keys()
+        .map_err(|e| undetermined(capability, operation, server, &e))?
+        .extensions;
+    let mut names: Vec<String> = KNOWN_CAPABILITIES
+        .iter()
+        .filter(|known| advertised.contains_key(**known))
+        .map(|known| (*known).to_string())
         .collect();
     names.sort_unstable();
 
@@ -108,29 +135,34 @@ fn persist_extensions(ctx: &CommandContext, server_name: &str, names: &[String])
     }
 }
 
-fn unsupported(capability: &str, operation: &str) -> BzrError {
+fn unsupported(capability: &str, operation: &str, server: &str) -> BzrError {
     BzrError::UnsupportedServerCapability {
         capability: capability.to_string(),
+        status: CAPABILITY_ABSENT,
         operation: operation.to_string(),
         detail: format!(
-            "server does not implement the Bugzilla '{capability}' extension \
-             (not advertised at /rest/extensions). Stock Bugzilla accepts this \
-             parameter and ignores it, so bzr refuses rather than returning an \
-             unfiltered result; use `bzr bug list` filters, or `bzr query` for a \
-             saved query stored locally"
+            "server {server} does not implement the Bugzilla '{capability}' \
+             extension (not advertised at /rest/extensions). Stock Bugzilla \
+             accepts this parameter and ignores it, so bzr refuses rather than \
+             returning an unfiltered result; use `bzr bug list` filters, or \
+             `bzr query` for a saved query stored locally. This answer is cached \
+             per server: if the server has since been upgraded, re-run \
+             `bzr config set-server` for it to re-probe"
         ),
     }
 }
 
-fn undetermined(capability: &str, error: &BzrError) -> BzrError {
+fn undetermined(capability: &str, operation: &str, server: &str, error: &BzrError) -> BzrError {
     BzrError::UnsupportedServerCapability {
         capability: capability.to_string(),
-        operation: "server capability check".to_string(),
+        status: CAPABILITY_UNDETERMINED,
+        operation: operation.to_string(),
         detail: format!(
-            "could not determine whether the server implements the Bugzilla \
+            "could not determine whether server {server} implements the Bugzilla \
              '{capability}' extension: reading /rest/extensions failed ({error}). \
-             This is not evidence the extension is absent; retry, or check \
-             connectivity to the server"
+             The probe needs the server's REST surface even when --api xmlrpc is \
+             in use. This is not evidence the extension is absent; retry, or \
+             check that REST is reachable"
         ),
     }
 }

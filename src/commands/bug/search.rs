@@ -79,6 +79,18 @@ async fn resolve_client_and_params(args: &SearchArgs, ctx: &CommandContext) -> R
                 "a search query, --saved-search, or --from-url is required".into(),
             ));
         }
+        // An empty name would satisfy the guard above, pass the capability
+        // gate, and reach the server as `savedsearch=` — which Bugzilla
+        // discards, leaving an unfiltered search reported as a saved one.
+        if let Some(name) = args.saved_search.as_deref() {
+            if name.trim().is_empty() {
+                return Err(crate::error::BzrError::input_field(
+                    "--saved-search requires a non-empty saved-search name".into(),
+                    "saved_search",
+                    Some(name.to_string()),
+                ));
+            }
+        }
         let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
         // A saved search is a Red Hat extension: refuse before dispatch rather
         // than let a stock server silently return an unfiltered result
