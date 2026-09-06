@@ -2,7 +2,7 @@
 
 - Issue: #670
 - Scope token: `q670-1c1b8eb2`
-- Decision: no ADR (see "Why no ADR" below)
+- Decision: recorded in "Decision record" below; no ADR file in this run, and why
 - Branch: `feat/saved-search-670`
 - Base branch: `main`
 
@@ -28,37 +28,46 @@ criteria require:
   runner's `for _phase in` list against the basenames in `tests/functional/phases/` and
   fails `make lint` unless they match, so a new phase file is not addable without its
   runner row.
-- `tests/functional/pybz/container-tests.sh` — its `run_parity_report_fixture` holds every
-  row of `docs/dev/python-bugzilla-parity.md` as a literal string and asserts each appears
-  exactly once, so the parity-row flip is not completable without the matching fixture
-  edit. This file is reached by `make functional-compare`, not by `make lint` or
-  `make test`.
+- `tests/functional/pybz/container-tests.sh` — this file models the whole `#670` gap, not
+  just its parity row. It holds every parity-report row as a literal string
+  (`run_parity_report_fixture`), **and** it drives the real
+  `tests/functional/compare/01-bug-lifecycle.sh` through a stub `run_bzr` that answers
+  `--saved-search` with the unsupported-flag diagnostic, **and** it asserts the resulting
+  PASS/FAIL/GAP counts and stale-gap behaviour. Closing the gap without updating all of
+  that leaves `make functional-compare-all` permanently red. The full list of edits is Task
+  3 of the plan.
 
 Neither is an expansion of the charter's surface; each is the unavoidable other half of a
-sourced criterion. Both are flagged to the campaign orchestrator, and the second is a
+sourced criterion. Both are flagged to the campaign orchestrator. The second is a
 line-adjacent conflict risk with the concurrently running sibling issue #672, which owns the
-`Comment tags and minor update` row two lines below. No dependency, config, auth, schema, or
-paging behaviour changes.
+`Comment tags and minor update` row and its own stub arm in the same file. No dependency,
+config, auth, schema, or paging behaviour changes.
 
 ## Verified: upstream Bugzilla ignores these parameters
 
-Three checks, run before this design, all against the project's own functional images
-(`bz50` = 5.0.6, `bz52`, `bz53` = 5.3.3+). Together they establish one thing: **upstream
-Bugzilla accepts `savedsearch` and `sharer_id` on `Bug.search` and does nothing with them,
-on both transports.**
+Two checks, run before this design against the project's own functional images
+(`bz50` = 5.0.6, `bz52`, `bz53` = 5.3.3+):
 
-1. **Source.** Neither identifier appears anywhere under `Bugzilla/` in any of the three
-   images. `Bugzilla::WebService::Bug::search` passes its parameter hash straight into
-   `Bugzilla::Search->new(params => ...)`; `sharer` exists there only as a *top-level
-   constructor option*, which `Bug.search` never sets.
-2. **Live REST probe**, authenticated as `admin@test.bzr` via that account's functional-test
-   API key — the same account the probe's named query was seeded for, so an ownership
-   mismatch cannot explain the result. With that query seeded to match nothing
-   (`bug_id=999999`), `GET /rest/bug?savedsearch=<name>&include_fields=id` against bz50
-   returned `{"bugs":[{"id":1}]}` — byte-identical to the same request with no criterion at
-   all. A name matching no stored query returned the same.
-3. **Live XML-RPC probe**, same account and same seeded query: `Bug.search` with a
-   `savedsearch` member returned that same unfiltered result.
+1. **Source, all three images.** Neither `savedsearch` nor `sharer_id` appears anywhere
+   under `Bugzilla/`. `Bugzilla::WebService::Bug::search` passes its parameter hash straight
+   into `Bugzilla::Search->new(params => ...)`; `sharer` exists there only as a *top-level
+   constructor option*, which `Bug.search` never sets. No module under
+   `Bugzilla/WebService/` references the `namedqueries` table at all. This establishes that
+   none of the three can *resolve* a saved search.
+2. **Live REST probe, all three images.** `GET /rest/bug?include_fields=id&savedsearch=…&sharer_id=1`
+   returned byte-identical output to the same request with no criterion, on each of bz50,
+   bz52 and bz53. This establishes the separate fact that each *accepts* the unknown
+   parameters rather than faulting on them.
+
+One further check covers bz50 only: an XML-RPC `Bug.search` carrying a `savedsearch` member,
+authenticated as `admin@test.bzr` and naming a query seeded for that same account so an
+ownership mismatch cannot explain the result, returned the same unfiltered rows. The seeded
+query was `bug_id=999999`, matching nothing, so a server that resolved it would have returned
+an empty set.
+
+Claims are therefore scoped as: *cannot resolve* — all three images, from source; *accepts
+without error over REST* — all three, probed live; *accepts without error over XML-RPC* —
+bz50, probed live, and inferred for the other two from check 1.
 
 ## Inferred, not verified: Red Hat Bugzilla honours them
 
@@ -66,27 +75,19 @@ Red Hat documents `sharer_id` explicitly as a Red Hat Extension, with the sharer
 user id** in its example payload (`{"savedsearch": "MySavedSearch", "sharer_id": 112233}`).
 That establishes the parameter names and the identifier form. It does **not** establish how
 Red Hat's fork implements them, and no check above observed a Red Hat server or read Red
-Hat's source.
+Hat's source. Nothing in this design depends on the inference.
 
-So the following is an inference from vendor documentation plus upstream's dispatch shape,
-and it is untested: because `Bug.search` is one server-side sub behind both the REST and the
-XML-RPC entry points upstream, a fork that implements saved-search resolution inside it gets
-identical behaviour on both transports. The inference is reasonable and it is the basis for
-one design choice below, but it is a projection of upstream's architecture onto the very
-area the fork patched, which is where that projection is weakest.
-
-**What follows regardless of the inference.** The transport asymmetry the issue's triage
-feared — REST ignoring the parameters while XML-RPC honours them — is ruled out for upstream
-by checks 2 and 3 directly. A plain REST pass-through is therefore the faithful
-implementation, and the comparison harness's `observe_bzr_transport` REST assertion is
-satisfiable without contriving anything.
+**What follows regardless.** The transport asymmetry the issue's triage feared — REST
+ignoring the parameters while XML-RPC honours them — is ruled out for upstream by the probes
+directly. A plain REST pass-through is the faithful implementation, and the comparison
+harness's `observe_bzr_transport` REST assertion is satisfiable without contriving anything.
 
 **What follows from the verified part alone.** On a stock Bugzilla the parameters are
 silently ignored, so the search degrades to an unfiltered one. That is precisely what
 python-bugzilla does today, which is why "parity" is an accurate claim at the level
 `docs/dev/python-bugzilla-parity.md` measures. It is not something a user should have to
 discover, so it is stated in the flag's own help text, in the CLI reference, and in a
-footnote on the parity table rather than left implicit.
+footnote on the parity table.
 
 ## Parameter model
 
@@ -97,43 +98,42 @@ pub saved_search: Option<String>,
 pub sharer_id: Option<u64>,
 ```
 
-`saved_search` joins `has_filters()` for consistency with every other filter field. That
-predicate is currently a consistency invariant rather than a behavioural gate: it has no
+`saved_search` joins **both** `has_filters()` and `has_structured_filters()`.
+
+`has_filters()` is a consistency invariant rather than a behavioural gate: it has no
 production caller — the three non-test call sites (`src/commands/query/update.rs:144` and
 `:169`, `src/commands/query/save.rs:63`) are all `SavedQuery::has_filters`, a separate
-function at `src/types/query.rs:266`. What actually makes a saved-search-only invocation a
-complete query is the presence check in `src/commands/bug/search.rs`, described under "CLI
-contract" below.
+function at `src/types/query.rs:266`. What makes a saved-search-only invocation a complete
+query is the presence check in `src/commands/bug/search.rs`, under "CLI contract" below.
 
-`saved_search` deliberately does **not** join `has_structured_filters()`. That predicate
-gates hybrid mode's XML-RPC retry of an empty REST result, and it exists for filters whose
-REST and XML-RPC handlers can disagree. The exclusion rests on the untested Red Hat
-inference above: if saved-search resolution is one server-side sub shared by both
-transports, an empty REST result is authoritative and a retry would return the same rows
-after a second round trip — the same reasoning the existing doc comment applies to
-`quicksearch` and `summary`.
+`has_structured_filters()` is behavioural: it gates hybrid mode's XML-RPC retry of an *empty*
+REST result (`src/client/resources/bug.rs:266-292`), and its stated purpose is the cases
+where a buggy REST extension can disagree with the XML-RPC implementation. `saved_search` is
+the only vendor extension this change adds, so excluding it would remove the one new
+extension from the net built for extensions. The cost of including it is close to nothing:
+the retry fires only when the REST leg returned no rows, and on a stock server
+`--saved-search` yields an unfiltered result, which is empty only when the caller can see no
+bugs at all. On a server that does resolve the search, an empty result is exactly the case a
+handler disagreement would hide. So the retry is paid on an already-empty query and bounded
+by the existing `XMLRPC_FALLBACK_TIMEOUT`.
 
-Stating the bet plainly, since it is a bet: this removes the one extension the change
-targets from a safety net built for extensions. If Red Hat's REST and XML-RPC handlers do
-disagree, a hybrid-mode saved search whose REST leg returns nothing is reported as empty
-without the XML-RPC retry that would have caught it. The alternative — including it, and
-paying a second round trip on every empty saved-search result — is rejected because it
-protects against a divergence nobody has observed, at a cost paid on every miss. Adding it
-later is a one-line change if a real server ever exhibits the divergence.
+This is deliberately *not* the same reasoning that excludes `quicksearch` and `summary`.
+Those are excluded because upstream evaluates them through one shared free-text parser — a
+verified property. No comparable property is known for a fork's saved-search handling, so
+the safe default applies.
 
 `sharer_id` is not a filter on its own; it only qualifies a saved-search name, and the CLI
 requires the name to be present.
 
 ## Considered and rejected
 
-**Accept a login for `--sharer` and resolve it to an id.** Rejected on three grounds. The
-documented server parameter *is* a numeric user id, which Red Hat's UI surfaces in the
-saved-search URL, so a login would have to be translated before it could be sent. Translating
-it means a `User.get` round trip whose result is usable only on servers that also implement
-the extension — it buys nothing where the feature works and wastes a request where it does
-not. And python-bugzilla's `--savedsearch-sharer-id` takes the id, so accepting a login would
-make bzr's flag silently mean something different from the tool this campaign measures
-parity against.
+**Accept a login for `--sharer` and resolve it to an id.** verified: the documented server
+parameter is a numeric user id, surfaced by Red Hat's UI in the saved-search URL, and
+python-bugzilla's `--savedsearch-sharer-id` takes the id. judgment: translating a login means
+a `User.get` round trip whose result is usable only on servers that also implement the
+extension — nothing gained where the feature works, one wasted request where it does not —
+and it would make bzr's flag silently mean something different from the tool this campaign
+measures parity against.
 
 So `--sharer` is typed `u64` and maps to `sharer_id` unchanged. Clap rejects a non-numeric
 value at parse time with its ordinary value-validation error and exit code 2, so no server
@@ -157,8 +157,6 @@ upstream Bugzilla exposes named queries only through `buglist.cgi?cmdtype=runnam
 module under `Bugzilla/WebService/` in any supported image references `namedqueries`. The
 translation would mean scraping a CGI page outside the API surface bzr is built on.
 
-The first two rejections are a policy, not a local choice — see "Decision record" below.
-
 ## CLI contract
 
 | Flag | Type | Constraint |
@@ -166,31 +164,29 @@ The first two rejections are a policy, not a local choice — see "Decision reco
 | `--saved-search <NAME>` | `Option<String>` | conflicts with the positional `<QUERY>` and with `--from-url` |
 | `--sharer <ID>` | `Option<u64>` | requires `--saved-search` |
 
-`--saved-search` conflicts with the positional quicksearch string for a verified reason, not
-a stylistic one: `Bug.search` replaces its entire parameter hash when `quicksearch` is
-present (`$match_params = $cgi->Vars` in `Bugzilla/WebService/Bug.pm`), so a saved-search
-name sent alongside a quicksearch string is discarded by the server without a diagnostic.
-Rejecting the combination at parse time is the only way the user learns.
+`--saved-search` conflicts with the positional quicksearch string for a verified reason:
+`Bug.search` replaces its entire parameter hash when `quicksearch` is present
+(`$match_params = $cgi->Vars` in `Bugzilla/WebService/Bug.pm`), so a saved-search name sent
+alongside a quicksearch string is discarded by the server without a diagnostic. Rejecting the
+combination at parse time is the only way the user learns.
 
 `--saved-search` conflicts with `--from-url` because that flag is a complete alternate query
 source with its own server resolution and `--save-as` persistence; there is no coherent
 combination of the two.
 
 `bug search` with none of the three sources keeps failing as input validation, with the
-message widened to name all three.
-
-Everything else composes unchanged: `--limit` (default 50), `--offset`, `--paginate`,
-`--count`, `--fields`, `--exclude-fields`, `--sort`, `--order`.
+message widened to name all three. Everything else composes unchanged: `--limit` (default
+50), `--offset`, `--paginate`, `--count`, `--fields`, `--exclude-fields`, `--sort`,
+`--order`.
 
 ## Wire mapping
 
 REST (`src/client/resources/bug.rs`): `savedsearch` joins the `append_option_params` string
-table; `sharer_id` is appended beside `limit` and `offset`, which are the existing numeric
-entries. Encoding goes through `reqwest`'s typed `query()` exactly as every other search
-parameter does.
+table; `sharer_id` is appended beside `limit` and `offset`, the existing numeric entries.
+Encoding goes through `reqwest`'s typed `query()` exactly as every other search parameter.
 
 XML-RPC (`src/xmlrpc/resources/bug.rs`): `savedsearch` joins the `option_fields` string
-table; `sharer_id` becomes a `Value::Int` beside `limit` and `offset`.
+table; `sharer_id` becomes a `Value::Int` via the existing `xmlrpc_id` range check.
 
 Both mappers omit an absent parameter entirely rather than sending an empty value, matching
 every other optional field on both paths.
@@ -198,90 +194,72 @@ every other optional field on both paths.
 ## Testing
 
 **Unit (wiremock and clap).** The wire contract is proven here, because it cannot be proven
-against a real Bugzilla — see below. A REST test asserts `query_param("savedsearch", …)` and
+against a real Bugzilla. A REST test asserts `query_param("savedsearch", …)` and
 `query_param("sharer_id", …)` on the outgoing request; an XML-RPC test asserts the
 corresponding members in the call body. Clap tests cover both conflicts, the `requires`
 relation, and the non-numeric `--sharer` rejection.
 
 **Functional phase (`tests/functional/phases/08f-bug-saved-search.sh`).** A real container
-can prove that a real Bugzilla *accepts* the request and that the CLI contract holds
-end-to-end; it cannot prove filtering, because the servers under test ignore the parameter
-by design. The phase therefore asserts: a credentialed `--saved-search` search succeeds and
-returns a JSON array; the same search under `--api xmlrpc` succeeds; `--count` composes;
-the credentialless path (`--server-url` with no credential) succeeds; and the four
-validation rejections exit 2. Stating what it cannot assert is part of the test's comment
-header, so a later reader does not mistake its silence for coverage.
+proves that Bugzilla accepts the request and that the CLI contract holds end-to-end; it
+cannot prove filtering, because the servers under test ignore the parameter. The phase
+asserts acceptance over REST and XML-RPC, composition with `--count`, the credentialless
+path, and the four parse-time rejections.
 
-The phase seeds **no fixture** and uses a literal saved-search name and sharer id. Seeding a
-real `namedqueries` row would change no assertion — every supported image returns the same
+The phase seeds no fixture and uses a literal saved-search name and sharer id. Seeding a real
+`namedqueries` row would change no assertion — every supported image returns the same
 unfiltered rows whether or not the name exists — while adding a failure mode that hides
-itself: a container-exec failure would turn all five container assertions into skips, and
-`test_skip` does not fail a run, so the phase could report green having proved nothing.
-Unconditional tests are both smaller and more honest here.
+itself, since `test_skip` does not fail a run and a container-exec failure would turn every
+container assertion into a skip on a green run.
 
 A new phase file rather than an addition to `08-bugs.sh` keeps this change out of a file a
 concurrently running sibling issue may also touch.
 
-**Comparison (`tests/functional/compare/01-bug-lifecycle.sh`).** The saved-search block
-drops `lifecycle_bzr_gap`'s diagnostic argument for plain `lifecycle_bzr`, and the
-`lifecycle_expect_gap 670` line is deleted. `expect_gap` converts a pass into a failure once
-the gap closes, so leaving it would turn the working feature red.
+**Comparison.** `tests/functional/compare/01-bug-lifecycle.sh` drops the expected-gap
+marking, and `tests/functional/pybz/container-tests.sh` — which models that gap in five
+places — is updated in the same commit. `bash tests/functional/pybz/container-tests.sh` is
+the observation that catches a mismatch between the two; it needs no container. Note that
+`make functional-compare` does **not** reach that file: only `make functional-compare-all`
+(`Makefile:226`) invokes it, and no CI workflow does.
 
 ## Known limitation of the comparison assertion
 
-Both sides of `compare/01-bug-lifecycle/saved-search` assert that the search returns exactly
-the two lifecycle bug ids. On upstream Bugzilla that assertion passes because the parameter
-is ignored *and* the container holds exactly those two bugs at that point — not because the
-saved search was resolved. This is true of the python-bugzilla side today, before this
-change, and flipping bzr's side to a plain `lifecycle_bzr` inherits the same property.
+Both sides of `compare/01-bug-lifecycle/saved-search` assert the search returns exactly the
+two lifecycle bug ids. On upstream Bugzilla that passes because the parameter is ignored
+*and* the container holds exactly those two bugs at that point — not because a saved search
+was resolved. This is already true of the python-bugzilla side before this change; flipping
+bzr's side inherits it. It is recorded, not fixed: strengthening the assertion would make
+both clients fail against every supported image. See the plan's Deferrals section for the
+owning follow-up.
 
-This is recorded rather than fixed. Strengthening the assertion — seeding a third bug the
-saved search excludes — would make both clients fail against every supported image, since
-neither server honours the parameter. The honest fix is a Red-Hat-shaped fixture, which is
-its own change against `tests/functional/redhat-shape-proxy.py`. It is not folded in here.
+Because the parity table is the durable, quotable artifact, that row's Status cell carries a
+footnote saying what its evidence can and cannot establish.
 
-Because the parity table is the durable, quotable artifact, the row's Status cell carries a
-footnote marker rather than a bare `parity`, and the footnote says the evidence test cannot
-distinguish a resolved saved search from an unfiltered one on any supported image. Applying
-this spec's own disclosure rule to the table is the point: that row is the line most likely
-to be read out of context.
+## Decision record
 
-This limitation has no owning tracker issue at design time. The repository keeps no
-`docs/debt/` directory, so it is carried in the plan's Deferrals section and filed as a
-follow-up issue from this run's completion report.
+**bzr sends vendor-extension search parameters unconditionally and discloses the silent no-op
+in documentation, rather than detecting server support.** Disclosure means three placements,
+each reaching the reader before or at the point of use: the flag's clap doc comment (so
+`--help` and the man page carry it), the flag's row and a note in `docs/bzr-cli.md`, and a
+footnote on the parity claim. The alternatives are recorded under "Considered and rejected"
+above.
 
-## Decision record: disclose, do not detect
-
-**bzr sends vendor-extension search parameters unconditionally and discloses the silent
-no-op in documentation, rather than detecting server support.** Disclosure means three
-placements, each reaching the reader before or at the point of use: the flag's clap doc
-comment (so `--help` and the man page carry it), the flag's row and a note in
-`docs/bzr-cli.md`, and a footnote on any parity claim saying what its evidence establishes.
-
-This is not local to `--saved-search`. `docs/dev/python-bugzilla-parity.md` lists four
-sibling gaps in the same campaign — #671 generic arbitrary fields, #672 comment tags, #679
-whiteboard match types, #680 personal bug tags — and each meets the same question. Whichever
-way this issue answers becomes the precedent, so it is settled once here rather than five
-times.
-
-Consequences: a `--saved-search` against a stock Bugzilla returns an unfiltered result and
+Consequences: `--saved-search` against a stock Bugzilla returns an unfiltered result and
 exits 0, which is bzr faithfully reproducing the server; bzr issues no extra request per
 invocation; and bzr cannot warn a user who has not read the documentation, which is accepted
-because the alternative charges every user a round trip to catch the subset who did not. The
-three rejected alternatives are recorded above with their grounds.
+because the alternative charges every user a round trip to catch the subset who did not.
 
-**This belongs in `docs/adr/`, and is not there.** `docs/adr/README.md` sets the criterion —
-"choices with viable alternatives where the rationale is worth preserving" — and a
-cross-cutting policy with three tagged rejected alternatives meets it. An earlier draft of
-this spec argued otherwise on the grounds that the change crosses no module boundary; that is
-the wrong criterion and the argument is withdrawn.
+**Scope of this record: `--saved-search` only.** An earlier draft claimed it as precedent
+governing the four sibling parity gaps (#671, #672, #679, #680). That claim is withdrawn — a
+policy recorded in `docs/workflow/specs/` is not linked from `docs/adr/README.md`, is not
+surfaced to a later reviewer consulting the ADR set, and is invisible to the sibling issue
+running concurrently, so it had no mechanism to bind anything.
 
-The ADR file is not written in this run because ADR numbers are assigned by the campaign
-orchestrator — sibling issues are running concurrently and would otherwise all take the same
-"next free" number — and no number was assigned in time. This section is written to be
-liftable verbatim into `docs/adr/NNNN-disclose-vendor-extension-parameters.md` once a number
-exists; the index row in `docs/adr/README.md` is the orchestrator's, and the index is not
-coupled to any gated check here. The run's completion report carries the recommendation.
+The cross-cutting version does belong in `docs/adr/`, by that directory's own criterion
+("choices with viable alternatives where the rationale is worth preserving"). It is not
+written here because ADR numbers are assigned by the campaign orchestrator — concurrent
+sibling issues would otherwise all take the same "next free" number — and no number was
+assigned in time. This run's completion report carries the recommendation, so the decision to
+make it binding stays with the party that can number it.
 
 ## Out of scope
 
