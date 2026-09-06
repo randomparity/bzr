@@ -83,7 +83,9 @@ names, so a catalogue-only check rejects `--field whiteboard=...`. If nothing is
 returns without a network call. Otherwise:
 
 1. Load `ServerConfig.bug_field_names` for `client.server_name()` from the config at
-   `ctx.config_path_override()`. If every remaining key is present, return.
+   `ctx.config_path_override()`, ignoring it unless `bug_field_names_url` still equals the
+   server's `url` (following `server_extensions_url`, ADR 0052). If every remaining key is
+   present, return.
 2. Probe `client.bug_field_names()`. On failure, return the probe error annotated (below).
 3. Persist the probed names under the config lock via `Config::update_locked_at`, following
    `persist_detected_settings` (`src/commands/runtime/shared/connection/detect.rs:38`): only

@@ -73,16 +73,26 @@ fn undeclared(key: &str) -> BzrError {
 /// Read the names cached by the last successful probe for `server_name`.
 /// A missing config, an unreadable one, or a server without an entry all mean
 /// "no fast path" rather than an error — the probe answers authoritatively.
+///
+/// The cache is bound to the URL it was probed from, following
+/// `server_extensions_url` (ADR 0052). Re-pointing a server name at a
+/// different host must not let the old host's catalogue accept a key the new
+/// one does not declare: that key would go on the wire for Bugzilla to ignore
+/// silently, which is the failure this validation exists to prevent. A URL
+/// mismatch is a cache miss, and a miss always re-probes.
 fn cached_names(
     config_path_override: Option<&std::path::Path>,
     server_name: &str,
 ) -> Option<Vec<String>> {
-    Config::load_at(config_path_override)
-        .ok()?
-        .servers
-        .get(server_name)?
-        .bug_field_names
-        .clone()
+    let config = Config::load_at(config_path_override).ok()?;
+    let server = config.servers.get(server_name)?;
+    if server.bug_field_names_url.as_deref()? != server.url {
+        tracing::debug!(
+            "cached bug field names for '{server_name}' came from a different URL; ignoring"
+        );
+        return None;
+    }
+    server.bug_field_names.clone()
 }
 
 /// Upper bound on the number of names cached to disk. The config is parsed on
@@ -118,6 +128,7 @@ fn persist_names(
             return Ok(());
         };
         srv.bug_field_names = Some(names.to_vec());
+        srv.bug_field_names_url = Some(srv.url.clone());
         Ok(())
     });
     if let Err(e) = result {
