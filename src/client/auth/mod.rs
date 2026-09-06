@@ -46,7 +46,34 @@
 //!
 //! Some servers (e.g. IBM LTC) reject header auth via `valid_login` but accept
 //! it on real API endpoints. When `valid_login` reports query-param, header auth
-//! is re-verified against `rest/bug`; if that succeeds, header is preferred.
+//! is re-verified by a differential probe over `rest/user?names=<login>`, sent
+//! three ways -- with the header, with no credentials, and with the query
+//! parameter `valid_login` proved. Bodies are compared as parsed JSON; a leg's
+//! status gates it but is never folded into the compared value, and the
+//! anonymous re-check compares status class separately.
+//!
+//! | Observation                                                       | Effect           |
+//! |-------------------------------------------------------------------|------------------|
+//! | any leg fails to send or its body is unreadable                    | keep query-param |
+//! | any leg's status is neither `2xx` nor `401`/`403`                  | keep query-param |
+//! | the header or query-param leg is non-`2xx`, or carries a 200 error | keep query-param |
+//! | header body == anonymous body                                      | keep query-param |
+//! | header body matches neither peer                                   | keep query-param |
+//! | header body == query-param body, anonymous response did not repeat | keep query-param |
+//! | header body == query-param body, anonymous response repeated       | prefer header    |
+//!
+//! A `401`/`403` on the *anonymous* leg is kept deliberately: an anonymous
+//! caller being refused what a credentialed one receives is discrimination, not
+//! an inconclusive leg, and Bugzilla delivers that refusal as a status and an
+//! error body together. Because the anonymous leg is a single observation that
+//! the whole differential rests on, it is re-issued once before header auth is
+//! preferred, and must return the same status class and body -- a one-off
+//! rate-limit or WAF response, refusal or `200` interstitial alike, would
+//! otherwise confirm header auth on a server that ignores the header. A 2xx
+//! alone is not evidence either: `rest/bug` answers 200 anonymously, so the
+//! probe this replaced could not fail for the condition it verified (ADR 0056).
+//! Every inconclusive outcome keeps the method `valid_login` proved, and each
+//! terminal decline says so at `info`.
 //!
 //! ## Cached vs. fresh detection (connection layer)
 //!
@@ -77,8 +104,22 @@ use super::version::{detect_version_and_mode, detect_version_and_mode_without_au
 
 const AUTH_PROBE_BODY_TRACE_MAX_BYTES: usize = 2048;
 
-fn trace_body_preview(body: &str) -> &str {
-    crate::http::utf8_prefix(body, AUTH_PROBE_BODY_TRACE_MAX_BYTES)
+/// Bound a probe response body for `trace` logging, with the API key removed.
+///
+/// The query-parameter probes put the key in the request URL, and an error page
+/// from a proxy or `CGI::Carp` typically echoes the request URI back in its body —
+/// so a traced body can carry the key even though bzr never wrote it there. Both
+/// probe call sites trace the body before checking the status, so this covers
+/// error pages as well as successful responses. Matches what `response.rs` does
+/// for its own body previews.
+fn trace_body_preview(body: &str) -> String {
+    // Move the cut before any key it would split, *then* redact. Truncating
+    // first defeats the bare-key branch of `redact_api_key`, which matches the
+    // active key by equality and so cannot match a half of it — leaving a
+    // credential prefix in the trace line.
+    let prefix = crate::http::utf8_prefix(body, AUTH_PROBE_BODY_TRACE_MAX_BYTES);
+    let end = crate::bugzilla_auth::safe_api_key_preview_boundary(body, prefix.len());
+    crate::bugzilla_auth::redact_api_key(&body[..end])
 }
 
 #[derive(Debug, Clone)]
@@ -178,18 +219,45 @@ pub async fn detect_server_settings_without_auth(
     })
 }
 
+/// Render a probe transport error with the API key removed.
+///
+/// `reqwest::Error`'s `Display` appends ` for url (<url>)` whenever a URL is
+/// attached to the error, and the query-parameter probes carry the API key in
+/// that query string. Formatting the error verbatim would therefore write the
+/// key to stderr on any timeout, reset, or DNS failure.
+///
+/// Two seams, composed, because neither alone is complete. `safe_url` reduces
+/// the attached URL to origin and path, which is what keeps the message useful
+/// for diagnosis — but it rewrites only the exact string reqwest attached, and
+/// an error's source chain can render a differently-encoded copy. So the result
+/// then goes through [`crate::bugzilla_auth::redact_api_key`], the same
+/// marker- and thread-local-based redaction that guards the user-facing
+/// `BzrError::Http` display seam, which catches the key wherever it appears.
+///
+/// This is the single seam for every transport error raised under
+/// `src/client/auth/`; adding a probe means routing its error through here.
+pub(super) fn redacted_probe_error(error: &reqwest::Error) -> String {
+    let rendered = format!("{error:#}");
+    let without_url = match error.url() {
+        Some(url) => rendered.replace(url.as_str(), &super::BugzillaClient::safe_url(url)),
+        None => rendered,
+    };
+    crate::bugzilla_auth::redact_api_key(&without_url)
+}
+
 /// Log a probe's `send()` error, surfacing TLS-certificate problems at `warn`
 /// with a [`crate::tls::tls_hint`] and routing all other transport errors to
 /// `debug`. Shared by the `whoami` and `valid_login` probes so their
 /// network-error handling cannot drift apart (the cause of TD-002).
 fn log_probe_send_error(probe: &str, method: AuthMethod, e: &reqwest::Error) {
+    let rendered = redacted_probe_error(e);
     if crate::tls::is_tls_cert_error(e) {
         tracing::warn!(
             "{}",
-            crate::tls::tls_hint(&format!("{probe} {method} request failed: {e:#}"), e)
+            crate::tls::tls_hint(&format!("{probe} {method} request failed: {rendered}"), e)
         );
     } else {
-        tracing::debug!("{probe} {method} request failed: {e:#}");
+        tracing::debug!("{probe} {method} request failed: {rendered}");
     }
 }
 
@@ -206,8 +274,11 @@ fn network_error_outcome(e: reqwest::Error) -> Result<AuthMethod> {
     if crate::tls::is_tls_cert_error(&e) {
         return Err(BzrError::Http(e));
     }
+    // Not `{e:#}`: the query-param probes carry the API key in the URL reqwest
+    // attaches to a transport error, and this arm logs at `warn`.
     tracing::warn!(
-        "could not reach server during auth detection ({e:#}); defaulting to header auth"
+        "could not reach server during auth detection ({}); defaulting to header auth",
+        redacted_probe_error(&e)
     );
     Ok(AuthMethod::Header)
 }
@@ -269,7 +340,7 @@ async fn detect_auth_method(
                 // detected, verify by probing a real endpoint with header auth.
                 // Prefer header when both work -- it avoids leaking keys in URLs.
                 if method == AuthMethod::QueryParam
-                    && verify_header_auth_via_rest(http, base, &key_header).await
+                    && verify_header_auth_via_rest(http, base, api_key, &key_header, login).await
                 {
                     tracing::info!(
                         "header auth works on API endpoints despite valid_login \

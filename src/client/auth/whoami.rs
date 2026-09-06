@@ -84,7 +84,10 @@ async fn probe_whoami(request: reqwest::RequestBuilder, method: AuthMethod) -> W
     let body = match resp.text().await {
         Ok(body) => body,
         Err(e) => {
-            tracing::warn!(error = %e, "whoami response read error");
+            tracing::warn!(
+                error = super::redacted_probe_error(&e),
+                "whoami response read error"
+            );
             return WhoamiOutcome::NetworkError(e);
         }
     };
