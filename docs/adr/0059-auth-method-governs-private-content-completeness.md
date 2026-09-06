@@ -48,7 +48,7 @@ to a REST endpoint that ignores the configured auth method.
 - The forced-`rest` assertions run on every supported version, so a future server or client
   change that reintroduces REST-side filtering under working auth turns a phase red instead of
   returning a quietly short list.
-- A client configured for `header` auth against Bugzilla `<= 5.2` still reads these two list
+- A client configured for `header` auth against Bugzilla 5.0 or 5.2 still reads these two list
   endpoints anonymously and gets a silently incomplete `200`. Nothing in this decision changes
   that. It is an auth-selection defect in `src/client/auth/` (issue #713); a guard in these two
   reads would patch a shared root cause at one caller, and the list endpoints give it nothing

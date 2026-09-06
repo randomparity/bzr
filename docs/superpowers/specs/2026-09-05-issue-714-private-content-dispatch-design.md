@@ -55,8 +55,8 @@ Two further observations, both already intended behaviour and not part of this d
    `get_attachments`, `get_attachment` — to state the measured rule: private content is
    complete whenever the server honoured the credential; XML-RPC is preferred in Hybrid
    mode because it authenticates in the request body and so is immune to a REST endpoint
-   that ignores the configured auth method. Correct the same claim in the header comment of
-   `tests/functional/phases/16b-attachments-private.sh`.
+   that ignores the configured auth method. Correct the same claim in the header comments of
+   both `tests/functional/phases/15b-comments-private.sh` and `16b-attachments-private.sh`.
 2. Extend `tests/functional/phases/15b-comments-private.sh` and
    `16b-attachments-private.sh` with default-mode and forced `--api rest` private-content
    assertions. Today both phases assert only `--api hybrid` and `--api xmlrpc`, which is why
@@ -68,7 +68,7 @@ No dispatch, version-mapping, or auth behaviour changes. `dispatch_xmlrpc_first`
 
 ## Residual, not fixed here
 
-A client configured for `header` auth against Bugzilla <= 5.2 still reads `comment list` and
+A client configured for `header` auth against Bugzilla 5.0 or 5.2 still reads `comment list` and
 `attachment list` anonymously and gets a silently incomplete answer. The root cause is
 auth-method selection accepting a method the REST endpoint does not honour, in
 `src/client/auth/` — outside this issue's surface and owned by issue #713. A detection guard
