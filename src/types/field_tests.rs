@@ -1,6 +1,26 @@
 #![expect(clippy::unwrap_used)]
 
-use super::{FieldValue, StatusTransition, FIELD_VALUE_FIELDS};
+use super::{FieldName, FieldNameSource, FieldValue, StatusTransition, FIELD_VALUE_FIELDS};
+
+#[test]
+fn field_name_source_serializes_lowercase() {
+    for (source, expected) in [
+        (FieldNameSource::Server, "server"),
+        (FieldNameSource::Bzr, "bzr"),
+        (FieldNameSource::Both, "both"),
+    ] {
+        // `as_str` is the single definition; serde reaches it through
+        // `#[serde(into = "&'static str")]`, so this pins both output modes.
+        assert_eq!(source.as_str(), expected);
+        let row = FieldName {
+            name: "whiteboard".into(),
+            source,
+        };
+        let value = serde_json::to_value(&row).unwrap();
+        assert_eq!(value["name"], "whiteboard");
+        assert_eq!(value["source"], expected);
+    }
+}
 
 #[test]
 fn field_value_fields_matches_serialized_keys() {

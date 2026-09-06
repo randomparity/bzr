@@ -2520,7 +2520,7 @@ emits the schema document verbatim. An unknown name exits 7 with the list of
 valid names.
 
 Available schemas: `bug`, `bug-adjacency`, `comment`, `attachment`, `product`, `component`,
-`classification`, `user`, `group`, `field-value`, `whoami` (read shapes); and the
+`classification`, `user`, `group`, `field-name`, `field-value`, `whoami` (read shapes); and the
 mutation/result envelopes `action-result`, `batch-result`,
 `batch-create-result`, `compound-create-result`, `multi-bug-view`, `tag-result`,
 `membership-result`, `count-result`, `download-result`, `upload-result`,
