@@ -10,6 +10,7 @@ use crate::types::bug::{CommentUpdate, IdListUpdate, StringListUpdate, UpdateBug
 use super::validate::validate_draft;
 use super::BugUpdateDraft;
 
+const FLAG_COMMENT_TAG: &str = "--comment-tag";
 pub(super) const FLAG_KEYWORDS_ADD: &str = "--keywords-add";
 const FLAG_KEYWORDS_REMOVE: &str = "--keywords-remove";
 pub(super) const FLAG_CC_ADD: &str = "--cc-add";
@@ -74,6 +75,19 @@ pub(crate) fn resolve_comment(
     }))
 }
 
+/// Validate and clean `--comment-tag` values. Bugzilla only applies
+/// `comment_tags` to the comment created by the same `Bug.update` call, so
+/// tags without a comment are a usage error, matching `--comment-private`'s
+/// existing "requires --comment or --comment-file" convention.
+fn resolve_comment_tags(tags: &[String], has_comment: bool) -> Result<Vec<String>> {
+    if !tags.is_empty() && !has_comment {
+        return Err(crate::error::BzrError::input(
+            "--comment-tag requires --comment or --comment-file".into(),
+        ));
+    }
+    clean_string_list(FLAG_COMMENT_TAG, tags)
+}
+
 pub(super) fn build_update_params(args: &UpdateArgs) -> Result<(Vec<u64>, UpdateBugParams)> {
     build_update_params_from_draft(args.ids.clone(), &BugUpdateDraft::from_cli(args))
 }
@@ -87,6 +101,12 @@ pub(crate) fn build_update_params_from_draft(
     let flags = crate::commands::runtime::input::flags::parse_flags(&draft.flags)?;
     let deadline =
         crate::validation::parse_optional_date_only(draft.deadline.as_deref(), "--deadline")?;
+    let comment = resolve_comment(
+        draft.comment.as_deref(),
+        draft.comment_file.as_deref(),
+        draft.comment_private.unwrap_or(false),
+    )?;
+    let comment_tags = resolve_comment_tags(&draft.comment_tags, comment.is_some())?;
     let params = UpdateBugParams {
         status: draft.status.clone(),
         resolution: draft.resolution.clone(),
@@ -128,11 +148,9 @@ pub(crate) fn build_update_params_from_draft(
             FLAG_SEE_ALSO_REMOVE,
             &draft.see_also_remove,
         )?,
-        comment: resolve_comment(
-            draft.comment.as_deref(),
-            draft.comment_file.as_deref(),
-            draft.comment_private.unwrap_or(false),
-        )?,
+        comment,
+        comment_tags,
+        minor_update: draft.minor_update.unwrap_or(false),
         comment_is_private: std::collections::HashMap::new(),
     };
     if params.is_empty() {

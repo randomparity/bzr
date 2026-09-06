@@ -113,6 +113,17 @@
           "type": ["boolean", "null"],
           "examples": [true]
         },
+        "comment_tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [["triaged"]]
+        },
+        "minor_update": {
+          "type": ["boolean", "null"],
+          "examples": [true]
+        },
         "flags": {
           "type": "array",
           "items": {

@@ -29,6 +29,7 @@ fn create_action() -> BugAction {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -115,6 +116,7 @@ async fn bug_create_sends_parity_fields_in_body() {
         .and(body_string_contains(
             "\"flags\":[{\"name\":\"review\",\"status\":\"+\"}]",
         ))
+        .and(body_string_contains("\"comment_tags\":[\"triaged\"]"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 123})))
         .expect(1)
         .mount(&mock)
@@ -138,6 +140,7 @@ async fn bug_create_sends_parity_fields_in_body() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec!["triaged".into()],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs {
@@ -190,6 +193,7 @@ async fn bug_create_rejects_malformed_deadline() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs {
@@ -233,6 +237,7 @@ async fn bug_create_missing_product_returns_input_validation() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -274,6 +279,7 @@ async fn bug_create_missing_component_returns_input_validation() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -315,6 +321,7 @@ async fn bug_create_with_unknown_template_errors() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -391,6 +398,7 @@ async fn bug_create_with_template_fills_missing_fields() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -460,6 +468,7 @@ async fn bug_create_template_applies_create_metadata_defaults() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -536,6 +545,7 @@ async fn bug_create_cli_create_metadata_overrides_template() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs {
@@ -607,6 +617,7 @@ async fn bug_create_reads_description_from_file() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -645,6 +656,7 @@ async fn bug_create_description_file_missing_returns_input_validation() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -690,6 +702,7 @@ async fn bug_create_description_file_non_utf8_returns_input_validation() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -732,6 +745,7 @@ async fn bug_create_missing_summary_without_editor_flow_is_rejected() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -852,6 +866,7 @@ fn build_editor_template_includes_summary_and_field_reminder() {
         groups: vec![],
         groups_present: false,
         flags: vec![],
+        comment_tags: vec![],
     };
     let buf = super::build_editor_template(Some("Pre-filled summary"), None, &params);
     assert!(buf.starts_with("Pre-filled summary\n"));
@@ -888,6 +903,7 @@ fn build_editor_template_includes_template_description_body() {
         groups: vec![],
         groups_present: false,
         flags: vec![],
+        comment_tags: vec![],
     };
     let buf = super::build_editor_template(None, Some("## Steps\n\n## Expected"), &params);
     assert!(buf.contains("## Steps"));
@@ -929,6 +945,7 @@ fn editor_action_no_summary_no_description() -> BugAction {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -1089,6 +1106,7 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -1121,6 +1139,42 @@ fn resolve_description_conflict_errors() {
     }
 }
 
+#[test]
+fn resolve_comment_tags_requires_description() {
+    let err =
+        super::resolve_comment_tags(&["triaged".to_string()], false, "no description").unwrap_err();
+    assert!(matches!(
+        err,
+        BzrError::InputValidation { message: ref m, .. } if m == "no description"
+    ));
+}
+
+#[test]
+fn resolve_comment_tags_accepts_tags_with_description() {
+    let tags = super::resolve_comment_tags(
+        &["triaged".to_string(), "needs-review".to_string()],
+        true,
+        "unused",
+    )
+    .unwrap();
+    assert_eq!(tags, vec!["triaged", "needs-review"]);
+}
+
+#[test]
+fn resolve_comment_tags_rejects_whitespace_only_tag() {
+    let err = super::resolve_comment_tags(&["   ".to_string()], true, "unused").unwrap_err();
+    assert!(matches!(
+        err,
+        BzrError::InputValidation { message: ref m, .. } if m.contains("--comment-tag")
+    ));
+}
+
+#[test]
+fn resolve_comment_tags_empty_is_fine_without_description() {
+    let tags = super::resolve_comment_tags(&[], false, "unused").unwrap();
+    assert!(tags.is_empty());
+}
+
 // ── Structured input: bug create --from-json (#307) ──────────────────
 
 /// Build a `from_json` create action: `from_json` set, every CLI field at its
@@ -1144,6 +1198,7 @@ fn from_json_action(path: &str) -> BugAction {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
@@ -1656,6 +1711,7 @@ fn compound_args(
         depends_on: vec![],
         with_comment: with_comment.map(Into::into),
         with_comment_file: None,
+        comment_tag: vec![],
         with_attachment,
         attachment_description: descriptions.into_iter().map(Into::into).collect(),
         create_fields: crate::cli::CreateFieldArgs::default(),

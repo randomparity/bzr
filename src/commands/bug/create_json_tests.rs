@@ -313,6 +313,50 @@ fn json_groups_non_empty_cli_override_replaces_json_groups() {
     assert_eq!(merged.groups.into_option(), Some(vec!["cli-group".into()]));
 }
 
+#[test]
+fn comment_tags_require_a_description() {
+    let input: JsonCreateBug = serde_json::from_value(serde_json::json!({
+        "product": "P", "component": "C", "summary": "S", "comment_tags": ["triaged"]
+    }))
+    .unwrap();
+
+    let err = input.into_params().unwrap_err();
+    assert!(matches!(
+        err,
+        BzrError::InputValidation { message: ref m, .. } if m.contains("--comment-tag")
+    ));
+}
+
+#[test]
+fn comment_tags_round_trip_with_description() {
+    let input: JsonCreateBug = serde_json::from_value(serde_json::json!({
+        "product": "P", "component": "C", "summary": "S", "description": "d",
+        "comment_tags": ["triaged", "needs-review"]
+    }))
+    .unwrap();
+
+    let params = input.into_params().unwrap();
+    let json = serde_json::to_value(&params).unwrap();
+    assert_eq!(
+        json["comment_tags"],
+        serde_json::json!(["triaged", "needs-review"])
+    );
+}
+
+#[test]
+fn comment_tags_non_empty_cli_flag_replaces_json() {
+    let json: JsonCreateBug = serde_json::from_value(serde_json::json!({
+        "description": "d", "comment_tags": ["json-tag"]
+    }))
+    .unwrap();
+    let mut args = from_json_args("input.json");
+    args.comment_tag = vec!["cli-tag".into()];
+
+    let merged = super::overlay_cli(json, &args).unwrap();
+
+    assert_eq!(merged.comment_tags, vec!["cli-tag".to_string()]);
+}
+
 // ── Compound --from-json (comment / attachments) ─────────────────────
 
 #[test]
@@ -472,6 +516,7 @@ fn from_json_args(path: &str) -> crate::cli::CreateArgs {
         with_comment_file: None,
         with_attachment: vec![],
         attachment_description: vec![],
+        comment_tag: vec![],
         create_fields: crate::cli::CreateFieldArgs::default(),
     }
 }

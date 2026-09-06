@@ -12,7 +12,7 @@ This report tracks bzr against python-bugzilla 3.3.0 using stable comparison tes
 | Bug history | `bzr bug history` | parity | `compare/01-bug-lifecycle/history` |
 | Server saved search | `bzr bug search --saved-search` | expected gap (#670) | `compare/01-bug-lifecycle/saved-search` |
 | Generic arbitrary fields | `bzr bug create/update --field` | expected gap (#671) | `compare/01-bug-lifecycle/arbitrary-fields` |
-| Comment tags and minor update | `bzr bug update --comment-tag --minor-update` | expected gap (#672) | `compare/01-bug-lifecycle/update-options` |
+| Comment tags and minor update | `bzr bug update --comment-tag --minor-update` | parity | `compare/01-bug-lifecycle/update-options` |
 | Whiteboard match types | `bzr bug list --status-whiteboard-type` | expected gap (#679) | `compare/01-bug-lifecycle/query-match-types` |
 | Personal bug tags | `bzr bug tag`, `bzr bug list --tag` | expected gap (#680) | `compare/01-bug-lifecycle/bug-tags` |
 | Public comments | `bzr comment add`, `bzr comment list` | parity | `compare/02-comments/public-comments` |

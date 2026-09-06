@@ -302,6 +302,54 @@ fn update_bug_params_serializes_comment_is_private_map() {
     );
 }
 
+#[test]
+fn update_bug_params_omits_comment_tags_when_empty() {
+    let params = UpdateBugParams::default();
+    let json = serde_json::to_value(&params).unwrap();
+    assert!(
+        json.get("comment_tags").is_none(),
+        "expected no comment_tags key when empty, got: {json}"
+    );
+}
+
+#[test]
+fn update_bug_params_serializes_comment_tags_as_sibling_of_comment() {
+    let params = UpdateBugParams {
+        comment: Some(CommentUpdate {
+            body: "tagged".into(),
+            is_private: false,
+        }),
+        comment_tags: vec!["triaged".into(), "needs-review".into()],
+        ..Default::default()
+    };
+    let json = serde_json::to_value(&params).unwrap();
+    assert_eq!(json["comment"], serde_json::json!({"body": "tagged"}));
+    assert_eq!(
+        json["comment_tags"],
+        serde_json::json!(["triaged", "needs-review"])
+    );
+}
+
+#[test]
+fn update_bug_params_omits_minor_update_when_false() {
+    let params = UpdateBugParams::default();
+    let json = serde_json::to_value(&params).unwrap();
+    assert!(
+        json.get("minor_update").is_none(),
+        "expected no minor_update key when false, got: {json}"
+    );
+}
+
+#[test]
+fn update_bug_params_serializes_minor_update_when_true() {
+    let params = UpdateBugParams {
+        minor_update: true,
+        ..Default::default()
+    };
+    let json = serde_json::to_value(&params).unwrap();
+    assert_eq!(json["minor_update"], serde_json::Value::Bool(true));
+}
+
 fn minimal_create_params() -> CreateBugParams {
     CreateBugParams {
         product: "Prod".into(),
@@ -350,6 +398,7 @@ fn create_params_all_fields_match_wire_contract() {
             status: FlagStatus::Grant,
             requestee: Some("reviewer@example.com".into()),
         }],
+        comment_tags: vec!["triaged".into()],
         ..minimal_create_params()
     };
     let json = serde_json::to_value(&params).unwrap();
@@ -381,7 +430,17 @@ fn create_params_all_fields_match_wire_contract() {
                 "status": "+",
                 "requestee": "reviewer@example.com",
             }],
+            "comment_tags": ["triaged"],
         })
+    );
+}
+
+#[test]
+fn create_params_omits_empty_comment_tags() {
+    let json = serde_json::to_value(minimal_create_params()).unwrap();
+    assert!(
+        json.get("comment_tags").is_none(),
+        "empty comment_tags must omit, got: {json}"
     );
 }
 

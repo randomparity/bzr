@@ -27,6 +27,10 @@ the summary and the rest becomes the description. A
 `git commit -v`-style sentinel divider separates editable
 content from informational field reminders.
 
+`--comment-tag <TAG>` (repeatable) tags the bug's first
+comment (the description); it requires a description from
+any source.
+
 On success, prints the new bug ID, alias (if assigned), and
 URL to stdout. With `--json`, the same fields are emitted as
 a JSON object suitable for piping into scripts.
@@ -147,6 +151,15 @@ pub(crate) struct CreateArgs {
     /// Bug IDs that this bug depends on (comma-separated)
     #[arg(long, value_delimiter = ',')]
     pub depends_on: Vec<u64>,
+    /// Tag the bug's first comment (the description) with this tag
+    /// (repeatable).
+    ///
+    /// Requires a description (`--description`, `--description-file`,
+    /// piped stdin, or the `$EDITOR` flow); using `--comment-tag` alone
+    /// is a usage error (exit 7). Forwards Bugzilla's `comment_tags`
+    /// field on `Bug.create`.
+    #[arg(long, value_name = "TAG")]
+    pub comment_tag: Vec<String>,
     /// Post a first comment on the new bug in the same operation.
     ///
     /// Literal text (no `-`/stdin: the description already consumes piped

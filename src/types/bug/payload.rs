@@ -27,6 +27,9 @@ pub struct CreateBugParams {
     pub groups: Vec<String>,
     pub(crate) groups_present: bool,
     pub flags: Vec<FlagUpdate>,
+    /// Tags applied to the description comment created with this bug.
+    /// Sibling wire field to `description`, not nested inside it.
+    pub comment_tags: Vec<String>,
 }
 
 impl CreateBugParams {
@@ -76,6 +79,8 @@ struct CreateBugParamsWire<'a> {
     groups: Option<&'a [String]>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     flags: &'a Vec<FlagUpdate>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    comment_tags: &'a Vec<String>,
 }
 
 impl Serialize for CreateBugParams {
@@ -106,6 +111,7 @@ impl Serialize for CreateBugParams {
             groups: (self.groups_present || !self.groups.is_empty())
                 .then_some(self.groups.as_slice()),
             flags: &self.flags,
+            comment_tags: &self.comment_tags,
         }
         .serialize(serializer)
     }
@@ -215,6 +221,13 @@ pub struct UpdateBugParams {
     pub see_also: StringListUpdate,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comment: Option<CommentUpdate>,
+    /// Tags applied to the comment created by `comment` above. Bugzilla only
+    /// applies these when `comment` is also present.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub comment_tags: Vec<String>,
+    /// Suppress bugmail notifications for this update.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub minor_update: bool,
     /// Edit the privacy of comments that are already on the bug.
     /// Keys are comment IDs; values are `true` (mark private) or
     /// `false` (mark public). Used by `attachment upload

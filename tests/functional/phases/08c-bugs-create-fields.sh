@@ -156,6 +156,27 @@ test_begin "bug-create-with-comment-empty-body-exits-7" "bug create --with-comme
 run_bzr bug create "${_CF[@]}" --summary "empty compound comment" --with-comment "   "
 if assert_exit_code 7; then test_pass; fi
 
+# ─ Issue #672: bug create --comment-tag (tags the first/description comment) ─
+
+test_begin "bug-create-comment-tag-round-trips" "bug create --comment-tag tags the first comment"
+_CT_TAG=$(unique_name comment-tag)
+TID=$(make_bug "${_CF[@]}" --summary "comment-tag create" --comment-tag "$_CT_TAG")
+if [[ -n "$TID" ]]; then
+    run_bzr comment list "$TID"
+    if assert_success && jq -e --arg tag "$_CT_TAG" \
+        'any(.[]; .tags | index($tag))' "$BZR_STDOUT" >/dev/null; then
+        test_pass
+    else
+        test_fail "first comment missing --comment-tag value"
+    fi
+fi
+unset _CT_TAG
+
+test_begin "bug-create-from-json-comment-tags-without-description-exits-7" "bug create --from-json comment_tags without description (exit 7)"
+printf '%s' '{"product":"FuncTestProd","component":"Backend","summary":"no desc comment-tag","op_sys":"Linux","platform":"PC","comment_tags":["orphan-tag"]}' >"$_FJ/comment-tag-no-desc.json"
+run_bzr bug create --from-json "$_FJ/comment-tag-no-desc.json"
+if assert_exit_code 7 && assert_stderr_contains "--comment-tag"; then test_pass; fi
+
 rm -r "$_FJ"
-unset _CF _FJ _WB _GROUP_WB CFID FID OID MID GID CCID JCID _CA_FILE _CA_MARK
+unset _CF _FJ _WB _GROUP_WB CFID FID OID MID GID CCID JCID _CA_FILE _CA_MARK TID
 echo ""

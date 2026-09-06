@@ -512,7 +512,7 @@ if [[ -n $LIFECYCLE_PYBZ_ID ]] &&
         --arg comment "$LIFECYCLE_COMMENT" --arg tag "$LIFECYCLE_COMMENT_TAG" \
         '{bug_id:$id,comment:$comment,comment_tags:[$tag],minor_update:true}')" &&
     lifecycle_transport_is update-options pybz REST; then
-    if lifecycle_bzr_gap update-options-bzr "error: unexpected argument '--comment-tag' found" \
+    if lifecycle_bzr update-options-bzr \
         bug update "$LIFECYCLE_PYBZ_ID" \
         --comment "$LIFECYCLE_BZR_COMMENT" --comment-tag "$LIFECYCLE_BZR_COMMENT_TAG" \
         --minor-update &&
@@ -532,7 +532,6 @@ if [[ -n $LIFECYCLE_PYBZ_ID ]] &&
     elif [[ $LAST_TEST_RESULT != FAIL ]]; then
         test_fail "bzr update-options result differed"
     fi
-    lifecycle_expect_gap 672
 elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail "update-options precondition failed"
 fi
