@@ -152,6 +152,15 @@ Concretely:
   `user.rs`. None of those codes maps to HTTP 401 on a stock Bugzilla, so they
   are unreachable from the 401 arm; they are reachable only from the 403 arm,
   which no stock Bugzilla emits.
+- **Reading the retried body costs memory and a second parse.**
+  `retried.text()` buffers the whole body with no byte cap, and on the `Refused`
+  arm that body is deserialized twice — once to read the code, once to build the
+  error. Bounded only by the request timeout (30s by default, `--timeout` /
+  `BZR_TIMEOUT`) and serde_json's recursion limit. This matches the pre-existing
+  unbounded read in `check_response_status`, which every other error status
+  already pays; the double parse is the part with no counterpart on the old
+  path. A byte cap would only be right applied at the shared response-reading
+  seam for every status, which is a wider change than this risk warrants.
 - Establishing (2) consumes the retried body, so a refusal cannot travel back to
   `check_response_status` as a response. It travels as the `BzrError` that
   function would have produced, from a helper both paths now share
