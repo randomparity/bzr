@@ -14,13 +14,14 @@ drift.
 Tech stack: Rust 2021, `reqwest` (async), `serde`/`serde_json`, `tracing`,
 `wiremock` + `tokio` for tests, Bash for the functional tier.
 
-Expected implementation size: 380–490 changed lines (M) — counted off the file
+Expected implementation size: 420–530 changed lines (M) — counted off the file
 map: `response.rs` ~50 changed lines (a ~30-line helper pair, ~18 lines moved out
-of `check_response_status`), `transport.rs` ~105, ~230 added to
-`src/client/transport_tests.rs` (eight new cases plus ~35 lines of helpers, and
-two comment corrections), ~55 added to one existing functional phase script. No other file changes: `ErrorResponse` is reused unchanged, so
-`src/client/response_tests.rs` and the ADR-0015-governed HTTP-200 error path stay
-untouched.
+of `check_response_status`), `transport.rs` ~105, ~265 added to
+`src/client/transport_tests.rs` (seven fallback cases, the R9 command-layer case
+with its own fixtures, ~35 lines of helpers, and two comment corrections), ~15
+added to `src/client/response_tests.rs`, ~55 added to one existing functional
+phase script. `ErrorResponse`, `default_error_code` and the ADR-0015-governed
+HTTP-200 error path in `check_bugzilla_200_error` are not touched.
 
 ## Global Constraints
 
@@ -67,7 +68,8 @@ untouched.
 |---|---|---|
 | `src/client/response.rs` | Yes | `error_from_status_body`; `bugzilla_error_code`; `check_response_status` delegating to the first |
 | `src/client/transport.rs` | Yes | The `AlternateAuth` outcome, the authentication-code band, `send_raw`'s three-way branch |
-| `src/client/transport_tests.rs` | Yes | Wiremock proofs that the two 401 bodies diverge |
+| `src/client/response_tests.rs` | Yes | The no-`code` sentinel regression test, beside the rest of that family |
+| `src/client/transport_tests.rs` | Yes | Wiremock proofs that the two 401 bodies diverge, and the R9 exit-code pin |
 | `tests/functional/phases/08e-bugs-restricted-access.sh` | Yes | Contract pinned against a real Bugzilla, authenticated and credentialless |
 
 `docs/adr/0057-alternate-auth-retry-classifies-the-refusal.md` and
@@ -147,14 +149,18 @@ Published for later tasks:
 - Contract: *a relayed per-resource code is suppressible by `--permissive`
   (spec R9).*
   Mode: focused-test.
-  Observable contract: with the first attempt answering 401 code 410 and the
-  retry answering 401 code 102, `bug view --permissive` over that id completes
-  with the bug recorded as failed instead of returning `Err`.
+  Observable contract: `crate::commands::bug::execute` with a two-id
+  `--permissive` view returns `Ok`, and the JSON envelope's `failed` array holds
+  exactly the bug whose fault arrived through the fallback. Driving the command
+  is mandatory — asserting `is_permissive_bug_view_error()` on the error instead
+  observes a predicate, not the batch outcome, and never exercises the exit-0
+  path the ADR claims to pin.
   Test: `relayed_per_resource_refusal_makes_permissive_view_exit_zero_not_four`.
-  Expected red: before Task 1 step 8 the error is `Api { code: 410 }`, which
-  `BzrError::is_permissive_bug_view_error` (`src/error.rs:247`) rejects, so the
-  call returns `Err` and the assertion on a completed batch fails.
-  Green command: `make test-one T=permissive_bug_view_suppresses`.
+  Expected red: before Task 1 step 8 the fallback yields `Api { code: 410 }`,
+  which `BzrError::is_permissive_bug_view_error` (`src/error.rs:247`) rejects, so
+  `execute` returns `Err` and `result.is_ok()` fails.
+  Green command:
+  `make test-one T=relayed_per_resource_refusal_makes_permissive_view`.
 
 - Contract: *an anonymous client never retries.*
   Mode: focused-test.
@@ -171,7 +177,11 @@ Published for later tasks:
   Mode: focused-test.
   Observable contract: HTTP 400 with `{"error":true,"message":"boom"}` yields
   `BzrError::Api { code: -1, message: "boom" }`.
-  Test: `error_body_without_a_code_reports_the_unknown_code_sentinel`.
+  Test: `src/client/response_tests.rs`,
+  `error_body_without_a_code_reports_the_unknown_code_sentinel`. It belongs
+  there, not in `transport_tests.rs`: no fallback is involved, and that file
+  already owns this family (`api_error_with_string_code_parsed_correctly`,
+  `api_200_error_without_code_field_uses_minus_one`).
   Expected red: reports a different code if the move drops `ErrorResponse`'s
   `-1` default.
   Green command: `make test-one T=error_body_without_a_code`.
@@ -383,8 +393,8 @@ Published for later tasks:
   only for a 401 or 403.
 - `check_response_status` and the retry build their `BzrError` through the same
   `error_from_status_body`.
-- `ErrorResponse`, `default_error_code`, `check_bugzilla_200_error`, and
-  `src/client/response_tests.rs` are unchanged.
+- `ErrorResponse`, `default_error_code`, and `check_bugzilla_200_error` are
+  unchanged — that is the part carrying real meaning for the ADR-0015 path.
 - Nothing derived from a `reqwest::Error` reaches a log or a message on the new
   body-read path.
 - `make lint` and `make test` are green.
@@ -415,18 +425,25 @@ Published for later tasks: nothing.
 
 Every entry below is `Mode: focused-test`, in
 `src/client/transport_tests.rs`, green under
-`make test-one T=auth_fallback` (or `T=error_body_without_a_code`).
+`make test-one T=auth_fallback`, except the last row, whose green command is
+`make test-one T=relayed_per_resource_refusal_makes_permissive_view`.
 
 | Test | Contract | Expected red |
 |---|---|---|
 | `auth_fallback_relays_a_policy_refusal_from_the_retried_body` | retried 401 code 120 wins over original 401 code 410 | before Task 1 step 8: reports `410` |
 | `auth_fallback_keeps_the_original_401_when_the_retry_also_fails_to_log_in` | retried 401 code **300** does not win over original 401 code 410 | under an inverted band check: reports `300` |
-| `relayed_per_resource_refusal_makes_permissive_view_exit_zero_not_four` | retried 401 code 102 is suppressed by `--permissive` instead of aborting the batch (spec R9) | before Task 1 step 8: the batch returns `Err` |
 | `auth_fallback_keeps_the_original_401_when_the_retry_carries_no_envelope` | retried 401 with an HTML body does not win | if `bugzilla_error_code` returned a code for unparseable input |
 | `auth_fallback_keeps_the_original_401_when_the_retried_envelope_has_no_code` | retried 401 `{"error":true,"message":…}` does not win | if the `-1` sentinel were not read back as "no signal" |
 | `auth_fallback_relays_a_403_policy_refusal` | retried **403** code 120 wins | if 403 were not classified alongside 401 |
 | `auth_fallback_band_edges_separate_login_failure_from_refusal` | 299 → relayed, 300 → kept, 399 → kept, 400 → relayed | if the band were written `300..400` or `300..=400` |
-| `error_body_without_a_code_reports_the_unknown_code_sentinel` | a plain HTTP 400 `{"error":true,"message":"boom"}` still reports `code: -1` | if Task 1 step 2 dropped `ErrorResponse`'s default |
+| `relayed_per_resource_refusal_makes_permissive_view_exit_zero_not_four` | a `--permissive` batch whose only fault is a relayed 102 returns `Ok` with that bug in `failed` (spec R9) | before Task 1 step 8: `execute` returns `Err` |
+
+One further case goes in `src/client/response_tests.rs`, not here, because no
+fallback is involved: `error_body_without_a_code_reports_the_unknown_code_sentinel`
+— a plain HTTP 400 `{"error":true,"message":"boom"}` still reports `code: -1`,
+red if Task 1 step 2 dropped `ErrorResponse`'s default. Mount a single 400 mock
+and follow the shape of `api_error_with_string_code_parsed_correctly` already in
+that file.
 
 ### Steps
 
@@ -444,29 +461,39 @@ Every entry below is `Mode: focused-test`, in
 2. Append this helper, whose ordering is the mechanism the new tests depend on:
 
    ```rust
-   /// Mount the two halves of a 401 alternate-auth fallback on one path. The
+   /// Mount the two halves of a 401 alternate-auth fallback on `route`. The
    /// mocks share identical matchers, so ordering alone must separate them:
    /// wiremock stable-sorts by priority and serves the first match, and equal
    /// priorities keep insertion order — so `first` is registered first and
    /// capped at one serve, and the retry falls through to `retried`.
-   async fn mount_auth_fallback(
+   async fn mount_auth_fallback_on(
        mock: &MockServer,
+       route: &str,
        first: ResponseTemplate,
        retried: ResponseTemplate,
    ) {
        Mock::given(method("GET"))
-           .and(path("/rest/bug/1"))
+           .and(path(route.to_string()))
            .respond_with(first)
            .up_to_n_times(1)
            .expect(1)
            .mount(mock)
            .await;
        Mock::given(method("GET"))
-           .and(path("/rest/bug/1"))
+           .and(path(route.to_string()))
            .respond_with(retried)
            .expect(1)
            .mount(mock)
            .await;
+   }
+
+   /// The common case: the fallback on `/rest/bug/1`.
+   async fn mount_auth_fallback(
+       mock: &MockServer,
+       first: ResponseTemplate,
+       retried: ResponseTemplate,
+   ) {
+       mount_auth_fallback_on(mock, "/rest/bug/1", first, retried).await;
    }
 
    fn bugzilla_error(code: i64, message: &str) -> serde_json::Value {
@@ -523,22 +550,41 @@ Every entry below is `Mode: focused-test`, in
    policy"))`. The band-edge test loops
    `for (retried_code, expected) in [(299, 299), (300, 410), (399, 410), (400,
    400)]`, building a fresh `MockServer` per iteration and asserting
-   `code == expected` with `"retried code {retried_code}"` as the message. The
-   sentinel test mounts a single uncapped 400 mock instead of the pair, because
-   no fallback is involved.
+   `code == expected` with `"retried code {retried_code}"` as the message.
 
-4a. Append the `--permissive` suppression test. It mounts
-   `mount_auth_fallback(&mock, login_required(),
-   ResponseTemplate::new(401).set_body_json(bugzilla_error(102, "You are not
-   authorized to access bug #1")))`, then drives the same code path
-   `bzr bug view --permissive` uses: call
-   `crate::commands::bug::view::…`'s batch helper if it is reachable from this
-   module, and otherwise assert the equivalent directly — that
-   `client.get_bug("1", None, None).await.unwrap_err()
-   .is_permissive_bug_view_error()` is `true`, and add a one-line comment naming
-   `src/commands/bug/view.rs:199` as the caller that acts on it. Resolve which
-   form is reachable by reading `src/commands/bug/view.rs` before writing the
-   test; do not add a `pub(crate)` export to make the first form reachable.
+4a. Append the R9 exit-code pin,
+   `relayed_per_resource_refusal_makes_permissive_view_exit_zero_not_four`. It
+   drives the command layer, because that is where the exit code is observable.
+   No export needs adding: `crate::test_helpers::setup_test_env` is `pub`
+   (`src/test_helpers.rs:67`) and seeds `api_key = "test-key"` with
+   `auth_method = "header"` — the credentialed header-auth client the fallback
+   needs — and `crate::commands::bug::execute` is `pub(crate)`
+   (`src/commands/bug/mod.rs:65`).
+
+   Mirror `view_multi_permissive_api_102_suppressed`
+   (`src/commands/bug/view_tests.rs:662-691`) for structure, and copy the three
+   small fixtures it uses — `make_view_action` (`view_tests.rs:10`),
+   `ok_bug_body` (`:22`), `api_error_body` (`:51`) — into
+   `transport_tests.rs` rather than exporting them; test-file duplication is
+   already excluded from the repo's duplication metric by
+   `sonar-project.properties`. The case lives here, not in `view_tests.rs`,
+   because the behaviour under test is the transport's relay and `view_tests.rs`
+   is outside this change's permitted surface.
+
+   Body: `let (_lock, mock, _tmp) = setup_test_env().await;`, mount an OK bug on
+   `/rest/bug/1`, `mount_auth_fallback(&mock, login_required(),
+   ResponseTemplate::new(401).set_body_json(api_error_body(102, "Access
+   Denied")))` on `/rest/bug/2`, then `crate::commands::bug::execute` with
+   `make_view_action(&["1", "2"], true)`, a `CapturedIo`, and a
+   `CommandContext::new(None, OutputFormat::Json, None)`. Assert
+   `result.is_ok()` and that `failed` holds exactly one entry with `id == "2"`,
+   reading it through `crate::test_helpers::json_envelope_data`. Add a comment
+   naming ADR 0057's Consequences as the decision this pins.
+
+   `setup_test_env` takes the global `ENV_LOCK`, so this case serialises against
+   the command tests. That is the existing norm for command-driving tests, not a
+   new cost. Use `mount_auth_fallback_on(&mock, "/rest/bug/2", …)` for the
+   fallback half, since this case needs it on a route other than `/rest/bug/1`.
 
 5. Run `make test-one T=auth_fallback` and `make test-one T=error_body_without`
    bare. Expect both green.
