@@ -241,12 +241,28 @@ async fn valid_login_query_param_and_header_fails_on_api() {
         .mount(&server)
         .await;
 
-    // Header auth rejected on real API endpoints: the credentialed header leg
-    // is refused, so it cannot stand in for the authenticated response.
+    // Header auth rejected on real API endpoints: the credentialed header leg is
+    // refused, so it cannot stand in for the authenticated response. Its body
+    // deliberately equals what the query-param leg returns, so the refusal itself
+    // is the only thing preventing a confirmation -- a bodiless 401 would fail
+    // the comparison anyway and prove nothing about the guard.
     Mock::given(method("GET"))
         .and(path("/rest/user"))
         .and(header(AUTH_HEADER_NAME, "test-key"))
-        .respond_with(ResponseTemplate::new(401))
+        .respond_with(ResponseTemplate::new(401).set_body_json(
+            serde_json::json!({"users": [{"id": 1, "real_name": "T", "groups": ["g"]}]}),
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({"users": [{"id": 1, "real_name": "T", "groups": ["g"]}]}),
+        ))
         .mount(&server)
         .await;
     Mock::given(method("GET"))
