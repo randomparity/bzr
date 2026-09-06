@@ -67,7 +67,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libdbus-1-dev pkg-config python3 openssl
 
-      - uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6  # stable
+      - uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6e  # stable
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6  # v2
         with:
