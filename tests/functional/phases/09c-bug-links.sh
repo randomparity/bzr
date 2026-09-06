@@ -126,6 +126,17 @@ if [[ -n "$LINK_A" ]]; then
     if assert_failure; then test_pass; fi
 else test_skip "no link nodes"; fi
 
+test_begin "bug-links-nonexistent-root-reports-the-servers-error" "bug links on a nonexistent root reports the server's error"
+# #719 moved the root read onto the direct endpoint, which faults where the
+# search endpoint returned an indistinguishable empty list. A stock Bugzilla
+# answers an absent id with code 101, so this exits 4 exactly as `bug view`
+# does on the same id (08-bugs.sh, 08e). Exit 2 stays reserved for a direct
+# read that returns an empty result carrying no error payload (ADR 0015).
+run_bzr_raw --json bug links 999999999
+if assert_exit_code 4 && assert_stderr_json '.error.api_code' "101"; then
+    test_pass
+fi
+
 test_begin "credentialless-bug-links-a-recursive-depth-2-public-server" "credentialless bug links A --recursive --depth 2 (public server)"
 if [[ -n "$LINK_A" ]] && [[ -n "$LINK_C" ]]; then
     run_bzr_raw --json --server public bug links "$LINK_A" --recursive --depth 2

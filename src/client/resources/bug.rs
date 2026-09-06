@@ -497,6 +497,44 @@ impl BugzillaClient {
         })
     }
 
+    /// Fetch the isolated link node for a graph's **root** id.
+    ///
+    /// Unlike [`Self::get_bug_links_nodes`], this reads Bugzilla's direct
+    /// endpoint, which faults on a bug the caller may not see. The search
+    /// endpoint that batches the related ids answers an inaccessible id with a
+    /// filtered 200 carrying no error at all, so a root read there could not
+    /// tell "omitted because invisible" from "omitted because absent" and
+    /// reported a permission denial as `NotFound` (issue #719). ADR 0015
+    /// reserves `NotFound` for the direct path returning an empty result with
+    /// no error payload, which is the one case still mapped to it here.
+    pub(crate) async fn get_bug_links_root_node(&self, id: u64) -> Result<BugLinksNode> {
+        match self.api_mode {
+            ApiMode::XmlRpc => self
+                .xmlrpc_client()
+                .get_bug(&id.to_string())
+                .await
+                .map(|bug| BugLinksNode::from_bug(&bug)),
+            ApiMode::Rest | ApiMode::Hybrid => self.get_bug_links_root_node_rest(id).await,
+        }
+    }
+
+    async fn get_bug_links_root_node_rest(&self, id: u64) -> Result<BugLinksNode> {
+        let req_builder = self
+            .http
+            .get(self.url(&format!("bug/{id}")))
+            .query(&[("include_fields", LINKS_INCLUDE_FIELDS)]);
+        let req = self.apply_auth(req_builder);
+        let resp = self.send(req).await?;
+        let data: BugLinksResponse = self.parse_json(resp).await?;
+        data.bugs
+            .into_iter()
+            .next()
+            .ok_or_else(|| BzrError::NotFound {
+                resource: "bug",
+                id: id.to_string(),
+            })
+    }
+
     /// Fetch isolated link nodes for `ids`. Inaccessible/nonexistent ids are
     /// omitted from the result; the caller decides whether an omission is fatal
     /// (root not found) or skippable (a related bug). REST/Hybrid batch the

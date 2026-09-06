@@ -231,6 +231,79 @@ if [[ -n "$RESTRICTED_BUG" ]]; then
     unset _RB_FAILURES
 else test_skip "no restricted bug"; fi
 
+# ── #719: `bug links` reads its root on the faultable direct path ─────
+# Bugzilla's search endpoint filters a bug the caller cannot see into a 200
+# carrying an empty list and no error at all, while the direct endpoint
+# faults. Reading the root through search therefore reported a permission
+# outcome as absence — `bug not found` (exit 2) for a bug `bug view` and
+# `bug history` display in the same session. `--api xmlrpc` already read the
+# faultable path and is the reference oracle these assertions pin REST to.
+
+test_begin "anonymous-links-of-a-restricted-bug-reports-access-not-absence" "anonymous links of a restricted bug reports access, not absence"
+# The credentialless direction. Before the fix this exited 2 with
+# "bug not found"; the search endpoint gave bzr nothing else to report.
+if [[ -n "$RESTRICTED_BUG" ]]; then
+    run_bzr_raw --json --server public bug links "$RESTRICTED_BUG"
+    if assert_exit_code 4 &&
+        assert_stderr_json '.error.type' "api" &&
+        assert_stderr_json '.error.api_code' "102" &&
+        assert_stderr_not_contains "not found"; then
+        test_pass
+    fi
+else test_skip "no restricted bug"; fi
+
+test_begin "group-member-links-the-restricted-bug" "group member links the restricted bug"
+# Criterion 1: the member reads the root and the walk succeeds. The bug has no
+# relationships, so the graph is empty — an empty graph at exit 0, which is
+# what `--api xmlrpc` answered all along, not an error.
+if [[ -n "$RESTRICTED_BUG" ]]; then
+    run_bzr_raw --json --server restricted bug links "$RESTRICTED_BUG"
+    if assert_exit_code 0 && assert_json 'length' "0"; then
+        test_pass
+    fi
+else test_skip "no restricted bug"; fi
+
+# A restricted alias authenticating by header. On a stock Bugzilla the direct
+# endpoint answers a header-auth key with 401/102 — which bzr's alternate-auth
+# retry repairs — while the *search* endpoint answers the same credentials 200
+# with no rows, which no retry can see. That asymmetry is the reported defect,
+# so this alias is the configuration where a member's `bug links` actually
+# failed while `bug view` on the same bug succeeded.
+_RESTRICTED_HEADER_OK=0
+test_begin "fixture-restricted-header-auth-alias" "fixture: restricted header-auth alias"
+run_bzr config set-server "restricted-header" --url "$BZ_URL" \
+    --api-key "$RESTRICTED_KEY" --auth-method header \
+    --email "$RESTRICTED_USER" --api rest
+if assert_success; then
+    _RESTRICTED_HEADER_OK=1
+    test_pass
+fi
+
+test_begin "header-auth-member-links-match-the-xmlrpc-oracle" "header-auth member links match the xmlrpc oracle"
+# The issue's headline scenario, and the REST-matches-XML-RPC assertion: both
+# arms must agree on exit code and on stdout for the same bug and identity.
+if [[ -n "$RESTRICTED_BUG" ]] && [[ $_RESTRICTED_HEADER_OK -eq 1 ]] &&
+    [[ $_RESTRICTED_ALIASES_OK -eq 1 ]]; then
+    run_bzr_raw --json --server restricted-header bug links "$RESTRICTED_BUG"
+    _RL_REST_EXIT=$BZR_EXIT
+    _RL_REST_OUT=$(cat "$BZR_STDOUT")
+    run_bzr_raw --json --server restricted-xmlrpc bug links "$RESTRICTED_BUG"
+    _RL_XMLRPC_EXIT=$BZR_EXIT
+    _RL_XMLRPC_OUT=$(cat "$BZR_STDOUT")
+    if [[ $_RL_REST_EXIT -ne 0 ]]; then
+        test_fail "rest links exited $_RL_REST_EXIT, expected 0"
+    elif [[ $_RL_REST_EXIT -ne $_RL_XMLRPC_EXIT ]]; then
+        test_fail "rest exit $_RL_REST_EXIT != xmlrpc exit $_RL_XMLRPC_EXIT"
+    elif [[ "$_RL_REST_OUT" != "$_RL_XMLRPC_OUT" ]]; then
+        test_fail "rest stdout '$_RL_REST_OUT' != xmlrpc stdout '$_RL_XMLRPC_OUT'"
+    else
+        test_pass
+    fi
+    unset _RL_REST_EXIT _RL_REST_OUT _RL_XMLRPC_EXIT _RL_XMLRPC_OUT
+else
+    test_fail "missing restricted bug or transport alias for the links comparison"
+fi
+
 # ── Product-level restriction ────────────────────────────────────────
 # "Access restricted product" in the report. A mandatory group control
 # (membercontrol=3) puts every bug in the product into the group

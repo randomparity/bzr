@@ -1370,6 +1370,73 @@ async fn get_bug_links_nodes_requests_isolated_fields_and_parses() {
     assert_eq!(nodes[0].duplicates, vec![3]);
 }
 
+// ── #719: the root node is read on the faultable direct path ────────────
+//
+// The batched search read above answers an id the caller cannot see with a
+// filtered 200 and no error, so it cannot distinguish "invisible" from
+// "absent". The root read uses `rest/bug/<id>` instead, and must carry the
+// same isolated field set — including the three BMO relations, which
+// `BugLinksNode::from_bug` cannot express.
+#[tokio::test]
+async fn get_bug_links_root_node_reads_direct_path_with_isolated_fields() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .and(query_param(
+            "include_fields",
+            "id,summary,status,depends_on,blocks,dupe_of,duplicates,regressed_by,regressions",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [
+                {"id": 1, "summary": "root", "status": "NEW",
+                 "depends_on": [2], "blocks": [], "duplicates": [3],
+                 "regressed_by": [4], "regressions": [5]}
+            ]
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let node = client.get_bug_links_root_node(1).await.unwrap();
+    assert_eq!(node.id, 1);
+    assert_eq!(node.depends_on, vec![2]);
+    assert_eq!(node.duplicates, vec![3]);
+    assert_eq!(node.regressed_by, vec![4]);
+    assert_eq!(node.regressions, vec![5]);
+}
+
+#[tokio::test]
+async fn get_bug_links_root_node_surfaces_the_servers_access_error() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
+            "error": true,
+            "code": 102,
+            "message": "You are not authorized to access bug #1."
+        })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_bug_links_root_node(1).await.unwrap_err();
+    assert!(matches!(err, BzrError::Api { code: 102, .. }), "{err:?}");
+}
+
+#[tokio::test]
+async fn get_bug_links_root_node_empty_direct_result_is_not_found() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({ "bugs": [] })))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let err = client.get_bug_links_root_node(1).await.unwrap_err();
+    assert!(matches!(err, BzrError::NotFound { .. }), "{err:?}");
+}
+
 #[tokio::test]
 async fn get_bug_links_nodes_empty_ids_makes_no_request() {
     let mock = MockServer::start().await; // no mounts => any request 404s

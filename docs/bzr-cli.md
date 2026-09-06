@@ -638,7 +638,10 @@ to stderr. Each bug is emitted once, at its first (minimal) depth; cycles are
 followed only once. A root id that cannot be fetched (nonexistent or no read
 permission) fails like `bzr bug view` — exit 2 when the server reports no such
 bug, exit 4 when it reports an access error; inaccessible related bugs are
-skipped silently. In table mode, a root with no in-scope relationships prints
+skipped silently. The root is read on Bugzilla's direct endpoint so that it can
+fault at all; a stock Bugzilla answers both an absent id (`101`) and a
+restricted one (`102`) with an error rather than an empty result, so exit 4 is
+the usual outcome for both. See ADR-0060. In table mode, a root with no in-scope relationships prints
 `No related bugs for #<id>.`.
 
 ### `bzr bug adjacency`
