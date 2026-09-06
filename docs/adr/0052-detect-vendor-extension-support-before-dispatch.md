@@ -269,12 +269,21 @@ Three properties of the amendment are part of the decision:
    guard would not fire for the commonest shape of "REST did not serve this endpoint", which is
    the case the fallback exists for.
 
+   Widening the predicate to add `BzrError::Api` was considered and rejected: it would leave
+   every *other* variant outside the fallback — a wrong-shaped REST body yields `Deserialize`,
+   a socket-level failure `Io` — so it fails less often without being right, and waits for the
+   next variant nobody enumerated. **The fallback is therefore deliberately unconditional**, on
+   any `Err`. That is not a looser rule than a predicate; it is the absence of a rule that could
+   be wrong.
+
    Falling back on any error is safe here in a way it is not in general, and the reason is
    specific to this probe: an error *from the extensions endpoint* is a statement about that
    endpoint, never about the capability. The XML-RPC probe returns the server's own extension
    list, so falling back more often can only make the verdict more accurate — it can never
-   fabricate a capability the server does not advertise. **Do not "fix" this into consistency
-   with `is_transport_failure()`**; doing so silently restores the defect.
+   fabricate a capability the server does not advertise, and both transports failing still
+   yields *undetermined*. **Do not "fix" this into consistency with `is_transport_failure()`**;
+   doing so silently restores the defect, and the evidence that it would is above: an enveloped
+   404 surfaces as `Api`, so the obvious predicate misses this record's own motivating case.
 2. **The cached answer gains no transport dimension.** `Bugzilla.extensions` and
    `/rest/extensions` are two views of the same Bugzilla handler, so the advertised list is
    treated as a property of the server rather than of the transport. Note the limit of the
@@ -297,9 +306,16 @@ Three properties of the amendment are part of the decision:
   goes there. Nor do the three other places that described the REST-only probe: the
   `bug search --saved-search` note in `docs/bzr-cli.md`, the `bug search` long-about in
   `src/cli/bug/search.rs` (which is `--help` and the man page), and the rustdoc on
-  `ServerConfig::server_extensions`. The *undetermined* message's embedded error names the
-  transport that actually failed — in Hybrid that is the XML-RPC attempt, with the earlier REST
-  failure logged at `info` so the first failure is not invisible.
+  `ServerConfig::server_extensions`. **In Hybrid the *undetermined* message names both attempts**
+  rather than only detailing the XML-RPC failure: the REST error is logged at `info`, which is
+  invisible at the default `bzr=warn`, and a user on a REST-first connection reading an XML-RPC
+  error would otherwise reasonably conclude bzr never tried REST.
+- **`bzr server info` is the other consumer and its behaviour improves.** It reaches this method
+  through `server_info()`. On a server whose `/rest/version` works but whose `/rest/extensions`
+  does not, it previously failed outright and now returns the list over XML-RPC. It cannot
+  produce wrong data — both transports report the same server's own advertised list — and
+  nothing changes where REST works, or on a fully REST-disabled deployment, where
+  `server_version()` still fails first.
 - Fail-closed is preserved: the three outcomes, the error variant, the exit code and the
   `capability_status` values are untouched, and no path is added on which an undetermined
   capability dispatches the parameter.

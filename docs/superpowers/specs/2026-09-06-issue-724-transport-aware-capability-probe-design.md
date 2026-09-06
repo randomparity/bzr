@@ -1,9 +1,12 @@
 # Issue #724 — the vendor-extension capability probe becomes transport-aware
 
-Design record for issue #724. Decision, with its grounds and rejected alternatives:
-the 2026-09-06 amendment to
-[ADR 0052](../../adr/0052-detect-vendor-extension-support-before-dispatch.md). This spec
-records what changes and how it is proven; it does not re-argue the decision.
+Design record for issue #724.
+
+**The decision, its grounds, and its rejected alternatives live in the 2026-09-06 amendment to
+[ADR 0052](../../adr/0052-detect-vendor-extension-support-before-dispatch.md), and only
+there.** This spec does not restate them — an earlier draft did, and both blocking findings of
+the third review round were drift between the two copies. What follows is what the ADR does
+not carry: the measurement record, the threat model, and why each test discriminates.
 
 ## Problem
 
@@ -11,101 +14,78 @@ ADR 0052 gates `bzr bug search --saved-search` on the server advertising the `Re
 extension, and establishes that fact through `GET /rest/extensions`
 (`BugzillaClient::server_extensions`, `src/client/resources/server.rs`). The probe is
 REST-only whatever `--api` says, so a deployment with REST disabled can never establish the
-capability and the gate refuses the write.
-
-The issue asks whether this is worth fixing at all, and treats that as open rather than
-settled.
+capability and the gate refuses the write. Whether that was worth fixing at all was open, and
+the ADR amendment answers it.
 
 ## Measurement
 
-Taken 2026-09-06 against the running functional containers on this machine — bz50, bz52,
-bz53 — and against a throwaway proxy that forwards `/xmlrpc.cgi` to bz50 and answers `503`
-on every `/rest/` path, emulating a REST-disabled deployment.
+Taken 2026-09-06 against the running functional containers — bz50, bz52, bz53 — and against
+two throwaway proxies in front of bz50: one answering `503` on every `/rest/` path
+(a REST-disabled deployment), one answering `/rest/extensions` with a Bugzilla error envelope
+at `404` while forwarding the rest of REST (a front-end blocking just that endpoint).
 
 | Probe | bz50 | bz52 | bz53 |
 |---|---|---|---|
 | `POST /xmlrpc.cgi` `Bugzilla.extensions`, unauthenticated | `<struct><member><name>extensions</name><value><struct /></value></member></struct>` | same | same |
 | `GET /rest/extensions` | `{"extensions":{}}` | same | same |
+| `GET /rest/<absent path>` | `404` + `{"error":true,"code":32614,"message":"A REST API resource was not found…"}` | same | same, `code` as a string |
 
-Against the REST-disabled proxy, with `bzr` built at `dcaf259f`:
+With `bzr` built at `dcaf259f` (pre-change):
 
-| Command | Result |
-|---|---|
-| `bzr --api xmlrpc bug search "test" --limit 1` | exit 0, one real bug returned |
-| `bzr --api xmlrpc bug search --saved-search nope` | exit 15, `capability_status: "undetermined"` |
+| Server | Command | Result |
+|---|---|---|
+| REST-disabled proxy | `--api xmlrpc bug search "test" --limit 1` | exit 0, one real bug |
+| REST-disabled proxy | `--api xmlrpc bug search --saved-search nope` | exit 15, `undetermined` |
+| envelope-404 proxy | `--api {rest,hybrid,xmlrpc} bug search --saved-search nope` | exit 15, `undetermined`, message `… (Bugzilla API error: …)` |
+| bz50, `RUST_LOG=bzr=debug` | `--api xmlrpc bug search --saved-search nope` | `API response url="…/rest/extensions"` |
 
-And against a REST-**enabled** container (bz50), with `RUST_LOG=bzr=debug`:
+Three consequences, all load-bearing for the ADR and none restated there in this detail:
 
-| Command | Observed request |
-|---|---|
-| `bzr --api xmlrpc bug search --saved-search nope` | `API response url="http://…/rest/extensions" status=200 OK` |
-
-The three facts these establish, and why together they settle the issue's open question, are
-the ADR amendment's Context section. Two of them bear directly on the change below and are
-repeated only as pointers: `src/xmlrpc/resources/bug.rs:29` and `:53-54` already insert
-`savedsearch` and `sharer_id` into `Bug.search`, and `src/xmlrpc/protocol/parsing.rs:66`
-(`expand_empty_elements = true`) already normalises the self-closing `<struct />` the
-containers send.
+- The XML-RPC search path already carries the parameters (`src/xmlrpc/resources/bug.rs:29`
+  and `:53-54`), and `src/xmlrpc/protocol/parsing.rs:66` already normalises the self-closing
+  `<struct />` the containers send. The gate is the last REST dependency on that path.
+- A 404 does **not** degrade to `absent`. It reaches `undetermined`, so fail-closed already
+  held before this change.
+- But it arrives as `BzrError::Api`, not `HttpStatus` — `error_from_status_body`
+  (`src/client/response.rs`) classifies any REST error carrying a Bugzilla envelope that way,
+  and `is_transport_failure()` (`src/error.rs`) does not match it. This is why the Hybrid arm
+  falls back unconditionally; ADR decision point 1 carries the reasoning and the warning
+  against narrowing it.
 
 ## Change
 
 `BugzillaClient::server_extensions()` establishes the extension list over the transport in
-use instead of always over REST: `ApiMode::Rest` probes REST, `ApiMode::XmlRpc` calls
-`Bugzilla.extensions`, and `ApiMode::Hybrid` probes REST first and falls back to XML-RPC on a
-transport failure. The ADR amendment carries the grounds for each arm, including why Hybrid
-does not use the existing `dispatch_xmlrpc_first` helper and what its fallback does and does
-not buy. The plan carries the code.
+use, per the ADR amendment's Decision. The plan carries the code.
 
-`is_transport_failure()` (`src/error.rs:233`) covers `Http`, `HttpStatus` and `XmlRpc`, so a
-REST surface that is absent (404), refusing (503) or unreachable falls back, while a
-`Deserialize` failure on a REST body that did arrive does not.
-
-### The XML-RPC adapter
-
-New `src/xmlrpc/resources/server.rs`, mirroring `src/xmlrpc/resources/group.rs`:
-`XmlRpcClient::server_extensions() -> Result<ServerExtensions>` calls `Bugzilla.extensions`
-with no parameters and maps `{extensions: {Name: {version: String}}}` onto the existing
-`ServerExtensions` / `ExtensionInfo` types (`src/types/server_info.rs`), which are already
-what the REST path deserialises into. Registered with one `mod server;` line in
-`src/xmlrpc/resources/mod.rs`.
-
-A malformed response is an error rather than an empty or partial map, in every shape where
-the adapter would otherwise be more permissive than serde — see ADR decision point 3, which
-enumerates them. An `extensions` member that is present and empty is a legitimate empty map,
-and is what all three containers actually send.
-
-### Messages and documentation
-
-Five statements currently describe a REST-only probe and become false. The last two are
-outside the surface #724 was dispatched with; the campaign orchestrator granted the widening
-on 2026-09-06, because fixing the CLI reference while leaving `--help` false would ship the
+Five statements describe a REST-only probe and become false. The last two are outside the
+surface #724 was dispatched with; the campaign orchestrator granted the widening on
+2026-09-06, because fixing the CLI reference while leaving `--help` false would ship the
 phantom-doc defect this change itself creates, in the higher-traffic surface, having seen it.
 
 - `src/commands/runtime/shared/capability.rs`, the *absent* message:
   `(not advertised at /rest/extensions)` → `(not advertised in the server's extension list)`.
-- The same file, the *undetermined* message:
-  `reading /rest/extensions failed ({error}). The probe needs the server's REST surface even
-  when --api xmlrpc is in use.` → `reading the server's extension list failed ({error}).`,
-  with the REST sentence removed and the closing remedy changed from `check that REST is
-  reachable` to `check that the server is reachable over the API mode in use`. The embedded
-  `{error}` already names the transport that failed.
-- `docs/bzr-cli.md:538`, the `bug search --saved-search` note, which tells users "bzr checks
-  `/rest/extensions` before searching". That is the repository's designated CLI reference, and
-  a doc that fails when followed is a defect fixed in the change that exposes it. It becomes
-  "bzr checks the server's advertised extension list over the API mode in use before
-  searching", plus one clause recording that `bzr server info`'s version step still needs
-  REST.
-- `src/cli/bug/search.rs:32`, the `bug search` long-about — which is `bzr bug search --help`
-  **and** the generated man page, so it reaches more users than the CLI reference does. Same
-  correction. `make man` regenerates the page in the same commit, since man generation is
-  CI-hard-gated.
-- `src/config/model.rs:41`, rustdoc on the persisted `server_extensions` field: "advertised at
-  `/rest/extensions`" becomes "the server advertises". Lowest blast radius, same defect.
+- The same file, the *undetermined* message: the REST-surface sentence is removed and the
+  remedy generalised. **In Hybrid the message must name both attempts**, not only detail the
+  XML-RPC failure — the REST error is logged at `info`, which is invisible at the default
+  `bzr=warn`, and a user on a REST-first connection reading an XML-RPC error would reasonably
+  conclude bzr never tried REST.
+- `docs/bzr-cli.md:538`, the `bug search --saved-search` note ("bzr checks `/rest/extensions`
+  before searching"). The repository's designated CLI reference.
+- `src/cli/bug/search.rs:32`, the `bug search` long-about — `--help` **and** the generated man
+  page, so it reaches more users than the CLI reference does.
+- `src/config/model.rs:41`, rustdoc on the persisted `server_extensions` field.
 
-Everything else about the gate is unchanged: the same three outcomes, the same
-`UnsupportedServerCapability` variant, the same exit code 15, the same
-`capability_status` values. The persisted cache is unchanged too — see the ADR amendment's
-first decision point for why it gains no transport dimension.
+### The other consumer
+
+`bzr server info` (`src/commands/server.rs:16`) reaches `server_extensions()` through
+`server_info()`, and its behaviour changes — the plan's "no caller changes" means signatures,
+not behaviour. The change is a strict improvement and cannot produce wrong data: on a server
+whose `/rest/version` works but whose `/rest/extensions` does not, `server info` previously
+failed outright and now returns the extension list over XML-RPC. Both transports report the
+same server's own advertised list, so a mixed-transport result is the same fact by two routes.
+Nothing changes where REST works, and nothing changes on a fully REST-disabled deployment,
+where `server_version()` still fails first — which is the residual recorded under *Out of
+scope*.
 
 ## Fail-closed
 
@@ -116,18 +96,11 @@ could weaken it:
   as "not supported" (`resolve_extensions`, unchanged).
 - The three outcomes stay distinct, and `absent` versus `undetermined` remains the
   machine-readable distinction in `capability_status`.
-- The new adapter is the only new surface on which the two transports could reach different
-  verdicts from the same evidence, and every shape where that was possible is closed in the
-  conservative direction: a missing `extensions` member, a non-struct `extensions` member, a
-  non-struct extension value, and a present-but-non-string `version`. The first three decide
-  presence; the fourth is parity for its own sake, since a server sending it is already
-  advertising the extension.
-- No path is added on which an undetermined capability dispatches the parameter.
-- The Hybrid arm falls back on **any** REST error rather than on
-  `BzrError::is_transport_failure()`. That widens when the fallback fires and so can only make
-  the verdict more determinate; it cannot grant a capability, because the XML-RPC probe returns
-  the server's own list. ADR decision point 1 carries the reasoning and the warning against
-  "fixing" it into consistency.
+- Every shape where the two transports could reach different verdicts from the same evidence
+  is closed in the conservative direction — the four the ADR's decision point 3 enumerates.
+- Widening the Hybrid fallback moves only *when* it fires. It cannot grant a capability,
+  because the XML-RPC probe returns the server's own list, and both transports failing still
+  yields `undetermined`.
 
 ## Threat model
 
@@ -142,27 +115,27 @@ connection; no new entry point, permission, or grant.
 
 **Actor model.** The untrusted party is the operator of the configured Bugzilla server — a
 server the user chose and, where TLS pinning is configured, already pinned. A network
-attacker is out of scope for this change on the same terms as every other request bzr makes:
-TLS and the pin/TOFU machinery in `src/tls/` govern it, not this code.
+attacker is out of scope on the same terms as every other request bzr makes: TLS and the
+pin/TOFU machinery in `src/tls/` govern it, not this code.
 
 **Control per boundary.**
 
 - *Parse.* `parse_response` (`src/xmlrpc/protocol/parsing.rs`) is the existing parser every
-  other XML-RPC resource already trusts; this adapter adds no parsing of its own beyond
-  struct member lookups. Unexpected shapes become `BzrError::XmlRpc`, which the gate maps to
+  other XML-RPC resource already trusts; this adapter adds no parsing of its own beyond struct
+  member lookups. Unexpected shapes become `BzrError::XmlRpc`, which the gate maps to
   *undetermined* — the fail-closed direction.
 - *Unbounded server text into the config.* Already controlled and unchanged: only names in
-  `KNOWN_CAPABILITIES` are persisted (`capability.rs`), so an adversarial server advertising
-  a megabyte of extension names writes nothing.
+  `KNOWN_CAPABILITIES` are persisted (`capability.rs`), so an adversarial server advertising a
+  megabyte of extension names writes nothing.
 - *Server text into an error message.* A `faultString` becomes `BzrError::Api` verbatim via
   `fault_to_error` (`src/xmlrpc/protocol/fault.rs`) and reaches the *undetermined* message's
   `{error}`, stderr, and the JSON error body. **Neither transport bounds that string today**:
   `diagnostic_body_preview` applies only to the non-envelope `HttpStatus` path in
   `src/xmlrpc/protocol/client.rs`, and REST's own error envelopes build `BzrError::Api` from
   the response body with the same absence of bounding (`src/client/response.rs`). API-key
-  redaction does hold, through `BzrError::Api`'s `Display` (`src/error.rs`). So the two
-  transports are symmetric here and this change introduces no new exposure; the shared
-  unboundedness is pre-existing and outside #724.
+  redaction does hold, through `BzrError::Api`'s `Display` (`src/error.rs`). The two transports
+  are therefore symmetric and this change introduces no new exposure; the shared unboundedness
+  is pre-existing and outside #724.
 - *Credential placement.* Under `ApiMode::XmlRpc` the client already carries the key in the
   request body for every call on that connection — `src/client/mod.rs` logs exactly this,
   overriding configured header auth for XML-RPC — so routing the probe there adds no placement
@@ -171,53 +144,58 @@ TLS and the pin/TOFU machinery in `src/tls/` govern it, not this code.
   parameter) into a request body, and only after REST has already failed.
 
 **Explicitly out of scope.** The `RedHat`-as-proxy false negative and false positive
-(ADR 0052 consequences, and named as out of scope by issue #724); raw `--from-url`
-passthrough remaining ungated (same); the unbounded error-message text above, which is
-pre-existing and symmetric across transports; and any change to what a credential is required
-for — the gate checks capability, not identity, and still does.
+(ADR 0052 consequences, and named as out of scope by issue #724); raw `--from-url` passthrough
+remaining ungated (same); the unbounded error-message text above, pre-existing and symmetric;
+and any change to what a credential is required for — the gate checks capability, not identity,
+and still does.
 
 ## Tests
 
 The honest limit — no supported container can produce a positive capability verdict — is
-recorded in the ADR amendment's Consequences, along with what the two tiers do and do not
-establish. What follows is the part that is this spec's own: why each test discriminates.
+recorded in the ADR amendment's Consequences, with what each tier does and does not establish.
+What follows is why each test discriminates.
 
 A capability probe exercised only against servers that all lack the capability is an
-empty-versus-empty oracle by default: a test asserting "bzr correctly determines the
-extension is absent" passes identically whether the probe works, silently fails, or is never
-issued. Every test below is required to discriminate, on one of two axes.
+empty-versus-empty oracle by default: a test asserting "bzr correctly determines the extension
+is absent" passes identically whether the probe works, silently fails, or is never issued.
+Every test is required to discriminate, on one of two axes.
 
 **Which transport was used.** Wiremock mounts both surfaces and asserts the request count on
 each, so "the probe went to the other transport" and "no probe was issued" both fail. The
-functional tier uses the `RUST_LOG=bzr=debug` trace, which is real wire evidence: the
-XML-RPC arm must show the `Bugzilla.extensions` call and must not show `/rest/extensions`,
-and the REST arm must show `/rest/extensions` and not the XML-RPC call.
+functional tier uses the `RUST_LOG=bzr=debug` trace, which is real wire evidence: the XML-RPC
+arm must show the `Bugzilla.extensions` call and not `/rest/extensions`, and the REST arm the
+reverse.
 
 **Absent versus undetermined.** Both refuse with exit 15, so exit code alone proves nothing.
-Asserting the *absent* wording is what proves the XML-RPC response was received and parsed;
-a broken adapter flips the verdict to *undetermined* and the assertion fails.
+Asserting the *absent* wording is what proves the XML-RPC response was received and parsed; a
+broken adapter flips the verdict to *undetermined* and the assertion fails.
 
 | Tier | File | What it establishes |
 |---|---|---|
 | unit | `src/xmlrpc/resources/server_tests.rs` | `Bugzilla.extensions` is the method called; advertised extensions parse; `<struct />` parses as an empty map; and each malformed shape is an error rather than a map — missing `extensions` member, non-struct `extensions` member, non-struct extension value, non-string `version` |
-| unit | `src/client/resources/server_tests.rs` | `XmlRpc` probes only `/xmlrpc.cgi`; `Rest` probes only `/rest/extensions`; `Hybrid` prefers REST; and `Hybrid` falls back to XML-RPC for **both** REST failure shapes — a 404 carrying a Bugzilla error envelope (the shape a real server sends, classified `BzrError::Api`) and a bodyless 503 (classified `HttpStatus`). Testing only the second is what let the guard defect through the first design pass, because it passes under either predicate |
-| unit | `src/commands/runtime/shared/capability_tests.rs` | the issue itself: REST answering 503 while XML-RPC advertises `RedHat` establishes the capability under `ApiMode::XmlRpc` — the positive verdict, at the only tier that can express it; plus the absent and undetermined paths over XML-RPC |
+| unit | `src/client/resources/server_tests.rs` | `XmlRpc` probes only `/xmlrpc.cgi`; `Rest` probes only `/rest/extensions`; `Hybrid` prefers REST; `Hybrid` falls back for **both** REST failure shapes — an enveloped 404 (`BzrError::Api`) and a bodyless 503 (`HttpStatus`); and both transports failing yields `undetermined` |
+| unit | `src/commands/runtime/shared/capability_tests.rs` | the issue itself: REST failing while XML-RPC advertises `RedHat` establishes the capability under `ApiMode::XmlRpc` — the positive verdict, at the only tier that can express it; plus the absent and undetermined paths, and that the Hybrid *undetermined* message names both attempts |
 | functional | `tests/functional/phases/08f-bug-saved-search.sh` | against a real container: the probe goes over XML-RPC under `--api xmlrpc` and over REST under `--api rest`, and the XML-RPC response really parsed |
 
-The functional phase's line 31 asserts `${BZ_URL}/rest/extensions` under `--api xmlrpc`, and
-its comment at lines 21–26 calls that "the REST-only `/rest/extensions` probe" — both pin the
-current behaviour as intended. They change because the behaviour changed, not because they
-were wrong.
+**The two Hybrid failure shapes are kept even though no predicate now distinguishes them.**
+They exercise different `BzrError` variants, so together they *prove* the unconditional
+fallback rather than assume it, and they pin it against a future edit reintroducing a
+predicate. Testing only the bodyless 503 is what let the original guard defect through, because
+it passes under either rule.
 
-Every new functional assertion goes through `test_pass` / `test_fail`, because a bare `[[ ]]`
-conjunct with no `else` moves no suite counter and renders no result. Each new test is proved
+The functional phase's line 31 asserts `${BZ_URL}/rest/extensions` under `--api xmlrpc`, and
+its comment at lines 21–26 calls that "the REST-only `/rest/extensions` probe". Both pin the
+current behaviour as intended; they change because the behaviour changed, not because they were
+wrong.
+
+Every new functional assertion goes through `test_pass` / `test_fail`. Each new test is proved
 to bite by seeding a controlled fault, observing red, and reverting.
 
 ## Out of scope
 
 `BugzillaClient::server_version()` (`src/client/resources/server.rs:35`) stays REST-only, so
 `bzr server info` against a REST-disabled deployment still fails at the version step.
-`Bugzilla.version` exists over XML-RPC and the fix would be near-identical, but the
-capability gate never calls `server_version()`, so it is not a consequence of any #724
-criterion. Reported to the campaign orchestrator rather than fixed here, and recorded in the
-`docs/bzr-cli.md` note so an affected operator is not left guessing.
+`Bugzilla.version` exists over XML-RPC and the fix would be near-identical, but the capability
+gate never calls `server_version()`, so it is not a consequence of any #724 criterion. Reported
+to the campaign orchestrator for its operator batch, and recorded in the `docs/bzr-cli.md` note
+so an affected operator is not left guessing.
