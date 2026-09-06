@@ -119,15 +119,16 @@ else
     if assert_exit_code 7 && assert_stderr_contains "dedicated flag"; then test_pass; fi
 fi
 
-# The catalogue probe needs no credentials, so an undeclared key is refused on
-# the public server too — locally, before the write that would have failed on
-# auth. This pins the ordering: validation precedes dispatch.
-test_begin "credentialless-undeclared-field-exits-7" "credentialless bug update --field with an undeclared name exits 7"
+# --field does not weaken the credential requirement. Both verbs that accept it
+# are mutations, so a credentialless invocation is refused at exit 3 before the
+# connection -- and therefore before the field catalogue is ever consulted.
+# There is no anonymous path that reaches --field validation.
+test_begin "credentialless-field-update-still-requires-credentials" "credentialless bug update --field still requires credentials (exit 3)"
 if [[ -z "$AFID" ]]; then
     test_fail "no fixture bug: the --field create above did not succeed"
 else
     run_bzr_raw --json --server public bug update "$AFID" --field "cf_no_such_field_here=1"
-    if assert_exit_code 7 && assert_stderr_contains "cf_no_such_field_here"; then test_pass; fi
+    if assert_exit_code 3 && assert_stderr_contains "requires credentials"; then test_pass; fi
 fi
 
 # --dry-run makes no connection, so it neither validates nor writes; the

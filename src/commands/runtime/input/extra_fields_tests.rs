@@ -170,3 +170,25 @@ fn empty_json_source_explains_the_single_stdin_read() {
     assert!(message.contains("read once"), "{message}");
     assert!(message.contains("--from-json -"), "{message}");
 }
+
+#[test]
+fn stdin_conflict_is_rejected_naming_both_flags() {
+    let err = super::reject_stdin_conflict(Some("-"), &[("--from-json -", true)]).unwrap_err();
+    assert_eq!(err.exit_code(), 7);
+    assert!(err.to_string().contains("--field-json -"), "{err}");
+    assert!(err.to_string().contains("--from-json -"), "{err}");
+}
+
+#[test]
+fn stdin_conflict_allows_a_file_path_source() {
+    assert!(super::reject_stdin_conflict(Some("f.json"), &[("--from-json -", true)]).is_ok());
+}
+
+#[test]
+fn stdin_conflict_allows_a_stdin_source_with_no_competitor() {
+    assert!(super::reject_stdin_conflict(
+        Some("-"),
+        &[("--from-json -", false), ("--comment -", false)]
+    )
+    .is_ok());
+}
