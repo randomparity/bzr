@@ -71,6 +71,26 @@ impl BugzillaClient {
     pub(super) async fn all_bug_fields(&self) -> Result<Vec<FieldDefinition>> {
         Ok(self.get_json::<FieldBugResponse>("field/bug").await?.fields)
     }
+
+    /// Fetch the names of every bug field this server declares, sorted and
+    /// deduplicated.
+    ///
+    /// `include_fields=name` keeps the response small on installations that
+    /// declare hundreds of fields with their legal values; every other member
+    /// of [`FieldDefinition`] defaults, so the reduced payload deserializes
+    /// through the same type.
+    pub(crate) async fn bug_field_names(&self) -> Result<Vec<String>> {
+        let mut names: Vec<String> = self
+            .get_json_query::<FieldBugResponse>("field/bug", &[("include_fields", "name")])
+            .await?
+            .fields
+            .into_iter()
+            .map(|field| field.name)
+            .collect();
+        names.sort_unstable();
+        names.dedup();
+        Ok(names)
+    }
 }
 
 #[cfg(test)]

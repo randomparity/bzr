@@ -3,6 +3,7 @@
 mod body_source;
 mod capability;
 mod connection;
+mod field_catalogue;
 mod merge;
 
 pub(crate) use body_source::{
@@ -12,6 +13,7 @@ pub(crate) use body_source::{
 };
 pub(crate) use capability::{require_server_capability, RED_HAT_EXTENSION};
 pub(crate) use connection::connect_and_configure;
+pub(crate) use field_catalogue::{connect_and_validate_bug_fields, validate_bug_fields};
 pub(crate) use merge::{merge_set, merge_vec};
 
 #[cfg(test)]

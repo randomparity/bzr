@@ -57,6 +57,21 @@ pub struct ServerConfig {
     /// a false "not advertised". A mismatch here is treated as a cache miss.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub server_extensions_known: Option<Vec<String>>,
+    /// Bug field names this server declared on the last successful
+    /// `field/bug` probe, sorted. Consulted by `bug create`/`bug update`
+    /// `--field` validation as a fast path; a key absent from this list
+    /// always forces a fresh probe, so a stale list cannot reject a field
+    /// the server has since declared.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bug_field_names: Option<Vec<String>>,
+    /// The `url` that `bug_field_names` was probed from, following
+    /// `server_extensions_url`. Re-pointing a server name at a different host
+    /// must not let the old host's catalogue accept a key the new one does not
+    /// declare -- that would put the key on the wire for Bugzilla to ignore
+    /// silently, which is the failure `--field` validation exists to prevent.
+    /// A mismatch is treated as a cache miss.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bug_field_names_url: Option<String>,
     /// Accept invalid TLS certificates (self-signed, expired, etc.).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tls_insecure: bool,
