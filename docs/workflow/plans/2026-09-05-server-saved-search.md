@@ -16,8 +16,10 @@ Tech stack: Rust 2021, clap derive, reqwest, wiremock, Bash for the functional h
 Spec: `docs/workflow/specs/2026-09-05-server-saved-search-design.md`
 Issue: #670 — Branch: `feat/saved-search-670` — Base branch: `main`
 
-Expected implementation size: 280–400 changed lines (M) — summed from the file map below,
-after the review cut the functional phase's seeding fixture (about 25 lines).
+Expected implementation size: 295–420 changed lines (M) — summed from the file map below. Two
+review-driven corrections moved it: cutting the functional phase's seeding fixture removed
+about 25 lines, and the six `container-tests.sh` gap-model edits Task 3 step 7 now requires
+added about 15.
 The charter's `$divination` complexity of S describes the decision surface; this band
 describes changed lines, which the repository's test-sibling and functional-phase
 conventions dominate. They measure different things.
