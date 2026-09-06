@@ -93,6 +93,7 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 | 12 | Keyring error (OS keychain access failed, e.g. locked keyring or missing daemon) |
 | 13 | TLS error (certificate pin mismatch or issuer changed; use `--tls-pin-now` to re-pin, `--tls-pin-clear` to remove a named-server pin, or `--server-tls-pin-now` for session-only ad-hoc trust) |
 | 14 | Mid-air collision (`bug update`/convenience verb `--expect-unchanged-since`: the bug changed since the given time; re-read and retry) |
+| 15 | Unsupported server capability (the server does not implement a Bugzilla extension the command requires, or bzr could not determine whether it does; the request is refused before dispatch) |
 
 *Exit code 2 is produced by clap for argument errors before bzr's error handling runs, in addition to resource-not-found errors from bzr itself.
 

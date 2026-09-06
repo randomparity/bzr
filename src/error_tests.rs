@@ -546,3 +546,21 @@ fn structured_detail_does_not_republish_raw_server_text() {
         );
     }
 }
+
+#[test]
+fn unsupported_server_capability_has_distinct_exit_code_and_type() {
+    let err = BzrError::UnsupportedServerCapability {
+        capability: "RedHat".to_string(),
+        operation: "saved search 'triage'".to_string(),
+        detail: "server does not implement the Red Hat saved-search extension".to_string(),
+    };
+    assert_eq!(err.exit_code(), 15);
+    assert_eq!(err.error_type(), "unsupported_server_capability");
+    assert_eq!(
+        err.structured_detail()
+            .get("capability")
+            .and_then(|v| v.as_str()),
+        Some("RedHat")
+    );
+    assert!(err.to_string().starts_with("saved search 'triage': "));
+}
