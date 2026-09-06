@@ -200,5 +200,6 @@ to bite by seeding a controlled fault, observing red, and reverting.
 `bzr server info` against a REST-disabled deployment still fails at the version step.
 `Bugzilla.version` exists over XML-RPC and the fix would be near-identical, but the capability
 gate never calls `server_version()`, so it is not a consequence of any #724 criterion. Reported
-to the campaign orchestrator for its operator batch, and recorded in the `docs/bzr-cli.md` note
-so an affected operator is not left guessing.
+to the campaign orchestrator for its operator batch. The `docs/bzr-cli.md` note does not carry
+this residual today: that note is held behind #718 and lands separately, and the sentence it
+gains there is the one describing the probe, not this.

@@ -58,7 +58,14 @@ impl BugzillaClient {
             ApiMode::XmlRpc => self.xmlrpc_client().server_extensions().await,
             ApiMode::Hybrid => match self.get_json("extensions").await {
                 Err(rest_err) => {
-                    tracing::info!(
+                    // warn, not info: this fires only when the REST probe
+                    // actually failed, so it is not routine noise — and a
+                    // *successful* fallback would otherwise be the one case
+                    // with no user-visible signal at the default `bzr=warn`,
+                    // silently papering over a degraded REST surface on every
+                    // invocation in Hybrid, which is the auto-detected default
+                    // for Bugzilla 5.0.x.
+                    tracing::warn!(
                         error = %rest_err,
                         "REST extensions probe failed, retrying via XML-RPC"
                     );

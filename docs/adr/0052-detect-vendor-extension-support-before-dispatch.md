@@ -315,16 +315,28 @@ Three properties of the amendment are part of the decision:
    rather than inventing a list. The same rule extends to a present-but-non-string `version`,
    which `Option<String>` rejects on the REST side.
 
+   Those four are the shapes **both transports can produce**, not every conceivable divergence.
+   One residual runs the other way and is left alone deliberately: an XML-RPC `<value><nil/></value>`
+   `version` fails the parser globally (`Value` has no nil variant) and renders *undetermined*,
+   where serde decodes JSON `null` into `version: None` and renders *advertised*. It is
+   conservative, and no Bugzilla emits it — the version comes from a Perl `VERSION` constant and
+   is always a string — so handling it would grow the adapter for an input that does not occur.
+
 ### Consequences
 
 - The refusal messages no longer name `/rest/extensions`, because the probe no longer always
-  goes there. Nor do the three other places that described the REST-only probe: the
-  `bug search --saved-search` note in `docs/bzr-cli.md`, the `bug search` long-about in
-  `src/cli/bug/search.rs` (which is `--help` and the man page), and the rustdoc on
-  `ServerConfig::server_extensions`. **In Hybrid the *undetermined* message names both attempts**
+  goes there. Nor do two of the three other places that described the REST-only probe: the
+  `bug search` long-about in `src/cli/bug/search.rs` (which is `--help` and the man page), and
+  the rustdoc on `ServerConfig::server_extensions`. The third, the `bug search --saved-search`
+  note in `docs/bzr-cli.md`, still says the probe reads `/rest/extensions`; it lands separately
+  because #718 is editing a different section of that same file. **In Hybrid the *undetermined* message names both attempts**
   rather than only detailing the XML-RPC failure: the REST error is logged at `info`, which is
   invisible at the default `bzr=warn`, and a user on a REST-first connection reading an XML-RPC
-  error would otherwise reasonably conclude bzr never tried REST.
+  error would otherwise reasonably conclude bzr never tried REST. A **successful** fallback is
+  not silent either: the REST failure is logged at `warn`, because it fires only when the probe
+  actually failed and would otherwise be the one case with no signal at all — papering over a
+  degraded REST surface on every invocation, and masking a bzr-side decode defect that the
+  unconditional fallback would route around.
 - **`bzr server info` is the other consumer and its behaviour improves.** It reaches this method
   through `server_info()`. On a server whose `/rest/version` works but whose `/rest/extensions`
   does not, it previously failed outright and now returns the list over XML-RPC. It cannot
@@ -387,6 +399,17 @@ Three properties of the amendment are part of the decision:
   So criterion 2's strongest reading is **satisfiable and deliberately deferred, not
   impossible** — sized as a design pass over the proxy rather than a call to an existing
   helper. Deferred to the operator batch rather than taken here.
+
+  **That reason covers the positive verdict only, and one other gap must not borrow it.** The
+  Hybrid arm — REST probe fails, XML-RPC answers — has no container-tier coverage either, and
+  it is *not* blocked by XML-RPC shaping: it needs only the REST probe to fail, which is a
+  body-only rewrite of `GET /rest/extensions` into a Bugzilla error envelope and is exactly
+  what the proxy's existing `(matcher, transformer)` contract already does. The verdict
+  discriminates on its own, since without the fallback the run reports *undetermined* and with
+  it reports *absent* over the real XML-RPC wire. So this gap is cheap to close and is left
+  open only because the proxy is outside the surface #724 was dispatched with — which is a
+  scope reason, not a technical one, and is recorded as such so it is not mistaken for the
+  harder deferral above.
 
   The limit is stated rather than papered over, because a probe tested only against servers
   that all lack the capability is otherwise an oracle that cannot fail.
