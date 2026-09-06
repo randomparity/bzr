@@ -305,8 +305,14 @@ if assert_success; then
 fi
 
 test_begin "header-auth-member-reads-the-restricted-root" "header-auth member reads the restricted root"
-# The issue's headline scenario. Reverting the root read to the search endpoint
-# reddens this at exit 2.
+# The issue's headline scenario, on the images where it is reachable.
+#
+# Reverting the root read to the search endpoint reddens this at exit 2 *only
+# where the server ignores `X-BUGZILLA-API-KEY`* — bz50 and bz52. On bz53 the
+# header is mapped onto `Bugzilla_api_key`, so even the pre-fix search read was
+# credentialed and already exited 0, and this assertion does not discriminate
+# there. The direction that reddens on every image is the anonymous one above,
+# which is why that one carries the defect rather than this one.
 #
 # It asserts the exit code and the root's readability, not the graph's contents,
 # and the boundary is deliberate: the root read draws the 401 that the
@@ -324,18 +330,27 @@ test_begin "header-auth-member-reads-the-restricted-root" "header-auth member re
 # (see the alias fixture above).
 if [[ $_RESTRICTED_HEADER_OK -ne 1 ]] || [[ $_RESTRICTED_ALIASES_OK -ne 1 ]]; then
     test_fail "restricted transport alias setup failed"
-elif [[ -z "$RESTRICTED_BUG" ]] || [[ -z "$RESTRICTED_DEP_BUG" ]]; then
-    test_skip "no restricted bug or dependency edge"
+elif [[ -z "$RESTRICTED_BUG" ]]; then
+    test_skip "no restricted bug"
 else
     run_bzr_raw --json --server restricted-header bug links "$RESTRICTED_BUG"
     _RL_REST_EXIT=$BZR_EXIT
-    run_bzr_raw --json --server restricted-xmlrpc bug links "$RESTRICTED_BUG"
-    if [[ $_RL_REST_EXIT -ne 0 ]]; then
-        test_fail "header-auth rest links exited $_RL_REST_EXIT, expected 0"
-    elif [[ $_RL_REST_EXIT -ne $BZR_EXIT ]]; then
-        test_fail "rest exit $_RL_REST_EXIT != xmlrpc exit $BZR_EXIT"
+    # This alias is what makes the header-to-query-parameter retry reachable on
+    # `bug links`, and that retry moves the key into the request URL. The phase
+    # guards the query_param alias the same way further down, for the same
+    # reason: a deployment that echoes the URI back in its error text would
+    # surface the key.
+    if ! assert_stderr_not_contains "$RESTRICTED_KEY"; then
+        : # assert_stderr_not_contains already recorded the failure
     else
-        test_pass
+        run_bzr_raw --json --server restricted-xmlrpc bug links "$RESTRICTED_BUG"
+        if [[ $_RL_REST_EXIT -ne 0 ]]; then
+            test_fail "header-auth rest links exited $_RL_REST_EXIT, expected 0"
+        elif [[ $_RL_REST_EXIT -ne $BZR_EXIT ]]; then
+            test_fail "rest exit $_RL_REST_EXIT != xmlrpc exit $BZR_EXIT"
+        else
+            test_pass
+        fi
     fi
     unset _RL_REST_EXIT
 fi
@@ -352,10 +367,16 @@ else
     run_bzr_raw --json --server restricted-rest bug links "$RESTRICTED_BUG"
     _RL_REST_EXIT=$BZR_EXIT
     _RL_REST_OUT=$(cat "$BZR_STDOUT")
+    # This alias authenticates by query parameter, so its key travels in the
+    # request URL on every one of these reads.
+    _RL_KEY_CLEAN=0
+    assert_stderr_not_contains "$RESTRICTED_KEY" && _RL_KEY_CLEAN=1
     run_bzr_raw --json --server restricted-xmlrpc bug links "$RESTRICTED_BUG"
     _RL_XMLRPC_EXIT=$BZR_EXIT
     _RL_XMLRPC_OUT=$(cat "$BZR_STDOUT")
-    if [[ $_RL_REST_EXIT -ne 0 ]]; then
+    if [[ $_RL_KEY_CLEAN -ne 1 ]]; then
+        : # assert_stderr_not_contains already recorded the failure
+    elif [[ $_RL_REST_EXIT -ne 0 ]]; then
         test_fail "rest links exited $_RL_REST_EXIT, expected 0"
     elif [[ $_RL_REST_EXIT -ne $_RL_XMLRPC_EXIT ]]; then
         test_fail "rest exit $_RL_REST_EXIT != xmlrpc exit $_RL_XMLRPC_EXIT"
@@ -366,7 +387,7 @@ else
     else
         test_pass
     fi
-    unset _RL_REST_EXIT _RL_REST_OUT _RL_XMLRPC_EXIT _RL_XMLRPC_OUT
+    unset _RL_REST_EXIT _RL_REST_OUT _RL_XMLRPC_EXIT _RL_XMLRPC_OUT _RL_KEY_CLEAN
 fi
 
 # ── Product-level restriction ────────────────────────────────────────
