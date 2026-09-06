@@ -2,224 +2,103 @@
 
 Issue: [#710](https://github.com/randomparity/bzr/issues/710)
 Decision record: [ADR 0061](../../adr/0061-prove-vendor-extension-behaviour-against-a-shaped-proxy.md)
+Build instructions: [the implementation plan](../plans/2026-09-06-prove-server-saved-search-filter.md)
 Governing client decision (read, not modified): [ADR 0052](../../adr/0052-detect-vendor-extension-support-before-dispatch.md)
+
+ADR 0061 is the single home for the evidence and the rationale. This spec states the shape
+of the change and the properties it must hold; the plan states how to build it. Neither
+repeats the ADR's argument.
 
 ## Problem
 
-`tests/functional/compare/01-bug-lifecycle.sh` has a `saved-search` row that reports a
-result it cannot establish.
-
-The row seeds a server-side named query selecting the two bugs the lifecycle just created
-(`bug_id=<bzr>,<pybz>&bug_id_type=anyexact`), asks python-bugzilla to run it, and asserts
-the returned id set equals `[<bzr>,<pybz>]`. Every supported image discards `savedsearch`
-and returns the whole database. The assertion passes because, at that point in a freshly
-reset compare run, the whole database *is* those two bugs.
-
-Verified — the same call against a container that has already run a full suite:
-
-```
-$ curl -s -o /tmp/ss -w '%{http_code}\n' \
-    'http://127.0.0.1:52766/rest/bug?savedsearch=nonexistent-query-xyz'
-200
-$ python3 -c "import json;print(len(json.load(open('/tmp/ss'))['bugs']))"
-182
-```
-
-So the row compares a filtered set against itself. Two consequences:
-
-1. A server honouring the parameter and a server discarding it produce the same PASS.
-2. Since ADR 0052 shipped, bzr refuses on every image the suite can run, so nothing
-   exercises the dispatch path that ADR gates.
+`tests/functional/compare/01-bug-lifecycle.sh`'s `saved-search` row reports a result it
+cannot establish. It seeds a named query selecting the two lifecycle bugs, asks
+python-bugzilla to run it, and asserts the returned id set equals those two ids — but every
+supported image discards `savedsearch` and returns the whole database, and at that point in
+a freshly reset run the whole database *is* those two bugs. The row compares a set against
+itself, so a server honouring the parameter and one discarding it produce the same PASS.
+Since ADR 0052 shipped, nothing exercises the dispatch path that ADR gates either.
 
 ## Goal
 
-Make the row able to fail for the right reason, in both directions:
-
-- if bzr stops sending `savedsearch`, the row goes red;
-- if the server stops honouring it, the row goes red;
-- and the sets the row compares must actually be able to differ on the seeded data.
-
-The third is a separate property from the first two. An assertion that bites when broken
-can still be comparing two identical sets, which is the defect being fixed here.
+The row must be able to fail in both directions — if bzr stops sending `savedsearch`, and if
+the server stops honouring it — and, separately, the sets it compares must actually be able
+to differ on the seeded data. An assertion that bites when broken can still be comparing two
+identical sets; that is the defect being fixed, so the two properties are tracked apart.
 
 ## Non-goals
 
 - No change to `bzr` itself. ADR 0052's detection and refusal ship separately (#670).
-- No change to `docs/adr/README.md`; the index row for ADR 0061 is reported as pending.
+- No change to `docs/adr/README.md`; the ADR 0061 index row is reported as pending.
 - No new `bzr` flag, and no weakening of ADR 0052's refusal to make a test pass.
 
-## Approach
+## Shape of the change
 
-Three changes, described below and planned in
-[the implementation plan](../plans/2026-09-06-prove-server-saved-search-filter.md).
+**A `saved-search` mode on `tests/functional/redhat-shape-proxy.py`**, selected by
+`BZR_FUNC_REDHAT_MODE` and registered in `REWRITE_HOOKS` like every other shape it serves. It
+injects a `RedHat` entry into `GET /rest/extensions` so bzr's ADR 0052 gate passes, and
+filters `GET /rest/bug` responses carrying `savedsearch` to the ids the named query selects.
+The fixture reads `BZR_FUNC_SAVED_SEARCH_{NAME,IDS,SHARER}`. Resolution: no `savedsearch` →
+forwarded unchanged (this is what fails the row if bzr stops sending it); a non-matching name
+→ empty; a matching name with absent or matching `sharer_id` → filtered to the fixture ids; a
+matching name with a different `sharer_id` → empty. A malformed ids list disables the fixture
+rather than filtering to nothing, so a harness typo fails loudly instead of producing a
+plausible result. The mode is inert unless enabled.
 
-### 1. A `saved-search` mode on the shaped proxy
+**A discriminating row.** The row keeps its identity and stays an expected gap — the
+stock-server difference it records is real. The seeded query changes to the bzr bug only, so
+it selects a strict subset of an unfiltered search. Against the shaped proxy, two bzr calls:
+an unfiltered control (`bug list --summary "$LIFECYCLE_STEM"`) asserted to **contain** both
+lifecycle bugs, and the filtered call (`bug search --saved-search …`) asserted to **equal**
+the seeded subset. Against the stock container: bzr refuses per ADR 0052, and
+python-bugzilla's result is asserted to contain the pybz bug the seeded query excludes —
+which turns the parity record's standing claim into a tested one.
 
-`tests/functional/redhat-shape-proxy.py` gains one mode, selected the way every other mode
-is (`BZR_FUNC_REDHAT_MODE=saved-search`) and registered in `REWRITE_HOOKS` as one
-`(matcher, transformer)` pair. It shapes two routes:
+The two proxied calls are **not** one flag apart; they differ by subcommand, search term, and
+flag, because the proxy answers a termless `/rest/bug` with `code 1000`. What the pair
+establishes is a **strict-superset relation** — the control contains what the filtered call
+equals — and that is what removes the vacuity. Preserve that relation, not a notion of
+parameter isolation the calls do not have.
 
-- `GET /rest/extensions` — inject a `RedHat` entry into the forwarded response, so bzr's
-  ADR 0052 capability gate passes. Verified: all three images return `200
-  {"extensions":{}}` for this route, so a response rewrite is enough. The injected shape
-  is `{"RedHat": {"version": "1.0"}}`, which matches `ExtensionInfo { version:
-  Option<String> }` in `src/types/server_info.rs`.
-- `GET /rest/bug` carrying `savedsearch` — filter the forwarded response's `bugs` array to
-  the ids the named query selects.
+Ordering is load-bearing: `expect_gap` converts the row's outcome, so the stock refusal must
+be the last bzr probe and every new assertion sits in the precondition chain, where a failure
+is an outright FAIL that never reaches `lifecycle_expect_gap 670`. That is the shape the
+eight existing `run_gap_ineligible_control` entries already assert.
 
-The fixture's mapping comes from the environment the harness sets when it starts the
-proxy:
+**Three self-test controls, one per assertion**, in `tests/functional/pybz/container-tests.sh`,
+which sources the real phase script against stubs: `LIFECYCLE_SAVED_SEARCH_UNFILTERED` (the
+filtered call returns the control set), `LIFECYCLE_SAVED_SEARCH_CONTROL_NARROW` (the control
+no longer exceeds the subset, so the comparison would be vacuous), and
+`LIFECYCLE_SAVED_SEARCH_PYBZ_FILTERED`. Each must redden through its own assertion rather
+than a neighbour that short-circuits ahead of it.
 
-| Variable | Meaning |
-|---|---|
-| `BZR_FUNC_SAVED_SEARCH_NAME` | the named query this fixture resolves |
-| `BZR_FUNC_SAVED_SEARCH_IDS` | comma-separated bug ids that query selects |
-| `BZR_FUNC_SAVED_SEARCH_SHARER` | the owning user id `sharer_id` must match |
+**The parity record**, whose row is restated and kept byte-identical to its fixture copy.
 
-Resolution rules, which are the whole of the fixture's behaviour:
+## Properties this design must hold
 
-- `savedsearch` absent → no filtering, response forwarded unchanged. This is what makes
-  the row fail if bzr stops sending the parameter.
-- `savedsearch` present but not equal to `BZR_FUNC_SAVED_SEARCH_NAME` → empty `bugs`
-  array (the server resolved no such query).
-- `savedsearch` matches, `sharer_id` absent or equal to `BZR_FUNC_SAVED_SEARCH_SHARER` →
-  `bugs` filtered to `BZR_FUNC_SAVED_SEARCH_IDS`.
-- `savedsearch` matches, `sharer_id` present and different → empty `bugs` array (the
-  query is not shared with that user).
+| Property | Where proven | Container |
+|---|---|---|
+| Advertises `RedHat`; filters on `savedsearch`; honours/rejects `sharer_id` | `ShapeTests` | no |
+| Mode gating, through `make_handler` rather than the transformer alone | `ShapeTests` round trip | no |
+| Seeder accepts one or more ids and rejects the rest | `container-tests.sh` seed fixture | no |
+| Each of the row's three assertions reddens through itself | three `container-tests.sh` controls | no |
+| The control really does exceed the subset on seeded data | `make functional-compare-all` | yes |
+| Row green on all three images | `make functional-compare-all` | yes |
 
-The mode is inert unless enabled, like every other mode, so no existing row's traffic
-changes.
-
-### 2. A discriminating assertion in the lifecycle row
-
-The row keeps its identity (`compare/01-bug-lifecycle/saved-search`) and stays an expected
-gap, because the gap it records — the stock-server difference between bzr and
-python-bugzilla — is real and still there. What changes is that all three of its
-assertions become capable of failing.
-
-The seeded named query changes from "both lifecycle bugs" to **the bzr bug only**, so the
-query selects a strict subset of what an unfiltered search returns.
-
-The row then establishes, in order:
-
-1. **A controlled pair against the Red-Hat-shaped server.** With the proxy running in
-   `saved-search` mode, two bzr calls go through it, differing in exactly one thing — the
-   `--saved-search` flag:
-   - the **unfiltered control**, `bzr bug list --summary "$LIFECYCLE_STEM"`, is asserted to
-     *contain* both lifecycle bugs (the stem is a substring of both
-     `"$LIFECYCLE_STEM [bzr]"` and `"$LIFECYCLE_STEM [pybz]"`). A term is required because
-     the proxy answers a termless `/rest/bug` with Bugzilla's own `code 1000` error,
-     mirroring the server;
-   - the **filtered** call, `bzr bug search --saved-search "$LIFECYCLE_SAVED_SEARCH"`, is
-     asserted to equal exactly the seeded subset.
-
-   Same server, same path, one flag apart, so the pair isolates the parameter. A server
-   that ignores it returns the control set for the filtered call and fails the equality.
-
-   Both assertions are load-bearing and each can fail alone, which is why there is no
-   third assertion that the two sets differ: given a control containing both bugs and a
-   filtered result equal to one of them, "they differ" is entailed and could never fail.
-   The control assertion is the one that carries the weight the issue is about — without
-   it, "the filtered call returned the seeded subset" would pass on a database that only
-   ever held the seeded subset, which is precisely the defect being fixed. Containment
-   rather than equality, because the stem-matching set is not fixed by construction: a
-   later row inserted above this one that creates a stem-bearing bug would break an
-   equality assertion for a reason that has nothing to do with saved searches.
-2. **Stock server, both clients** — bzr refuses with
-   `"type":"unsupported_server_capability"` and exit 15 (unchanged, ADR 0052); and
-   python-bugzilla's result **contains the pybz bug id, which the seeded query excludes**.
-   That is the row's proof that python-bugzilla ignores the parameter — the claim the
-   parity record has been making without evidence.
-
-Ordering is load-bearing. `expect_gap` converts the row's recorded outcome, so the stock
-refusal must be the last bzr probe in the row: every assertion above sits in the row's
-precondition chain, where a failure produces an outright FAIL that never reaches
-`lifecycle_expect_gap 670`. That is the same shape the eight existing
-`run_gap_ineligible_control` entries already assert for this row.
-
-Assertion 2's python-bugzilla check uses containment rather than equality against the
-control, because the unproxied call returns the whole database rather than the stem's two
-bugs — 182 on the container probed above. Containment says the same thing and cannot drift
-when a later fixture seeds another bug.
-
-Only the bzr arm is proxied; ADR 0061 records why.
-
-One helper is added beside `lifecycle_ids_are`, which is exact-equality only:
-`lifecycle_ids_contain <file> <json-id-array>`, asserting every listed id is present. It
-serves both the control assertion and the python-bugzilla one.
-
-### 3. The harness self-test keeps step, and gains two controls
-
-`tests/functional/pybz/container-tests.sh` sources the real phase script against stubbed
-clients, so it is where "the test bites" is proven deterministically without a container.
-It gains stubs for the proxy lifecycle and for the proxied bzr call, and two new failure
-controls, one per new failure direction:
-
-- `LIFECYCLE_SAVED_SEARCH_UNFILTERED` — the proxied bzr call returns the control set
-  instead of the seeded subset. The row must go red. This is the deliberately broken
-  filter of the issue's third acceptance criterion, and it reddens through the filtered
-  equality, which is the assertion the second criterion names.
-- `LIFECYCLE_SAVED_SEARCH_CONTROL_NARROW` — the unfiltered control returns only the bzr
-  bug, so the control no longer exceeds the seeded subset and the comparison would be
-  vacuous. The row must go red. This is the control for the empty-graph failure: an
-  oracle whose two sides cannot differ.
-- `LIFECYCLE_SAVED_SEARCH_PYBZ_FILTERED` — python-bugzilla's result omits the pybz bug,
-  i.e. it appears to honour the parameter. The row must go red.
-
-One control per assertion, so each assertion is shown to bite through itself rather than
-through a neighbour.
-
-The existing eight `run_gap_ineligible_control` entries for `saved-search`, the
-`LIFECYCLE_STALE_GAPS` scenario, the slug list, and the PASS/FAIL/GAP counts are
-re-established against the new row rather than assumed to survive it.
-
-### 4. The parity record
-
-`docs/dev/python-bugzilla-parity.md`'s `Server saved search` row is restated to say what
-the row now proves, and its literal copy in the parity-report fixture
-(`container-tests.sh`, `run_parity_report_fixture`) is updated to the identical string.
-`run_parity_report_fixture` greps the document for each fixture literal with
-`grep -Fxc "$row"` requiring exactly one whole-line match (`container-tests.sh:1037`), so a
-fixture row missing from the document does fail. The reverse — a document row with no
-fixture entry — is not caught, so both edits stay in one task.
+`make lint` and `make test` reach none of this; `make functional-compare-all` is the gate.
 
 ## What this does not prove
 
 The Red-Hat-shaped arm proves bzr's behaviour against a fixture built from the vendor's
-documented parameter names. It is not evidence that Red Hat Bugzilla resolves a named
-query the same way; no Red Hat source was read and no Red Hat server was contacted. This
-is the same limit ADR 0052 already accepted for detection, and the parity record states it
-so a green row does not imply a fidelity nobody established.
-
-## Testing
-
-| Property | Where it is proven | Needs a container |
-|---|---|---|
-| Proxy advertises `RedHat` | `ShapeTests` in `redhat-shape-proxy.py` | no |
-| Proxy filters on `savedsearch` | `ShapeTests` | no |
-| Proxy honours/rejects `sharer_id` | `ShapeTests` | no |
-| Proxy leaves traffic alone when the mode is off | `ShapeTests`, through `apply_rewrite_hooks` | no |
-| Seeder accepts one or more ids and rejects the rest | `container-tests.sh` seed fixture | no |
-| The row goes red on an unfiltered proxied result | `container-tests.sh` control | no |
-| The row goes red when the control cannot exceed the subset | `container-tests.sh` control | no |
-| The row goes red if python-bugzilla appears to filter | `container-tests.sh` control | no |
-| The control really does exceed the subset on seeded data | `make functional-compare-all` | yes |
-| End-to-end row green on all three images | `make functional-compare-all` | yes |
-
-`make lint` and `make test` reach none of this; `make functional-compare-all` is the gate.
+documented parameter names. It is not evidence that Red Hat Bugzilla resolves a named query
+the same way; no Red Hat source was read and no Red Hat server was contacted. The parity
+record says so, so a green row does not imply a fidelity nobody established.
 
 ## Threat model
 
-Not security-relevant under `$quest` step 6's triggers: no `src/` change, no shipped
-artifact, no trust boundary in the product. Two boundaries exist inside the test harness
-and are noted because the proxy parses attacker-shaped input in principle:
-
-- **Proxy ← backend response.** Already bounded: `_forward` caps request bodies at 1 MiB
-  and the existing hooks already `json.loads` backend responses. The new transformer adds
-  no new parse of a new source; it reads the same already-parsed body.
-- **Proxy ← its own environment.** `BZR_FUNC_SAVED_SEARCH_IDS` is set by the harness, not
-  by a remote party. It is parsed strictly (decimal ids only) and a malformed value
-  disables the fixture rather than being coerced, so a typo fails the row loudly instead
-  of silently filtering to nothing.
-
-No credential handling changes; the existing `prepare_auth_forward` path is untouched.
+Not security-relevant under the diff triggers: no `src/` change, no shipped artifact, no
+trust boundary in the product. Two harness-internal boundaries, both already bounded:
+the proxy's parse of a backend response (`_forward` caps bodies at 1 MiB; existing hooks
+already `json.loads` responses, and the new transformer adds no new source), and the proxy's
+own environment (`BZR_FUNC_SAVED_SEARCH_IDS` is harness-set and parsed strictly). No
+credential handling changes; `prepare_auth_forward` is untouched.
