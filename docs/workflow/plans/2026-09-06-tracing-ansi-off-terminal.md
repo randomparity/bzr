@@ -10,11 +10,14 @@ Architecture: `src/main.rs` gains one pure helper deciding the tracing stream's 
 existing `reset`. `docs/bzr-cli.md:50` and the clap doc comment at `src/cli/mod.rs:247-251` are
 corrected together, being the two renderings of one flag's contract. Spec:
 `docs/workflow/specs/2026-09-06-tracing-ansi-off-terminal-design.md`. ADR:
-`docs/adr/0058-suppress-tracing-ansi-off-terminal.md`. Branch
-`feat/suppress-tracing-ansi-on-non-tty-722` off `main`.
+`docs/adr/0058-suppress-tracing-ansi-off-terminal.md` — numbered 0058 because 0054-0057 are
+assigned to concurrent issues in the same campaign wave, not because records are missing. Its
+`docs/adr/README.md` row is the orchestrator's to append after the wave merges; CI gates no ADR
+index, so no task adds it. Branch `feat/suppress-tracing-ansi-on-non-tty-722` off `main`.
 
-Expected implementation size: 85-100 changed lines (S) - `src/main.rs` ~24, `src/main_tests.rs`
-~31, phase 17 = 9, the two doc surfaces = 11, `Makefile` = 10, `run-compare-all.sh` = 2.
+Expected implementation size: 95-115 changed lines (S) - `src/main.rs` ~24, `src/main_tests.rs`
+~31, phase 17 = 9, the four colour-documentation rows = 15, `setup-bugzilla.sh` = 7,
+`Makefile` = 10, `run-compare-all.sh` = 2.
 
 ## Global Constraints
 
@@ -27,9 +30,7 @@ Repository conventions in `CLAUDE.md` bind every task; these are the ones it doe
 - `tests/functional/phases/*.sh` are shellcheck'd (`make check-shell`) but not shfmt'd, and use
   4-space indent. Test ids match `^[a-z0-9]+(-[a-z0-9]+)*$` and must be unique
   (`make check-functional-test-ids`).
-- Concurrent issues own `src/client/auth/`, `src/client/transport.rs`,
-  `tests/functional/phases/08c-bugs-create-fields.sh`, `tests/functional/pybz/container-tests.sh`,
-  and `tests/functional/redhat-shape-proxy.py`. Do not edit them.
+- Concurrent issues own the files the charter excludes; do not edit them.
 
 ## Task 1 — bzr writes plain text to a non-terminal stderr
 
@@ -67,22 +68,21 @@ crate and reached by `src/main_tests.rs` through its existing `use super::*;`. C
 2. Run `make test-one T=tracing_ansi`. Expect a compile error naming `tracing_ansi_enabled`.
 3. Add the helper to `src/main.rs`, below `tracing_filter_directive`, with the signature above.
    Body: return `false` when `no_color_flag` is set or `stderr_is_terminal` is false, then
-   `no_color_env.is_none_or(std::ffi::OsStr::is_empty)`. Doc comment: `tracing_subscriber::fmt`
-   defaults ANSI on unless `NO_COLOR` holds a non-empty value and performs no terminal detection,
-   and an explicit `with_ansi` call replaces that default outright, so the helper must re-apply
-   the `NO_COLOR` rule rather than inherit it.
+   `no_color_env.is_none_or(std::ffi::OsStr::is_empty)`. Give it the doc comment ADR 0058's
+   Decision records.
 4. In `main`, insert `let stderr_ansi = tracing_ansi_enabled(cli.no_color,
    std::env::var_os("NO_COLOR").as_deref(), std::io::stderr().is_terminal());` above the
    `tracing_subscriber::fmt()` chain at `src/main.rs:29-32`, and add `.with_ansi(stderr_ansi)` to
    that chain between `.with_env_filter(filter)` and `.with_writer(std::io::stderr)`.
 5. Run `make test-one T=tracing_ansi`. Expect all six cases to pass.
-6. Correct both renderings of the `--no-color` contract, each staying its current size:
-   `docs/bzr-cli.md:50` (currently `Disable colored output. Color is also suppressed
-   automatically when stdout is not a TTY.`) says the flag covers stdout and the stderr
-   diagnostic stream and that each stream's automatic suppression follows its own terminal
-   status; the clap doc comment at `src/cli/mod.rs:247-251` (currently claiming
-   `CLICOLOR_FORCE=1` re-enables colour unqualified) says `NO_COLOR`, `CLICOLOR=0`, and
-   `CLICOLOR_FORCE=1` govern stdout colour and that the flag disables colour on both streams.
+6. Correct the four colour-documentation rows, each staying its current size. `docs/bzr-cli.md:50`
+   and the clap doc comment at `src/cli/mod.rs:247-251`: the flag disables colour on stdout and on
+   the stderr diagnostic stream, and each stream's automatic suppression follows its own terminal
+   status. `docs/bzr-cli.md:72` (`CLICOLOR`) and `:74` (`CLICOLOR_FORCE`): both govern stdout
+   colour only, and `CLICOLOR_FORCE=1` does not force colour when stdout is redirected, because
+   `src/main.rs:36-37` sets `colored`'s manual override and `colored` 3.1.1's
+   `ShouldColorize::should_colorize` (`src/control.rs:118-128`) reads that override first. Say the
+   same about `CLICOLOR_FORCE` in the clap comment rather than repeating the unqualified claim.
 7. Run `make lint` bare, then `make test` bare in the background. Expect exit 0 from both.
 
 **Acceptance.** `grep -c $'\033'` over a redirected `bzr -vv` stderr prints `0` on a debug
@@ -138,15 +138,18 @@ and guarded the same way by tests already in this file. Defines nothing.
 ## Task 3 — the comparison tier runs against a container it created
 
 **Interfaces.** Consumes `setup-bugzilla.sh`'s existing `reset` command (`case` dispatch at
-`:208` → `cmd_reset` at `:186-190` = `cmd_stop` then `cmd_start`; `cmd_stop` at `:153` uses
-`rm -f … 2>/dev/null || true` and so succeeds on an absent container). Defines nothing.
+`:208` → `cmd_reset` at `:186-190` = `cmd_stop` then `cmd_start`), and its existing
+`container_exists` and `err` helpers. Modifies `cmd_reset`; leaves `cmd_stop` alone, since its
+`rm -f … 2>/dev/null || true` at `:153` is what lets `stop` succeed on an absent container for
+every other caller.
 
 **Verification.**
 
-- Contract: both entry points recreate the container instead of reusing a running one.
-  `Mode: task-test-not-applicable` — the changed surface is two build-recipe lines whose only
-  observable effect is container lifecycle on a Docker/podman host. No test in this repository
-  drives a container runtime or observes make-recipe prerequisites. Proof is step 4.
+- Contract: both entry points recreate the container instead of reusing a running one, and
+  `reset` fails loudly rather than silently reusing when removal is refused.
+  `Mode: task-test-not-applicable` — the changed surface is build-recipe lines and one container
+  lifecycle branch on a Docker/podman host. No test in this repository drives a container runtime
+  or observes make-recipe prerequisites. Proof is steps 4 and 5.
 
 **Steps.**
 
@@ -163,13 +166,17 @@ and guarded the same way by tests already in this file. Defines nothing.
 2. In `tests/functional/run-compare-all.sh:29`, change
    `if ! "$SCRIPT_DIR/setup-bugzilla.sh" start; then` to
    `if ! "$SCRIPT_DIR/setup-bugzilla.sh" reset; then`, leaving the
-   `RESULTS+=("${ver}: FAILED (container start)")` message at `:30` unchanged. `cmd_reset` ends
-   in `return 0`, but that line is unreachable on failure: `setup-bugzilla.sh:5` sets
-   `set -euo pipefail`, `cmd_start` calls `resolve_bz_port || exit 1`, and its final
-   `wait_for_ready` returns 1 on a container that never becomes ready, so a failing `reset` still
-   exits non-zero.
-3. Run `make check-shell` bare. Expect exit 0.
-4. Run, in this order with no `NO_COLOR` in the environment: `make functional-test`, then
+   `RESULTS+=("${ver}: FAILED (container start)")` message at `:30` unchanged: `setup-bugzilla.sh:5`
+   sets `set -euo pipefail`, so a failing `reset` exits non-zero and that branch still reports it.
+3. In `tests/functional/setup-bugzilla.sh`, make `cmd_reset` (`:186-190`) verify removal before
+   restarting: after `cmd_stop`, if `container_exists` still succeeds, call `err` with a message
+   naming the likely cause — a dependent container such as a leftover python-bugzilla sidecar,
+   which `tests/functional/lib.sh:406` attaches with `--network container:<name>` and which
+   podman refuses to orphan — and `return 1`. `cmd_stop` discards `rm -f` failure and logs
+   "Container removed." regardless, so without this check a refused removal makes `reset`
+   silently identical to `start`.
+4. Run `make check-shell` bare. Expect exit 0.
+5. Run, in this order with no `NO_COLOR` in the environment: `make functional-test`, then
    `make functional-compare`. Expect the comparison run to reach its own summary and to report a
    transport per capability rather than `transport observation is missing`.
 

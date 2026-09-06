@@ -51,13 +51,18 @@ contract is to compare against a server the run set up.
 
 - `bzr -vv 2> file` now writes plain tracing output — a user-visible change for anyone capturing
   the escapes deliberately. A terminal, or a pty wrapper such as `script`, restores them.
-- `--no-color` now covers both streams; `CLICOLOR_FORCE=1` re-enables stdout colour only, which
-  its help text now says. `NO_COLOR=1` keeps working and is no longer load-bearing for the
-  comparison tier, which reads production tracing with no interposed transformation, so a change
-  to a boundary message still fails the tier loudly as ADR 0045 requires.
+- `--no-color` now covers both streams. `NO_COLOR` keeps working and is no longer load-bearing
+  for the comparison tier, which reads production tracing with no interposed transformation, so a
+  change to a boundary message still fails the tier loudly as ADR 0045 requires.
 - `make functional-compare` destroys any container a developer was holding for
   `make functional-test`, and the recreated container publishes on a new host port. CI starts
   each comparison job cold, so nothing there changes.
+- `cmd_reset` gains a removal check. `cmd_stop` discards `rm -f` failure (`2>/dev/null || true`)
+  and logs "Container removed." regardless, and podman refuses to remove a container a running
+  one depends on through `--network container:<name>` — which is what a leftover python-bugzilla
+  sidecar is (`tests/functional/lib.sh:406`) after a compare run whose EXIT trap did not fire. An
+  unchecked `reset` would then be exactly `start`, silently. It now fails with a diagnostic
+  instead; `stop` keeps its permissive behaviour for its other callers.
 - The container-freshness ground is an observation, not a mechanism. If the tier is later seen to
   pass reliably against a dirty container, this half is safe to withdraw on its own.
 
@@ -89,3 +94,9 @@ contract is to compare against a server the run set up.
 - **Detect a dirty container and fail with a diagnostic.** judgment: with the coupling
   uncharacterised there is no property to detect, so the check would be a proxy that goes stale
   unnoticed.
+- **Give the comparison tier its own container name.** verified: `bugzilla_container_name` is
+  already checkout-scoped (ADR 0030), so a tier suffix would let compare create and destroy a
+  container of its own and never touch the one `functional-test` is using — a stronger guarantee
+  than `reset`. judgment: it costs a second Bugzilla instance per host and a second image
+  lifecycle to reason about, which is more than an uncharacterised precondition is worth. It is
+  the right answer if the destructive consequence above proves painful.
