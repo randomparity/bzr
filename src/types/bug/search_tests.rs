@@ -205,6 +205,7 @@ fn search_params_has_filters_for_each_individual_field() {
         ("id", |p| p.id = vec![1]),
         ("summary", |p| p.summary = Some("X".into())),
         ("quicksearch", |p| p.quicksearch = Some("X".into())),
+        ("saved_search", |p| p.saved_search = Some("X".into())),
         ("raw_params", |p| {
             p.raw_params = vec![("f1".into(), "X".into())];
         }),
@@ -269,6 +270,7 @@ fn search_params_has_structured_filters_for_each_individual_field() {
         ("cc", |p| p.cc = Some("X".into())),
         ("alias", |p| p.alias = Some("X".into())),
         ("id", |p| p.id = vec![1]),
+        ("saved_search", |p| p.saved_search = Some("X".into())),
         ("raw_params", |p| {
             p.raw_params = vec![("f1".into(), "X".into())];
         }),

@@ -41,6 +41,16 @@ pub struct SearchParams {
     pub offset: Option<u32>,
     pub summary: Option<String>,
     pub quicksearch: Option<String>,
+    /// Name of a server-side saved search (Bugzilla `savedsearch`).
+    ///
+    /// A query stored in the Bugzilla account, distinct from bzr's local
+    /// saved queries (`bzr query`). Resolving one is a Red Hat Bugzilla
+    /// extension, so the command layer refuses before dispatch when the
+    /// server does not advertise it (ADR-0052).
+    pub saved_search: Option<String>,
+    /// Numeric Bugzilla user ID owning a shared saved search
+    /// (Bugzilla `sharer_id`). Only meaningful alongside `saved_search`.
+    pub sharer_id: Option<u64>,
     pub include_fields: Option<String>,
     pub exclude_fields: Option<String>,
     /// Raw query parameters passed through verbatim to the REST API.
@@ -208,6 +218,7 @@ impl SearchParams {
             || self.summary.is_some()
             || self.quicksearch.is_some()
             || !self.raw_params.is_empty()
+            || self.saved_search.is_some()
             || self.creation_time.is_some()
             || self.last_change_time.is_some()
     }
@@ -224,12 +235,20 @@ impl SearchParams {
     /// XML-RPC implementation. An empty quicksearch or summary result is
     /// authoritative - retrying via XML-RPC will return the same set
     /// (and may incur a long timeout on servers with slow XML-RPC).
+    ///
+    /// `saved_search` *is* included, unlike `quicksearch`. The exclusions above
+    /// rest on a verified property — upstream evaluates both through one shared
+    /// free-text parser. No comparable property is known for a fork's
+    /// saved-search handling, so the retry stays available for the one vendor
+    /// extension bzr sends; it costs one capped round trip on an already-empty
+    /// result.
     pub fn has_structured_filters(&self) -> bool {
         self.has_mapped_filters()
             || self.cc.is_some()
             || self.alias.is_some()
             || !self.id.is_empty()
             || !self.raw_params.is_empty()
+            || self.saved_search.is_some()
             || self.creation_time.is_some()
             || self.last_change_time.is_some()
     }

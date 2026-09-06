@@ -545,12 +545,12 @@ run_lifecycle_phase_fixture() (
         if [[ ${LIFECYCLE_BZR_CALL_NAME:-} == saved-search &&
             ( ${LIFECYCLE_WRONG_PARSER_DIAGNOSTIC:-0} -eq 1 ||
                 ${LIFECYCLE_EXPECTED_DIAGNOSTIC_EXIT_ONE:-0} -eq 1 ) ]]; then
-            diagnostic="error: unexpected argument '--saved-search' found"
+            diagnostic='{"error":{"type":"unsupported_server_capability","exit_code":15}}'
             [[ ${LIFECYCLE_WRONG_PARSER_DIAGNOSTIC:-0} -eq 0 ]] ||
-                diagnostic="error: unexpected argument '--different-option' found"
+                diagnostic='{"error":{"type":"input","exit_code":7}}'
             cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
             printf '%s\n' "$diagnostic" >"$BZR_STDERR"
-            BZR_EXIT=2
+            BZR_EXIT=15
             [[ ${LIFECYCLE_EXPECTED_DIAGNOSTIC_EXIT_ONE:-0} -eq 0 ]] || BZR_EXIT=1
             return 0
         fi
@@ -597,12 +597,21 @@ run_lifecycle_phase_fixture() (
             fixture_finish_bzr 0
             return 0
         fi
+        if [[ ${LIFECYCLE_STALE_GAPS:-0} -ne 1 && $args == *" --saved-search "* ]]; then
+            # bzr implements --saved-search; it refuses because no supported
+            # image advertises the Red Hat extension (ADR-0052).
+            cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
+            printf '%s\n' \
+                '{"error":{"type":"unsupported_server_capability","exit_code":15}}' \
+                >"$BZR_STDERR"
+            BZR_EXIT=15
+            return 0
+        fi
         if [[ ${LIFECYCLE_STALE_GAPS:-0} -ne 1 &&
-            ( $args == *" --saved-search "* || $args == *" --field "* ||
+            ( $args == *" --field "* ||
                 $args == *" --comment-tag "* || $args == *" --status-whiteboard-type "* ||
                 $args == *" bug tag "* || $args == *" --tag "* ) ]]; then
             case "$args" in
-            *" --saved-search "*) diagnostic="error: unexpected argument '--saved-search' found" ;;
             *" --field "*) diagnostic="error: unexpected argument '--field' found" ;;
             *" --comment-tag "*) diagnostic="error: unexpected argument '--comment-tag' found" ;;
             *" --status-whiteboard-type "*)
@@ -957,7 +966,7 @@ run_parity_report_fixture() {
         '| Bug update | `bzr bug update` | parity | `compare/01-bug-lifecycle/update` |'
         '| Bug view | `bzr bug view` | parity | `compare/01-bug-lifecycle/view` |'
         '| Bug history | `bzr bug history` | parity | `compare/01-bug-lifecycle/history` |'
-        '| Server saved search | `bzr bug search --saved-search` | expected gap (#670) | `compare/01-bug-lifecycle/saved-search` |'
+        '| Server saved search | `bzr bug search --saved-search` | bzr errors; python-bugzilla returns unfiltered results (#670) | `compare/01-bug-lifecycle/saved-search` |'
         '| Generic arbitrary fields | `bzr bug create/update --field` | expected gap (#671) | `compare/01-bug-lifecycle/arbitrary-fields` |'
         '| Comment tags and minor update | `bzr bug update --comment-tag --minor-update` | expected gap (#672) | `compare/01-bug-lifecycle/update-options` |'
         '| Whiteboard match types | `bzr bug list --status-whiteboard-type` | expected gap (#679) | `compare/01-bug-lifecycle/query-match-types` |'

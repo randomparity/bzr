@@ -117,3 +117,67 @@ fn search_save_as_requires_from_url() {
         ErrorKind::MissingRequiredArgument
     );
 }
+
+#[test]
+fn saved_search_conflicts_with_positional_query() {
+    assert_eq!(
+        parse_error_kind(&["bzr", "bug", "search", "crash", "--saved-search", "triage"]),
+        ErrorKind::ArgumentConflict
+    );
+}
+
+#[test]
+fn saved_search_conflicts_with_from_url() {
+    assert_eq!(
+        parse_error_kind(&[
+            "bzr",
+            "bug",
+            "search",
+            "--from-url",
+            "https://bz.example/buglist.cgi?product=X",
+            "--saved-search",
+            "triage",
+        ]),
+        ErrorKind::ArgumentConflict
+    );
+}
+
+#[test]
+fn sharer_requires_saved_search() {
+    assert_eq!(
+        parse_error_kind(&["bzr", "bug", "search", "--sharer", "1"]),
+        ErrorKind::MissingRequiredArgument
+    );
+}
+
+#[test]
+fn sharer_rejects_non_numeric_id() {
+    assert_eq!(
+        parse_error_kind(&[
+            "bzr",
+            "bug",
+            "search",
+            "--saved-search",
+            "triage",
+            "--sharer",
+            "not-a-number",
+        ]),
+        ErrorKind::ValueValidation
+    );
+}
+
+#[test]
+fn parse_saved_search_with_sharer() {
+    let search = search_args(&[
+        "bzr",
+        "bug",
+        "search",
+        "--saved-search",
+        "team list",
+        "--sharer",
+        "112233",
+    ]);
+    assert_eq!(search.saved_search.as_deref(), Some("team list"));
+    assert_eq!(search.sharer, Some(112_233));
+    assert!(search.query.is_none());
+}

@@ -15,6 +15,7 @@ fn make_server_config(server_url: &str) -> ServerConfig {
         auth_method: None,
         api_mode: None,
         server_version: None,
+        server_extensions: None,
         tls_insecure: false,
         tls_ca_cert: None,
         tls_pin_sha256: None,

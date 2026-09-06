@@ -25,6 +25,14 @@ query for reuse; if no name is given it defaults to the URL's
 auto-generated name. Saved queries are managed with
 `bzr query`.
 
+`--saved-search <NAME>` runs a saved search stored in your
+Bugzilla account, optionally qualified by `--sharer <ID>` when
+another user shared it. These are unrelated to bzr's local
+saved queries. Resolving one is a Red Hat Bugzilla extension:
+bzr checks `/rest/extensions` first and exits 15 when the
+server does not advertise it, because a stock Bugzilla accepts
+both parameters and silently ignores them.
+
 Examples:
 
   bzr bug search "kernel panic" --limit 10
@@ -32,6 +40,8 @@ Examples:
   bzr bug list --summary "kernel panic" --limit 10  # all states, summary only
   bzr bug search --from-url 'https://bz/buglist.cgi?product=Firefox'
   bzr bug search --from-url '...' --save-as firefox-bugs
+  bzr bug search --saved-search "my triage list"
+  bzr bug search --saved-search "team list" --sharer 112233
 
 See bzr-bug-list(1) for filter-flag based listing and
 bzr-query(1) for managing saved queries directly."#;
@@ -67,6 +77,26 @@ pub(crate) struct SearchArgs {
     /// Saved queries are managed via `bzr query`.
     #[arg(long, requires = "from_url", num_args = 0..=1, default_missing_value = "")]
     pub save_as: Option<String>,
+    /// Run a saved search stored on the server (Bugzilla `savedsearch`).
+    ///
+    /// This is a *server-side* saved search — a query stored in your
+    /// Bugzilla account — not one of bzr's local saved queries, which
+    /// are managed with `bzr query`. Mutually exclusive with the
+    /// positional query and with `--from-url`.
+    ///
+    /// Resolving a saved search is a Red Hat Bugzilla extension. bzr
+    /// checks for it before searching and exits 15 when the server does
+    /// not advertise it, rather than returning an unfiltered result.
+    #[arg(long, conflicts_with_all = ["query", "from_url"])]
+    pub saved_search: Option<String>,
+    /// Numeric Bugzilla user ID of the account that shared the saved
+    /// search (Bugzilla `sharer_id`).
+    ///
+    /// Needed only for a search someone else shared with you; Bugzilla
+    /// shows the ID in the saved search's own URL. Requires
+    /// `--saved-search`.
+    #[arg(long, requires = "saved_search")]
+    pub sharer: Option<u64>,
     /// Max number of results (default: 50)
     #[arg(long)]
     pub limit: Option<u32>,

@@ -74,12 +74,28 @@ async fn resolve_client_and_params(args: &SearchArgs, ctx: &CommandContext) -> R
     let exclude_fields = args.field_args.exclude_fields.as_deref();
 
     let Some(url_str) = args.from_url.as_deref() else {
-        let query_str = args.query.as_deref().ok_or_else(|| {
-            crate::error::BzrError::input("either a search query or --from-url is required".into())
-        })?;
+        if args.query.is_none() && args.saved_search.is_none() {
+            return Err(crate::error::BzrError::input(
+                "a search query, --saved-search, or --from-url is required".into(),
+            ));
+        }
         let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+        // A saved search is a Red Hat extension: refuse before dispatch rather
+        // than let a stock server silently return an unfiltered result
+        // (ADR-0052). Clap guarantees at most one query source is set here.
+        if let Some(name) = args.saved_search.as_deref() {
+            crate::commands::runtime::shared::require_server_capability(
+                ctx,
+                &client,
+                crate::commands::runtime::shared::RED_HAT_EXTENSION,
+                &format!("saved search '{name}'"),
+            )
+            .await?;
+        }
         let params = SearchParams {
-            quicksearch: Some(query_str.to_string()),
+            quicksearch: args.query.clone(),
+            saved_search: args.saved_search.clone(),
+            sharer_id: args.sharer,
             limit: Some(args.limit.unwrap_or(DEFAULT_SEARCH_LIMIT)),
             include_fields: canonical_field_list(fields),
             exclude_fields: canonical_field_list(exclude_fields),

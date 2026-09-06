@@ -38,6 +38,13 @@ pub struct ServerConfig {
     pub api_mode: Option<ApiMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub server_version: Option<String>,
+    /// Bugzilla extension names advertised at `/rest/extensions`, sorted.
+    ///
+    /// Detection state like `auth_method`/`api_mode`/`server_version`: cached
+    /// so a vendor-extension capability check (ADR-0052) costs one probe per
+    /// server rather than one per invocation. `None` means not yet probed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_extensions: Option<Vec<String>>,
     /// Accept invalid TLS certificates (self-signed, expired, etc.).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tls_insecure: bool,
