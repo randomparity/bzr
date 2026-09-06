@@ -115,7 +115,15 @@ fn cached_server_name_and_extensions(
 ) -> Option<(String, Option<Vec<String>>)> {
     let config = Config::load_at(ctx.config_path_override()).ok()?;
     let (name, srv) = config.resolve_server(ctx.server()).ok()?;
-    Some((name.to_string(), srv.server_extensions.clone()))
+    // Only trust the cache while it still describes this URL. A name
+    // re-pointed at another host must re-probe rather than inherit an answer
+    // that would let the gate pass for a server that never advertised it.
+    let cached = if srv.server_extensions_url.as_deref() == Some(srv.url.as_str()) {
+        srv.server_extensions.clone()
+    } else {
+        None
+    };
+    Some((name.to_string(), cached))
 }
 
 /// Cache the probed extension list under the config lock.
@@ -126,6 +134,7 @@ fn cached_server_name_and_extensions(
 fn persist_extensions(ctx: &CommandContext, server_name: &str, names: &[String]) {
     let result = Config::update_locked_at(ctx.config_path_override(), |config| {
         if let Some(srv) = config.servers.get_mut(server_name) {
+            srv.server_extensions_url = Some(srv.url.clone());
             srv.server_extensions = Some(names.to_vec());
         }
         Ok(())

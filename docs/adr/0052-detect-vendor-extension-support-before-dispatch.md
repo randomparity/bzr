@@ -84,7 +84,10 @@ Three consequences of that rule are part of the decision, not implementation det
   `auth_method`, which surface as a visible connection failure rather than a plausible-looking
   refusal, so the refusal message says the answer is cached and how to re-probe. Only
   capabilities bzr acts on are stored — the probe response is server-controlled and unbounded,
-  and persisting it verbatim would write arbitrary server text into the user's config.
+  and persisting it verbatim would write arbitrary server text into the user's config. The cached
+  answer is bound to the URL it was probed from and discarded when that changes, so a server name
+  re-pointed at a different host cannot inherit the old host's capabilities and let the gate pass
+  for a server that never advertised them.
 - **The probe is REST-only.** `GET /rest/extensions` is issued whatever the resolved API mode,
   so on a deployment with REST disabled the capability can never be established and the feature
   is permanently undetermined — even on a fork whose XML-RPC `Bug.search` would honour the

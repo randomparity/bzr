@@ -103,6 +103,14 @@ with `EXIT_CODE_UNSUPPORTED_CAPABILITY = 15` (codes 2–14 are contiguous and fu
 `SCHEMA_VERSION` goes `3.0.1` → `3.0.2` — the same bump sibling issue #672 makes, on the same
 unreleased cycle; the orchestrator reconciles that one line at serial merge.
 
+`detail` interpolates the probe's own `BzrError`, whose `Display` is the redaction seam — any
+error reaching that format must redact there, and a test pins it against an API key carried in an
+HTTP body preview.
+
+The cached answer is bound to the URL it was probed from (`server_extensions_url`) and discarded
+when that no longer matches, so re-pointing a server name at another host re-probes rather than
+inheriting capabilities the new host never advertised.
+
 Messages follow the repository's operation/input/fix rule, e.g.
 
 ```

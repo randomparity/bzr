@@ -209,3 +209,34 @@ async fn inline_server_neither_reads_nor_writes_the_cache() {
         "an inline invocation must not overwrite the named server's cache"
     );
 }
+
+/// A cached answer is bound to the URL it was probed from. Re-pointing a
+/// server name at another host must re-probe, or the gate fails open on
+/// capabilities the new host never advertised.
+#[tokio::test]
+async fn cache_probed_from_a_different_url_is_not_trusted() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    let config_path = crate::config::Config::path_at(None).unwrap();
+    crate::config::Config::update_locked_at(Some(&config_path), |config| {
+        if let Some(srv) = config.servers.get_mut("test") {
+            srv.server_extensions = Some(vec![RED_HAT_EXTENSION.to_string()]);
+            srv.server_extensions_url = Some("https://elsewhere.example".to_string());
+        }
+        Ok(())
+    })
+    .unwrap();
+
+    // The server actually pointed at advertises nothing.
+    mount_extensions(&mock, &[], 1).await;
+    let ctx = ctx();
+    let client = connect_and_configure(&ctx).await.unwrap();
+    let err = require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
+        .await
+        .expect_err("a cache from another URL must not satisfy the gate");
+    assert_eq!(err.exit_code(), 15);
+
+    let after = crate::config::Config::load_at(Some(&config_path)).unwrap();
+    let (_, srv) = after.resolve_server(None).unwrap();
+    assert_eq!(srv.server_extensions.as_deref(), Some([].as_slice()));
+    assert_eq!(srv.server_extensions_url.as_deref(), Some(&*mock.uri()));
+}

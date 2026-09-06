@@ -75,6 +75,7 @@ pub(super) async fn handle(
         api_mode: None,
         server_version: None,
         server_extensions: None,
+        server_extensions_url: None,
         tls_insecure,
         tls_ca_cert: tls_ca_cert.map(PathBuf::from),
         tls_pin_sha256: tls_pin_sha256.map(str::to_owned),

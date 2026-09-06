@@ -45,6 +45,12 @@ pub struct ServerConfig {
     /// server rather than one per invocation. `None` means not yet probed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub server_extensions: Option<Vec<String>>,
+    /// The `url` that `server_extensions` was probed from. A cached capability
+    /// answer is only trusted while this still matches `url`: re-pointing a
+    /// server name at a different host must not inherit the old host's
+    /// capabilities, or the pre-dispatch gate fails open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_extensions_url: Option<String>,
     /// Accept invalid TLS certificates (self-signed, expired, etc.).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tls_insecure: bool,
