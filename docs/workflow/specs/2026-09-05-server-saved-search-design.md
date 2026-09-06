@@ -41,13 +41,11 @@ consequences, which record the false negative this accepts.
 `BugzillaClient::server_extensions()` already exists (`src/client/resources/server.rs:39`) and
 issues `GET /rest/extensions`; nothing new is built for the probe itself.
 
-The result joins the per-server detection state that `DetectedServerSettings` already carries.
-That struct documents exactly the semantics this needs for `server_version`: `Some` when the
-endpoint responded, `None` on transient failure, and callers persist only when it is `Some`
-(`src/client/auth/mod.rs:116`, honoured by `persist_detected_settings` at
-`src/commands/runtime/shared/connection/detect.rs:38-44`). `extensions: Option<Vec<String>>`
-follows that contract unchanged, and `ServerConfig` gains a matching
-`server_extensions: Option<Vec<String>>` beside `auth_method`, `api_mode` and `server_version`.
+`ServerConfig` gains `server_extensions: Option<Vec<String>>` beside `auth_method`, `api_mode`
+and `server_version`, following the same "persist only what was actually determined" rule those
+fields already document. Only capabilities bzr acts on are stored: the probe response is
+server-controlled and unbounded, and the sole consumer is a membership test, so persisting the
+advertised list verbatim would write arbitrary server text into the user's config for no gain.
 
 **Where the gate lives.** `connect_and_configure` returns only a `BugzillaClient`, so the
 command layer cannot see what detection found. Rather than widen that signature — it is called
@@ -91,12 +89,17 @@ mean the server reported a fault when it reported nothing, and `NotFound`/`Confi
 describe unrelated conditions. A new variant is added:
 
 ```rust
-UnsupportedServerCapability { capability: String, detail: String }
+UnsupportedServerCapability {
+    capability: String,
+    status: &'static str,   // "absent" | "undetermined"
+    operation: String,
+    detail: String,
+}
 ```
 
 with `EXIT_CODE_UNSUPPORTED_CAPABILITY = 15` (codes 2–14 are contiguous and full) and
 `error_type()` `"unsupported_server_capability"`. `schemas/error.json` raises its `exit_code`
-`maximum` from 14 to 15 and gains a `capability` property. Both are additive, so
+`maximum` from 14 to 15 and gains `capability` and `capability_status` properties. Both are additive, so
 `SCHEMA_VERSION` goes `3.0.1` → `3.0.2` — the same bump sibling issue #672 makes, on the same
 unreleased cycle; the orchestrator reconciles that one line at serial merge.
 
