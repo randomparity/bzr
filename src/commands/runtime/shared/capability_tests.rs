@@ -6,6 +6,7 @@ use wiremock::{Mock, ResponseTemplate};
 use super::{require_server_capability, RED_HAT_EXTENSION};
 use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::shared::connect_and_configure;
+use crate::error::{CAPABILITY_ABSENT, CAPABILITY_UNDETERMINED};
 use crate::test_helpers::setup_test_env;
 use crate::types::OutputFormat;
 
@@ -189,6 +190,19 @@ async fn inline_server_neither_reads_nor_writes_the_cache() {
     .unwrap();
     let _ = &tmp;
 
+    // The inline server has no config entry, so connect_and_configure detects
+    // its API mode rather than reading a cached one. Since the probe now
+    // follows the resolved transport (ADR-0052, amended 2026-09-06), an
+    // undetectable version would fall back to XmlRpc and this REST mock would
+    // never fire — so pin a REST-capable version. The cache assertions below
+    // are what this test is actually about.
+    Mock::given(method("GET"))
+        .and(path("/rest/version"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "version": "5.2"
+        })))
+        .mount(&mock)
+        .await;
     // The inline server advertises nothing.
     mount_extensions(&mock, &[], 1).await;
     let ctx = ctx().with_inline_server(Some(crate::commands::runtime::invocation::InlineServer {
@@ -295,4 +309,154 @@ async fn cache_written_against_a_different_allowlist_is_not_trusted() {
     require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
         .await
         .expect("a stale-allowlist cache must be re-probed, not trusted");
+}
+
+// ── Transport-aware probe (ADR-0052, amended 2026-09-06) ───────────────
+
+const XMLRPC_ADVERTISED: &str = concat!(
+    r#"<?xml version="1.0"?><methodResponse><params><param><value><struct>"#,
+    r"<member><name>extensions</name><value><struct>",
+    r"<member><name>RedHat</name><value><struct>",
+    r"<member><name>version</name><value><string>1.0</string></value></member>",
+    r"</struct></value></member>",
+    r"</struct></value></member>",
+    r"</struct></value></param></params></methodResponse>",
+);
+
+const XMLRPC_EMPTY: &str = concat!(
+    r#"<?xml version="1.0"?><methodResponse><params><param><value><struct>"#,
+    r"<member><name>extensions</name><value><struct /></value></member>",
+    r"</struct></value></param></params></methodResponse>",
+);
+
+fn ctx_with_api(api: crate::types::ApiMode) -> CommandContext {
+    CommandContext::new(None, OutputFormat::Json, Some(api))
+}
+
+async fn mount_xmlrpc(mock: &wiremock::MockServer, response: ResponseTemplate) {
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(response)
+        .mount(mock)
+        .await;
+}
+
+/// Mount `/rest/extensions` returning the Bugzilla error envelope a real
+/// server sends for an absent endpoint, at the given status.
+async fn mount_rest_failure(mock: &wiremock::MockServer, status: u16) {
+    Mock::given(method("GET"))
+        .and(path("/rest/extensions"))
+        .respond_with(
+            ResponseTemplate::new(status).set_body_json(serde_json::json!({
+                "error": true,
+                "code": 32614,
+                "message": "A REST API resource was not found for 'GET /extensions'."
+            })),
+        )
+        .mount(mock)
+        .await;
+}
+
+/// The issue itself: a server whose REST surface cannot answer, whose XML-RPC
+/// surface advertises the extension. Before this change the capability was
+/// permanently undetermined here.
+#[tokio::test]
+async fn capability_established_over_xmlrpc_when_rest_is_unreachable() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_rest_failure(&mock, 503).await;
+    mount_xmlrpc(
+        &mock,
+        ResponseTemplate::new(200).set_body_string(XMLRPC_ADVERTISED),
+    )
+    .await;
+
+    let ctx = ctx_with_api(crate::types::ApiMode::XmlRpc);
+    let client = connect_and_configure(&ctx).await.unwrap();
+
+    require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
+        .await
+        .expect("XML-RPC must establish the capability when REST cannot be reached");
+}
+
+#[tokio::test]
+async fn capability_absent_over_xmlrpc() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_xmlrpc(
+        &mock,
+        ResponseTemplate::new(200).set_body_string(XMLRPC_EMPTY),
+    )
+    .await;
+
+    let ctx = ctx_with_api(crate::types::ApiMode::XmlRpc);
+    let client = connect_and_configure(&ctx).await.unwrap();
+    let err = require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
+        .await
+        .expect_err("an empty extension list must be refused");
+
+    // `absent`, not `undetermined`: this is what proves the XML-RPC response
+    // was received and parsed rather than the probe merely failing.
+    assert_eq!(
+        err.structured_detail()
+            .get("capability_status")
+            .and_then(|v| v.as_str()),
+        Some(CAPABILITY_ABSENT)
+    );
+}
+
+#[tokio::test]
+async fn capability_absent_message_does_not_name_rest_path() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_extensions(&mock, &["Voting"], 1).await;
+
+    let ctx = ctx();
+    let client = connect_and_configure(&ctx).await.unwrap();
+    let err = require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
+        .await
+        .expect_err("an unadvertised capability must be refused");
+
+    let message = err.to_string();
+    assert!(!message.contains("/rest/extensions"), "{message}");
+}
+
+#[tokio::test]
+async fn capability_undetermined_message_does_not_name_rest() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_xmlrpc(&mock, ResponseTemplate::new(500)).await;
+
+    let ctx = ctx_with_api(crate::types::ApiMode::XmlRpc);
+    let client = connect_and_configure(&ctx).await.unwrap();
+    let err = require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
+        .await
+        .expect_err("a failed probe must be refused as undetermined");
+
+    let message = err.to_string();
+    assert_eq!(
+        err.structured_detail()
+            .get("capability_status")
+            .and_then(|v| v.as_str()),
+        Some(CAPABILITY_UNDETERMINED)
+    );
+    assert!(!message.contains("/rest/extensions"), "{message}");
+    assert!(!message.contains("REST surface"), "{message}");
+}
+
+/// In Hybrid both transports are attempted, so the refusal must say so. The
+/// `info` log of the REST failure is invisible at the default `bzr=warn`, and a
+/// user on a REST-first connection reading only an XML-RPC error would
+/// reasonably conclude bzr never tried REST.
+#[tokio::test]
+async fn capability_undetermined_in_hybrid_names_both_attempts() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    mount_rest_failure(&mock, 404).await;
+    mount_xmlrpc(&mock, ResponseTemplate::new(500)).await;
+
+    let ctx = ctx_with_api(crate::types::ApiMode::Hybrid);
+    let client = connect_and_configure(&ctx).await.unwrap();
+    let err = require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
+        .await
+        .expect_err("both transports failing must be refused");
+
+    let message = err.to_string();
+    assert!(message.contains("REST"), "{message}");
+    assert!(message.contains("XML-RPC"), "{message}");
 }

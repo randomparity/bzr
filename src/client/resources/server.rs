@@ -8,6 +8,7 @@ use crate::types::capabilities::{
     ServerCapabilities, StatusTransitionSummary,
 };
 use crate::types::server_info::{ServerExtensions, ServerInfoResponse, ServerVersion};
+use crate::types::transport::ApiMode;
 use crate::types::FieldValue;
 
 #[derive(Deserialize)]
@@ -36,8 +37,49 @@ impl BugzillaClient {
         self.get_json("version").await
     }
 
+    /// Advertised server extensions, over the transport in use (ADR-0052,
+    /// amended 2026-09-06, which carries the grounds for each arm).
+    ///
+    /// Hybrid keeps REST first — the transport `bug search` itself prefers in
+    /// that mode — and falls back on ANY error, deliberately not on
+    /// [`BzrError::is_transport_failure`], which the rest of the client uses.
+    /// Bugzilla returns an error envelope even for a 404 on an absent endpoint,
+    /// and `error_from_status_body` turns that into [`BzrError::Api`], which
+    /// that predicate does not match — so it would miss the commonest shape of
+    /// "REST did not serve this endpoint", the case the fallback exists for.
+    /// Falling back more often is safe here because an error from the
+    /// extensions endpoint says nothing about the capability, and the XML-RPC
+    /// probe returns the server's own list: it can only make the verdict more
+    /// determinate, never grant something absent. Do not "fix" this into
+    /// consistency with the other call sites.
     pub async fn server_extensions(&self) -> Result<ServerExtensions> {
-        self.get_json("extensions").await
+        match self.api_mode {
+            ApiMode::Rest => self.get_json("extensions").await,
+            ApiMode::XmlRpc => self.xmlrpc_client().server_extensions().await,
+            ApiMode::Hybrid => match self.get_json("extensions").await {
+                Err(rest_err) => {
+                    tracing::info!(
+                        error = %rest_err,
+                        "REST extensions probe failed, retrying via XML-RPC"
+                    );
+                    // Name both attempts when both fail: the line above is
+                    // invisible at the default `bzr=warn`, and a user on a
+                    // REST-first connection reading only an XML-RPC error would
+                    // reasonably conclude bzr never tried REST. The variant
+                    // reflects the final attempt; the message carries both.
+                    self.xmlrpc_client()
+                        .server_extensions()
+                        .await
+                        .map_err(|xmlrpc_err| {
+                            BzrError::XmlRpc(format!(
+                                "REST probe failed ({rest_err}); \
+                                 XML-RPC probe also failed ({xmlrpc_err})"
+                            ))
+                        })
+                }
+                ok => ok,
+            },
+        }
     }
 
     /// Assemble the structured capability surface (see ADR-0005). `version` is
