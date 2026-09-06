@@ -228,17 +228,22 @@ own phase records for #504. Two directions:
 - *authenticated policy refusal* — the admin adds a bug to a group that exists
   but is not enabled on `FuncTestProd`. Expect a non-zero exit, `error.type ==
   "api"`, the server's own `api_code`, and stderr that does not say "log in".
-- *credentialless* — the same write through `--server public`. Expect the
-  server's own answer for an unauthenticated write, pinned by `api_code`.
+- *credentialless* — the same write through `--server public`. **Measured
+  against Bugzilla 5.0.6:** `bug update` requires credentials and refuses
+  locally with exit 3 and `error.type == "config"` before any HTTP request, so
+  there is no server answer on this path and the fallback is never reached. The
+  test pins that negative — a credentialless write keeps reporting the local
+  credential precondition and does not start reporting an api/auth error.
 
-Both directions pin an **observed** exit code and `api_code`, not a predicted
-one: the phase's existing anonymous-read test answers `102`, not `410`, so what
-a stock container returns for an anonymous write is a fact to measure before
-asserting. Neither functional test can be reddened by mutating
-`code_proves_auth_failure` — the credentialless path returns at the
-`self.auth.is_none()` guard before any body is read, and the authenticated path
-does not reach the divergent case on a stock server. What they pin is the
-contract; the mutation proof lives in the wiremock tests above.
+Both directions pin an **observed** exit code, not a predicted one. The
+authenticated direction was measured at exit 4 with `api_code` 120
+(`group_restriction_not_allowed`), which is the issue's own reported case; the
+credentialless prediction in an earlier draft of this spec — that it would
+surface the server's answer — was refuted by the run. Neither functional test
+can be reddened by mutating `code_proves_auth_failure`: the credentialless path
+never reaches the client, and the authenticated path does not reach the
+divergent case on a stock server. What they pin is the contract; the mutation
+proof lives in the wiremock tests above.
 
 ## Non-goals
 
