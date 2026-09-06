@@ -517,6 +517,13 @@ impl BugzillaClient {
     /// so routing through `get_bug` would silently truncate the root's adjacency
     /// on Red Hat and Mozilla deployments. Deserializing `BugLinksResponse`
     /// keeps all six. Do not "simplify" this into a `get_bug` call (ADR 0060).
+    ///
+    /// That warning is about the **REST** arm only. The `XmlRpc` arm below does
+    /// go through `from_bug` and does accept the truncation, because XML-RPC
+    /// answers with a `Bug`, which has no field for the three BMO relations in
+    /// the first place — there is nothing there to lose. So the two arms can
+    /// disagree on a root's BMO adjacency on a deployment that populates those
+    /// fields, and that predates this change.
     pub(crate) async fn get_bug_links_root_node(&self, id: u64) -> Result<BugLinksNode> {
         match self.api_mode {
             ApiMode::XmlRpc => self

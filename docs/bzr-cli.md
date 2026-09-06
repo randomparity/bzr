@@ -641,8 +641,8 @@ bug, exit 4 when it reports an access error; inaccessible related bugs are
 skipped silently. The root is read on Bugzilla's direct endpoint so that it can
 fault at all; a stock Bugzilla answers both an absent id (`101`) and a
 restricted one (`102`) with an error rather than an empty result, so exit 4 is
-the usual outcome for both. See ADR-0060. In table mode, a root with no in-scope relationships prints
-`No related bugs for #<id>.`.
+the usual outcome for both. See ADR-0060. In table mode, a root with no
+in-scope relationships prints `No related bugs for #<id>.`.
 
 ### `bzr bug adjacency`
 
