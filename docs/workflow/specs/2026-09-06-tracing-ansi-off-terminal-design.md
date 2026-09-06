@@ -14,7 +14,10 @@ set and the proof map.
   before. Five colour-documentation surfaces are corrected with it, identified by row content
   rather than line number: `docs/bzr-cli.md`'s `--no-color`, `NO_COLOR`, `CLICOLOR`, and
   `CLICOLOR_FORCE` rows, plus the clap doc comment for `--no-color` in `src/cli/mod.rs`.
-  `NO_COLOR` now governs both streams; `CLICOLOR` and `CLICOLOR_FORCE` govern stdout only, and
+  `NO_COLOR` now reaches both streams but not identically — any present value disables stdout
+  colour under `colored` 3.1.1, while an empty value leaves tracing ANSI on, per the crate default
+  and no-color.org — so the rows state it per stream. `CLICOLOR` and `CLICOLOR_FORCE` govern
+  stdout only, and
   `CLICOLOR_FORCE=1` does not in fact force stdout colour when stdout is redirected, because
   `src/main.rs:36-37` sets `colored`'s manual override and `colored` 3.1.1's
   `ShouldColorize::should_colorize` reads that override before `clicolor_force`.
@@ -38,7 +41,7 @@ set and the proof map.
 | R3, R4 | the remaining unit rows of the plan's truth table |
 | R5 | the phase-17 test's `observe_bzr_transport` call |
 | R6 | manual: `make functional-test` then `make functional-compare` in one checkout, no `NO_COLOR` set; the removal check is plan Task 3 step 1 |
-| R7 | two separate controlled faults, plan Task 2 step 4. The test's `&&` short-circuits, so one fault cannot prove both halves. |
+| R7 | two separate controlled faults, plan Task 2 step 4 — one at the ANSI setting, one at the emitted boundary message. The test's `&&` short-circuits, so one fault cannot prove both halves. |
 
 `make lint` and `make test` gate the unit half, `make functional-test` the functional half, and
 `make functional-compare` the comparison half. The change is not security-relevant: it selects a

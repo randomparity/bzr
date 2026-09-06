@@ -63,8 +63,17 @@ contract is to compare against a server the run set up.
   sidecar is (`tests/functional/lib.sh:406`) after a compare run whose EXIT trap did not fire. An
   unchecked `reset` would then be exactly `start`, silently. It now fails with a diagnostic
   instead; `stop` keeps its permissive behaviour for its other callers.
-- The container-freshness ground is an observation, not a mechanism. If the tier is later seen to
-  pass reliably against a dirty container, this half is safe to withdraw on its own.
+- The container-freshness ground is an observation, not a mechanism, and the cost above is
+  accepted on that basis deliberately: charter criterion 3 permits the cheaper documented branch,
+  and this record takes the dearer one because an entry point that silently inherits arbitrary
+  server state is the same class of latent defect as the one being fixed. If the tier is later
+  seen to pass reliably against a dirty container, this half is safe to withdraw on its own.
+- The two streams disagree on an empty `NO_COLOR`. `colored` 3.1.1 disables stdout colour for any
+  present value (`src/control.rs:144-158`: `normalize_env` maps `Ok(s)` to `Some(s != "0")`),
+  while the tracing stream follows the crate default and no-color.org in treating an empty value
+  as unset. `NO_COLOR=` on a terminal therefore leaves stdout plain and stderr coloured. The
+  tracing side keeps the conventional reading rather than matching `colored`, and the reference
+  documents the divergence per stream instead of claiming one rule for both.
 
 ## Considered & rejected
 

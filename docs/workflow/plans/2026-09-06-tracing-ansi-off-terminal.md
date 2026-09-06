@@ -7,16 +7,18 @@ must run against a container created for that run.
 Architecture: `src/main.rs` gains one pure helper deciding the tracing stream's ANSI setting;
 `src/main_tests.rs` covers it. `tests/functional/phases/17-global-options.sh` gains one test.
 `Makefile` and `tests/functional/run-compare-all.sh` swap `setup-bugzilla.sh start` for the
-existing `reset`. `docs/bzr-cli.md:50` and the clap doc comment at `src/cli/mod.rs:247-251` are
-corrected together, being the two renderings of one flag's contract. Spec:
+existing `reset`, and `setup-bugzilla.sh` `cmd_reset` gains a removal check. Five
+colour-documentation surfaces are corrected together — the `--no-color`, `NO_COLOR`, `CLICOLOR`,
+and `CLICOLOR_FORCE` rows of `docs/bzr-cli.md`, plus the clap doc comment for `--no-color` in
+`src/cli/mod.rs`. Spec:
 `docs/workflow/specs/2026-09-06-tracing-ansi-off-terminal-design.md`. ADR:
 `docs/adr/0058-suppress-tracing-ansi-off-terminal.md` — numbered 0058 because 0054-0057 are
 assigned to concurrent issues in the same campaign wave, not because records are missing. Its
 `docs/adr/README.md` row is the orchestrator's to append after the wave merges; CI gates no ADR
 index, so no task adds it. Branch `feat/suppress-tracing-ansi-on-non-tty-722` off `main`.
 
-Expected implementation size: 95-115 changed lines (S) - `src/main.rs` ~24, `src/main_tests.rs`
-~31, phase 17 = 9, the four colour-documentation rows = 15, `setup-bugzilla.sh` = 7,
+Expected implementation size: 100-120 changed lines (S) - `src/main.rs` ~24, `src/main_tests.rs`
+~31, phase 17 = 9, the five colour-documentation surfaces = 19, `setup-bugzilla.sh` = 7,
 `Makefile` = 10, `run-compare-all.sh` = 2.
 
 ## Global Constraints
@@ -83,8 +85,12 @@ stderr_is_terminal: bool) -> bool`. Consumes
    - the `--no-color` row, and the clap doc comment for the same flag in `src/cli/mod.rs`: the
      flag disables colour on stdout and on the stderr diagnostic stream, and each stream's
      automatic suppression follows its own terminal status.
-   - the `NO_COLOR` row: a non-empty value disables stdout colour and suppresses ANSI on the
-     tracing stream. Do not write that it governs stdout only — this change makes it govern both.
+   - the `NO_COLOR` row: state it per stream, because the two disagree on an empty value. Any
+     present `NO_COLOR` disables stdout colour — `colored` 3.1.1 `src/control.rs:144-158` maps
+     `Ok(s)` to `Some(s != "0")`, so `NO_COLOR=` and `NO_COLOR=0` both count as present — while a
+     **non-empty** `NO_COLOR` suppresses tracing ANSI, following the crate default and
+     no-color.org. Keep the row's existing "any value" claim for stdout; it is correct. Do not
+     write that one rule covers both streams.
    - the `CLICOLOR` and `CLICOLOR_FORCE` rows, and the same claim in the clap comment: both govern
      stdout colour only, and `CLICOLOR_FORCE=1` does not force colour when stdout is redirected,
      because `src/main.rs:36-37` sets `colored`'s manual override and `colored` 3.1.1's
@@ -134,10 +140,18 @@ and guarded the same way by tests already in this file. Defines nothing.
    - **ANSI half:** change `.with_ansi(stderr_ansi)` to `.with_ansi(true)`, rebuild, re-run
      `make functional-test`. Expect FAIL with `stderr unexpectedly contains`. Revert; confirm it
      passes again.
-   - **Transport half:** with the correct build, append a character that cannot occur to both
-     `BZR_REST_BOUNDARY_RE` and `BZR_XMLRPC_BOUNDARY_RE` (`tests/functional/lib.sh:272-275`),
+   - **Transport half:** with the correct build, break the emitted boundary line itself, which is
+     what criterion 4 names. Temporarily change the REST message `"API response"`
+     (`src/client/transport.rs:127`) to something the harness regex cannot match, rebuild, and
      re-run `make functional-test`. Expect FAIL with
-     `transport is not observable from -vv stderr`. Revert; confirm it passes again.
+     `transport is not observable from -vv stderr` — a different message from the ANSI fault's,
+     which is the point. `src/client/transport.rs` is a charter exclusion owned by issue #715, so
+     this edit is a local fault that never reaches a commit: revert it, confirm
+     `git status --short -- src/client/transport.rs` is empty, and confirm the test passes again.
+     If touching that file is unwelcome, the equivalent harness-side fault is to append an
+     impossible character to `BZR_REST_BOUNDARY_RE` and `BZR_XMLRPC_BOUNDARY_RE`
+     (`tests/functional/lib.sh:272-275`); it drives the same failure path but proves the
+     observation rather than the emitter, so record the substitution if it is used.
 
 **Acceptance.** The test passes with the fix and fails under each fault for its own reason.
 
