@@ -1337,7 +1337,7 @@ fn parse_field_list() {
     match cli.command {
         Commands::Field {
             action: FieldAction::List { name, .. },
-        } => assert_eq!(name, "status"),
+        } => assert_eq!(name.as_deref(), Some("status")),
         _ => panic!("expected Field List"),
     }
 }

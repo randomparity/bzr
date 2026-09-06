@@ -488,15 +488,19 @@ pub(crate) enum Commands {
         action: ProductAction,
     },
 
-    /// Discover valid values for Bugzilla bug fields (status, priority, etc.).
+    /// Discover which bug field names a server accepts, and their legal values.
     ///
-    /// Used to find the legal values for fields like `--status`,
-    /// `--priority`, `--severity`, `--resolution`, and `--op-sys` before
-    /// passing them to `bug create` or `bug update`. Field-name aliases
-    /// (e.g. `severity` for `bug_severity`) are listed by `field aliases`.
+    /// `field list` with no argument enumerates every field name
+    /// `bug create` and `bug update` accept for `--field` /
+    /// `--field-json`. Given a name, it lists that field's legal values,
+    /// for fields like `--status`, `--priority`, `--severity`,
+    /// `--resolution`, and `--op-sys` before passing them to
+    /// `bug create` or `bug update`. Field-name aliases (e.g. `severity`
+    /// for `bug_severity`) are listed by `field aliases`.
     ///
     /// Examples:
     ///
+    ///   bzr field list
     ///   bzr field aliases
     ///   bzr field list status
     ///   bzr field list priority --json

@@ -66,6 +66,46 @@ test_begin "field-aliases" "field aliases"
 run_bzr field aliases
 if assert_success && assert_stdout_contains "status" && assert_stdout_contains "bug_status"; then test_pass; fi
 
+# `field list` with no argument enumerates the whole accepted --field set: the
+# server's catalogue names and the REST names bzr models (ADR 0062, issue #718).
+# Asserting BOTH sources appear is what discriminates the union from either half
+# alone -- a catalogue-only regression drops every `bzr` row, and a
+# BUG_FIELDS-only regression drops every `server` row.
+test_begin "field-list-no-argument-lists-both-sources" "field list (no argument) lists both sources"
+run_bzr field list
+if assert_success &&
+    assert_json 'any(.[]; .source == "server")' true &&
+    assert_json 'any(.[]; .source == "bzr")' true; then test_pass; fi
+
+# The concrete asymmetry the issue is about: Bugzilla's catalogue reports
+# `status_whiteboard`, the write API takes `whiteboard`, and both are accepted.
+# Naming the pair makes this fail on the real regression rather than on an
+# abstraction of it.
+test_begin "field-list-no-argument-marks-internal-and-rest-names" "field list marks internal and REST spellings"
+run_bzr field list
+if assert_success &&
+    assert_json 'map(select(.name == "status_whiteboard")) | .[0].source' "server" &&
+    assert_json 'map(select(.name == "whiteboard")) | .[0].source' "bzr"; then test_pass; fi
+
+test_begin "field-list-no-argument-fields-projects-keys" "field list (no argument) --fields projects keys"
+run_bzr field list --fields name
+if assert_success && assert_json '.[0] | keys == ["name"]' true; then test_pass; fi
+
+# `sort_key` is a valid key of the *named* form and an invalid key of this one,
+# so this fails if the handler validates against FIELD_VALUE_FIELDS. A nonsense
+# token would be rejected either way and would prove nothing.
+test_begin "field-list-no-argument-fields-unknown-exits-7" "field list (no argument) --fields unknown exits 7"
+run_bzr field list --fields sort_key
+if assert_exit_code 7; then test_pass; fi
+
+# The catalogue is anonymously readable, so the listing must work with no
+# credential.
+test_begin "credentialless-field-list-no-argument" "credentialless field list (no argument)"
+run_bzr_raw --json --server public field list
+if assert_success &&
+    assert_json 'any(.[]; .source == "server")' true &&
+    assert_json 'any(.[]; .source == "bzr")' true; then test_pass; fi
+
 test_begin "classification-view-unclassified" "classification view Unclassified"
 run_bzr classification view Unclassified
 if assert_success && assert_json '.name' "Unclassified"; then test_pass; fi

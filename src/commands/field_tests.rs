@@ -9,7 +9,7 @@ use crate::types::OutputFormat;
 
 fn list_with(name: &str, projection: ProjectionArgs) -> FieldAction {
     FieldAction::List {
-        name: name.to_string(),
+        name: Some(name.to_string()),
         projection,
     }
 }
@@ -50,7 +50,7 @@ async fn field_list_returns_values() {
         .await;
 
     let action = FieldAction::List {
-        name: "status".to_string(),
+        name: Some("status".to_string()),
         projection: ProjectionArgs::default(),
     };
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
@@ -100,7 +100,7 @@ async fn field_list_table_format_with_empty_values_prints_no_values_message() {
         .mount(&mock)
         .await;
     let action = FieldAction::List {
-        name: "status".to_string(),
+        name: Some("status".to_string()),
         projection: ProjectionArgs::default(),
     };
     let mut __io_a3 = crate::test_helpers::CapturedIo::new();
@@ -130,7 +130,7 @@ async fn field_list_json_format_with_empty_values_emits_empty_array() {
         .mount(&mock)
         .await;
     let action = FieldAction::List {
-        name: "status".to_string(),
+        name: Some("status".to_string()),
         projection: ProjectionArgs::default(),
     };
     let mut __io_a4 = crate::test_helpers::CapturedIo::new();
@@ -163,7 +163,7 @@ async fn field_list_http_500_returns_error() {
         .await;
 
     let action = FieldAction::List {
-        name: "status".to_string(),
+        name: Some("status".to_string()),
         projection: ProjectionArgs::default(),
     };
     let result = super::execute(
@@ -281,4 +281,74 @@ async fn field_list_table_fields_is_noop_with_warning() {
     assert!(io
         .err_str()
         .contains("--fields/--exclude-fields only affect"));
+}
+
+async fn mount_catalogue_names(mock: &wiremock::MockServer) {
+    Mock::given(method("GET"))
+        .and(path("/rest/field/bug"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "fields": [{"name": "status_whiteboard"}, {"name": "keywords"}]
+        })))
+        .mount(mock)
+        .await;
+}
+
+#[tokio::test]
+async fn field_list_no_argument_lists_names() {
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
+    mount_catalogue_names(&mock).await;
+
+    let action = FieldAction::List {
+        name: None,
+        projection: ProjectionArgs::default(),
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
+        &mut io.writers(),
+    )
+    .await;
+    assert!(result.is_ok(), "no-argument field list: {result:?}");
+    let parsed = crate::test_helpers::json_envelope_data(io.out_str());
+    let rows = parsed.as_array().unwrap();
+    let source_of = |name: &str| {
+        rows.iter()
+            .find(|row| row["name"] == name)
+            .map(|row| row["source"].as_str().unwrap().to_string())
+    };
+    // Catalogue-only, bzr-only, and overlapping, in one assertion set: each
+    // fails on a different half of the union going missing.
+    assert_eq!(source_of("status_whiteboard").as_deref(), Some("server"));
+    assert_eq!(source_of("whiteboard").as_deref(), Some("bzr"));
+    assert_eq!(source_of("keywords").as_deref(), Some("both"));
+}
+
+/// `sort_key` is a valid key of the *named* form and an invalid key of this
+/// one, so this fails if the handler validates against `FIELD_VALUE_FIELDS` by
+/// mistake. A nonsense token would be rejected either way and prove nothing.
+#[tokio::test]
+async fn field_list_no_argument_rejects_unknown_projection() {
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
+    mount_catalogue_names(&mock).await;
+
+    let action = FieldAction::List {
+        name: None,
+        projection: ProjectionArgs {
+            fields: Some("sort_key".to_string()),
+            ..ProjectionArgs::default()
+        },
+    };
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = super::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
+        &mut io.writers(),
+    )
+    .await;
+    // `sort_key` is a FieldValue key, not a FieldName key.
+    let err = result.unwrap_err();
+    assert_eq!(err.exit_code(), 7);
 }

@@ -42,6 +42,53 @@ pub struct FieldValue {
 /// validation on `field list`.
 pub const FIELD_VALUE_FIELDS: &[&str] = &["name", "sort_key", "is_active", "can_change_to"];
 
+/// Why a bug field name is accepted by `--field` / `--field-json` (ADR 0062).
+///
+/// [`FieldNameSource::as_str`] is the single definition of the three spellings:
+/// serde serializes through it via `#[serde(into = "&'static str")]`, and the
+/// table writer calls it directly, so the JSON and table output cannot name a
+/// source differently. `schemas/field-name.json` pins the same three values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(into = "&'static str")]
+pub enum FieldNameSource {
+    /// The connected server's `field/bug` catalogue declares it.
+    Server,
+    /// bzr models it as a canonical REST bug field (`BUG_FIELDS`).
+    Bzr,
+    /// Both sources name it.
+    Both,
+}
+
+impl FieldNameSource {
+    /// The wire and table spelling. The one definition; see the type docs.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            FieldNameSource::Server => "server",
+            FieldNameSource::Bzr => "bzr",
+            FieldNameSource::Both => "both",
+        }
+    }
+}
+
+impl From<FieldNameSource> for &'static str {
+    fn from(source: FieldNameSource) -> Self {
+        source.as_str()
+    }
+}
+
+/// A bug field name `bzr bug create` / `bzr bug update` accept for `--field` /
+/// `--field-json`, as emitted by `bzr field list` with no positional argument.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct FieldName {
+    pub name: String,
+    pub source: FieldNameSource,
+}
+
+/// Serde JSON keys of [`FieldName`], for `--fields` / `--exclude-fields`
+/// validation on the no-argument `field list`.
+pub const FIELD_NAME_FIELDS: &[&str] = &["name", "source"];
+
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct StatusTransition {

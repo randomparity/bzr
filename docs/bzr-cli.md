@@ -12,7 +12,7 @@ For installation and quick start, see [README.md](../README.md).
 - [comment](#bzr-comment----comment-operations)
 - [attachment](#bzr-attachment----attachment-operations)
 - [product](#bzr-product----product-operations)
-- [field](#bzr-field----field-value-lookup)
+- [field](#bzr-field----field-name-and-value-lookup)
 - [user](#bzr-user----user-operations)
 - [group](#bzr-group----group-management)
 - [whoami](#bzr-whoami)
@@ -136,7 +136,8 @@ Valid field names per verb:
 | `group list-users` | `id`, `name`, `real_name`, `email`, `groups`, `can_login` |
 | `group view` | `id`, `name`, `description`, `is_active`, `membership` |
 | `classification list` / `classification view` | `id`, `name`, `description`, `sort_key`, `products` |
-| `field list` | `name`, `sort_key`, `is_active`, `can_change_to` |
+| `field list <name>` | `name`, `sort_key`, `is_active`, `can_change_to` |
+| `field list` (no argument) | `name`, `source` |
 
 `bzr bug list`/`view`/`search`/`my` and `query run` also accept these flags with
 alias-aware field names; see their sections.
@@ -226,7 +227,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   └── update [<NAME>] [--from-json <PATH>] [--description <D>] [--default-milestone <M>] [--is-open <BOOL>]
 ├── field
 │   ├── aliases
-│   └── list <FIELD_NAME> [--fields <F>] [--exclude-fields <F>]
+│   └── list [<FIELD_NAME>] [--fields <F>] [--exclude-fields <F>]
 ├── user
 │   ├── search <QUERY> [--details] [--fields <F>] [--exclude-fields <F>]
 │   ├── create [--from-json <PATH>] [--email <E>] [--full-name <N>] [--password <P>] [--login <L>]
@@ -449,7 +450,7 @@ bzr bug list --version 9.4 --version 9.5 --op-sys Linux
 ```
 
 `platform` is the canonical Bugzilla hardware-field name for search, bug
-objects, create, update, and clone. Schema 3.0.2 publishes and accepts only the
+objects, create, update, and clone. Schema 3.0.3 publishes and accepts only the
 canonical `platform` spelling.
 
 ### `bzr bug view`
@@ -675,11 +676,11 @@ table always includes the fixed fields `ID`, `SUMMARY`, `STATUS`, `RESOLUTION`,
 `BLOCKS`, and `DEPENDS ON`; the two adjacency columns are complete,
 comma-separated ID lists.
 
-Under `--json`, the usual `3.0.2` envelope contains a closed result object:
+Under `--json`, the usual `3.0.3` envelope contains a closed result object:
 
 ```json
 {
-  "schema_version": "3.0.2",
+  "schema_version": "3.0.3",
   "data": {
     "requests": [
       {"requested": "00123", "bug_id": 123},
@@ -1105,15 +1106,18 @@ models — Bugzilla's catalogue reports internal column names for many built-ins
 write API takes the REST names, so both sets count. A name in neither fails with
 exit 7 naming the field — rather than being accepted by Bugzilla, which silently
 ignores request keys it does not recognise and would report success having
-changed nothing. `bzr server capabilities` lists the custom fields a server
-declares.
+changed nothing. `bzr field list`, with no argument, enumerates every field
+name this server accepts here.
 
-The set bzr accepts is wider than the set it can currently list:
-`server capabilities` shows only custom (`is_custom`) fields, so the non-custom
-catalogue names and the `BUG_FIELDS` REST names are accepted without appearing
-in any listing. `bzr field list <name>` enumerates one named field's legal
-*values* and needs the name up front, so it does not close that gap either.
-Issue #718 tracks the missing enumeration command.
+Three caveats on that listing. A field the server *removes* after its names
+were cached is still accepted on a cache hit, while the listing — which always
+probes — no longer shows it; that is the one accepted-but-unlisted case, and
+closing it would mean probing on every write. A field *added* since the listing
+is a cache miss, which always re-probes, so it is never wrongly rejected. And a
+listed name is one bzr will not refuse, not one Bugzilla will honour: that
+covers the read-only catalogue names (`bug_id`, timestamps) and the read-only
+entries of bzr's own `--fields` list, so `id`, `creator`, `creation_time`, and
+`last_change_time` appear with `source: bzr` and no write can set them.
 
 A key bzr already models needs no request at all; for the rest the catalogue is
 fetched once per server and cached in the config beside the detected auth method
@@ -1551,13 +1555,59 @@ bzr --dry-run product update "My Product" --is-open false
 
 ---
 
-## `bzr field` -- Field Value Lookup
+## `bzr field` -- Field Name and Value Lookup
 
 ### `bzr field list`
 
+Two forms. With no argument, lists the field **names** this server accepts; with a
+name, lists that field's legal **values**.
+
+#### No argument -- which names a write accepts
+
+Enumerates every bug field name `bzr bug create` and `bzr bug update` accept for
+`--field` / `--field-json`. Each row carries a `source` saying why the name is
+accepted:
+
+| `source` | meaning |
+|----------|---------|
+| `server` | the connected server's `field/bug` catalogue declares it |
+| `bzr` | bzr models it as a canonical REST bug field |
+| `both` | both sources name it |
+
+Both spellings are listed because both are accepted. Bugzilla's catalogue reports
+internal column names for several built-ins, while the write API takes the REST
+names -- `status_whiteboard`/`whiteboard`, `short_desc`/`summary`,
+`rep_platform`/`platform`, `bug_file_loc`/`url`, `blocked`/`blocks`. bzr does **not**
+pair them in the output: it has no source for that mapping, and inventing one would
+mean a hand-maintained table that drifts. The `source` column is the relationship it
+does record. See
+[ADR 0062](adr/0062-field-list-enumerates-the-accepted-write-field-set.md).
+
+Three caveats:
+
+- A field the server *removes* after its names were cached is still accepted on a
+  cache hit, while this listing -- which always probes -- no longer shows it. That is
+  the one accepted-but-unlisted case; closing it would mean probing on every write.
+- A field *added* since the listing is a cache miss, which always re-probes, so it is
+  never wrongly rejected.
+- Listed means bzr will not refuse the key, **not** that Bugzilla will honour it.
+  That covers the read-only catalogue names (`bug_id`, timestamps) and the read-only
+  entries of bzr's `--fields` list, so `id`, `creator`, `creation_time`, and
+  `last_change_time` appear with `source: bzr` and no write can set them.
+
+```bash
+bzr field list
+bzr --json field list
+bzr --json field list | jq -r '.data[] | select(.name | startswith("cf_")) | .name'
+```
+
+Schema: `bzr schema field-name`.
+
+#### With a name -- which values a field accepts
+
 List valid values for a bug field (e.g. status, priority, severity, resolution). For status fields, shows allowed state transitions.
 
-Common field name aliases are resolved automatically (matching is case-insensitive):
+Common field name aliases are resolved automatically (matching is case-insensitive). Aliases apply to this form only; the no-argument listing does no alias resolution.
 
 | You type | API Field Name |
 |----------|----------------|
@@ -2520,7 +2570,7 @@ emits the schema document verbatim. An unknown name exits 7 with the list of
 valid names.
 
 Available schemas: `bug`, `bug-adjacency`, `comment`, `attachment`, `product`, `component`,
-`classification`, `user`, `group`, `field-value`, `whoami` (read shapes); and the
+`classification`, `user`, `group`, `field-name`, `field-value`, `whoami` (read shapes); and the
 mutation/result envelopes `action-result`, `batch-result`,
 `batch-create-result`, `compound-create-result`, `multi-bug-view`, `tag-result`,
 `membership-result`, `count-result`, `download-result`, `upload-result`,
@@ -2557,7 +2607,7 @@ Every pretty `--json` response is wrapped in a stable envelope:
 
 ```json
 {
-  "schema_version": "3.0.2",
+  "schema_version": "3.0.3",
   "data": <the command's payload>
 }
 ```
@@ -2572,7 +2622,7 @@ bzr --json schema | jq -r '.schema_version'   # the contract version itself
 ```
 
 `--json` error output carries the version too, beside an `error` object:
-`{"schema_version":"3.0.2","error":{"type":...,"message":...,"exit_code":...}}`.
+`{"schema_version":"3.0.3","error":{"type":...,"message":...,"exit_code":...}}`.
 
 Two outputs are deliberately **not** enveloped:
 
