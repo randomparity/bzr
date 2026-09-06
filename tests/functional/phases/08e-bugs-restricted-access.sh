@@ -252,16 +252,36 @@ if [[ -n "$RESTRICTED_BUG" ]]; then
     fi
 else test_skip "no restricted bug"; fi
 
-test_begin "group-member-links-the-restricted-bug" "group member links the restricted bug"
-# Criterion 1: the member reads the root and the walk succeeds. The bug has no
-# relationships, so the graph is empty — an empty graph at exit 0, which is
-# what `--api xmlrpc` answered all along, not an error.
+# A second bug in the same group, wired as a dependency of the first. Without
+# an edge the root's graph is empty, and a REST-vs-XML-RPC stdout comparison
+# over two empty graphs asserts nothing about content. One edge makes it
+# discriminating: both arms have to return the same neighbour, not merely the
+# same emptiness.
+RESTRICTED_DEP_BUG=""
+test_begin "fixture-restricted-dependency-edge" "fixture: restricted dependency edge"
 if [[ -n "$RESTRICTED_BUG" ]]; then
-    run_bzr_raw --json --server restricted bug links "$RESTRICTED_BUG"
-    if assert_exit_code 0 && assert_json 'length' "0"; then
-        test_pass
+    RESTRICTED_DEP_BUG=$(make_bug "${_RA[@]}" --summary "restricted dependency probe" \
+        --groups "$RESTRICTED_GROUP")
+    if [[ -z "$RESTRICTED_DEP_BUG" ]]; then
+        test_fail "could not create the restricted dependency bug"
+    else
+        run_bzr bug update "$RESTRICTED_BUG" --depends-on-add "$RESTRICTED_DEP_BUG"
+        if assert_success; then test_pass; fi
     fi
 else test_skip "no restricted bug"; fi
+
+test_begin "group-member-links-the-restricted-bug" "group member links the restricted bug"
+# Criterion 1: the member reads the root and the walk reaches the neighbour —
+# exit 0 with the edge, where the search-endpoint read reported the root absent.
+if [[ -n "$RESTRICTED_BUG" ]] && [[ -n "$RESTRICTED_DEP_BUG" ]]; then
+    run_bzr_raw --json --server restricted bug links "$RESTRICTED_BUG"
+    if assert_exit_code 0 &&
+        assert_json 'length' "1" &&
+        assert_json '.[0].id' "$RESTRICTED_DEP_BUG" &&
+        assert_json '.[0].relation' "depends_on"; then
+        test_pass
+    fi
+else test_skip "no restricted bug or dependency edge"; fi
 
 # A restricted alias authenticating by header. On a stock Bugzilla the direct
 # endpoint answers a header-auth key with 401/102 — which bzr's alternate-auth
@@ -282,8 +302,17 @@ fi
 test_begin "header-auth-member-links-match-the-xmlrpc-oracle" "header-auth member links match the xmlrpc oracle"
 # The issue's headline scenario, and the REST-matches-XML-RPC assertion: both
 # arms must agree on exit code and on stdout for the same bug and identity.
-if [[ -n "$RESTRICTED_BUG" ]] && [[ $_RESTRICTED_HEADER_OK -eq 1 ]] &&
-    [[ $_RESTRICTED_ALIASES_OK -eq 1 ]]; then
+# The dependency edge above is what makes the stdout half discriminating.
+#
+# The two guards are graded deliberately. A missing bug or edge is the
+# best-effort fixture every consumer of $RESTRICTED_BUG in this phase skips on;
+# a failed transport alias is a setup failure this file already treats as one
+# (see the alias fixture above).
+if [[ $_RESTRICTED_HEADER_OK -ne 1 ]] || [[ $_RESTRICTED_ALIASES_OK -ne 1 ]]; then
+    test_fail "restricted transport alias setup failed"
+elif [[ -z "$RESTRICTED_BUG" ]] || [[ -z "$RESTRICTED_DEP_BUG" ]]; then
+    test_skip "no restricted bug or dependency edge"
+else
     run_bzr_raw --json --server restricted-header bug links "$RESTRICTED_BUG"
     _RL_REST_EXIT=$BZR_EXIT
     _RL_REST_OUT=$(cat "$BZR_STDOUT")
@@ -296,12 +325,12 @@ if [[ -n "$RESTRICTED_BUG" ]] && [[ $_RESTRICTED_HEADER_OK -eq 1 ]] &&
         test_fail "rest exit $_RL_REST_EXIT != xmlrpc exit $_RL_XMLRPC_EXIT"
     elif [[ "$_RL_REST_OUT" != "$_RL_XMLRPC_OUT" ]]; then
         test_fail "rest stdout '$_RL_REST_OUT' != xmlrpc stdout '$_RL_XMLRPC_OUT'"
+    elif ! grep -q "$RESTRICTED_DEP_BUG" <<<"$_RL_REST_OUT"; then
+        test_fail "both arms agreed but neither returned the edge: '$_RL_REST_OUT'"
     else
         test_pass
     fi
     unset _RL_REST_EXIT _RL_REST_OUT _RL_XMLRPC_EXIT _RL_XMLRPC_OUT
-else
-    test_fail "missing restricted bug or transport alias for the links comparison"
 fi
 
 # ── Product-level restriction ────────────────────────────────────────
