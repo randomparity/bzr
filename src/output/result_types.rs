@@ -435,6 +435,14 @@ impl SubStepFailure {
             error: error.into(),
         }
     }
+
+    pub fn comment_tags(error: impl Into<String>) -> Self {
+        Self {
+            step: "comment_tags".to_string(),
+            file: None,
+            error: error.into(),
+        }
+    }
 }
 
 /// Result of a single compound `bug create` (flag form or single-object

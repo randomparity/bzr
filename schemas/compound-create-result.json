@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/randomparity/bzr/schemas/compound-create-result.json",
   "title": "CompoundCreateResult",
-  "description": "Result of a single compound `bug create` (flag form or single-object `--from-json`) that filed the bug but had at least one sub-step (comment/attachment) fail. Full-success creates emit `action-result` instead, so this body appears only on partial failure (exit 11). The created bug `id` is always present.",
+  "description": "Result of a single compound `bug create` (flag form or single-object `--from-json`) that filed the bug but had at least one sub-step (comment/attachment/comment_tags) fail. Full-success creates emit `action-result` instead, so this body appears only on partial failure (exit 11). The created bug `id` is always present.",
   "type": "object",
   "properties": {
     "resource": {
@@ -25,7 +25,7 @@
         "properties": {
           "step": {
             "type": "string",
-            "enum": ["comment", "attachment"]
+            "enum": ["comment", "attachment", "comment_tags"]
           },
           "file": {
             "type": "string",

@@ -398,7 +398,6 @@ fn create_params_all_fields_match_wire_contract() {
             status: FlagStatus::Grant,
             requestee: Some("reviewer@example.com".into()),
         }],
-        comment_tags: vec!["triaged".into()],
         ..minimal_create_params()
     };
     let json = serde_json::to_value(&params).unwrap();
@@ -430,17 +429,7 @@ fn create_params_all_fields_match_wire_contract() {
                 "status": "+",
                 "requestee": "reviewer@example.com",
             }],
-            "comment_tags": ["triaged"],
         })
-    );
-}
-
-#[test]
-fn create_params_omits_empty_comment_tags() {
-    let json = serde_json::to_value(minimal_create_params()).unwrap();
-    assert!(
-        json.get("comment_tags").is_none(),
-        "empty comment_tags must omit, got: {json}"
     );
 }
 

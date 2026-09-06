@@ -35,6 +35,7 @@ fn plain(
         crate::commands::bug::compound::CompoundPlan {
             comment: None,
             attachments: vec![],
+            comment_tags: vec![],
         },
     )
 }
@@ -315,12 +316,12 @@ fn json_groups_non_empty_cli_override_replaces_json_groups() {
 
 #[test]
 fn comment_tags_require_a_description() {
-    let input: JsonCreateBug = serde_json::from_value(serde_json::json!({
+    let mut input: JsonCreateBug = serde_json::from_value(serde_json::json!({
         "product": "P", "component": "C", "summary": "S", "comment_tags": ["triaged"]
     }))
     .unwrap();
 
-    let err = input.into_params().unwrap_err();
+    let err = input.take_plan().unwrap_err();
     assert!(matches!(
         err,
         BzrError::InputValidation { message: ref m, .. } if m.contains("--comment-tag")
@@ -328,19 +329,18 @@ fn comment_tags_require_a_description() {
 }
 
 #[test]
-fn comment_tags_round_trip_with_description() {
-    let input: JsonCreateBug = serde_json::from_value(serde_json::json!({
+fn comment_tags_land_in_the_compound_plan_with_description() {
+    let mut input: JsonCreateBug = serde_json::from_value(serde_json::json!({
         "product": "P", "component": "C", "summary": "S", "description": "d",
         "comment_tags": ["triaged", "needs-review"]
     }))
     .unwrap();
 
+    let plan = input.take_plan().unwrap();
+    assert_eq!(plan.comment_tags, vec!["triaged", "needs-review"]);
+    // take_plan leaves the scalar description intact for into_params.
     let params = input.into_params().unwrap();
-    let json = serde_json::to_value(&params).unwrap();
-    assert_eq!(
-        json["comment_tags"],
-        serde_json::json!(["triaged", "needs-review"])
-    );
+    assert_eq!(params.description.as_deref(), Some("d"));
 }
 
 #[test]
@@ -424,6 +424,7 @@ async fn array_sub_step_failure_suppresses_done_event() {
                     is_private: false,
                 }),
                 attachments: vec![],
+                comment_tags: vec![],
             },
         ),
     ];
@@ -472,6 +473,7 @@ async fn array_one_good_one_failing_comment_exits_11() {
                     is_private: false,
                 }),
                 attachments: vec![],
+                comment_tags: vec![],
             },
         ),
     ];

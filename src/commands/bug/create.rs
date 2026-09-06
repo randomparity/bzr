@@ -391,12 +391,11 @@ pub(super) async fn handle(
         groups: merged.groups,
         groups_present: false,
         flags,
-        comment_tags,
     };
     // Building the plan reads attachment files and validates the comment body
     // *before* the bug is created, so a bad input never files an unfinishable
     // bug. An empty plan keeps the byte-identical plain single-create path.
-    let plan = build_compound_plan(args)?;
+    let plan = build_compound_plan(args, comment_tags)?;
     if plan.is_empty() {
         create_and_report(&params, ctx, w).await
     } else {
@@ -404,11 +403,17 @@ pub(super) async fn handle(
     }
 }
 
-/// Build the comment + attachment plan from the flag-form compound flags.
-fn build_compound_plan(args: &CreateArgs) -> Result<super::compound::CompoundPlan> {
+/// Build the comment + attachment + comment-tag plan from the flag-form
+/// compound flags. `comment_tags` is resolved by the caller (it depends on
+/// the resolved description, computed earlier in `handle`).
+fn build_compound_plan(
+    args: &CreateArgs,
+    comment_tags: Vec<String>,
+) -> Result<super::compound::CompoundPlan> {
     Ok(super::compound::CompoundPlan {
         comment: resolve_compound_comment(args)?,
         attachments: build_attachment_plan(args)?,
+        comment_tags,
     })
 }
 

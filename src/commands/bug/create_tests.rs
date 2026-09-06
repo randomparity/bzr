@@ -116,7 +116,6 @@ async fn bug_create_sends_parity_fields_in_body() {
         .and(body_string_contains(
             "\"flags\":[{\"name\":\"review\",\"status\":\"+\"}]",
         ))
-        .and(body_string_contains("\"comment_tags\":[\"triaged\"]"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 123})))
         .expect(1)
         .mount(&mock)
@@ -140,7 +139,7 @@ async fn bug_create_sends_parity_fields_in_body() {
         depends_on: vec![],
         with_comment: None,
         with_comment_file: None,
-        comment_tag: vec!["triaged".into()],
+        comment_tag: vec![],
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs {
@@ -866,7 +865,6 @@ fn build_editor_template_includes_summary_and_field_reminder() {
         groups: vec![],
         groups_present: false,
         flags: vec![],
-        comment_tags: vec![],
     };
     let buf = super::build_editor_template(Some("Pre-filled summary"), None, &params);
     assert!(buf.starts_with("Pre-filled summary\n"));
@@ -903,7 +901,6 @@ fn build_editor_template_includes_template_description_body() {
         groups: vec![],
         groups_present: false,
         flags: vec![],
-        comment_tags: vec![],
     };
     let buf = super::build_editor_template(None, Some("## Steps\n\n## Expected"), &params);
     assert!(buf.contains("## Steps"));
@@ -1732,7 +1729,7 @@ fn tmp_attachment(suffix: &str, body: &[u8]) -> tempfile::TempPath {
 fn build_compound_plan_more_descriptions_than_attachments_errors() {
     let att = tmp_attachment(".log", b"x");
     let args = compound_args(vec![att.to_path_buf()], vec!["d1", "d2"], None);
-    let err = super::build_compound_plan(&args).unwrap_err();
+    let err = super::build_compound_plan(&args, vec![]).unwrap_err();
     assert_eq!(err.exit_code(), 7);
     assert!(matches!(err, BzrError::InputValidation { .. }));
 }
@@ -1740,14 +1737,14 @@ fn build_compound_plan_more_descriptions_than_attachments_errors() {
 #[test]
 fn build_compound_plan_description_without_attachment_errors() {
     let args = compound_args(vec![], vec!["orphan"], None);
-    let err = super::build_compound_plan(&args).unwrap_err();
+    let err = super::build_compound_plan(&args, vec![]).unwrap_err();
     assert_eq!(err.exit_code(), 7);
 }
 
 #[test]
 fn build_compound_plan_empty_comment_body_errors() {
     let args = compound_args(vec![], vec![], Some("   "));
-    let err = super::build_compound_plan(&args).unwrap_err();
+    let err = super::build_compound_plan(&args, vec![]).unwrap_err();
     assert_eq!(err.exit_code(), 7);
 }
 
@@ -1760,7 +1757,7 @@ fn build_compound_plan_undescribed_attachment_defaults_summary_to_filename() {
         vec!["first only"],
         None,
     );
-    let plan = super::build_compound_plan(&args).unwrap();
+    let plan = super::build_compound_plan(&args, vec![]).unwrap();
     assert_eq!(plan.attachments.len(), 2);
     assert_eq!(plan.attachments[0].summary, "first only");
     assert_eq!(plan.attachments[1].summary, plan.attachments[1].file_name);
