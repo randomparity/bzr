@@ -1,8 +1,8 @@
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used, clippy::expect_used)]
 
 use serde_json::json;
 
-use super::{parse_extra_fields, reject_typed_collisions};
+use super::{check_against, parse};
 
 fn args(values: &[&str]) -> Vec<String> {
     values.iter().map(|v| (*v).to_string()).collect()
@@ -16,7 +16,7 @@ fn write_json(tmp: &tempfile::TempDir, contents: &str) -> String {
 
 #[test]
 fn pairs_become_string_values_in_key_order() {
-    let fields = parse_extra_fields(
+    let fields = parse(
         &args(["cf_release=9.6", "whiteboard=text"].as_slice()),
         None,
     )
@@ -29,7 +29,7 @@ fn pairs_become_string_values_in_key_order() {
 
 #[test]
 fn value_keeps_every_character_after_the_first_separator() {
-    let fields = parse_extra_fields(&args(["cf_expr=a=b=c"].as_slice()), None).unwrap();
+    let fields = parse(&args(["cf_expr=a=b=c"].as_slice()), None).unwrap();
     assert_eq!(fields["cf_expr"], json!("a=b=c"));
 }
 
@@ -37,13 +37,13 @@ fn value_keeps_every_character_after_the_first_separator() {
 /// empty string rather than being rejected as missing.
 #[test]
 fn empty_value_clears_the_field() {
-    let fields = parse_extra_fields(&args(["cf_release="].as_slice()), None).unwrap();
+    let fields = parse(&args(["cf_release="].as_slice()), None).unwrap();
     assert_eq!(fields["cf_release"], json!(""));
 }
 
 #[test]
 fn pair_without_separator_is_rejected() {
-    let err = parse_extra_fields(&args(["cf_release"].as_slice()), None).unwrap_err();
+    let err = parse(&args(["cf_release"].as_slice()), None).unwrap_err();
     assert_eq!(err.exit_code(), 7);
     assert!(
         err.to_string().contains("is not KEY=VALUE"),
@@ -53,14 +53,14 @@ fn pair_without_separator_is_rejected() {
 
 #[test]
 fn empty_key_is_rejected() {
-    let err = parse_extra_fields(&args(["  =value"].as_slice()), None).unwrap_err();
+    let err = parse(&args(["  =value"].as_slice()), None).unwrap_err();
     assert_eq!(err.exit_code(), 7);
     assert!(err.to_string().contains("empty field name"), "{err}");
 }
 
 #[test]
 fn duplicate_pair_key_is_rejected_rather_than_resolved() {
-    let err = parse_extra_fields(&args(["cf_a=1", "cf_a=2"].as_slice()), None).unwrap_err();
+    let err = parse(&args(["cf_a=1", "cf_a=2"].as_slice()), None).unwrap_err();
     assert_eq!(err.exit_code(), 7);
     assert!(err.to_string().contains("more than once"), "{err}");
     assert!(err.to_string().contains("cf_a"), "{err}");
@@ -73,7 +73,7 @@ fn json_source_preserves_value_types() {
         &tmp,
         r#"{"cf_multi": ["a", "b"], "cf_flag": true, "cf_count": 3}"#,
     );
-    let fields = parse_extra_fields(&[], Some(&source)).unwrap();
+    let fields = parse(&[], Some(&source)).unwrap();
     assert_eq!(fields["cf_multi"], json!(["a", "b"]));
     assert_eq!(fields["cf_flag"], json!(true));
     assert_eq!(fields["cf_count"], json!(3));
@@ -83,7 +83,7 @@ fn json_source_preserves_value_types() {
 fn key_supplied_by_both_sources_is_rejected() {
     let tmp = tempfile::TempDir::new().unwrap();
     let source = write_json(&tmp, r#"{"cf_a": "from-json"}"#);
-    let err = parse_extra_fields(&args(["cf_a=from-flag"].as_slice()), Some(&source)).unwrap_err();
+    let err = parse(&args(["cf_a=from-flag"].as_slice()), Some(&source)).unwrap_err();
     assert_eq!(err.exit_code(), 7);
     assert!(err.to_string().contains("more than once"), "{err}");
 }
@@ -92,7 +92,7 @@ fn key_supplied_by_both_sources_is_rejected() {
 fn json_source_must_be_an_object() {
     let tmp = tempfile::TempDir::new().unwrap();
     let source = write_json(&tmp, r#"["cf_a"]"#);
-    let err = parse_extra_fields(&[], Some(&source)).unwrap_err();
+    let err = parse(&[], Some(&source)).unwrap_err();
     assert_eq!(err.exit_code(), 7);
     assert!(
         err.to_string().contains("must contain a JSON object"),
@@ -104,7 +104,7 @@ fn json_source_must_be_an_object() {
 fn malformed_json_names_the_source() {
     let tmp = tempfile::TempDir::new().unwrap();
     let source = write_json(&tmp, "{not json");
-    let err = parse_extra_fields(&[], Some(&source)).unwrap_err();
+    let err = parse(&[], Some(&source)).unwrap_err();
     assert_eq!(err.exit_code(), 7);
     assert!(err.to_string().contains(&source), "{err}");
 }
@@ -113,20 +113,20 @@ fn malformed_json_names_the_source() {
 fn unreadable_json_source_is_rejected() {
     let tmp = tempfile::TempDir::new().unwrap();
     let missing = tmp.path().join("absent.json");
-    let err = parse_extra_fields(&[], Some(&missing.to_string_lossy())).unwrap_err();
+    let err = parse(&[], Some(&missing.to_string_lossy())).unwrap_err();
     assert_eq!(err.exit_code(), 7);
 }
 
 #[test]
 fn empty_inputs_produce_an_empty_map() {
-    assert!(parse_extra_fields(&[], None).unwrap().is_empty());
+    assert!(parse(&[], None).unwrap().is_empty());
 }
 
 #[test]
 fn collision_with_a_serialized_typed_field_is_rejected() {
     let typed = json!({"product": "P", "whiteboard": "set"});
-    let extra = parse_extra_fields(&args(["whiteboard=other"].as_slice()), None).unwrap();
-    let err = reject_typed_collisions(&typed, &extra).unwrap_err();
+    let extra = parse(&args(["whiteboard=other"].as_slice()), None).unwrap();
+    let err = check_against(&typed, extra).unwrap_err();
     assert_eq!(err.exit_code(), 7);
     assert!(err.to_string().contains("dedicated flag"), "{err}");
     assert!(err.to_string().contains("whiteboard"), "{err}");
@@ -138,13 +138,13 @@ fn collision_with_a_serialized_typed_field_is_rejected() {
 #[test]
 fn key_absent_from_the_serialized_payload_is_allowed() {
     let typed = json!({"product": "P", "component": "C"});
-    let extra = parse_extra_fields(&args(["whiteboard=text"].as_slice()), None).unwrap();
-    assert!(reject_typed_collisions(&typed, &extra).is_ok());
+    let extra = parse(&args(["whiteboard=text"].as_slice()), None).unwrap();
+    assert!(check_against(&typed, extra).is_ok());
 }
 
 #[test]
 fn collision_check_is_a_no_op_without_extras() {
     let typed = json!({"product": "P"});
-    let extra = parse_extra_fields(&[], None).unwrap();
-    assert!(reject_typed_collisions(&typed, &extra).is_ok());
+    let extra = parse(&[], None).unwrap();
+    assert!(check_against(&typed, extra).is_ok());
 }

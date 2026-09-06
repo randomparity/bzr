@@ -24,7 +24,7 @@ pub use links::{
     BugLink, BugLinksNode, LinkRelation, LINKS_ID_CHUNK, LINKS_INCLUDE_FIELDS, LINKS_MAX_NODES,
 };
 pub use payload::{
-    CommentUpdate, CreateBugParams, IdListUpdate, StringListUpdate, UpdateBugParams,
+    CommentUpdate, CreateBugParams, ExtraBugFields, IdListUpdate, StringListUpdate, UpdateBugParams,
 };
 pub use search::{
     partition_filters, FieldMapping, FilterField, NegationOp, Overrides, SearchParams,

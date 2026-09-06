@@ -89,7 +89,12 @@ fn resolve_comment_tags(tags: &[String], has_comment: bool) -> Result<Vec<String
 }
 
 pub(super) fn build_update_params(args: &UpdateArgs) -> Result<(Vec<u64>, UpdateBugParams)> {
-    build_update_params_from_draft(args.ids.clone(), &BugUpdateDraft::from_cli(args))
+    let mut draft = BugUpdateDraft::from_cli(args);
+    draft.extra_fields = crate::commands::runtime::input::extra_fields::parse(
+        &args.field,
+        args.field_json.as_deref(),
+    )?;
+    build_update_params_from_draft(args.ids.clone(), &draft)
 }
 
 pub(crate) fn build_update_params_from_draft(
@@ -107,7 +112,7 @@ pub(crate) fn build_update_params_from_draft(
         draft.comment_private.unwrap_or(false),
     )?;
     let comment_tags = resolve_comment_tags(&draft.comment_tags, comment.is_some())?;
-    let params = UpdateBugParams {
+    let mut params = UpdateBugParams {
         status: draft.status.clone(),
         resolution: draft.resolution.clone(),
         dupe_of: draft.dupe_of,
@@ -152,7 +157,15 @@ pub(crate) fn build_update_params_from_draft(
         comment_tags,
         minor_update: draft.minor_update.unwrap_or(false),
         comment_is_private: std::collections::HashMap::new(),
+        extra_fields: crate::types::bug::ExtraBugFields::new(),
     };
+    // Assigned after the typed fields are in place so the collision check
+    // reads the payload as it will actually be sent, and before `is_empty` so
+    // a passthrough-only update counts as a change.
+    params.extra_fields = crate::commands::runtime::input::extra_fields::check_against(
+        &params,
+        draft.extra_fields.clone(),
+    )?;
     if params.is_empty() {
         return Err(crate::error::BzrError::input(
             "no fields to update; specify at least one field to change".into(),

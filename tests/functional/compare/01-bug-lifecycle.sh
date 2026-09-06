@@ -512,7 +512,7 @@ if lifecycle_pybz arbitrary-fields-create generic_fields "$(jq -cn \
         --argjson id "$LIFECYCLE_GENERIC_PYBZ_ID" '{bug_id:$id}')" &&
     jq -e --arg value "$LIFECYCLE_FIELD_UPDATED" '.whiteboard == $value' \
         "$COMPARE_EXCHANGE_DIR/arbitrary-fields-update-view.pybz.result.json" >/dev/null; then
-    if lifecycle_bzr_gap arbitrary-fields-create "error: unexpected argument '--field' found" \
+    if lifecycle_bzr arbitrary-fields-create \
         bug create --product TestProduct --component TestComponent \
         --summary "$LIFECYCLE_STEM generic bzr" --description "generic fields" --op-sys Linux \
         --platform PC --field "whiteboard=$LIFECYCLE_FIELD_INITIAL" &&
@@ -521,7 +521,7 @@ if lifecycle_pybz arbitrary-fields-create generic_fields "$(jq -cn \
         lifecycle_bzr arbitrary-fields-create-view-bzr bug view "$LIFECYCLE_GENERIC_BZR_ID" &&
         jq -e --arg value "$LIFECYCLE_FIELD_INITIAL" '.whiteboard == $value' \
             "$COMPARE_EXCHANGE_DIR/arbitrary-fields-create-view-bzr.bzr.stdout.json" >/dev/null &&
-        lifecycle_bzr_gap arbitrary-fields-update "error: unexpected argument '--field' found" \
+        lifecycle_bzr arbitrary-fields-update \
             bug update "$LIFECYCLE_GENERIC_BZR_ID" \
             --field "whiteboard=$LIFECYCLE_FIELD_UPDATED" &&
         lifecycle_bzr arbitrary-fields-view bug view "$LIFECYCLE_GENERIC_BZR_ID" &&
@@ -531,7 +531,6 @@ if lifecycle_pybz arbitrary-fields-create generic_fields "$(jq -cn \
     elif [[ $LAST_TEST_RESULT != FAIL ]]; then
         test_fail "bzr arbitrary-fields result differed"
     fi
-    lifecycle_expect_gap 671
 elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail "arbitrary-fields precondition failed"
 fi

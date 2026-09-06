@@ -261,6 +261,28 @@ pub(crate) struct UpdateArgs {
     /// Repeat the flag to remove multiple URLs.
     #[arg(long)]
     pub see_also_remove: Vec<String>,
+    /// Set any field the server declares, as `KEY=VALUE` (repeatable).
+    ///
+    /// Covers custom (`cf_*`) fields and any built-in bzr has no dedicated
+    /// flag for. The value is sent as a string; `--field key=` sends the
+    /// empty string, which clears the field. Every key is checked against
+    /// the server's own field catalogue before anything is sent, so a name
+    /// the server does not declare fails with exit 7 naming the field
+    /// instead of being silently ignored by Bugzilla. A key that also has
+    /// a dedicated flag set on the same command line is a usage error
+    /// (exit 7) rather than a silent winner. Use `bzr field list` to see
+    /// what a server declares.
+    #[arg(long, value_name = "KEY=VALUE")]
+    pub field: Vec<String>,
+    /// Set declared fields from a JSON object of names to values.
+    ///
+    /// A value of `-` reads the JSON from stdin; otherwise it is a file
+    /// path. Unlike `--field`, values keep their JSON type, so this is the
+    /// way to set multi-select, boolean, and numeric custom fields. Keys
+    /// are validated exactly as `--field`'s are; a key set by both is a
+    /// usage error (exit 7).
+    #[arg(long, value_name = "PATH")]
+    pub field_json: Option<String>,
     /// Only apply the update if the bug has not changed since this time
     /// (optimistic concurrency).
     ///

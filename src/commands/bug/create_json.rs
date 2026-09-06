@@ -20,10 +20,14 @@ use crate::types::comment::AddCommentParams;
 use crate::types::output::OutputFormat;
 
 /// One bug's worth of structured input for `bug create --from-json`. Keys match
-/// the create flag names; `deny_unknown_fields` rejects typos and keeps
-/// undesigned `cf_*` custom-field writes (issue #283) out of this path. All
-/// fields are optional here — required-field and date validation happen in
-/// [`Self::into_params`] so the error messages can name the offending field.
+/// the create flag names; `deny_unknown_fields` rejects typos and keeps this
+/// document shape strict. Arbitrary and custom (`cf_*`) fields are set through
+/// `--field` / `--field-json` instead, which validates every key against the
+/// server's own catalogue (ADR 0053, issues #283 and #671); those flags overlay
+/// onto this path through `extra_fields`, which serde skips so the document
+/// itself cannot carry the key. All fields are optional here — required-field
+/// and date validation happen in [`Self::into_params`] so the error messages
+/// can name the offending field.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct JsonCreateBug {
@@ -65,6 +69,11 @@ struct JsonCreateBug {
     /// Attachments to upload after the bug is created (compound create).
     #[serde(default)]
     attachments: Vec<JsonAttachment>,
+    /// Carried in from the CLI `--field` / `--field-json` overlay, never from
+    /// the document — `serde(skip)` keeps it out of the deserialized field
+    /// list, so `deny_unknown_fields` still rejects an `extra_fields` key.
+    #[serde(skip)]
+    extra_fields: crate::types::bug::ExtraBugFields,
 }
 
 #[derive(Debug, Default)]
@@ -202,10 +211,17 @@ impl JsonCreateBug {
             groups: Vec::new(),
             groups_present: false,
             flags,
+            extra_fields: crate::types::bug::ExtraBugFields::new(),
         };
         if let Some(groups) = groups {
             params.set_groups_from_structured_input(groups);
         }
+        // Assigned after the typed fields are in place so the collision check
+        // reads the payload as it will actually be sent.
+        params.extra_fields = crate::commands::runtime::input::extra_fields::check_against(
+            &params,
+            self.extra_fields,
+        )?;
         Ok(params)
     }
 }
@@ -230,8 +246,13 @@ fn explicit_description(
 
 /// Overlay explicit CLI flags onto a JSON entry: a CLI value (a `Some` scalar
 /// or a non-empty repeatable) wins over the JSON field, applied uniformly to
-/// every element of an array.
-fn overlay_cli(mut json: JsonCreateBug, args: &CreateArgs) -> Result<JsonCreateBug> {
+/// every element of an array. `extra` is parsed once by the caller — its
+/// `--field-json -` source may be stdin, which reads only once.
+fn overlay_cli(
+    mut json: JsonCreateBug,
+    args: &CreateArgs,
+    extra: &crate::types::bug::ExtraBugFields,
+) -> Result<JsonCreateBug> {
     let CreateArgs {
         product,
         component,
@@ -275,6 +296,7 @@ fn overlay_cli(mut json: JsonCreateBug, args: &CreateArgs) -> Result<JsonCreateB
     json.groups.overlay_cli(&create_fields.groups);
     merge_vec(&mut json.flags, &create_fields.flag);
     merge_vec(&mut json.comment_tags, comment_tag);
+    json.extra_fields.clone_from(extra);
     // `blocks`/`depends_on` are `Vec<u64>`; `merge_vec` is `Vec<String>`-typed,
     // so keep the equivalent guard inline.
     if !blocks.is_empty() {
@@ -335,7 +357,13 @@ async fn create_batch_from_json(
         );
         return Ok(());
     }
-    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+    let client = crate::commands::runtime::shared::connect_and_validate_bug_fields(
+        ctx,
+        &crate::commands::runtime::input::extra_fields::key_union(
+            prepared.iter().map(|(params, _)| &params.extra_fields),
+        ),
+    )
+    .await?;
     let mut created = Vec::new();
     let mut failed = Vec::new();
     for (index, (params, plan)) in prepared.into_iter().enumerate() {
@@ -382,9 +410,13 @@ pub(super) async fn handle(
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let extra = crate::commands::runtime::input::extra_fields::parse(
+        &args.create_fields.field,
+        args.create_fields.field_json.as_deref(),
+    )?;
     match crate::commands::runtime::input::from_json::read_one_or_many::<JsonCreateBug>(arg)? {
         JsonOneOrMany::One(entry) => {
-            let mut merged = overlay_cli(*entry, args)?;
+            let mut merged = overlay_cli(*entry, args, &extra)?;
             let plan = merged.take_plan()?;
             let params = merged.into_params()?;
             if plan.is_empty() {
@@ -404,7 +436,7 @@ pub(super) async fn handle(
             // aborts (exit 7) with zero bugs created.
             let mut prepared = Vec::with_capacity(entries.len());
             for entry in entries {
-                let mut merged = overlay_cli(entry, args)?;
+                let mut merged = overlay_cli(entry, args, &extra)?;
                 let plan = merged.take_plan()?;
                 let params = merged.into_params()?;
                 prepared.push((params, plan));

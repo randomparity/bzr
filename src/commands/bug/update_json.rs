@@ -105,8 +105,10 @@ fn build_from_json(
     mut entry: super::update::BugUpdateDraft,
     args: &UpdateArgs,
     ids: Vec<u64>,
+    extra: &crate::types::bug::ExtraBugFields,
 ) -> Result<(Vec<u64>, UpdateBugParams, Option<String>)> {
     entry.overlay_cli(args);
+    entry.extra_fields.clone_from(extra);
     reject_json_comment_file_stdin(&entry, args)?;
     let expected = entry.expect_unchanged_since.clone();
     let (ids, params) = super::update::build_update_params_from_draft(ids, &entry)?;
@@ -117,11 +119,12 @@ fn build_array_request(
     entry: super::update::BugUpdateDraft,
     args: &UpdateArgs,
     index: usize,
+    extra: &crate::types::bug::ExtraBugFields,
 ) -> Result<JsonUpdateRequest> {
     let id = entry.id.ok_or_else(|| {
         crate::error::BzrError::input(format!("--from-json item {index}: id is required"))
     })?;
-    let (_ids, params, expect_unchanged_since) = build_from_json(entry, args, vec![id])?;
+    let (_ids, params, expect_unchanged_since) = build_from_json(entry, args, vec![id], extra)?;
     Ok(JsonUpdateRequest {
         id,
         expect_unchanged_since,
@@ -167,7 +170,13 @@ async fn update_many_from_json(
         return Ok(());
     }
 
-    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+    let client = crate::commands::runtime::shared::connect_and_validate_bug_fields(
+        ctx,
+        &crate::commands::runtime::input::extra_fields::key_union(
+            requests.iter().map(|request| &request.params.extra_fields),
+        ),
+    )
+    .await?;
     let preflight_failures = preflight_expect_unchanged_since(&client, requests).await;
     if !preflight_failures.is_empty() {
         let batch = BatchResult::new(Vec::new(), preflight_failures);
@@ -241,10 +250,14 @@ pub(super) async fn handle(
     ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    let extra = crate::commands::runtime::input::extra_fields::parse(
+        &args.field,
+        args.field_json.as_deref(),
+    )?;
     match read_validated_update_input(args, arg)? {
         JsonOneOrMany::One(entry) => {
             let ids = object_ids(&entry, args)?;
-            let (ids, params, expect_unchanged_since) = build_from_json(*entry, args, ids)?;
+            let (ids, params, expect_unchanged_since) = build_from_json(*entry, args, ids, &extra)?;
             super::update::apply_checked(
                 super::update::ApplyRequest {
                     ids,
@@ -269,7 +282,7 @@ pub(super) async fn handle(
             }
             let mut requests = Vec::with_capacity(entries.len());
             for (index, entry) in entries.into_iter().enumerate() {
-                requests.push(build_array_request(entry, args, index)?);
+                requests.push(build_array_request(entry, args, index, &extra)?);
             }
             update_many_from_json(&requests, ctx, w).await
         }

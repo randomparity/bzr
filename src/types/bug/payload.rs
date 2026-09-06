@@ -1,6 +1,14 @@
+use std::collections::BTreeMap;
+
 use serde::{Serialize, Serializer};
+use serde_json::Value;
 
 use crate::types::flag::FlagUpdate;
+
+/// Fields set through `bug create`/`bug update` `--field` / `--field-json`.
+/// `BTreeMap` so the wire payload and every diagnostic order keys
+/// deterministically.
+pub type ExtraBugFields = BTreeMap<String, Value>;
 
 #[derive(Debug, Default)]
 #[non_exhaustive]
@@ -27,6 +35,11 @@ pub struct CreateBugParams {
     pub groups: Vec<String>,
     pub(crate) groups_present: bool,
     pub flags: Vec<FlagUpdate>,
+    /// Fields set through `--field` / `--field-json`, flattened onto the wire
+    /// payload. Every key has been checked against the server's own field
+    /// catalogue before it reaches here (ADR 0053), and against the typed
+    /// payload's own keys, so this can never shadow a field above.
+    pub extra_fields: ExtraBugFields,
 }
 
 impl CreateBugParams {
@@ -76,6 +89,8 @@ struct CreateBugParamsWire<'a> {
     groups: Option<&'a [String]>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     flags: &'a Vec<FlagUpdate>,
+    #[serde(flatten)]
+    extra_fields: &'a ExtraBugFields,
 }
 
 impl Serialize for CreateBugParams {
@@ -106,6 +121,7 @@ impl Serialize for CreateBugParams {
             groups: (self.groups_present || !self.groups.is_empty())
                 .then_some(self.groups.as_slice()),
             flags: &self.flags,
+            extra_fields: &self.extra_fields,
         }
         .serialize(serializer)
     }
@@ -233,6 +249,14 @@ pub struct UpdateBugParams {
     /// by `Bug.add_attachment`.
     #[serde(skip_serializing_if = "std::collections::HashMap::is_empty")]
     pub comment_is_private: std::collections::HashMap<u64, bool>,
+    /// Fields set through `--field` / `--field-json`, flattened onto the wire
+    /// payload. Every key has been checked against the server's own field
+    /// catalogue before it reaches here (ADR 0053), and against the typed
+    /// payload's own keys, so this can never shadow a field above. An empty
+    /// map contributes no keys, so [`Self::is_empty`] keeps working and now
+    /// counts a passthrough-only update as a change.
+    #[serde(flatten)]
+    pub extra_fields: ExtraBugFields,
 }
 
 impl UpdateBugParams {
