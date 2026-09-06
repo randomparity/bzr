@@ -109,6 +109,17 @@ Adding a result type is additive under ADR 0007, so `SCHEMA_VERSION` goes 3.0.2 
   '..'` (verified against the built binary). This is the unavoidable cost of the
   no-argument form the issue asks for, and it is the only behaviour change to an existing
   invocation.
+- **Server-supplied names are escaped into the table, to the same standard as comment
+  tags and no further.** `write_field_names` runs the name cell through
+  `escape_table_control` (promoted here out of `src/output/resources/comment.rs`, where
+  `8afa1c7a` introduced it), so a hostile server cannot put a raw ESC on the user's
+  terminal. `source` is not escaped: it comes from `FieldNameSource::as_str`, a closed set
+  of three literals. The residual is that `char::is_control` covers Unicode category Cc
+  only, so bidirectional overrides and format characters (U+202E, U+2066..U+2069,
+  U+200B/E/F) still reach the cell. That gap is the repository's existing standard, not
+  one this change introduces, and closing it belongs to every table writer at once rather
+  than to this one; it is recorded as follow-up. The JSON and NDJSON paths need nothing —
+  serde escapes control characters when it serializes.
 - One subcommand emits two shapes, selected by whether the positional is present:
   `FieldValue[]` with a name, `FieldName[]` without. `bzr schema` already does exactly
   this, so the pattern is not new to the CLI, but an agent that hard-codes `field list`'s

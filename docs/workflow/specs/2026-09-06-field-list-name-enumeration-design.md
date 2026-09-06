@@ -257,7 +257,16 @@ Not security-relevant, and the trigger list in `$quest` step 6 is the test appli
   fixed `include_fields=name`.
 - No permission grant, dependency, file mode, TLS, or security-relevant default changes.
 
-One boundary is worth naming even though it is not new: the server controls the field
-names printed. They are written through the existing table and JSON writers, which is the
-same handling `bzr server capabilities` already gives catalogue-supplied custom field
-names, so no new destination-encoding concern is introduced.
+One boundary is worth naming: the server controls the field names printed. The first
+draft of this section concluded that reusing the existing table and JSON writers raised
+"no new destination-encoding concern", on the grounds that `bzr server capabilities`
+already renders catalogue-supplied custom field names the same way. `$detect-evil`
+refuted that: the repository had already ruled the unescaped treatment defective for
+comment tags (`8afa1c7a`), so a new table cell that skipped it was a new instance of a
+settled defect, not parity. The control is therefore **present, not absent** —
+`write_field_names` escapes the name cell through `escape_table_control`
+(`src/output/formatting.rs`). `source` needs none: it is a closed set of three literals.
+Residual, matching the repository's existing standard rather than widening it:
+`char::is_control` is Unicode Cc only, so bidi overrides and format characters still pass
+through; ADR 0062 records this and it is tracked as follow-up. JSON and NDJSON need no
+control — serde escapes when it serializes.

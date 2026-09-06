@@ -225,6 +225,34 @@ pub(super) fn yes_no(value: bool) -> &'static str {
     }
 }
 
+/// Escape control characters before a server-controlled string enters a table
+/// cell.
+///
+/// Table output goes straight to a terminal, so an ESC in a value the server
+/// chose would let a hostile or compromised Bugzilla manipulate the screen or
+/// forge rows. The JSON family needs no equivalent: serde escapes control
+/// characters when it serializes. Introduced for comment tags (`8afa1c7a`) and
+/// shared from here so a new table writer inherits the treatment rather than
+/// rediscovering it.
+///
+/// Scope, stated because the predicate is narrower than "cannot influence a
+/// terminal": `char::is_control` is Unicode category Cc only, so bidirectional
+/// overrides and other format characters (U+202E, U+2066..U+2069, U+200B/E/F)
+/// pass through. That matches what the repository already decided for comment
+/// tags rather than adding a second standard; widening it is a separate change
+/// across every table writer.
+pub(super) fn escape_table_control(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        if character.is_control() {
+            escaped.extend(character.escape_default());
+        } else {
+            escaped.push(character);
+        }
+    }
+    escaped
+}
+
 /// Three-valued yes/no for `Option<bool>` — returns "Yes", "No", or "-".
 pub(super) fn opt_yes_no(value: Option<bool>) -> &'static str {
     match value {

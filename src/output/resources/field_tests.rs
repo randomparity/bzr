@@ -38,6 +38,27 @@ fn write_field_names_table() {
     assert!(text.contains("both"), "{text}");
 }
 
+/// Mirrors the comment-tag guard added by `8afa1c7a`: field names come from
+/// the server, table output goes to a terminal, so a control character must
+/// not reach it verbatim. JSON is unaffected — serde escapes it there.
+#[test]
+fn write_field_names_table_escapes_control_characters() {
+    let rows = vec![FieldName {
+        name: "cf_evil\u{1b}[2Jclear".into(),
+        source: FieldNameSource::Server,
+    }];
+    let text = capture_names(
+        OutputFormat::Table,
+        &crate::validation::fields::FieldProjection::none(),
+        &rows,
+    );
+    assert!(
+        !text.contains('\u{1b}'),
+        "raw ESC reached the table: {text}"
+    );
+    assert!(text.contains("\\u{1b}"), "escaped form missing: {text}");
+}
+
 #[test]
 fn write_field_names_json_projects() {
     let rows = vec![FieldName {
