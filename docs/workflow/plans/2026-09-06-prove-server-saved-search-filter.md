@@ -12,19 +12,20 @@ advertises the `RedHat` extension and resolves `savedsearch`/`sharer_id`.
 what the filtered call equals. `pybz/container-tests.sh` sources the real phase script against
 stubs, and is where the controls are proven without a container.
 
-Expected implementation size: ≈384 changed lines (M). Not a guess: the proxy's **185** was
-measured by applying Steps 1.1–1.8 to a scratch copy and diffing; `run-compare.sh` (23),
-the lifecycle phase (49), the self-test (108) and the parity row (2) come from a mechanical
-application of Tasks 2–5 during review; this revision then adds ≈6 (per-assertion `test_fail`
-reasons), ≈7 (the reason-matched control loop) and ≈4 (the fidelity caveat).
+Expected implementation size: ≈379 changed lines (M), reproduced by applying every code block
+below to a scratch checkout and running `git diff --numstat`: proxy 189, `run-compare.sh` 23,
+lifecycle phase 56, self-test 105, parity document 6.
 
 ADR 0061 is the single home for **why**; the spec states the shape. This file is build
 instructions only.
 
 ## Global Constraints
 
-- **Bash 3.2**, macOS/BSD userland. No `declare -A`, `${var^^}`, or `mapfile`. Harness scripts
-  use **4-space indent** and are **not** CI-linted; bare `shfmt` will disagree — match the file.
+- **Bash 3.2**, macOS/BSD userland. No `declare -A`, `${var^^}`, or `mapfile`. Every shell file
+  in the file map **is** linted: `make check-shell` runs `shellcheck -s bash` and `bash -n`
+  over `run-compare.sh`, `compare/*.sh`, `pybz/*.sh` and `lib.sh` (`Makefile:149-150`), and CI
+  runs that target with a pinned shellcheck 0.11.0 (`ci.yml:271`). Only `shfmt` formatting is
+  not enforced on them, so match the file's 4-space indent and never run bare `shfmt`.
 - **Python standard library only** (`http.server`, `urllib.parse`, `json`, `unittest`,
   `unittest.mock`); the proxy runs as a bare script on the host and in a container.
 - **No `src/` change** (ADR 0052 ships separately, #670) and **do not touch
@@ -485,18 +486,21 @@ if [[ -n $LIFECYCLE_BZR_ID && -n $LIFECYCLE_PYBZ_ID ]] &&
     lifecycle_saved_search_probe saved-search-control bug list --summary "$LIFECYCLE_STEM" &&
     { lifecycle_ids_contain "$COMPARE_EXCHANGE_DIR/saved-search-control.bzr.stdout.json" \
         "[$LIFECYCLE_BZR_ID,$LIFECYCLE_PYBZ_ID]" ||
-        { test_fail "saved-search control did not exceed the seeded subset"; false; }; } &&
+        { [[ $TEST_RESULT_PENDING -eq 1 ]] ||
+            test_fail "saved-search control did not exceed the seeded subset"; false; }; } &&
     lifecycle_saved_search_probe saved-search-filtered \
         bug search --saved-search "$LIFECYCLE_SAVED_SEARCH" &&
     { lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/saved-search-filtered.bzr.stdout.json" \
         "[$LIFECYCLE_BZR_ID]" ||
-        { test_fail "saved-search filtered result was not the seeded subset"; false; }; } &&
+        { [[ $TEST_RESULT_PENDING -eq 1 ]] ||
+            test_fail "saved-search filtered result was not the seeded subset"; false; }; } &&
     lifecycle_pybz saved-search saved_search "$(jq -cn --arg name "$LIFECYCLE_SAVED_SEARCH" \
         '{name:$name}')" &&
     lifecycle_transport_is saved-search pybz XMLRPC &&
     { lifecycle_ids_contain "$COMPARE_EXCHANGE_DIR/saved-search.pybz.result.json" \
         "[$LIFECYCLE_PYBZ_ID]" ||
-        { test_fail "python-bugzilla saved-search result was filtered"; false; }; }; then
+        { [[ $TEST_RESULT_PENDING -eq 1 ]] ||
+            test_fail "python-bugzilla saved-search result was filtered"; false; }; }; then
     if lifecycle_bzr_refusal_gap saved-search '"type":"unsupported_server_capability"' 15 \
         bug search --saved-search "$LIFECYCLE_SAVED_SEARCH" &&
         lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/saved-search.bzr.stdout.json" \
@@ -525,8 +529,12 @@ Four properties of this shape must not be rearranged:
   three fall through to the generic `saved-search precondition failed` and the self-test
   controls can only show that the row reddened, not *which* assertion reddened it — which
   would make the controls unable to discriminate, the same defect one level up. The
-  `|| { test_fail …; false; }` form keeps the `&&` chain's short-circuit intact, and the
-  existing `elif [[ $TEST_RESULT_PENDING -eq 0 ]]` guard prevents a double count.
+  `|| { … ; false; }` form keeps the `&&` chain's short-circuit intact. The inner
+  `[[ $TEST_RESULT_PENDING -eq 1 ]] ||` is **not** optional: `lifecycle_ids_contain` and
+  `lifecycle_ids_are` both call `test_fail` themselves on their structure-validation paths,
+  and `test_fail` increments `FAIL_COUNT` unconditionally (`lib.sh:153`), so an unguarded
+  second call double-counts. The `elif [[ $TEST_RESULT_PENDING -eq 0 ]]` branch below does
+  not cover this — it only suppresses the generic message.
 
 Control uses containment and filtered uses equality, and they are not interchangeable: the
 control set is every stem-bearing bug in the run and is not fixed by construction —
@@ -690,7 +698,7 @@ All three fail in the precondition chain, so the outcome is an outright FAIL —
     # Each control must redden through its OWN assertion. run_lifecycle_failure_control
     # only proves the row went FAIL, and all three would match that on the generic
     # reason, so pair each with the distinct reason Step 3.4 gives its assertion.
-    while IFS='|' read -r control reason; do
+    while IFS='|' read -r control reason <&3; do
         if ! run_lifecycle_failure_control "$control" saved-search 'server saved search'; then
             control_failures=$((control_failures + 1))
         elif ! grep -Fq "$reason" "$fixture_output"; then
@@ -698,7 +706,7 @@ All three fail in the precondition chain, so the outcome is an outright FAIL —
                 "$control" "$reason" >&2
             control_failures=$((control_failures + 1))
         fi
-    done <<'CONTROLS'
+    done 3<<'CONTROLS'
 LIFECYCLE_SAVED_SEARCH_CONTROL_NARROW|saved-search control did not exceed the seeded subset
 LIFECYCLE_SAVED_SEARCH_UNFILTERED|saved-search filtered result was not the seeded subset
 LIFECYCLE_SAVED_SEARCH_PYBZ_FILTERED|python-bugzilla saved-search result was filtered
@@ -707,7 +715,14 @@ CONTROLS
 
 `run_lifecycle_failure_control` writes the phase output to `$fixture_output` and leaves it in
 place, so the `grep` reads the run that control just produced. A quoted heredoc keeps the
-reasons literal, and `read` with `IFS='|'` is Bash 3.2-safe.
+reasons literal, and `IFS='|' read` is Bash 3.2-safe.
+
+The **descriptor 3** is load-bearing, not style. The loop body calls
+`run_lifecycle_failure_control`, which does `source "$phase"`; on plain stdin the phase would
+inherit the heredoc, and any command in it that reads stdin — a bare `read`, a filter given no
+file argument, `perl -` — would silently eat control lines. The loop would then run fewer
+iterations, leave `control_failures` at 0, and exit green with controls that never ran. Bash
+3.2 supports both `<&3` and `3<<`.
 
 **Step 4.7.** Run bare:
 
