@@ -878,3 +878,53 @@ async fn relayed_per_resource_refusal_makes_permissive_view_exit_zero_not_four()
     assert_eq!(parsed["failed"].as_array().unwrap().len(), 1);
     assert_eq!(parsed["failed"][0]["id"], "2");
 }
+
+/// The other direction of the same substitution, and the one that costs a user
+/// something: when the ORIGINAL 401 carries a suppressible per-resource code
+/// and the retry carries a non-suppressible one, a `--permissive` batch that
+/// previously completed now aborts. Relaying the server's true code is the
+/// decision (ADR 0057); this is its correct consequence, and it is recorded
+/// rather than discovered.
+#[tokio::test]
+async fn relayed_non_suppressible_code_makes_permissive_view_exit_four_not_zero() {
+    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(view_ok_bug_body(1, "first")))
+        .mount(&mock)
+        .await;
+    mount_auth_fallback_on(
+        &mock,
+        "/rest/bug/2",
+        ResponseTemplate::new(401).set_body_json(bugzilla_error(
+            102,
+            "You are not authorized to access bug #2",
+        )),
+        ResponseTemplate::new(401).set_body_json(bugzilla_error(
+            120,
+            "you are not allowed to restrict bugs to this group",
+        )),
+    )
+    .await;
+
+    let action = permissive_view_action(&["1", "2"]);
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let outcome = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(
+            None,
+            crate::types::OutputFormat::Json,
+            None,
+        ),
+        &mut io.writers(),
+    )
+    .await;
+    let Err(err) = outcome else {
+        panic!("a relayed non-suppressible code must abort the batch");
+    };
+    assert_eq!(err.exit_code(), 4);
+    match err {
+        BzrError::Api { code, .. } => assert_eq!(code, 120),
+        other => panic!("expected the relayed Api 120, got {other:?}"),
+    }
+}

@@ -601,8 +601,11 @@ that file.
 
 ### Acceptance criteria
 
-- Eight new `#[tokio::test]` cases in `src/client/transport_tests.rs`; no inline
-  `mod tests` anywhere.
+- Twelve new `#[tokio::test]` cases in `src/client/transport_tests.rs` — ten
+  fallback cases plus the two command-driven `--permissive` pins; no inline
+  `mod tests` anywhere. (Four more than this plan first specified: the branch
+  review added the 403-with-auth-code case, the retried-410 case, the
+  bare-original/enveloped-retry case, and the exit 0 → 4 permissive direction.)
 - The two misleading "LIFO" comments at `src/client/transport_tests.rs:135`
   and `:174` corrected.
 - The relay test observed red under the restored status-only predicate and green
