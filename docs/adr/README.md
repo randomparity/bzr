@@ -51,3 +51,10 @@ rejected.
 | [0051](0051-share-adapter-with-bounded-local-proofs.md) | Share one adapter with bounded local proofs | Accepted |
 | [0052](0052-detect-vendor-extension-support-before-dispatch.md) | Detect vendor-extension support before dispatch | Accepted |
 | [0053](0053-server-validated-arbitrary-field-writes.md) | Server-validated arbitrary field writes | Accepted |
+| [0056](0056-differential-header-auth-verification.md) | Header-auth verification is a differential probe, not a 2xx check | Accepted |
+| [0057](0057-alternate-auth-retry-classifies-the-refusal.md) | The alternate-auth retry classifies the refusal, not the status | Accepted |
+| [0058](0058-suppress-tracing-ansi-off-terminal.md) | Plain-text tracing off a terminal, and a comparison container per run | Accepted |
+| [0059](0059-auth-method-governs-private-content-completeness.md) | The honoured auth method, not the API mode, governs private-content completeness | Accepted |
+| [0060](0060-bug-links-reads-its-root-on-the-direct-path.md) | `bug links` reads its root on the direct path | Accepted |
+| [0061](0061-prove-vendor-extension-behaviour-against-a-shaped-proxy.md) | Prove vendor-extension behaviour against a shaped proxy | Accepted |
+| [0062](0062-field-list-enumerates-the-accepted-write-field-set.md) | `field list` enumerates the accepted write-field set | Accepted |
