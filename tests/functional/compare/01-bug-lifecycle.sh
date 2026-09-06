@@ -274,6 +274,9 @@ lifecycle_ids_contain() {
     # cannot-fail shape this row exists to remove. Reject it structurally
     # rather than relying on the caller's guards. A malformed expectation makes
     # --argjson exit non-zero and lands here too.
+    # `lifecycle_ids_are` deliberately does not carry this check: it is
+    # pre-existing shared machinery with a dozen-odd callers, none of which can
+    # pass an empty set today, so hardening it is a wider change than this row.
     if ! jq -ne --argjson expected "$expected" \
         '$expected | type == "array" and length > 0' >/dev/null 2>&1; then
         test_fail "ID expectation was empty or malformed"

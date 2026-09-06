@@ -439,9 +439,21 @@ every assertion its own `test_fail` reason and Step 4.6 greps for it.
 
 Nothing else sets `LIFECYCLE_BZR_URL`, so every existing caller is unaffected.
 
-**Step 3.2.** Add the id helper immediately after `lifecycle_ids_are`:
+**Step 3.2.** Add two helpers immediately after `lifecycle_ids_are`:
 
 ```bash
+# Run one assertion with its own failure reason, for a row whose controls must show
+# *which* assertion reddened rather than only that the row did. The pending check
+# keeps a helper that already recorded a failure from being counted twice.
+lifecycle_require() {
+    local reason="$1"
+    shift
+
+    "$@" && return 0
+    [[ $TEST_RESULT_PENDING -eq 1 ]] || test_fail "$reason"
+    return 1
+}
+
 # `lifecycle_ids_are` is exact-equality, which the saved-search row cannot use for
 # either set it does not fully control: the unfiltered control is every bug whose
 # summary carries the run stem, and python-bugzilla's unfiltered result is the whole
@@ -513,23 +525,20 @@ if [[ -n $LIFECYCLE_BZR_ID && -n $LIFECYCLE_PYBZ_ID ]] &&
     seed_server_saved_search "$COMPARE_ADMIN_EMAIL" "$LIFECYCLE_SAVED_SEARCH" \
         "$LIFECYCLE_BZR_ID" &&
     lifecycle_saved_search_probe saved-search-control bug list --summary "$LIFECYCLE_STEM" &&
-    { lifecycle_ids_contain "$COMPARE_EXCHANGE_DIR/saved-search-control.bzr.stdout.json" \
-        "[$LIFECYCLE_BZR_ID,$LIFECYCLE_PYBZ_ID]" ||
-        { [[ $TEST_RESULT_PENDING -eq 1 ]] ||
-            test_fail "saved-search control did not exceed the seeded subset"; false; }; } &&
+    lifecycle_require "saved-search control did not exceed the seeded subset" \
+        lifecycle_ids_contain "$COMPARE_EXCHANGE_DIR/saved-search-control.bzr.stdout.json" \
+        "[$LIFECYCLE_BZR_ID,$LIFECYCLE_PYBZ_ID]" &&
     lifecycle_saved_search_probe saved-search-filtered \
         bug search --saved-search "$LIFECYCLE_SAVED_SEARCH" &&
-    { lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/saved-search-filtered.bzr.stdout.json" \
-        "[$LIFECYCLE_BZR_ID]" ||
-        { [[ $TEST_RESULT_PENDING -eq 1 ]] ||
-            test_fail "saved-search filtered result was not the seeded subset"; false; }; } &&
+    lifecycle_require "saved-search filtered result was not the seeded subset" \
+        lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/saved-search-filtered.bzr.stdout.json" \
+        "[$LIFECYCLE_BZR_ID]" &&
     lifecycle_pybz saved-search saved_search "$(jq -cn --arg name "$LIFECYCLE_SAVED_SEARCH" \
         '{name:$name}')" &&
     lifecycle_transport_is saved-search pybz XMLRPC &&
-    { lifecycle_ids_contain "$COMPARE_EXCHANGE_DIR/saved-search.pybz.result.json" \
-        "[$LIFECYCLE_PYBZ_ID]" ||
-        { [[ $TEST_RESULT_PENDING -eq 1 ]] ||
-            test_fail "python-bugzilla saved-search result was filtered"; false; }; }; then
+    lifecycle_require "python-bugzilla saved-search result was filtered" \
+        lifecycle_ids_contain "$COMPARE_EXCHANGE_DIR/saved-search.pybz.result.json" \
+        "[$LIFECYCLE_PYBZ_ID]"; then
     if lifecycle_bzr_refusal_gap saved-search '"type":"unsupported_server_capability"' 15 \
         bug search --saved-search "$LIFECYCLE_SAVED_SEARCH" &&
         lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/saved-search.bzr.stdout.json" \
@@ -558,12 +567,14 @@ Four properties of this shape must not be rearranged:
   three fall through to the generic `saved-search precondition failed` and the self-test
   controls can only show that the row reddened, not *which* assertion reddened it — which
   would make the controls unable to discriminate, the same defect one level up. The
-  `|| { … ; false; }` form keeps the `&&` chain's short-circuit intact. The inner
-  `[[ $TEST_RESULT_PENDING -eq 1 ]] ||` is **not** optional: `lifecycle_ids_contain` and
+  `lifecycle_require` wrapper keeps the `&&` chain's short-circuit intact. Its
+  `[[ $TEST_RESULT_PENDING -eq 1 ]]` check is **not** optional: `lifecycle_ids_contain` and
   `lifecycle_ids_are` both call `test_fail` themselves on their structure-validation paths,
   and `test_fail` increments `FAIL_COUNT` unconditionally (`lib.sh:153`), so an unguarded
   second call double-counts. The `elif [[ $TEST_RESULT_PENDING -eq 0 ]]` branch below does
-  not cover this — it only suppresses the generic message.
+  not cover this — it only suppresses the generic message. That guard and the
+  empty-expectation guard are both covered by `run_lifecycle_assert_helpers_fixture`
+  (Task 4), because neither is reachable from a row-level control.
 
 Control uses containment and filtered uses equality, and they are not interchangeable: the
 control set is every stem-bearing bug in the run and is not fixed by construction —

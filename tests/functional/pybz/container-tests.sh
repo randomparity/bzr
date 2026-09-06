@@ -307,22 +307,97 @@ run_transport_observation_fixture() (
     fi
 )
 
+# Extract one column-0 shell function from a file, refusing anything that is not a
+# single complete definition. Shared by the fixtures that exercise real functions
+# rather than restating them.
+extract_shell_function() {
+    local name="$1" source_file="$2" destination="$3"
+
+    awk -v fn="^${name}\\\\(\\\\) \\\\{$" '$0 ~ fn, /^\}$/' "$source_file" >"$destination"
+    if [[ ! -s $destination ]] ||
+        [[ $(head -1 "$destination") != "${name}() {" ]] ||
+        [[ $(tail -1 "$destination") != '}' ]]; then
+        printf '%s did not extract as one complete function\n' "$name" >&2
+        return 1
+    fi
+}
+
+# The row's discrimination rests on two guards that no row-level control can reach:
+# lifecycle_require's double-count suppression, and lifecycle_ids_contain's refusal
+# of an empty expectation. Both are exactly the kind of guard this issue exists to
+# stop trusting untested, so they get direct coverage.
+run_lifecycle_assert_helpers_fixture() (
+    local phase="$PYBZ_DIR/../compare/01-bug-lifecycle.sh" extracted evidence status
+    extracted=$(mktemp)
+    evidence=$(mktemp)
+    trap 'rm -f "$extracted" "$evidence"' EXIT
+
+    extract_shell_function lifecycle_require "$phase" "$extracted" || return 1
+    # shellcheck disable=SC1090 # the extracted function text is generated above.
+    source "$extracted"
+    extract_shell_function lifecycle_ids_contain "$phase" "$extracted" || return 1
+    # shellcheck disable=SC1090 # the extracted function text is generated above.
+    source "$extracted"
+
+    FAIL_COUNT=0 TEST_RESULT_PENDING=0
+    test_fail() {
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+        TEST_RESULT_PENDING=1
+        printf '%s\n' "$1" >>"$evidence"
+    }
+
+    # A helper that already recorded its own failure must not be counted twice.
+    self_failing() {
+        test_fail 'inner reason'
+        return 1
+    }
+    set +e
+    lifecycle_require 'outer reason' self_failing
+    status=$?
+    set -e
+    assert_equals 1 "$status" "lifecycle_require propagates the helper's failure"
+    assert_equals 1 "$FAIL_COUNT" "lifecycle_require does not double-count"
+    assert_equals 'inner reason' "$(cat "$evidence")" "lifecycle_require keeps the inner reason"
+
+    # A helper that fails silently must get the caller's reason.
+    FAIL_COUNT=0 TEST_RESULT_PENDING=0
+    : >"$evidence"
+    set +e
+    lifecycle_require 'outer reason' false
+    status=$?
+    set -e
+    assert_equals 1 "$status" "lifecycle_require fails when its helper does"
+    assert_equals 'outer reason' "$(cat "$evidence")" "lifecycle_require names the assertion"
+
+    # An empty expectation would be vacuously satisfied, so it must be rejected.
+    printf '[{"id":41}]\n' >"$extracted"
+    FAIL_COUNT=0 TEST_RESULT_PENDING=0
+    : >"$evidence"
+    set +e
+    lifecycle_ids_contain "$extracted" '[]'
+    status=$?
+    set -e
+    assert_equals 1 "$status" "lifecycle_ids_contain rejects an empty expectation"
+    assert_equals 'ID expectation was empty or malformed' "$(cat "$evidence")" \
+        "lifecycle_ids_contain names the empty expectation"
+
+    set +e
+    lifecycle_ids_contain "$extracted" '[41]'
+    status=$?
+    lifecycle_ids_contain "$extracted" '[42]'
+    local absent=$?
+    set -e
+    assert_equals 0 "$status" "lifecycle_ids_contain accepts a present ID"
+    assert_equals 1 "$absent" "lifecycle_ids_contain rejects an absent ID"
+)
+
 run_saved_search_seed_fixture() (
     # Source the real function out of run-compare.sh rather than restating it: a
     # second hand-written copy is what let the arity change go untested before.
     local source_file="$PYBZ_DIR/../run-compare.sh" extracted status
     extracted=$(mktemp)
     trap 'rm -f "$extracted"' EXIT
-    awk '/^seed_server_saved_search\(\) \{$/,/^\}$/' "$source_file" >"$extracted"
-    # An emptiness check cannot see an over-capture: an awk range whose closing
-    # pattern stops matching runs to end-of-file and would be sourced whole.
-    # Pin both ends instead, so a mis-terminated range fails loudly.
-    if [[ ! -s $extracted ]] ||
-        [[ $(head -1 "$extracted") != 'seed_server_saved_search() {' ]] ||
-        [[ $(tail -1 "$extracted") != '}' ]]; then
-        printf 'seed_server_saved_search did not extract as one complete function\n' >&2
-        return 1
-    fi
+    extract_shell_function seed_server_saved_search "$source_file" "$extracted" || return 1
     # shellcheck disable=SC1090 # the extracted function text is generated above.
     source "$extracted"
 
@@ -3144,6 +3219,7 @@ run_summary_fixture
 run_product_normalization_fixture
 run_sidecar_wrapper_fixture
 run_transport_observation_fixture
+run_lifecycle_assert_helpers_fixture
 run_saved_search_seed_fixture
 run_lifecycle_phase_fixture
 run_api_key_identity_request_fixture
