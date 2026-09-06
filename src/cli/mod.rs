@@ -246,9 +246,13 @@ pub struct Cli {
 
     /// Disable colored output.
     ///
-    /// bzr also honors the `NO_COLOR` and `CLICOLOR=0` environment
-    /// variables, plus `CLICOLOR_FORCE=1` to re-enable. This flag
-    /// takes precedence over all of them.
+    /// Covers stdout and the stderr diagnostic stream. Each stream is
+    /// also desaturated automatically when it is not a terminal.
+    /// `NO_COLOR` disables stdout color at any value unless
+    /// `CLICOLOR_FORCE=1` outranks it, and suppresses stderr tracing
+    /// color only when non-empty. `CLICOLOR=0` and `CLICOLOR_FORCE=1`
+    /// apply to stdout alone, and `CLICOLOR_FORCE=1` has no effect once
+    /// stdout is redirected. This flag takes precedence over all of them.
     #[arg(long, global = true)]
     pub no_color: bool,
 
