@@ -61,6 +61,17 @@ if [[ -n "$_TRACE_BUG" ]]; then
 else test_fail "could not create trace redaction fixture"; fi
 unset _TRACE_SECRET _TRACE_BUG
 
+# $BZR_STDERR is a file, so bzr must write plain text there and the comparison
+# harness's anchored boundary regexes must match it (ADR 0058, amending 0045).
+test_begin "verbose-tracing-is-plain-on-redirected-stderr" "-vv tracing is plain text and its transport is observable"
+if [[ -n "$BUG1" ]]; then
+    run_bzr_raw -vv bug view "$BUG1"
+    if assert_success && assert_stderr_not_contains $'\033'; then
+        if observe_bzr_transport; then test_pass
+        else test_fail "transport is not observable from -vv stderr"; fi
+    fi
+else test_skip "no BUG1"; fi
+
 test_begin "server-test-whoami" "--server test whoami"
 run_bzr_raw --server test whoami
 if assert_success; then test_pass; fi
