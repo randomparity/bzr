@@ -95,8 +95,9 @@ Concretely:
    that `bug view --permissive` (`src/commands/bug/view.rs:199`) and
    `comment list --permissive` (`src/commands/comment/list.rs:61`) skip rather
    than abort on. Code 102 is one of the fifteen Bugzilla maps to 401, so
-   relaying it is the one place this decision moves a process exit code. That is
-   accepted; see Consequences.
+   substituting the retry's code for the original's moves that suppression
+   whenever the two attempts disagree across `{100, 101, 102}` — in either
+   direction. That is accepted; Consequences enumerates both.
 
 5. **The classification is confined to the retry.** The first attempt's body is
    not inspected, and the retry still runs on every 401.
@@ -108,9 +109,9 @@ Concretely:
   ordinary case, and the one the issue reported — that is the whole of the
   change: same variant, same `error.type`, same structured-error key set, same
   exit code.
-- **Two reachable user-visible transitions, both accepted deliberately.** They
-  are listed here because a record that names one and denies the other is worse
-  than one that names neither.
+- **The reachable user-visible transitions, all accepted deliberately.** They
+  are listed here because a record that names some and denies the rest is worse
+  than one that names none.
 - **Transition (a): a bare 401 becomes an API error.** When the first attempt's
   401 carries no Bugzilla error envelope and the retry's does, the old path
   reported `BzrError::HttpStatus { status: 401 }` — exit 5, `error.type`
@@ -121,18 +122,36 @@ Concretely:
   5, sees the difference. The retried envelope is the server's actual answer and
   the bare 401 was not, so this is the same principle the rest of this decision
   rests on; it is pinned by a wiremock test.
-- **Transition (b): a `--permissive` batch can exit 0 where it exited 4.**
-  `bzr bug view A,B --permissive` (and `comment list --permissive`) suppress a
-  per-resource fault — codes 100, 101, 102 — and abort on anything else. On a
-  deployment where the first auth method draws a 401 (the #713 shape), a
-  restricted bug previously produced the header attempt's `Api { code: 410 }`,
-  which is not suppressible, so the whole batch aborted with exit 4. It now
-  produces the retry's `Api { code: 102 }`, which is suppressible, so the bug is
-  listed as failed and the command exits 0. That is the behaviour
-  `--permissive` was built for — 102 is the true answer, and the flag exists to
-  skip inaccessible bugs — and the old exit 4 was a consequence of the masking,
-  not a contract. It is pinned by a wiremock test so it is a contract rather
-  than an accident, and it is what the release note has to say.
+- **Transition (b): relaying the code changes which faults a `--permissive`
+  batch suppresses — in both directions.** `bzr bug view A,B --permissive` (and
+  `comment list --permissive`) suppress a per-resource fault — codes 100, 101,
+  102 — and abort on anything else. Substituting the retry's `api_code` for the
+  original's therefore moves suppressibility whenever the two attempts disagree
+  across that set. Both directions are reachable on a deployment where the first
+  auth method draws a 401 (the #713 shape):
+
+  - **exit 4 → 0.** A restricted bug previously produced the header attempt's
+    `Api { code: 410 }`, which is not suppressible, so the batch aborted. It now
+    produces the retry's `Api { code: 102 }`, which is, so the bug is listed as
+    failed and the command exits 0. This is what `--permissive` was built for;
+    the old exit 4 was a consequence of the masking, not a contract.
+  - **exit 0 → 4.** The converse: an original `Api { code: 102 }` with a retry
+    carrying a non-suppressible code (120, say) now aborts a batch that
+    previously completed. This one costs the caller something, and it is the
+    correct consequence of relaying the server's true answer rather than the
+    stale one. It is narrower in practice — of 100/101/102 only 102 maps to
+    HTTP 401 on a stock Bugzilla, and a repeated `Bug.get` would ordinarily
+    answer 102 again — but it is reachable, so it is recorded.
+
+  Both directions are pinned by wiremock tests, and both are what the release
+  note has to say.
+
+  The same substitution can in principle move the other `api_code`-keyed
+  branches — the 100500 search fallback in `src/client/resources/bug.rs`, and
+  the 900 / 32610 / 32614 checks in `classification.rs`, `group.rs` and
+  `user.rs`. None of those codes maps to HTTP 401 on a stock Bugzilla, so they
+  are unreachable from the 401 arm; they are reachable only from the 403 arm,
+  which no stock Bugzilla emits.
 - Establishing (2) consumes the retried body, so a refusal cannot travel back to
   `check_response_status` as a response. It travels as the `BzrError` that
   function would have produced, from a helper both paths now share

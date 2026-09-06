@@ -69,11 +69,13 @@ decide which of two disagreeing responses wins. ADR 0057 decides that.
   so the API key on the query-parameter path — reaches a log or a message on the
   new code path.
 - **R9** — Because `api_code` is read as control flow by
-  `BzrError::is_permissive_bug_view_error` (`src/error.rs:247`), a relayed code
-  102 makes a previously-fatal `bug view --permissive` / `comment list
-  --permissive` batch suppressible, moving that batch's process exit from 4 to
-  0. That is accepted (ADR 0057, Consequences) and must be pinned by a test, not
-  discovered.
+  `BzrError::is_permissive_bug_view_error` (`src/error.rs:247`), substituting
+  the retry's code for the original's moves which faults a `bug view
+  --permissive` / `comment list --permissive` batch suppresses, **in both
+  directions**: a relayed 102 makes a previously-fatal batch exit 0 instead of
+  4, and a relayed non-suppressible code makes a previously-completing batch
+  exit 4 instead of 0. Both are accepted (ADR 0057, Consequences, transition
+  (b)) and both must be pinned by a test, not discovered.
 
 ## Design
 
@@ -212,7 +214,20 @@ different 401 from the second.
   test discriminates nothing.
 - `relayed_per_resource_refusal_makes_permissive_view_exit_zero_not_four` — first
   attempt 401 code 410, retry 401 code 102, through `bug view --permissive`.
-  Expect the batch to complete with the bug listed as failed, pinning R9.
+  Expect the batch to complete with the bug listed as failed, pinning R9's
+  exit 4 → 0 direction.
+- `relayed_non_suppressible_code_makes_permissive_view_exit_four_not_zero` —
+  first attempt 401 code 102, retry 401 code 120, same command. Expect the batch
+  to abort with exit 4, pinning R9's exit 0 → 4 direction.
+- `auth_fallback_keeps_the_original_when_a_403_retry_carries_an_auth_code` —
+  retry 403 code 300. Expect the original 410; this is what makes the 403 arm of
+  the classification guard load-bearing.
+- `auth_fallback_treats_a_retried_410_as_an_authentication_failure` — first
+  attempt 401 code 300, retry 401 code 410. Expect 300, pinning the
+  `LOGIN_REQUIRED` half of the band check.
+- `auth_fallback_relays_a_refusal_when_the_original_401_carried_no_envelope` —
+  first attempt 401 with an HTML body, retry 401 code 120. Expect `Api` at exit
+  4, pinning R10.
 - `auth_fallback_keeps_the_original_401_when_the_retry_carries_no_envelope` —
   retry 401 with a non-JSON body. Expect the original's code.
 - `auth_fallback_relays_a_403_policy_refusal` — retry 403 with code 120.
