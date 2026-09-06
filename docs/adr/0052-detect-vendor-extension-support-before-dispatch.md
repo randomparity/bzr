@@ -343,15 +343,28 @@ Three properties of the amendment are part of the decision:
   it could only fail undetermined and cache nothing. So reverting this change does not restore
   the previous behaviour on such a server until that cached entry is cleared, by the same
   `server_extensions` config remedy the refusal message already names.
-- **The positive verdict remains uncoverable against a stock container.** No supported image
-  advertises the `RedHat` extension, so no functional test can establish "capability confirmed
-  over XML-RPC". The functional tier covers the probe mechanism and the *negative* verdict over
-  a real XML-RPC wire — discriminating on which transport carried the probe, and on *absent*
-  versus *undetermined*, since both exit 15. The positive verdict and the REST-disabled
-  scenario are covered at the wiremock tier, which can mount a `RedHat`-advertising XML-RPC
-  response beside a failing REST surface. This limit is stated rather than papered over,
-  because a probe tested only against servers that all lack the capability is otherwise an
-  oracle that cannot fail.
+- **The positive verdict over XML-RPC is not covered by a container test, and the reason is
+  narrower than "no image advertises the extension".** No supported image does, which is why
+  the phase tier here covers the probe mechanism and the *negative* verdict over a real XML-RPC
+  wire — discriminating on which transport carried the probe, and on *absent* versus
+  *undetermined*, since both exit 15. The positive verdict and the REST-disabled scenario are
+  covered at the wiremock tier, which can mount a `RedHat`-advertising XML-RPC response beside
+  a failing REST surface.
+
+  **[ADR 0061](0061-prove-vendor-extension-behaviour-against-a-shaped-proxy.md) has since built
+  the mechanism that closes the other half**, and this record would be stale without saying so:
+  `tests/functional/redhat-shape-proxy.py` rewrites a real `/rest/extensions` response to
+  advertise `RedHat`, so a *positive* verdict is now provable against a shaped proxy rather
+  than only against a stock image. Two limits keep it from covering this amendment's XML-RPC
+  path: the shaping hook matches on `/rest/extensions` and so is REST-only, and the proxy runs
+  in the comparison tier (`run-compare.sh`), not the phase tier where the transport assertions
+  live. Extending it to shape `Bugzilla.extensions` would make the XML-RPC positive path
+  provable end to end. That is deliberately not done here — it is #710's file and harness, and
+  it arrived after this design was frozen — and it is recorded as the obvious next step rather
+  than as an impossibility.
+
+  The limit is stated rather than papered over, because a probe tested only against servers
+  that all lack the capability is otherwise an oracle that cannot fail.
 - `BugzillaClient::server_version()` stays REST-only, so `bzr server info` against a
   REST-disabled deployment still fails at the version step. The capability gate never calls it,
   so it was left out of this amendment rather than folded in.

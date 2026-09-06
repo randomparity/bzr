@@ -151,9 +151,11 @@ and still does.
 
 ## Tests
 
-The honest limit — no supported container can produce a positive capability verdict — is
-recorded in the ADR amendment's Consequences, with what each tier does and does not establish.
-What follows is why each test discriminates.
+The honest limit, and what has since changed about it, is recorded in the ADR amendment's
+Consequences: no supported *image* advertises the extension, so this phase covers the probe
+mechanism and the negative verdict; ADR 0061's shaped proxy can now produce a positive verdict,
+but only over REST and only in the comparison tier, so it does not reach this amendment's
+XML-RPC path. What follows is why each test here discriminates.
 
 A capability probe exercised only against servers that all lack the capability is an
 empty-versus-empty oracle by default: a test asserting "bzr correctly determines the extension
