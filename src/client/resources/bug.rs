@@ -497,6 +497,89 @@ impl BugzillaClient {
         })
     }
 
+    /// Fetch the isolated link node for a graph's **root** id.
+    ///
+    /// Unlike [`Self::get_bug_links_nodes`], this reads Bugzilla's direct
+    /// endpoint, which faults on a bug the caller may not see. The search
+    /// endpoint that batches the related ids answers an inaccessible id with a
+    /// filtered 200 carrying no error at all, so a root read there could not
+    /// tell "omitted because invisible" from "omitted because absent" and
+    /// reported a permission denial as `NotFound` (issue #719). ADR 0015
+    /// reserves `NotFound` for the direct path returning an empty result with
+    /// no error payload, which is the one case still mapped to it here.
+    ///
+    /// This reads the same direct endpoint as [`Self::get_bug`] but does not
+    /// call it, and the difference is load-bearing rather than incidental:
+    /// `get_bug` yields a [`Bug`], and the only way to a `BugLinksNode` from
+    /// there is `BugLinksNode::from_bug`, which can express just the three core
+    /// relations and leaves `duplicates`, `regressed_by`, and `regressions`
+    /// empty. Those are the BMO relations, and this node seeds the traversal —
+    /// so routing through `get_bug` would silently truncate the root's adjacency
+    /// on Red Hat and Mozilla deployments. Deserializing `BugLinksResponse`
+    /// keeps all six. Do not "simplify" this into a `get_bug` call (ADR 0060).
+    ///
+    /// That warning is about the **REST** arm only. The `XmlRpc` arm below does
+    /// go through `from_bug` and does accept the truncation, because XML-RPC
+    /// answers with a `Bug`, which has no field for the three BMO relations in
+    /// the first place — there is nothing there to lose. So the two arms can
+    /// disagree on a root's BMO adjacency on a deployment that populates those
+    /// fields, and that predates this change.
+    pub(crate) async fn get_bug_links_root_node(&self, id: u64) -> Result<BugLinksNode> {
+        match self.api_mode {
+            ApiMode::XmlRpc => self
+                .xmlrpc_client()
+                .get_bug(&id.to_string())
+                .await
+                .map(|bug| BugLinksNode::from_bug(&bug)),
+            ApiMode::Rest | ApiMode::Hybrid => self.get_bug_links_root_node_rest(id).await,
+        }
+    }
+
+    async fn get_bug_links_root_node_rest(&self, id: u64) -> Result<BugLinksNode> {
+        let req_builder = self
+            .http
+            .get(self.url(&format!("bug/{id}")))
+            .query(&[("include_fields", LINKS_INCLUDE_FIELDS)]);
+        let req = self.apply_auth(req_builder);
+        let resp = self.send(req).await?;
+
+        // The direct endpoint is the one some Bugzilla extensions hook and
+        // crash on with 100500, which is why `get_bug_rest` retries through
+        // search. Moving the root read here carries that retry with it, or
+        // `bug links` stops working on those deployments while the related-id
+        // half of the walk keeps succeeding. The original error travels with
+        // the retry: search omits rows the caller cannot see, so an empty
+        // retry is "the fallback could not answer", never `NotFound`
+        // (issue #504, ADR 0015).
+        let data: BugLinksResponse = match self.parse_json(resp).await {
+            Err(
+                original @ BzrError::Api {
+                    code: BUGZILLA_INTERNAL_ERROR,
+                    ..
+                },
+            ) => {
+                tracing::debug!(
+                    "direct links root lookup returned 100500, retrying via search endpoint"
+                );
+                return self
+                    .get_bug_links_nodes_rest(&[id])
+                    .await?
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| annotate_search_fallback(original, &id.to_string()));
+            }
+            other => other?,
+        };
+
+        data.bugs
+            .into_iter()
+            .next()
+            .ok_or_else(|| BzrError::NotFound {
+                resource: "bug",
+                id: id.to_string(),
+            })
+    }
+
     /// Fetch isolated link nodes for `ids`. Inaccessible/nonexistent ids are
     /// omitted from the result; the caller decides whether an omission is fatal
     /// (root not found) or skippable (a related bug). REST/Hybrid batch the
