@@ -4,6 +4,10 @@
 
 Accepted
 
+Amended 2026-09-06 (issue #724): the probe now follows the transport in use rather than
+always issuing a REST request. The original decision below stands unchanged; see
+[Amendment (2026-09-06)](#amendment-2026-09-06-the-probe-follows-the-transport-in-use).
+
 ## Context
 
 python-bugzilla exposes several Bugzilla search and mutation parameters that are Red Hat
@@ -103,11 +107,11 @@ Three consequences of that rule are part of the decision, not implementation det
   answer is bound to the URL it was probed from and discarded when that changes, so a server name
   re-pointed at a different host cannot inherit the old host's capabilities and let the gate pass
   for a server that never advertised them.
-- **The probe is REST-only.** `GET /rest/extensions` is issued whatever the resolved API mode,
-  so on a deployment with REST disabled the capability can never be established and the feature
-  is permanently undetermined — even on a fork whose XML-RPC `Bug.search` would honour the
-  parameter. The undetermined message says the probe needs the REST surface. Routing the probe
-  through the resolved transport is deferred.
+- ~~**The probe is REST-only.**~~ `GET /rest/extensions` was issued whatever the resolved API
+  mode, so on a deployment with REST disabled the capability could never be established and the
+  feature was permanently undetermined — even on a fork whose XML-RPC `Bug.search` would honour
+  the parameter. Routing the probe through the resolved transport was deferred here and is no
+  longer deferred: see the amendment below.
 - **The gate checks capability, not identity.** `bug search` is an anonymous-capable command, and
   the gate does not change that. A saved search names a query stored in an account, so on a server
   that does implement the extension an uncredentialed `--saved-search` is still dispatched and the
@@ -206,3 +210,87 @@ the vendor-extension side; the two above do not.
   difference with python-bugzilla, and four of the five capabilities work correctly on the
   servers that implement them. Declining to ship them to avoid one documented behavioural
   difference trades five working features for one paragraph.
+
+## Amendment (2026-09-06): the probe follows the transport in use
+
+Issue #724. The original decision above is unchanged; this amends only *how* support is
+established.
+
+### Context
+
+The Consequences section above deferred routing the probe through the resolved transport and
+left open whether it was worth doing at all. Three measurements settle it, taken 2026-09-06
+against the project's own functional images and a proxy that forwards `/xmlrpc.cgi` to bz50
+while answering `503` on every `/rest/` path:
+
+- The XML-RPC search path already carries the vendor parameters —
+  `src/xmlrpc/resources/bug.rs` inserts `savedsearch` and `sharer_id` into `Bug.search` — and
+  `bzr --api xmlrpc bug search` returns real bugs against the REST-disabled proxy. The gate is
+  the only thing blocking the feature there, so this was an incomplete implementation rather
+  than an unbuilt one.
+- `Bugzilla.extensions` answers over XML-RPC on bz50, bz52 and bz53 unauthenticated, returning
+  the same `{extensions: {...}}` shape REST returns.
+- The defect is not confined to REST-disabled deployments. Against a fully REST-enabled bz50,
+  `bzr --api xmlrpc bug search --saved-search <name>` issues `GET /rest/extensions`. `--api` is
+  a documented contract and the REST-only probe violated it on every server, which is why
+  deployment rarity was the wrong axis to decide this on.
+
+### Decision
+
+**`BugzillaClient::server_extensions()` establishes the extension list over the transport in
+use.** `ApiMode::Rest` probes REST; `ApiMode::XmlRpc` calls `Bugzilla.extensions`;
+`ApiMode::Hybrid` probes REST first and falls back to XML-RPC only on a transport failure,
+matching the REST-first dispatch `bug search` itself uses in that mode.
+
+Two properties of the amendment are part of the decision:
+
+1. **The cached answer gains no transport dimension.** The advertised extension list is a fact
+   about the server, not the transport, and both transports return the same list. The URL and
+   capability-allowlist binding specified above is unchanged.
+2. **A missing `extensions` member in the XML-RPC response is an error, not an empty map.** An
+   empty map would render as *absent* — a settled refusal — where the REST path's decode
+   failure renders as *undetermined*. The transports must reach the same verdict from the same
+   evidence, so the adapter fails rather than inventing an empty list.
+
+### Consequences
+
+- The refusal messages no longer name `/rest/extensions`, because the probe no longer always
+  goes there. The *undetermined* message's embedded transport error names what actually failed.
+- Fail-closed is preserved: the three outcomes, the error variant, the exit code and the
+  `capability_status` values are untouched, and no path is added on which an undetermined
+  capability dispatches the parameter.
+- **The positive verdict remains uncoverable against a stock container.** No supported image
+  advertises the `RedHat` extension, so no functional test can establish "capability confirmed
+  over XML-RPC". The functional tier covers the probe mechanism and the *negative* verdict over
+  a real XML-RPC wire — discriminating on which transport carried the probe, and on *absent*
+  versus *undetermined*, since both exit 15. The positive verdict and the REST-disabled
+  scenario are covered at the wiremock tier, which can mount a `RedHat`-advertising XML-RPC
+  response beside a failing REST surface. This limit is stated rather than papered over,
+  because a probe tested only against servers that all lack the capability is otherwise an
+  oracle that cannot fail.
+- `BugzillaClient::server_version()` stays REST-only, so `bzr server info` against a
+  REST-disabled deployment still fails at the version step. The capability gate never calls it,
+  so it was left out of this amendment rather than folded in.
+
+### Considered & rejected
+
+- **Leave it REST-only and document the limitation.** verified: against the REST-disabled
+  proxy, `bzr --api xmlrpc bug search "test" --limit 1` returns a bug at exit 0 while
+  `--saved-search` returns `capability_status: undetermined` at exit 15 (bzr at `dcaf259f`,
+  macOS, bz50 image). judgment: documenting a refusal the tool could simply stop issuing, on a
+  path whose other half is already built, spends a paragraph to avoid ~40 lines of adapter.
+- **Use the existing `dispatch_xmlrpc_first` helper for all three modes.** verified: `bug
+  search` in Hybrid is REST-first — `search_bugs_configured` routes `ApiMode::Hybrid` to
+  `search_bugs_hybrid`, which calls `search_bugs_rest` first (`src/client/resources/bug.rs`).
+  judgment: XML-RPC-first would change the probe's transport for the default mode on 5.0/5.2 —
+  most users — for no requirement, and would make the probe disagree with the command it gates
+  about which transport is "in use".
+- **Add a generic REST-first dispatch helper beside `dispatch_xmlrpc_first`.** judgment: one
+  caller. Three lines inline in the resource that needs them, until a second caller exists.
+- **Key the persisted capability answer on transport as well as URL.** verified: `GET
+  /rest/extensions` and `Bugzilla.extensions` return the same list on bz50, bz52 and bz53.
+  judgment: a cache key that cannot change the answer only causes redundant probes, and it
+  would add a third dimension to a binding this record already had to reason about carefully.
+- **Also route `server_version()` through the transport in use.** judgment: correct, and not
+  reachable from any #724 criterion — the gate never calls it. Widening the change to fix an
+  adjacent command is scope this record does not own.
