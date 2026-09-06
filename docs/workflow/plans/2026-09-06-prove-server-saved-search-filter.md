@@ -47,7 +47,7 @@ instructions only.
 | File | Change | Answerable for |
 |---|---|---|
 | `tests/functional/redhat-shape-proxy.py` | modify | the `saved-search` mode and its seven `ShapeTests` cases |
-| `tests/functional/run-compare.sh` | modify | `seed_server_saved_search` accepting a variable number of bug ids |
+| `tests/functional/run-compare.sh` | modify | `seed_server_saved_search` seeding a one-bug named query |
 | `tests/functional/compare/01-bug-lifecycle.sh` | modify | the row's assertions, the new id helper, the proxied-call wrapper |
 | `tests/functional/pybz/container-tests.sh` | modify | proxy stubs, three failure controls, the seeder fixture, count and row updates |
 | `docs/dev/python-bugzilla-parity.md` | modify | the `Server saved search` row text, and the fidelity caveat below the table |
@@ -335,12 +335,12 @@ Expect `Ran 51 tests` and `OK` — 44 existing plus 7.
 Modifies `tests/functional/run-compare.sh`. The seeded query must select fewer bugs than an
 unfiltered search returns, or the row's two sets cannot stand in a superset relation.
 
-**Interfaces produced.** `seed_server_saved_search LOGIN NAME BUG_ID [BUG_ID...]`.
+**Interfaces produced.** `seed_server_saved_search LOGIN NAME BUG_ID` — exactly three arguments.
 
 ### Verification
 
-- Contract: the seeder accepts one or more ids, rejects zero ids and a non-decimal id, and
-  builds the `bug_id=` list from all of them. Mode: focused-test. Test:
+- Contract: the seeder takes exactly one id, rejects a missing or non-decimal one, and builds
+  the `bug_id=` term from it. Mode: focused-test. Test:
   `run_saved_search_seed_fixture` (Task 4, Step 4.0), which extracts and sources the **real**
   function and drives it with stubbed container helpers. Expected red: with the old two-id
   signature the one-id call returns 2, so nothing reaches stdout and the fixture reports
@@ -359,29 +359,22 @@ that stub (`container-tests.sh:337`) and the single call site (`01-bug-lifecycle
 
 ```bash
 seed_server_saved_search() {
-    if [[ $# -lt 3 ]]; then
-        printf 'seed_server_saved_search: expected LOGIN NAME BUG_ID [BUG_ID...]\n' >&2
+    if [[ $# -ne 3 ]]; then
+        printf 'seed_server_saved_search: expected LOGIN NAME BUG_ID\n' >&2
         return 2
     fi
 
-    local login="$1" name="$2"
-    shift 2
-    local runtime container helper query id ids=""
-    if [[ -z $login || -z $name || ${#name} -gt 64 || $name == *$'\n'* ]]; then
-        printf 'seed_server_saved_search: invalid login or name\n' >&2
+    local login="$1" name="$2" id="$3"
+    local runtime container helper query
+    if [[ -z $login || -z $name || ${#name} -gt 64 || $name == *$'\n'* ||
+        ! $id =~ ^[1-9][0-9]*$ ]]; then
+        printf 'seed_server_saved_search: invalid login, name, or bug ID\n' >&2
         return 2
     fi
-    for id in "$@"; do
-        if [[ ! $id =~ ^[1-9][0-9]*$ ]]; then
-            printf 'seed_server_saved_search: invalid bug ID\n' >&2
-            return 2
-        fi
-        ids="${ids:+$ids,}$id"
-    done
     runtime=$(container_runtime) || return 1
     container=$(bugzilla_container_name) || return 1
     helper="$SCRIPT_DIR/compare/seed-saved-search.pl"
-    query="bug_id=${ids}&bug_id_type=anyexact"
+    query="bug_id=${id}&bug_id_type=anyexact"
     if [[ ! -r $helper ]]; then
         printf 'seed_server_saved_search: helper is unreadable\n' >&2
         return 1
@@ -391,10 +384,14 @@ seed_server_saved_search() {
 }
 ```
 
+**One** id, not a variable number. The row seeds exactly one bug and there is no other caller
+(`rg -n 'seed_server_saved_search' tests/` returns the definition, the lifecycle fixture's
+stub, and the single call site). A variadic signature would be capability nothing asks for.
+
 `seed-saved-search.pl` is unchanged: it already takes `LOGIN NAME QUERY`.
 
 **Acceptance criteria.** `bash -n tests/functional/run-compare.sh` clean; the function builds
-`bug_id=41&bug_id_type=anyexact` for one id and `bug_id=41,42&bug_id_type=anyexact` for two.
+`bug_id=41&bug_id_type=anyexact` for a valid id and returns 2 for anything else.
 
 ## Task 3 — the discriminating row
 
@@ -603,11 +600,15 @@ run_saved_search_seed_fixture() (
     assert_equals 'bug_id=41&bug_id_type=anyexact' \
         "$(seed_server_saved_search admin@test.bzr fixture-name 41 | awk '{print $NF}')" \
         "seed builds a single-ID query"
-    assert_equals 'bug_id=41,42&bug_id_type=anyexact' \
-        "$(seed_server_saved_search admin@test.bzr fixture-name 41 42 | awk '{print $NF}')" \
-        "seed builds a multi-ID query"
 )
 ```
+
+The `awk`-extract-and-`source` idiom appears nowhere else in this file, so it earns a word.
+It exists to prevent exactly the drift that made this task necessary: the lifecycle fixture's
+`seed_server_saved_search` is a hand-written restatement of the real function, and the arity
+change went untested because nothing compared the two. Running the real text is what makes a
+second copy impossible to drift from. Extraction failing loudly is part of that — the `-s`
+check turns a reformatted function into an error rather than a silently empty test.
 
 `container_runtime` returns `echo`, so the function's last line prints its own argv and the
 query is the final whitespace-separated field; `perl` never runs and no container is touched.
@@ -620,12 +621,8 @@ because the lifecycle fixture must not touch a container; Step 4.0 is what holds
 
 ```bash
     seed_server_saved_search() {
-        [[ $1 == admin@test.bzr && -n $2 && ${#2} -le 64 && $# -ge 3 ]] || return 1
-        local id
-        shift 2
-        for id in "$@"; do
-            [[ $id =~ ^[1-9][0-9]*$ ]] || return 1
-        done
+        [[ $1 == admin@test.bzr && -n $2 && ${#2} -le 64 && $# -eq 3 &&
+            $3 =~ ^[1-9][0-9]*$ ]] || return 1
     }
 ```
 
@@ -738,7 +735,7 @@ number — read the fixture output and find which assertion changed the row's ou
 changed count means the row's shape changed, which this plan does not intend.
 
 **Acceptance criteria.** Three `controlled red` lines, each matched to its own reason;
-`run_saved_search_seed_fixture`'s four assertions pass; counts unchanged at 7/0/3; the
+`run_saved_search_seed_fixture`'s three assertions pass; counts unchanged at 7/0/3; the
 stale-gap scenario still reports `#670 appears resolved` with `stale gap fail count` 3.
 
 ## Task 5 — the parity record and its fixture copy
@@ -819,10 +816,16 @@ because the branch must not regress them.
 
 ## Deferrals
 
-None. Both design-review cycles dispositioned every finding `accepted-fixed`; no deferral
-record or tracker issue is owed. One suppression stands: that the row could be proven on a
-stock image if bzr warned instead of refusing, suppressed against ADR 0052, which settled
-that question and which this charter also excludes.
+None. Both design-review cycles and the scope audit dispositioned every finding
+`accepted-fixed`; no deferral record or tracker issue is owed. One suppression stands: that
+the row could be proven on a stock image if bzr warned instead of refusing, suppressed
+against ADR 0052, which settled that question and which this charter also excludes.
+
+The scope audit's cut was taken: `seed_server_saved_search` takes exactly one id rather than a
+variable number, because the row seeds one bug and no other caller exists. Its seeder fixture
+was kept, with the drift-protection rationale now stated at Step 4.0 — the audit offered that
+as its alternative remedy, and the fixture is the only thing that exercises the real function
+rather than the lifecycle stub's hand-written copy.
 
 ## Resume facts
 

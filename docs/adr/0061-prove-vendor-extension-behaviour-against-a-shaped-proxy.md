@@ -53,11 +53,11 @@ $ for p in 52766 52531 52679; do \
 response rather than a synthesized route.
 
 Issue #710's scope note is wrong on three counts, recorded here because the issue is where
-the next reader starts: there are **17** `saved-search` sites, not "roughly 19"; the
-stale-gaps loop is `670 679 680` (671 and 672 went when those flags shipped); and the
-parity document/fixture agreement is **partly** guarded, by `grep -Fxc "$row"` in
-`run_parity_report_fixture` (`container-tests.sh:1038`) — only a document row with no
-fixture entry is uncaught.
+the next reader starts: `saved-search` and its variants occur on **17 lines** (21
+occurrences), not "roughly 19" sites; the stale-gaps loop is `670 679 680` (671 and 672 went
+when those flags shipped); and the parity document/fixture agreement is **partly** guarded,
+by `grep -Fxc "$row"` in `run_parity_report_fixture` (`container-tests.sh:1038`) — only a
+document row with no fixture entry is uncaught.
 
 ## Decision
 
@@ -88,7 +88,11 @@ Three parts of that are the decision, not implementation detail:
 3. **Only the bzr arm is routed through the proxy.** The python-bugzilla arm stays on the
    unproxied container and is asserted to return a bug the seeded query excludes, which
    turns the parity row's standing claim — python-bugzilla returns unfiltered results —
-   from an unproven sentence into a tested one.
+   from an unproven sentence into a tested one. That restated assertion, and the control
+   guarding the control set, are **forced** by narrowing the seeded query rather than
+   volunteered: once the query selects a strict subset, the old equality assertions stop
+   being true and something has to replace them. They are worth having, but they are the
+   cost of the fix, not a separate gain it earns.
 
 ## Consequences
 
@@ -113,6 +117,13 @@ Three parts of that are the decision, not implementation detail:
 - The two arms talk to two different servers within one row. Deliberate — the gap recorded is
   a stock-server gap and must be measured on one — but the row is no longer a single
   like-for-like comparison, and its assertions name which server each addresses.
+- **Routing the bzr arm through the proxy also subjects it to the proxy's *ungated* hooks**,
+  not just the saved-search mode. `REWRITE_HOOKS[0]` matches `/rest/bug` unconditionally and
+  rewrites `component`/`version` into arrays with a `-redhat-secondary` member. That is
+  benign for this row — `src/types/bug.rs:50-51` already types both as
+  `Option<Vec<String>>`, and the row asserts only on `id` — but it is a real coupling: a
+  future assertion on either field would see the shaped value on the proxied calls and the
+  plain value on the stock ones.
 - The fixture's name-to-ids mapping and the seeded `namedqueries` row encode the same set
   twice, set from the same shell values in the same block to bound the drift window.
 - **The mode is read once, the fixture on every request.** `make_handler` reads

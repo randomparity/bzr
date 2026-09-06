@@ -80,7 +80,7 @@ than a neighbour that short-circuits ahead of it.
 |---|---|---|
 | Advertises `RedHat`; filters on `savedsearch`; honours/rejects `sharer_id` | `ShapeTests` | no |
 | Mode gating, through `make_handler` rather than the transformer alone | `ShapeTests` round trip | no |
-| Seeder accepts one or more ids and rejects the rest | `container-tests.sh` seed fixture | no |
+| Seeder takes exactly one id and rejects a missing or non-decimal one | `container-tests.sh` seed fixture | no |
 | Each of the row's three assertions reddens through itself | three `container-tests.sh` controls | no |
 | The control really does exceed the subset on seeded data | `make functional-compare-all` | yes |
 | Row green on all three images | `make functional-compare-all` | yes |
