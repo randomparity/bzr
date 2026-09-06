@@ -52,12 +52,9 @@ $ for p in 52766 52531 52679; do \
 (bz50 5.0.6, bz52 5.2, bz53 5.3.3+.) So the advertisement can be a rewrite of a real
 response rather than a synthesized route.
 
-Issue #710's scope note is wrong on three counts, recorded here because the issue is where
-the next reader starts: `saved-search` and its variants occur on **17 lines** (21
-occurrences), not "roughly 19" sites; the stale-gaps loop is `670 679 680` (671 and 672 went
-when those flags shipped); and the parity document/fixture agreement is **partly** guarded,
-by `grep -Fxc "$row"` in `run_parity_report_fixture` (`container-tests.sh:1038`) — only a
-document row with no fixture entry is uncaught.
+Issue #710's scope note is wrong on one count, recorded here because the issue is where
+the next reader starts: the stale-gaps loop is `670 679 680` (671 and 672 went when those
+flags shipped).
 
 ## Decision
 
