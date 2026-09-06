@@ -307,7 +307,13 @@ pub(super) async fn create_and_report(
         write_create_dry_run(params, format, w);
         return Ok(());
     }
-    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+    let client = crate::commands::runtime::shared::connect_and_validate_bug_fields(
+        ctx,
+        &crate::commands::runtime::input::extra_fields::key_union(std::iter::once(
+            &params.extra_fields,
+        )),
+    )
+    .await?;
     let id = client.create_bug(params).await?;
     write_result(
         &ActionResult::created(id, ResourceKind::Bug),
@@ -365,7 +371,7 @@ pub(super) async fn handle(
          piped stdin, or $EDITOR)",
     )?;
 
-    let params = CreateBugParams {
+    let mut params = CreateBugParams {
         product: merged.product,
         component: merged.component,
         summary: resolved_summary.ok_or_else(|| {
@@ -391,7 +397,15 @@ pub(super) async fn handle(
         groups: merged.groups,
         groups_present: false,
         flags,
+        extra_fields: crate::types::bug::ExtraBugFields::new(),
     };
+    params.extra_fields = crate::commands::runtime::input::extra_fields::check_against(
+        &params,
+        crate::commands::runtime::input::extra_fields::parse(
+            &create_fields.field,
+            create_fields.field_json.as_deref(),
+        )?,
+    )?;
     // Building the plan reads attachment files and validates the comment body
     // *before* the bug is created, so a bad input never files an unfinishable
     // bug. An empty plan keeps the byte-identical plain single-create path.

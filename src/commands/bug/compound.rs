@@ -141,7 +141,13 @@ pub(super) async fn create_with_sub_steps(
         write_compound_dry_run(params, &plan, ctx, w);
         return Ok(());
     }
-    let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+    let client = crate::commands::runtime::shared::connect_and_validate_bug_fields(
+        ctx,
+        &crate::commands::runtime::input::extra_fields::key_union(std::iter::once(
+            &params.extra_fields,
+        )),
+    )
+    .await?;
     let id = client.create_bug(params).await?;
     let failures = run_sub_steps(&client, id, plan, w).await;
     if failures.is_empty() {

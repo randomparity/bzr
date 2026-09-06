@@ -64,6 +64,11 @@ pub(crate) struct BugUpdateDraft {
     #[serde(default)]
     pub(crate) see_also_remove: Vec<String>,
     pub(crate) expect_unchanged_since: Option<String>,
+    /// Carried in from the CLI `--field` / `--field-json` overlay, never from
+    /// the document — `serde(skip)` keeps it out of the deserialized field
+    /// list, so `deny_unknown_fields` still rejects an `extra_fields` key.
+    #[serde(skip)]
+    pub(crate) extra_fields: crate::types::bug::ExtraBugFields,
 }
 
 impl BugUpdateDraft {
@@ -107,6 +112,9 @@ impl BugUpdateDraft {
             see_also_add: args.see_also_add.clone(),
             see_also_remove: args.see_also_remove.clone(),
             expect_unchanged_since: args.expect_unchanged_since.clone(),
+            // Parsing `--field-json` can fail and can read stdin, so the
+            // caller does it once and assigns the result.
+            extra_fields: crate::types::bug::ExtraBugFields::new(),
         }
     }
 

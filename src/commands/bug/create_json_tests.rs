@@ -309,7 +309,8 @@ fn json_groups_non_empty_cli_override_replaces_json_groups() {
     let mut args = from_json_args("input.json");
     args.create_fields.groups = vec!["cli-group".into()];
 
-    let merged = super::overlay_cli(json, &args).unwrap();
+    let merged =
+        super::overlay_cli(json, &args, &crate::types::bug::ExtraBugFields::new()).unwrap();
 
     assert_eq!(merged.groups.into_option(), Some(vec!["cli-group".into()]));
 }
@@ -352,7 +353,8 @@ fn comment_tags_non_empty_cli_flag_replaces_json() {
     let mut args = from_json_args("input.json");
     args.comment_tag = vec!["cli-tag".into()];
 
-    let merged = super::overlay_cli(json, &args).unwrap();
+    let merged =
+        super::overlay_cli(json, &args, &crate::types::bug::ExtraBugFields::new()).unwrap();
 
     assert_eq!(merged.comment_tags, vec!["cli-tag".to_string()]);
 }

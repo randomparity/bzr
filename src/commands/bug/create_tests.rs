@@ -143,6 +143,8 @@ async fn bug_create_sends_parity_fields_in_body() {
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs {
+            field: vec![],
+            field_json: None,
             alias: Some("a-1".into()),
             url: Some("https://example.com/repro".into()),
             whiteboard: Some("needs-triage".into()),
@@ -196,6 +198,8 @@ async fn bug_create_rejects_malformed_deadline() {
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs {
+            field: vec![],
+            field_json: None,
             deadline: Some("not-a-date".into()),
             ..Default::default()
         },
@@ -548,6 +552,8 @@ async fn bug_create_cli_create_metadata_overrides_template() {
         with_attachment: vec![],
         attachment_description: vec![],
         create_fields: crate::cli::CreateFieldArgs {
+            field: vec![],
+            field_json: None,
             alias: None,
             url: Some("https://example.com/cli".into()),
             whiteboard: Some("cli-whiteboard".into()),
@@ -843,6 +849,7 @@ Just a summary
 fn build_editor_template_includes_summary_and_field_reminder() {
     use crate::types::CreateBugParams;
     let params = CreateBugParams {
+        extra_fields: crate::types::bug::ExtraBugFields::new(),
         product: "Foo".into(),
         component: "Bar".into(),
         summary: String::new(),
@@ -879,6 +886,7 @@ fn build_editor_template_includes_summary_and_field_reminder() {
 fn build_editor_template_includes_template_description_body() {
     use crate::types::CreateBugParams;
     let params = CreateBugParams {
+        extra_fields: crate::types::bug::ExtraBugFields::new(),
         product: "Foo".into(),
         component: "Bar".into(),
         summary: String::new(),
@@ -1571,6 +1579,7 @@ async fn run_editor_flow_returns_parsed_editor_output() {
 fn build_editor_template_separates_no_newline_body_from_sentinel() {
     use crate::types::CreateBugParams;
     let params = CreateBugParams {
+        extra_fields: crate::types::bug::ExtraBugFields::new(),
         product: "P".into(),
         component: "C".into(),
         version: "1".into(),

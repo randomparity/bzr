@@ -232,6 +232,14 @@ pub(crate) async fn apply_checked_connected(
         write_update_dry_run(&request.ids, &request.params, format, w);
         return Ok(());
     }
+    crate::commands::runtime::shared::validate_bug_fields(
+        client,
+        ctx,
+        &crate::commands::runtime::input::extra_fields::key_union(std::iter::once(
+            &request.params.extra_fields,
+        )),
+    )
+    .await?;
     if let Some(expected) = request.expect_unchanged_since {
         ensure_unchanged_since(client, &request.ids, expected).await?;
     }

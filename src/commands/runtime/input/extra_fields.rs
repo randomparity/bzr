@@ -5,7 +5,7 @@
 //! each key is settled later, against the field catalogue, by
 //! [`crate::commands::runtime::shared::field_catalogue`].
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
@@ -96,10 +96,7 @@ fn parse_json_source(source: &str) -> Result<ExtraFields> {
 /// Merge the repeatable `--field KEY=VALUE` arguments with an optional
 /// `--field-json` source into one map. A key set by both, or by `--field`
 /// twice, is rejected rather than silently resolved (exit 7).
-pub(crate) fn parse_extra_fields(
-    pairs: &[String],
-    json_source: Option<&str>,
-) -> Result<ExtraFields> {
+pub(crate) fn parse(pairs: &[String], json_source: Option<&str>) -> Result<ExtraFields> {
     let mut out = match json_source {
         Some(source) => parse_json_source(source)?,
         None => ExtraFields::new(),
@@ -118,18 +115,18 @@ pub(crate) fn parse_extra_fields(
 /// tracks `skip_serializing_if` and cannot drift from the payload structs.
 /// `--field whiteboard=x` is therefore accepted when `--whiteboard` was not
 /// given and rejected when it was.
-pub(crate) fn reject_typed_collisions<T: serde::Serialize>(
+pub(crate) fn check_against<T: serde::Serialize>(
     typed: &T,
-    extra: &ExtraFields,
-) -> Result<()> {
+    extra: ExtraFields,
+) -> Result<ExtraFields> {
     if extra.is_empty() {
-        return Ok(());
+        return Ok(extra);
     }
-    let Ok(Value::Object(typed)) = serde_json::to_value(typed) else {
-        return Ok(());
+    let Ok(Value::Object(rendered)) = serde_json::to_value(typed) else {
+        return Ok(extra);
     };
     for key in extra.keys() {
-        if typed.contains_key(key) {
+        if rendered.contains_key(key) {
             return Err(BzrError::input_field(
                 format!(
                     "--field: '{key}' is already set by this request's typed \
@@ -140,7 +137,13 @@ pub(crate) fn reject_typed_collisions<T: serde::Serialize>(
             ));
         }
     }
-    Ok(())
+    Ok(extra)
+}
+
+/// The union of keys across one or more payloads' extra-field maps, for the
+/// single pre-dispatch catalogue check that covers a whole batch.
+pub(crate) fn key_union<'a>(maps: impl Iterator<Item = &'a ExtraFields>) -> BTreeSet<String> {
+    maps.flat_map(|map| map.keys().cloned()).collect()
 }
 
 #[cfg(test)]

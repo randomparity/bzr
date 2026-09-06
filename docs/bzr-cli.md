@@ -171,6 +171,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │          [--whiteboard <W>] [--target-milestone <T>] [--deadline <DATE>]
 │   │          [--cc <C>...] [--keywords <K>...] [--groups <G>...] [--flag <F>...]
 │   │          [--comment-tag <TAG>...]
+│   │          [--field <KEY=VALUE>...] [--field-json <PATH>]
 │   │          [--with-comment <TEXT> | --with-comment-file <PATH>]
 │   │          [--with-attachment <PATH>...] [--attachment-description <TEXT>...]
 │   ├── clone <ID> [--summary <S>] [--product <P>] [--component <C>] [--version <V>]
@@ -192,6 +193,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │                   [--see-also-add <URL>] [--see-also-remove <URL>]
 │   │                   [--comment <BODY>] [--comment-file <PATH>] [--comment-private]
 │   │                   [--comment-tag <TAG>...] [--minor-update]
+│   │                   [--field <KEY=VALUE>...] [--field-json <PATH>]
 │   │                   [--expect-unchanged-since <TIMESTAMP>]
 │   ├── resolve <ID...> [--status <STATUS>] [--as <RESOLUTION>] [--comment <BODY>] [--comment-file <PATH>]
 │   │                   [--comment-private] [--expect-unchanged-since <TIMESTAMP>]
@@ -814,6 +816,8 @@ bzr bug create --from-json bugs.json
 | `--groups <G>` | No | | Add the bug to these groups (comma-separated, repeatable) |
 | `--flag <F>` | No | | Set/request a flag using Bugzilla flag syntax (repeatable): `name+`, `name-`, `name?`, `name?(user@example.com)` |
 | `--template <T>` | No | | Name of a saved template to use for default field values |
+| `--field <KEY=VALUE>` | No | | Set any field the server declares, including custom (`cf_*`) fields (repeatable). See [Arbitrary declared fields](#arbitrary-declared-fields---field----field-json). |
+| `--field-json <PATH>` | No | | Set declared fields from a JSON object of names to values (`-` reads stdin); values keep their JSON type. See [Arbitrary declared fields](#arbitrary-declared-fields---field----field-json). |
 | `--comment-tag <TAG>` | No | | Tag the bug's first comment (the description) with this tag (repeatable). Requires a description from any source; using it without one is a usage error (exit 7). `Bug.create` has no `comment_tags` parameter, so this is a post-create sub-step (see [Compound create](#compound-create-comment--attachments)); a failed tag PUT does not roll back the created bug. |
 | `--with-comment <TEXT>` | No | | Post a first comment after the bug is created (compound create). Literal text; no `-`/stdin. Mutually exclusive with `--with-comment-file` and `--from-json`. See [Compound create](#compound-create-comment--attachments). |
 | `--with-comment-file <PATH>` | No | | Post a first comment read from a UTF-8 file. Mutually exclusive with `--with-comment` and `--from-json`. |
@@ -1044,6 +1048,8 @@ bzr bug update --from-json updates.json --json | jq '.data.failed'
 | `--whiteboard <W>` | No | Set whiteboard text |
 | `--url <U>` | No | Set the URL field |
 | `--target-milestone <M>` | No | Set the target milestone |
+| `--field <KEY=VALUE>` | No | Set any field the server declares, including custom (`cf_*`) fields (repeatable). See [Arbitrary declared fields](#arbitrary-declared-fields---field----field-json). |
+| `--field-json <PATH>` | No | Set declared fields from a JSON object of names to values (`-` reads stdin); values keep their JSON type. See [Arbitrary declared fields](#arbitrary-declared-fields---field----field-json). |
 | `--flag <F>` | No | Set flags (repeatable; see [Flag Syntax](#flag-syntax)) |
 | `--blocks-add <IDs>` | No | Add bug IDs to the blocks list (comma-separated) |
 | `--blocks-remove <IDs>` | No | Remove bug IDs from the blocks list (comma-separated) |
@@ -1063,6 +1069,50 @@ bzr bug update --from-json updates.json --json | jq '.data.failed'
 | `--comment-tag <TAG>` | No | Tag the comment posted with this update (repeatable). Requires `--comment` or `--comment-file`; using it alone is a usage error (exit 7). `Bug.update`'s `comment_tags` parameter is not reliably honored across supported server versions, so this issues a follow-up tag call after the update (two API round-trips), identifying the posted comment by recency rather than by an ID `Bug.update` never returns. A comment landed by another user or process on the same bug in that narrow window could be mistagged instead — a check-then-write race the same shape as `--expect-unchanged-since`'s, disclosed rather than eliminated. If only the tag call fails, the field changes and comment have already landed: a batch failure for that ID carries `"step":"comment_tags"` (see [Structured update input](#structured-update-input---from-json)'s batch shape) — do **not** retry with the same `--comment` text, since `Bug.update` posts a new comment on every call and a retry would duplicate it; use `bzr comment tag` on the existing comment instead. |
 | `--minor-update` | No | Suppress bugmail notifications for this update (forwards Bugzilla's `minor_update` field). Core upstream functionality with a version floor, not a vendor extension — verified present on Bugzilla 5.3.3, absent on 5.0.6 and 5.2. bzr has no runtime capability detection for this; on a server below the floor it warns on stderr (naming the detected version) and sends the notification anyway rather than failing the update. |
 | `--expect-unchanged-since <TIMESTAMP>` | No | Optimistic-concurrency guard: only apply if the bug's `last_change_time` still equals this value (pass the `last_change_time` from a preceding `bug view`). Re-reads each target before writing and exits 14 (collision) without writing on a mismatch. Client-side, so a narrow check-then-write window remains; with multiple IDs any mismatch aborts the whole batch |
+
+#### Arbitrary declared fields (`--field` / `--field-json`)
+
+`bzr bug create` and `bzr bug update` can set any field the target server
+declares — custom (`cf_*`) fields and built-ins bzr has no dedicated flag for —
+without a bzr release adding a flag for each one.
+
+```bash
+bzr bug create --product Fedora --component kernel --summary "Boot failure" \
+  --description d --field cf_release=9.6 --field cf_environment=staging
+bzr bug update 12345 --field cf_release=9.7
+bzr bug update 12345 --field-json fields.json   # {"cf_targets": ["a", "b"]}
+```
+
+`--field KEY=VALUE` splits on the first `=`, so `--field k=a=b` sets `a=b`.
+The value is sent as a string; `--field k=` sends the empty string, which is how
+Bugzilla clears a field. `--field-json` takes a JSON object whose values keep
+their JSON type, which is the way to set multi-select, boolean, and numeric
+custom fields.
+
+**Every key is validated against the server's own field catalogue before
+anything is sent.** A name the server does not declare fails with exit 7 naming
+the field — rather than being accepted by Bugzilla, which silently ignores
+request keys it does not recognise and would report success having changed
+nothing. Run `bzr field list` to see what a server declares. The catalogue is
+fetched once per server and cached in the config beside the detected auth method
+and API mode; a key the cache does not list always forces a fresh fetch, so a
+field added on the server since is accepted rather than wrongly rejected.
+
+If the catalogue cannot be fetched at all, the write is **refused** rather than
+sent unvalidated. That failure keeps the underlying error's own exit code (4, 5,
+8, or 9) and says the field catalogue was not retrieved, so it is never
+confusable with the exit-7 "server does not declare this field" refusal.
+
+Other usage errors, all exit 7: an argument without `=`, an empty field name, a
+key supplied more than once across `--field` and `--field-json`, a
+`--field-json` document that is not a JSON object, and a key that a dedicated
+flag on the same command line already sets (`--whiteboard x --field
+whiteboard=y` is rejected rather than silently resolved).
+
+`--dry-run` makes no connection, so it neither validates the keys nor writes;
+the previewed payload shows them as they would be sent. The strict `--from-json`
+document shapes do not accept these keys — combine `--from-json` with `--field`
+on the command line instead.
 
 #### Structured update input (`--from-json`)
 
