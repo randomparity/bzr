@@ -139,16 +139,25 @@ So `--sharer` is typed `u64` and maps to `sharer_id` unchanged. Clap rejects a n
 value at parse time with its ordinary value-validation error and exit code 2, so no server
 round trip happens for a mistyped id.
 
-**Detect extension support and warn (or refuse) when the server lacks it.** The facility
-exists: `BugzillaClient::server_extensions()` (`src/client/resources/server.rs:39`) already
-fetches `GET /rest/extensions` into `ServerExtensions`
-(`src/types/server_info.rs:13`), which the server commands already surface. Rejected: it
-costs an extra round trip on every `--saved-search` invocation to tell the user something the
-flag's own `--help` and the CLI reference already tell them, and detection would have to be
-wired into a search path that currently makes exactly one request. Disclosure is the cheaper
-control for the same information.
+**Detect extension support and warn.** verified: the facility exists —
+`BugzillaClient::server_extensions()` (`src/client/resources/server.rs:39`) fetches
+`GET /rest/extensions` into `ServerExtensions` (`src/types/server_info.rs:13`), which the
+server commands already surface. judgment: it costs a round trip on every `--saved-search`
+invocation to restate what the flag's own `--help` and the CLI reference already say, wired
+into a search path that today makes exactly one request — and the warning arrives after the
+user has typed the flag, later than the documentation reaches them.
 
-That second rejection is a policy, not a local choice — see "Decision record" below.
+**Refuse the request when the extension is absent.** judgment: bzr would reject a request the
+server accepts, on the strength of an `/rest/extensions` listing that is not a guaranteed
+inventory of patched `Bug.search` behaviour. ADR 0015 already settles that bzr does not mask
+server responses; a client-side rejection is that same failure in the other direction.
+
+**Resolve the saved search client-side and translate it into ordinary filters.** verified:
+upstream Bugzilla exposes named queries only through `buglist.cgi?cmdtype=runnamed`; no
+module under `Bugzilla/WebService/` in any supported image references `namedqueries`. The
+translation would mean scraping a CGI page outside the API surface bzr is built on.
+
+The first two rejections are a policy, not a local choice — see "Decision record" below.
 
 ## CLI contract
 
@@ -241,25 +250,38 @@ This limitation has no owning tracker issue at design time. The repository keeps
 `docs/debt/` directory, so it is carried in the plan's Deferrals section and filed as a
 follow-up issue from this run's completion report.
 
-## Decision record
+## Decision record: disclose, do not detect
 
-`docs/adr/README.md` sets this repository's criterion for an ADR: "choices with viable
-alternatives where the rationale is worth preserving". Disclose-rather-than-detect meets it.
-It is not local to this issue — `docs/dev/python-bugzilla-parity.md` lists four sibling gaps
-in the same parity campaign (#671 generic arbitrary fields, #672 comment tags, #679
-whiteboard match types, #680 personal bug tags), and each faces the same question: ship a
-vendor-extension parameter that stock servers ignore and disclose it, or detect support
-first. Whichever way this issue answers becomes the precedent, so recording it once here
-saves four re-litigations.
+**bzr sends vendor-extension search parameters unconditionally and discloses the silent
+no-op in documentation, rather than detecting server support.** Disclosure means three
+placements, each reaching the reader before or at the point of use: the flag's clap doc
+comment (so `--help` and the man page carry it), the flag's row and a note in
+`docs/bzr-cli.md`, and a footnote on any parity claim saying what its evidence establishes.
 
-An earlier draft of this spec argued no ADR was needed on the grounds that the change
-touches no module boundary or contract shape. That is the wrong criterion — it is not the
-one the README states — and the argument is withdrawn.
+This is not local to `--saved-search`. `docs/dev/python-bugzilla-parity.md` lists four
+sibling gaps in the same campaign — #671 generic arbitrary fields, #672 comment tags, #679
+whiteboard match types, #680 personal bug tags — and each meets the same question. Whichever
+way this issue answers becomes the precedent, so it is settled once here rather than five
+times.
 
-The ADR number is assigned by the campaign orchestrator, not chosen here, because sibling
-issues are running concurrently and all would otherwise pick the same "next free" number.
-The index row in `docs/adr/README.md` is the orchestrator's to add; the index is not coupled
-to any gated check in this repository.
+Consequences: a `--saved-search` against a stock Bugzilla returns an unfiltered result and
+exits 0, which is bzr faithfully reproducing the server; bzr issues no extra request per
+invocation; and bzr cannot warn a user who has not read the documentation, which is accepted
+because the alternative charges every user a round trip to catch the subset who did not. The
+three rejected alternatives are recorded above with their grounds.
+
+**This belongs in `docs/adr/`, and is not there.** `docs/adr/README.md` sets the criterion —
+"choices with viable alternatives where the rationale is worth preserving" — and a
+cross-cutting policy with three tagged rejected alternatives meets it. An earlier draft of
+this spec argued otherwise on the grounds that the change crosses no module boundary; that is
+the wrong criterion and the argument is withdrawn.
+
+The ADR file is not written in this run because ADR numbers are assigned by the campaign
+orchestrator — sibling issues are running concurrently and would otherwise all take the same
+"next free" number — and no number was assigned in time. This section is written to be
+liftable verbatim into `docs/adr/NNNN-disclose-vendor-extension-parameters.md` once a number
+exists; the index row in `docs/adr/README.md` is the orchestrator's, and the index is not
+coupled to any gated check here. The run's completion report carries the recommendation.
 
 ## Out of scope
 
