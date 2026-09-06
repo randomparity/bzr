@@ -14,6 +14,200 @@ fn strict_http_client() -> reqwest::Client {
     .unwrap()
 }
 
+/// Mount the three `rest/user` responses the header-auth probe distinguishes.
+///
+/// Mount order is load-bearing: wiremock sorts by priority (default 5 for every
+/// mock) and breaks ties by insertion order, so the credential-matching mocks
+/// must precede the catch-all that answers the anonymous leg.
+async fn mount_user_legs(
+    server: &MockServer,
+    header_leg: ResponseTemplate,
+    query_leg: ResponseTemplate,
+    anonymous_leg: ResponseTemplate,
+) {
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .and(header(AUTH_HEADER_NAME, "test-key"))
+        .respond_with(header_leg)
+        .mount(server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .and(query_param(AUTH_QUERY_PARAM, "test-key"))
+        .respond_with(query_leg)
+        .mount(server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .respond_with(anonymous_leg)
+        .mount(server)
+        .await;
+}
+
+/// The projection Bugzilla returns to an anonymous caller.
+fn thin_user() -> ResponseTemplate {
+    ResponseTemplate::new(200)
+        .set_body_json(serde_json::json!({"users": [{"id": 1, "real_name": "T"}]}))
+}
+
+/// The projection Bugzilla returns to an authenticated caller.
+fn rich_user() -> ResponseTemplate {
+    ResponseTemplate::new(200)
+        .set_body_json(serde_json::json!({"users": [{"id": 1, "real_name": "T", "groups": ["g"]}]}))
+}
+
+fn bugzilla_error(status: u16) -> ResponseTemplate {
+    ResponseTemplate::new(status).set_body_json(
+        serde_json::json!({"error": true, "code": 410, "message": "You must log in"}),
+    )
+}
+
+async fn header_auth_confirmed(server: &MockServer) -> bool {
+    verify_header_auth_via_rest(
+        &strict_http_client(),
+        &server.uri(),
+        "test-key",
+        &HeaderValue::from_static("test-key"),
+        "user@example.com",
+    )
+    .await
+}
+
+async fn requests_received(server: &MockServer) -> usize {
+    server.received_requests().await.unwrap().len()
+}
+
+#[tokio::test]
+async fn header_ignored_is_not_confirmed() {
+    // The #713 defect: a header-unaware server answers the header leg exactly as
+    // it answers an anonymous caller.
+    let server = MockServer::start().await;
+    mount_user_legs(&server, thin_user(), rich_user(), thin_user()).await;
+
+    assert!(!header_auth_confirmed(&server).await);
+    assert_eq!(
+        requests_received(&server).await,
+        2,
+        "probe should stop after the anonymous leg matched the header leg"
+    );
+}
+
+#[tokio::test]
+async fn header_honoured_is_confirmed() {
+    let server = MockServer::start().await;
+    mount_user_legs(&server, rich_user(), rich_user(), thin_user()).await;
+
+    assert!(header_auth_confirmed(&server).await);
+}
+
+#[tokio::test]
+async fn anonymous_refusal_is_confirmed() {
+    // A `requirelogin` server refuses the anonymous caller with a status *and* a
+    // Bugzilla error body together. That refusal is the discrimination the probe
+    // is looking for, so the anonymous leg is exempt from the credentialed-leg
+    // error test. A bodiless 401 would pass either way and prove nothing.
+    let server = MockServer::start().await;
+    mount_user_legs(&server, rich_user(), rich_user(), bugzilla_error(401)).await;
+
+    assert!(header_auth_confirmed(&server).await);
+}
+
+#[tokio::test]
+async fn non_discriminating_endpoint_is_not_confirmed() {
+    let server = MockServer::start().await;
+    mount_user_legs(&server, thin_user(), thin_user(), thin_user()).await;
+
+    assert!(!header_auth_confirmed(&server).await);
+}
+
+#[tokio::test]
+async fn header_leg_non_success_is_not_confirmed() {
+    // The header body deliberately equals the query-param body, so the
+    // credential-accepted guard is the only thing preventing a confirmation.
+    let server = MockServer::start().await;
+    mount_user_legs(
+        &server,
+        ResponseTemplate::new(401).set_body_json(
+            serde_json::json!({"users": [{"id": 1, "real_name": "T", "groups": ["g"]}]}),
+        ),
+        rich_user(),
+        thin_user(),
+    )
+    .await;
+
+    assert!(!header_auth_confirmed(&server).await);
+    assert_eq!(
+        requests_received(&server).await,
+        1,
+        "a refused header leg should end the probe before the anonymous leg"
+    );
+}
+
+#[tokio::test]
+async fn query_leg_non_success_is_not_confirmed() {
+    let server = MockServer::start().await;
+    mount_user_legs(
+        &server,
+        rich_user(),
+        ResponseTemplate::new(403).set_body_json(
+            serde_json::json!({"users": [{"id": 1, "real_name": "T", "groups": ["g"]}]}),
+        ),
+        thin_user(),
+    )
+    .await;
+
+    assert!(!header_auth_confirmed(&server).await);
+}
+
+#[tokio::test]
+async fn anonymous_leg_failure_is_not_confirmed() {
+    // A transient anonymous failure differs from the header response for a
+    // reason unrelated to auth; without the conclusive-status rule the matching
+    // query-param leg would then confirm on the strength of an error.
+    let server = MockServer::start().await;
+    mount_user_legs(
+        &server,
+        thin_user(),
+        thin_user(),
+        ResponseTemplate::new(503),
+    )
+    .await;
+
+    assert!(!header_auth_confirmed(&server).await);
+}
+
+#[tokio::test]
+async fn error_body_leg_is_not_confirmed() {
+    // Bugzilla delivers some errors inside an HTTP 200. Two credentialed legs
+    // carrying the same 200 error must not read as agreement.
+    let server = MockServer::start().await;
+    mount_user_legs(
+        &server,
+        bugzilla_error(200),
+        bugzilla_error(200),
+        thin_user(),
+    )
+    .await;
+
+    assert!(!header_auth_confirmed(&server).await);
+}
+
+#[tokio::test]
+async fn header_matching_neither_peer_is_not_confirmed() {
+    let server = MockServer::start().await;
+    mount_user_legs(
+        &server,
+        rich_user(),
+        ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({"users": [{"id": 1, "real_name": "T", "groups": ["h"]}]}),
+        ),
+        thin_user(),
+    )
+    .await;
+
+    assert!(!header_auth_confirmed(&server).await);
+}
+
 #[test]
 fn valid_login_result_from_bool_true() {
     let v: ValidLoginResult = serde_json::Value::Bool(true).try_into().unwrap();

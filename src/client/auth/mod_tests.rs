@@ -167,11 +167,34 @@ async fn valid_login_query_param_but_header_works_on_api() {
         .mount(&server)
         .await;
 
-    // Header auth works on real API endpoints
+    // Header auth works on real API endpoints: the header leg gets the same
+    // authenticated projection the query-param leg does, and both differ from
+    // what an anonymous caller receives.
     Mock::given(method("GET"))
-        .and(path("/rest/bug"))
+        .and(path("/rest/user"))
         .and(header(AUTH_HEADER_NAME, "test-key"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({"users": [{"id": 1, "real_name": "T", "groups": ["g"]}]}),
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({"users": [{"id": 1, "real_name": "T", "groups": ["g"]}]}),
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"users": [{"id": 1, "real_name": "T"}]})),
+        )
         .mount(&server)
         .await;
 
@@ -218,11 +241,75 @@ async fn valid_login_query_param_and_header_fails_on_api() {
         .mount(&server)
         .await;
 
-    // Header auth rejected on real API endpoints
+    // Header auth rejected on real API endpoints: the credentialed header leg
+    // is refused, so it cannot stand in for the authenticated response.
     Mock::given(method("GET"))
-        .and(path("/rest/bug"))
+        .and(path("/rest/user"))
         .and(header(AUTH_HEADER_NAME, "test-key"))
         .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"users": [{"id": 1, "real_name": "T"}]})),
+        )
+        .mount(&server)
+        .await;
+
+    let result = detect_auth_method(
+        &test_http_client(),
+        &server.uri(),
+        "test-key",
+        Some("user@example.com"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(result, AuthMethod::QueryParam);
+}
+
+#[tokio::test]
+async fn valid_login_query_param_survives_anonymously_readable_endpoint() {
+    // Issue #713: a stock, header-unaware Bugzilla answers the verification
+    // endpoint identically to every caller. The old probe read any 2xx as proof
+    // that header auth worked and discarded the correct query-param result, so
+    // every later REST read ran unauthenticated.
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/valid_login"))
+        .and(header(AUTH_HEADER_NAME, "test-key"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": false})),
+        )
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/valid_login"))
+        .and(query_param("login", "user@example.com"))
+        .and(query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "test-key",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": true})))
+        .mount(&server)
+        .await;
+
+    // The endpoint answers every caller the same way, header included.
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"users": [{"id": 1, "real_name": "T"}]})),
+        )
         .mount(&server)
         .await;
 

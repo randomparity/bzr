@@ -46,7 +46,27 @@
 //!
 //! Some servers (e.g. IBM LTC) reject header auth via `valid_login` but accept
 //! it on real API endpoints. When `valid_login` reports query-param, header auth
-//! is re-verified against `rest/bug`; if that succeeds, header is preferred.
+//! is re-verified by a differential probe over `rest/user?names=<login>`, sent
+//! three ways -- with the header, with no credentials, and with the query
+//! parameter `valid_login` proved. Bodies are compared as parsed JSON; the
+//! status is checked but not compared.
+//!
+//! | Observation                                                       | Effect           |
+//! |-------------------------------------------------------------------|------------------|
+//! | any leg fails to send or its body is unreadable                    | keep query-param |
+//! | any leg's status is neither `2xx` nor `401`/`403`                  | keep query-param |
+//! | the header or query-param leg is non-`2xx`, or carries a 200 error | keep query-param |
+//! | header body == anonymous body                                      | keep query-param |
+//! | header body == query-param body (and != anonymous)                 | prefer header    |
+//! | header body matches neither                                        | keep query-param |
+//!
+//! A `401`/`403` on the *anonymous* leg is kept deliberately: an anonymous
+//! caller being refused what a credentialed one receives is discrimination, not
+//! an inconclusive leg, and Bugzilla delivers that refusal as a status and an
+//! error body together. A 2xx alone is not evidence either: `rest/bug` answers
+//! 200 anonymously, so the probe this replaced could not fail for the condition
+//! it verified (ADR 0056). Every inconclusive outcome keeps the method
+//! `valid_login` proved.
 //!
 //! ## Cached vs. fresh detection (connection layer)
 //!
@@ -269,7 +289,7 @@ async fn detect_auth_method(
                 // detected, verify by probing a real endpoint with header auth.
                 // Prefer header when both work -- it avoids leaking keys in URLs.
                 if method == AuthMethod::QueryParam
-                    && verify_header_auth_via_rest(http, base, &key_header).await
+                    && verify_header_auth_via_rest(http, base, api_key, &key_header, login).await
                 {
                     tracing::info!(
                         "header auth works on API endpoints despite valid_login \
