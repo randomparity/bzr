@@ -86,8 +86,16 @@ contract is to compare against a server the run set up.
 
 ### Making the container fresh
 
-- **Document the precondition instead of enforcing it.** judgment: it already lived in
-  documentation-shaped institutional memory and was forgotten anyway.
+- **Do nothing.** verified: the symptom issue #722 attributed to a dirty container is otherwise
+  explained — the saved-search probe queries two ids the same run created — so no reported failure
+  is known to require this half. judgment: the tier's contract is nonetheless to compare against a
+  server the run set up, and leaving an entry point that silently inherits arbitrary state is a
+  latent version of exactly the class of defect this issue is.
+- **Document the precondition instead of enforcing it.** verified: charter criterion 3 permits it,
+  and it is the cheaper branch — no container rebuild, no destroyed developer container.
+  judgment: a `##` help line is read by `make help`, not by the runner typing
+  `make functional-compare`, so it is the branch that was already effectively taken and already
+  forgotten.
 - **Enforce it behind a flag or a separate `functional-compare-fresh` target.** judgment: the
   default would stay the unsafe one, which is how this was missed; a developer iterating on one
   comparison failure can still call `run-compare.sh` directly.

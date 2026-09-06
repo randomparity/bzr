@@ -34,8 +34,10 @@ Repository conventions in `CLAUDE.md` bind every task; these are the ones it doe
 
 ## Task 1 — bzr writes plain text to a non-terminal stderr
 
-**Interfaces.** Defines `tracing_ansi_enabled` (step 3) in `src/main.rs`, private to that binary
-crate and reached by `src/main_tests.rs` through its existing `use super::*;`. Consumes
+**Interfaces.** Defines, in `src/main.rs`, private to that binary crate and reached by
+`src/main_tests.rs` through its existing `use super::*;`:
+`fn tracing_ansi_enabled(no_color_flag: bool, no_color_env: Option<&std::ffi::OsStr>,
+stderr_is_terminal: bool) -> bool`. Consumes
 `Cli::no_color` (`src/cli/mod.rs:253`, `pub no_color: bool`), `std::io::IsTerminal` (imported at
 `src/main.rs:1`), and `tracing_subscriber::fmt::SubscriberBuilder::with_ansi` (0.3.23,
 `src/fmt/mod.rs:633`, `pub fn with_ansi(self, ansi: bool) -> SubscriberBuilder<…>`).
@@ -75,14 +77,18 @@ crate and reached by `src/main_tests.rs` through its existing `use super::*;`. C
    `tracing_subscriber::fmt()` chain at `src/main.rs:29-32`, and add `.with_ansi(stderr_ansi)` to
    that chain between `.with_env_filter(filter)` and `.with_writer(std::io::stderr)`.
 5. Run `make test-one T=tracing_ansi`. Expect all six cases to pass.
-6. Correct the four colour-documentation rows, each staying its current size. `docs/bzr-cli.md:50`
-   and the clap doc comment at `src/cli/mod.rs:247-251`: the flag disables colour on stdout and on
-   the stderr diagnostic stream, and each stream's automatic suppression follows its own terminal
-   status. `docs/bzr-cli.md:72` (`CLICOLOR`) and `:74` (`CLICOLOR_FORCE`): both govern stdout
-   colour only, and `CLICOLOR_FORCE=1` does not force colour when stdout is redirected, because
-   `src/main.rs:36-37` sets `colored`'s manual override and `colored` 3.1.1's
-   `ShouldColorize::should_colorize` (`src/control.rs:118-128`) reads that override first. Say the
-   same about `CLICOLOR_FORCE` in the clap comment rather than repeating the unqualified claim.
+6. Correct five colour-documentation surfaces, each staying its current size. Locate the four
+   `docs/bzr-cli.md` rows by their leading cell rather than by line number — run
+   `grep -n 'NO_COLOR\|CLICOLOR\|`--no-color`' docs/bzr-cli.md` first, because the numbers move.
+   - the `--no-color` row, and the clap doc comment for the same flag in `src/cli/mod.rs`: the
+     flag disables colour on stdout and on the stderr diagnostic stream, and each stream's
+     automatic suppression follows its own terminal status.
+   - the `NO_COLOR` row: a non-empty value disables stdout colour and suppresses ANSI on the
+     tracing stream. Do not write that it governs stdout only — this change makes it govern both.
+   - the `CLICOLOR` and `CLICOLOR_FORCE` rows, and the same claim in the clap comment: both govern
+     stdout colour only, and `CLICOLOR_FORCE=1` does not force colour when stdout is redirected,
+     because `src/main.rs:36-37` sets `colored`'s manual override and `colored` 3.1.1's
+     `ShouldColorize::should_colorize` (`src/control.rs:118-128`) reads that override first.
 7. Run `make lint` bare, then `make test` bare in the background. Expect exit 0 from both.
 
 **Acceptance.** `grep -c $'\033'` over a redirected `bzr -vv` stderr prints `0` on a debug
@@ -172,9 +178,10 @@ every other caller.
    restarting: after `cmd_stop`, if `container_exists` still succeeds, call `err` with a message
    naming the likely cause — a dependent container such as a leftover python-bugzilla sidecar,
    which `tests/functional/lib.sh:406` attaches with `--network container:<name>` and which
-   podman refuses to orphan — and `return 1`. `cmd_stop` discards `rm -f` failure and logs
-   "Container removed." regardless, so without this check a refused removal makes `reset`
-   silently identical to `start`.
+   podman refuses to orphan — and the repair, which is to remove that sidecar
+   (`pybz_sidecar_stop`, `tests/functional/lib.sh:430`, or `<runtime> rm -f <sidecar>`) and retry;
+   then `return 1`. `cmd_stop` discards `rm -f` failure and logs "Container removed." regardless,
+   so without this check a refused removal makes `reset` silently identical to `start`.
 4. Run `make check-shell` bare. Expect exit 0.
 5. Run, in this order with no `NO_COLOR` in the environment: `make functional-test`, then
    `make functional-compare`. Expect the comparison run to reach its own summary and to report a
@@ -186,8 +193,10 @@ tier, with no environment variable set by the caller.
 ## Rollback
 
 `git revert` of the branch restores the previous behaviour; no data, schema, or config migration
-is involved. A host left holding a stopped container after a failed `reset` is repaired by
-`make functional-start`, as before.
+is involved. A `reset` refused because a dependent sidecar holds the container leaves that
+container **running**, so `make functional-start` is inert there and reports success: the repair
+is to remove the sidecar and re-run. A host left holding a *stopped* container is still repaired
+by `make functional-start`, as before.
 
 ## Deferrals
 
