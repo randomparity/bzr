@@ -21,15 +21,13 @@ condition it verifies provides no signal, and this one actively overrode a corre
 bzr computed `AuthMethod::QueryParam` from `valid_login`, then discarded it and returned
 `AuthMethod::Header`.
 
-The consequence is silent. Issue #713 measured it against a stock Bugzilla 5.2 fixture
-(image `bugzilla/bugzilla` at `644c66f4`, head of branch `5.2`), with one actor and one key:
-the `X-BUGZILLA-API-KEY` column of every request was byte-identical to the anonymous column.
-A grep of the docroot for `x.bugzilla.api.key`, `X_BUGZILLA_API_KEY`, `HTTP_X_BUGZILLA` and
-`API_AUTH_HEADERS` returned zero hits, while `Bugzilla_api_key` matched
-`Bugzilla/Auth/Login/APIKey.pm` and two others — stock Bugzilla has no API-key-header code
-path at all, so the probe's positive is always wrong there. Reads then returned 200 with a
-narrower body: `estimated_time`/`remaining_time` absent, private comments absent. Nothing
-distinguishes that from a legitimately empty result.
+The evidence is issue #713's measurement against a stock Bugzilla 5.2 fixture (image
+`bugzilla/bugzilla` at `644c66f4`): a docroot grep for every spelling of the API-key header
+returns zero hits while `Bugzilla_api_key` matches `Bugzilla/Auth/Login/APIKey.pm`, and the
+`X-BUGZILLA-API-KEY` column of the issue's request table is byte-identical to the anonymous
+column. Stock Bugzilla has no API-key-header code path at all, so the probe's positive is
+always wrong there. Reads then returned 200 with a narrower body — `estimated_time` and
+private comments absent — which is indistinguishable from a legitimately empty result.
 
 The question this record answers is what evidence a client can collect that actually
 separates an honoured header from an ignored one, on a server whose version, permission
@@ -42,25 +40,33 @@ differential probe shows the header response is a success, is distinguishable fr
 anonymous response, and matches the response query-parameter auth produces. Every other
 outcome — including every inconclusive one — keeps the method `valid_login` proved.**
 
-The probe issues up to three `GET {base}/rest/user?names={login}` requests and compares
-`(status, body)` pairs:
+The probe issues up to three `GET {base}/rest/user?names={login}` requests:
 
-1. **Header** — with `X-BUGZILLA-API-KEY`. A transport failure or a non-2xx status ends the
-   probe: not confirmed.
-2. **Anonymous** — no credentials at all. A transport failure ends the probe: not confirmed.
-   If this response equals the header response, the header changed nothing and the probe
-   ends: not confirmed.
-3. **Query-parameter** — with `Bugzilla_api_key`, the method `valid_login` proved. A
-   transport failure ends the probe: not confirmed. Header auth is confirmed if and only if
-   this response equals the header response.
+1. **Header** — with `X-BUGZILLA-API-KEY`.
+2. **Anonymous** — no credentials. If this response equals the header response, the header
+   changed nothing and the probe ends: not confirmed.
+3. **Query-parameter** — with `Bugzilla_api_key`, the method `valid_login` proved. Header
+   auth is confirmed if and only if this response equals the header response.
 
-Three properties of that rule are the decision, not implementation detail:
+**Every leg must complete and return a success status.** A transport failure, an unreadable
+body, or a non-2xx status on *any* of the three ends the probe as not confirmed. This is
+load-bearing rather than tidiness: without it, an anonymous leg that fails transiently
+(503, 429, a proxy error page) is unequal to the header response for a reason that has
+nothing to do with auth, and on a server whose `rest/user` record does not discriminate at
+all the third leg then matches the first — confirming header auth on the strength of an
+error, which is exactly the defect being fixed.
 
-1. **The endpoint is `rest/user?names={login}`, and `{login}` is the configured email the
-   `valid_login` probe already required.** It is a deterministic record — no clock, no
-   counter, no server-side ordering — so two identical requests return identical bytes. That
-   is what makes a byte comparison meaningful. It is also the endpoint whose anonymous and
-   authenticated projections issue #713 measured as differing on stock Bugzilla.
+Two further properties are part of the decision:
+
+1. **Responses are compared as parsed JSON values, not as bytes.** Content stability is not
+   encoding stability: field ordering, whitespace, or a per-response serialisation
+   difference would make two identical records unequal, and the probe would then return
+   `false` unconditionally — silently shipping the "remove the fallback" alternative this
+   record rejects, while claiming not to. Each body is parsed with
+   `serde_json::from_str::<serde_json::Value>` and compared structurally; a body that does
+   not parse as JSON is compared as raw text, and a parsed body never equals an unparsed
+   one. `serde_json`'s own 128-level recursion limit bounds the parse of a
+   server-controlled body.
 
 2. **Discriminating power is measured, never assumed.** The probe asserts nothing about
    which fields the server returns, which endpoints require a login, or which Bugzilla
@@ -69,44 +75,57 @@ Three properties of that rule are the decision, not implementation detail:
    anything when it does not. The defect being fixed is exactly an assumption of that kind
    baked into a probe.
 
-3. **Every failure resolves toward the proven method.** Transport error, non-2xx, an
-   indistinguishable pair, an unexpected third response — all of them return
-   `AuthMethod::QueryParam`, which `valid_login` established works. The probe can only ever
-   *upgrade* to header auth on positive evidence; it can never downgrade a working
-   configuration to a broken one.
+The endpoint is `rest/user?names={login}`, with `{login}` the configured email the
+`valid_login` probe already required. Its record has no clock, counter, or server-side
+ordering, so its *content* is stable between two requests — which is what makes a
+comparison meaningful at all — and it is the endpoint whose anonymous and authenticated
+projections issue #713 measured as differing on stock Bugzilla.
 
 ## Consequences
 
-- On stock Bugzilla the anonymous and header responses are byte-identical, the probe stops
-  after two requests, and bzr keeps query-parameter auth. REST reads run authenticated, and
-  the fields the acting user is entitled to — private comments, time tracking — come back.
-  This is the defect closed.
+- On stock Bugzilla the anonymous and header responses agree, the probe stops after two
+  requests, and bzr keeps query-parameter auth. REST reads run authenticated, and the
+  fields the acting user is entitled to come back. This is the defect closed.
 - On a server that genuinely honours the header while `valid_login` denies it, the header
   response matches the query-parameter response and differs from the anonymous one, and bzr
-  still prefers header auth. The fallback the doc comment was written for survives.
+  still prefers header auth.
+- **Every failure resolves toward the method `valid_login` proved.** The probe can only
+  ever upgrade to header auth on positive evidence; it can never downgrade a working
+  configuration to a broken one. False negatives are therefore the accepted direction of
+  error, and there are three shapes of them: a server whose `rest/user` record is identical
+  for anonymous and authenticated callers, a server that refuses `rest/user` to anonymous
+  callers outright (`requirelogin`, where the anonymous leg is non-2xx), and any transient
+  failure on any leg. Each keeps query-parameter auth, which works but puts the API key in
+  URLs — redacted from bzr's own logs by `safe_url()`, still visible to the server's access
+  log.
 - **Detection costs one or two extra round trips**, only in the `valid_login` +
-  query-parameter branch, and only when auth is not already cached. Two requests in the
-  common (not-confirmed) case, three when header auth is confirmed. The old probe cost one.
-  The result is persisted per server in `config.toml` beside `api_mode` and `server_version`,
-  so this is a one-time cost per server, not a per-invocation one.
-- **A false negative is possible and is the accepted direction of error.** A server whose
-  `rest/user` record is identical for anonymous and authenticated callers — a fully public
-  deployment, or one whose user endpoint is disabled — cannot demonstrate discriminating
-  power, so bzr keeps query-parameter auth even if header auth would also have worked. The
-  cost is the API key travelling in URLs, where `safe_url()` redacts it from bzr's own logs
-  but the server's access log still sees it. That is strictly better than the inverse error,
-  which returns wrong data silently.
-- **Auth detection now issues one deliberately unauthenticated request** carrying the
-  configured login as a query parameter. It reveals to the server only a value that server
-  already holds, and it is sent to the configured URL over the same TLS policy as every
-  other probe. It is not a new trust boundary; it is the same one, crossed once more.
-- **The API key still appears in the query-parameter probe's URL.** That is unchanged from
-  the existing `whoami` and `valid_login` query-parameter probes and is inherent to the
-  method being probed.
+  query-parameter branch, and only when auth is not already cached: two requests in the
+  common not-confirmed case, three when header auth is confirmed. The old probe cost one.
+- **An already-affected user does not get the fix by upgrading.** The detected method is
+  persisted per server in `config.toml`, and a server with both `auth_method` and
+  `api_mode` cached is never re-detected — `connect` short-circuits to a TLS probe
+  (`src/commands/runtime/shared/connection/mod.rs`) and the cached method is read straight
+  from config (`.../connection/target.rs`). Anyone whose config the old probe wrote
+  `auth_method = "header"` into keeps it, and their REST reads keep silently omitting what
+  they are entitled to. The remedy the tool supports today is re-running the server's full
+  `bzr config set-server <name> --url <url> --email <email> ...` line, which replaces the
+  entry and resets the detected settings; note that it also resets keyring, TLS pin and
+  TOFU state, so the whole original command must be re-run rather than a fragment of it.
+  Invalidating the stale value automatically would mean a persisted-config migration, which
+  is a separate decision and is not taken here.
+- **R3 has no test in either tier.** The one server class the fallback exists for —
+  `valid_login` denying a header the server honours — appears in no fixture and in no
+  container the project runs. The unit tests drive `wiremock`, which replays a fixed byte
+  string and proves the comparison logic; the functional tier runs stock Bugzilla, which
+  this record establishes has no header code path and therefore only ever exercises the
+  negative branch. The confirming branch is reasoned, not measured.
+- **The API key still appears in the query-parameter probe's URL.** Unchanged from the
+  existing `whoami` and `valid_login` query-parameter probes and inherent to the method
+  being probed.
 - **The decision matrix in `src/client/auth/mod.rs` is part of the contract.** That file's
   header states that changing a cell is a behaviour change that must update the table and
   its tests together; this record's rule replaces the "`rest/bug`, any 2xx" row.
-- The `whoami` path (Bugzilla 5.3+/BMO-derived) is untouched. `detect_whoami_auth` probes an
+- The `whoami` path (Bugzilla 5.3+/BMO-derived) is untouched: `detect_whoami_auth` probes an
   endpoint that returns the caller's own id and treats `id == 0` as anonymous, so it already
   distinguishes what this probe could not.
 - This does not address the alternate-auth retry in `src/client/transport.rs`, which judges a
@@ -128,31 +147,28 @@ Three properties of that rule are the decision, not implementation detail:
   comparison over a non-deterministic body reintroduces a false positive by a different
   route — the probe would report "the header changed something" because the bug list moved.
 - **Probe `rest/whoami` with the header.** verified: this branch is reachable only after
-  `detect_whoami_auth` returned `NotFound` or `AuthRejected` (`src/client/auth/mod.rs`
-  lines 248-261), and issue #713 measured `rest/whoami` returning 404 in all three auth
-  modes on stock Bugzilla 5.2, calling it a Harmony endpoint. judgment: an endpoint the
-  server has already declined to serve cannot verify anything.
+  `detect_whoami_auth` returned `NotFound`, `AuthRejected`, or `MalformedResponse`
+  (`src/client/auth/mod.rs` lines 249-261); issue #713 measured `rest/whoami` returning 404
+  in all three auth modes on stock Bugzilla 5.2, calling it a Harmony endpoint. judgment: an
+  endpoint the server declined to serve cannot verify anything, and the third arm is no
+  better — a 200 whose body bzr could not parse is equally unusable as a discriminator.
 - **Require a field only an authenticated caller receives — `groups`, `can_login`.**
   verified: issue #713's measured table shows the anonymous `rest/user/<login>` projection
-  carrying id and real_name, and the query-parameter projection carrying the full record
+  carrying id and real_name and the query-parameter projection carrying the full record
   including `groups`, on stock Bugzilla 5.2. judgment: which fields a server returns varies
   by version, by the caller's permissions, and by whether the caller is querying itself.
   Hard-coding one name makes a server-specific detail a correctness dependency, which is the
-  same class of mistake as the defect being fixed. The measured comparison needs no such
-  assumption.
+  same class of mistake as the defect being fixed.
 - **Compare only the anonymous and header responses, preferring header when they differ.**
   judgment: "differs from anonymous" proves the header changed something, not that it
-  authenticated. A transient 5xx or a rate-limit response on either leg is enough to make
-  the pair differ, and the probe would then confirm header auth on the strength of an error.
-  Comparing against the response query-parameter auth actually produces costs one additional
-  request, and only in the branch that ends up confirming header auth.
+  authenticated. The third leg is what pins a positive to the response authenticated access
+  actually produces, rather than to any difference at all.
 - **Probe an endpoint anonymous callers cannot read at all.** verified: issue #713's table
   records `rest/group?names=admin` answering 401 (code 410) anonymously and to the header,
   and 200 to query-parameter auth, on stock Bugzilla 5.2. judgment: it needs a group name
   bzr does not have, and whether a given endpoint requires a login is a per-deployment
-  configuration fact (`requirelogin`, group visibility). Choosing an endpoint on the belief
-  that it always 401s anonymously is the same baked-in assumption the current probe is made
-  of, pointed the other way.
+  configuration fact. Choosing an endpoint on the belief that it always 401s anonymously is
+  the same baked-in assumption the current probe is made of, pointed the other way.
 - **Do nothing.** verified: the probe's positive is unconditional on stock Bugzilla, where
   no API-key-header code path exists at all. judgment: the failure mode is a correct answer
   being discarded in favour of a wrong one, with the damage appearing as absent fields in a
