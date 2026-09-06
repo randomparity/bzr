@@ -5,6 +5,12 @@ use crate::types::server_info::{ExtensionInfo, ServerExtensions};
 use crate::xmlrpc::protocol::{Value, XmlRpcClient};
 use crate::xmlrpc::resources::mappers::EXPECTED_STRUCT_RESPONSE;
 
+/// How much of a server-supplied extension name may reach an error message.
+/// Shorter than [`crate::http::DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES`] because an
+/// extension name is an identifier, not a body: `RedHat` is six bytes, and
+/// anything approaching this bound is already evidence of a malformed response.
+const EXTENSION_NAME_PREVIEW_MAX_BYTES: usize = 128;
+
 impl XmlRpcClient {
     /// Advertised server extensions, via `Bugzilla.extensions`.
     ///
@@ -35,7 +41,7 @@ impl XmlRpcClient {
                 // read with no length cap, and both sibling paths bound server
                 // text the same way (`HttpStatus` via `diagnostic_body_preview`,
                 // REST's decode failure via `format_body_preview`).
-                let label = crate::http::utf8_prefix(name, 128);
+                let label = crate::http::utf8_prefix(name, EXTENSION_NAME_PREVIEW_MAX_BYTES);
                 let fields = info.as_struct().ok_or_else(|| {
                     BzrError::XmlRpc(format!(
                         "expected a struct for extension '{label}' in the response"
