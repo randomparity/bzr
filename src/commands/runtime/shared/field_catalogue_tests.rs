@@ -107,9 +107,90 @@ async fn undeclared_key_is_refused_at_exit_seven() {
     let message = err.to_string();
     assert!(message.contains("cf_relase"), "names the field: {message}");
     assert!(
-        message.contains("bzr server capabilities"),
+        message.contains("bzr field list"),
         "points at discovery: {message}"
     );
+}
+
+#[test]
+fn accepted_bug_fields_marks_each_source() {
+    // `status_whiteboard` is a catalogue-only internal column name; `whiteboard`
+    // is a REST name bzr models that the catalogue does not declare; `keywords`
+    // is in both. The duplicate proves the union deduplicates.
+    let declared = vec![
+        "status_whiteboard".to_string(),
+        "keywords".to_string(),
+        "status_whiteboard".to_string(),
+    ];
+    let rows = super::accepted_bug_fields_from(&declared);
+
+    let find = |name: &str| {
+        rows.iter()
+            .filter(|row| row.name == name)
+            .collect::<Vec<_>>()
+    };
+
+    let sw = find("status_whiteboard");
+    assert_eq!(sw.len(), 1, "a duplicate in `declared` must yield one row");
+    assert_eq!(sw[0].source, crate::types::FieldNameSource::Server);
+
+    let wb = find("whiteboard");
+    assert_eq!(wb.len(), 1);
+    assert_eq!(wb[0].source, crate::types::FieldNameSource::Bzr);
+
+    let kw = find("keywords");
+    assert_eq!(kw.len(), 1);
+    assert_eq!(kw[0].source, crate::types::FieldNameSource::Both);
+
+    let names: Vec<&str> = rows.iter().map(|row| row.name.as_str()).collect();
+    let mut sorted = names.clone();
+    sorted.sort_unstable();
+    assert_eq!(names, sorted, "rows must be sorted by name");
+}
+
+#[test]
+fn accepted_bug_fields_with_empty_catalogue_is_bug_fields_only() {
+    let rows = super::accepted_bug_fields_from(&[]);
+    assert_eq!(rows.len(), crate::types::bug::BUG_FIELDS.len());
+    assert!(rows
+        .iter()
+        .all(|row| row.source == crate::types::FieldNameSource::Bzr));
+}
+
+/// Acceptance criterion 2 of issue #718, executable: every name the listing
+/// emits is a name the validator accepts. The oracle discriminates — a row
+/// backed by neither source makes `validate_bug_fields` return
+/// `InputValidation`, and the `expect` below fails naming the exact key.
+///
+/// `expected_calls` is 2: the listing probes once (it always does, never
+/// reading the cache), and the validator probes once more because the listed
+/// set contains catalogue-only names that are not `is_bzr_known_bug_field` and
+/// the fresh config carries no cached names.
+#[tokio::test]
+async fn everything_listed_is_accepted() {
+    let declared_names = ["status_whiteboard", "short_desc", "keywords", "cf_example"];
+    let (server, tmp, client) = setup(&declared_names, 2).await;
+    let config_path = write_config(&tmp, &server.uri(), "");
+
+    let declared: Vec<String> = declared_names.iter().map(|n| (*n).to_string()).collect();
+    // Drive the real entry point, which fetches the catalogue itself — the
+    // same `bug_field_names` the validator probes with. Feeding both sides a
+    // hand-built array would prove only that the pure union is consistent
+    // with itself.
+    let listed: BTreeSet<String> = super::accepted_bug_fields(&client)
+        .await
+        .expect("the listing fetches the catalogue")
+        .into_iter()
+        .map(|row| row.name)
+        .collect();
+    // The union is strictly wider than either source alone, so this is
+    // exercising the union rather than a degenerate case.
+    assert!(listed.len() > crate::types::bug::BUG_FIELDS.len());
+    assert!(listed.len() > declared.len());
+
+    validate_bug_fields(&client, &ctx_for(&config_path), &listed)
+        .await
+        .expect("every listed field name must be accepted by the --field validator");
 }
 
 /// A key already in the cached list is answered without a request. The mock

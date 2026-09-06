@@ -10,12 +10,13 @@
 //! the write is refused — a probe failure is not an absent field, and the two
 //! diagnostics never overlap.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::client::BugzillaClient;
 use crate::commands::runtime::invocation::CommandContext;
 use crate::config::Config;
 use crate::error::{BzrError, Result};
+use crate::types::{FieldName, FieldNameSource};
 
 const PROBE_CONTEXT: &str = "could not validate --field keys: the server's bug field catalogue \
                              was not retrieved, so no changes were sent";
@@ -47,23 +48,18 @@ fn annotate_probe_failure(original: BzrError) -> BzrError {
     }
 }
 
-/// Point at the command that actually answers "what can I set here".
+/// Point at the command that answers "what can I set here".
 ///
-/// Not `bzr field list`: it takes a required field name and enumerates that
-/// one field's legal *values*, so a no-argument form is a usage error rather
-/// than a listing. `bzr server capabilities` prints the custom fields the
-/// server declares, which is what this feature is mostly used for.
-///
-/// The wording stops at "custom fields" deliberately. The accepted set is
-/// wider than anything bzr can currently list — it also holds the non-custom
-/// catalogue names and every REST name in `BUG_FIELDS` — so promising that
-/// this command shows "the fields it accepts" would be the same overclaim in
-/// a new place. Issue #718 tracks the missing enumeration command.
+/// `bzr field list` with no argument enumerates the whole accepted set — the
+/// server's catalogue names and the REST names bzr models — which is exactly
+/// the set this function guards (ADR 0062). Earlier wording named
+/// `bzr server capabilities` and stopped at "custom fields", because before
+/// issue #718 no command could show the rest.
 fn undeclared(key: &str) -> BzrError {
     BzrError::input_field(
         format!(
             "--field: this server does not declare a field named '{key}'; \
-             run `bzr server capabilities` to see the custom fields it declares"
+             run `bzr field list` to see every field name this server accepts"
         ),
         "--field",
         Some(key.to_string()),
@@ -151,6 +147,47 @@ fn is_bzr_known_bug_field(key: &str) -> bool {
     crate::types::bug::BUG_FIELDS
         .iter()
         .any(|field| field.canonical() == key)
+}
+
+/// Every bug field name `--field` / `--field-json` accepts, each marked with
+/// why it is accepted.
+///
+/// This is the listing half of the contract [`validate_bug_fields`] enforces,
+/// and the agreement is structural on **both** halves rather than by
+/// convention. The `BUG_FIELDS` half is shared because both sides read that one
+/// constant — the validator through [`is_bzr_known_bug_field`], the listing by
+/// iterating it directly. The catalogue
+/// half is shared because this function fetches it itself, through the same
+/// [`BugzillaClient::bug_field_names`] the validator probes with — taking the
+/// names as a parameter would leave the two bound only by whatever a caller
+/// chose to pass, which is a convention a later edit can break silently
+/// (ADR 0062).
+pub(crate) async fn accepted_bug_fields(client: &BugzillaClient) -> Result<Vec<FieldName>> {
+    Ok(accepted_bug_fields_from(&client.bug_field_names().await?))
+}
+
+/// The pure union, split out so the unit tests can drive it without a server.
+/// Not a second entry point: [`accepted_bug_fields`] is the only production
+/// caller, and it supplies the catalogue itself.
+///
+/// `BTreeMap` gives sorted, deduplicated output in one pass and collapses a
+/// name present in both sources into a single `Both` row.
+fn accepted_bug_fields_from(declared: &[String]) -> Vec<FieldName> {
+    let mut rows: BTreeMap<&str, FieldNameSource> = BTreeMap::new();
+    for name in declared {
+        rows.insert(name.as_str(), FieldNameSource::Server);
+    }
+    for field in crate::types::bug::BUG_FIELDS {
+        rows.entry(field.canonical())
+            .and_modify(|source| *source = FieldNameSource::Both)
+            .or_insert(FieldNameSource::Bzr);
+    }
+    rows.into_iter()
+        .map(|(name, source)| FieldName {
+            name: name.to_string(),
+            source,
+        })
+        .collect()
 }
 
 /// Refuse the write unless every key in `keys` is a field the server declares

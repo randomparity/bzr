@@ -24,8 +24,8 @@ use crate::test_helpers::CapturedIo;
 use crate::types::{
     Attachment, AuthMode, BugAdjacencyBug, BugAdjacencyError, BugAdjacencyRequest,
     BugAdjacencyResult, BugzillaUser, Classification, Comment, Component, CustomFieldSummary,
-    FieldValue, FlagTypeSummary, GroupInfo, HistoryRecord, ServerCapabilities,
-    StatusTransitionSummary, WhoamiOutput, WhoamiResponse,
+    FieldName, FieldNameSource, FieldValue, FlagTypeSummary, GroupInfo, HistoryRecord,
+    ServerCapabilities, StatusTransitionSummary, WhoamiOutput, WhoamiResponse,
 };
 
 /// Look up a schema body by registry name.
@@ -602,6 +602,32 @@ fn field_value_conforms() {
     }))
     .unwrap();
     assert_conforms("field-value", &to_value(&field_value));
+}
+
+#[test]
+fn field_name_conforms() {
+    // Closed schema, both keys always emitted: the bijection `assert_conforms`
+    // enforces is exact here, with no optional property to leave unexercised.
+    let row = FieldName {
+        name: "status_whiteboard".into(),
+        source: FieldNameSource::Server,
+    };
+    assert_conforms("field-name", &to_value(&row));
+}
+
+/// `assert_conforms` checks top-level keys only, so it never looks at the
+/// `source` enum. Pin the published values against the Rust spellings directly.
+#[test]
+fn field_name_source_enum_is_closed() {
+    let schema = schema_for("field-name");
+    assert_eq!(
+        schema.pointer("/properties/source/enum").unwrap(),
+        &json!([
+            FieldNameSource::Server.as_str(),
+            FieldNameSource::Bzr.as_str(),
+            FieldNameSource::Both.as_str()
+        ])
+    );
 }
 
 #[test]

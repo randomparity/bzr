@@ -45,6 +45,7 @@ pub(crate) const SCHEMAS: &[(&str, &str)] = schema_registry![
     "dry-run-result",
     "envelope",
     "error",
+    "field-name",
     "field-value",
     "group",
     "group-create-input",

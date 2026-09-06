@@ -19,23 +19,38 @@ pub(crate) enum FieldAction {
     ///   bzr field aliases
     ///   bzr field aliases --json
     ///
-    /// See bzr-field-list(1) to enumerate the legal values of one
-    /// field.
+    /// See bzr-field-list(1), which enumerates the field names this
+    /// server accepts when given no argument, and one field's legal
+    /// values when given a name. Aliases apply to the named form only.
     #[command(verbatim_doc_comment)]
     Aliases,
 
-    /// List the legal values for a Bugzilla bug field.
+    /// List the field names this server accepts, or one field's legal values.
     ///
-    /// Prints every value the configured server accepts for the
-    /// named field. Common aliases (`status`, `severity`,
+    /// With no argument, prints every bug field name `bzr bug create`
+    /// and `bzr bug update` accept for `--field` / `--field-json`, with
+    /// a `source` column saying why each is accepted: `server` when the
+    /// connected server's field catalogue declares it, `bzr` when bzr
+    /// models it as a canonical REST bug field, `both` when both do.
+    /// Bugzilla's catalogue reports internal column names for several
+    /// built-ins (`status_whiteboard`, `short_desc`, `rep_platform`)
+    /// while the write API takes the REST spellings (`whiteboard`,
+    /// `summary`, `platform`); both are accepted and both are listed.
+    /// A listed name is one bzr will not refuse, which is not a promise
+    /// that Bugzilla will honour it.
+    ///
+    /// With a field name, prints every value the configured server
+    /// accepts for that field. Common aliases (`status`, `severity`,
     /// `priority`, `resolution`, ...) are resolved automatically to
     /// their underlying field names; the canonical names also work.
     /// Use this to discover legal values before passing
     /// `--status`, `--priority`, etc. to `bzr bug create` or
-    /// `bzr bug update`.
+    /// `bzr bug update`. Aliases apply to this form only.
     ///
     /// Examples:
     ///
+    ///   bzr field list
+    ///   bzr field list --json
     ///   bzr field list status
     ///   bzr field list priority --json
     ///   bzr field list bug_severity
@@ -46,9 +61,10 @@ pub(crate) enum FieldAction {
     #[command(verbatim_doc_comment)]
     List {
         /// Field name (e.g. status, priority, severity, resolution).
+        /// Omit it to list the field names this server accepts instead.
         /// Common aliases are resolved automatically (status -> `bug_status`,
         /// severity -> `bug_severity`, etc.)
-        name: String,
+        name: Option<String>,
         #[command(flatten)]
         projection: crate::cli::ProjectionArgs,
     },

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/field-name.json",
+  "title": "FieldName",
+  "description": "A bug field name that `bzr bug create` / `bzr bug update` accept for `--field` / `--field-json`, as emitted by `bzr field list` with no positional argument.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The field name a --field write accepts."
+    },
+    "source": {
+      "type": "string",
+      "enum": ["server", "bzr", "both"],
+      "description": "Why the name is accepted: `server` = the connected server's field/bug catalogue declares it; `bzr` = bzr models it as a canonical REST bug field; `both` = both."
+    }
+  },
+  "required": ["name", "source"],
+  "additionalProperties": false
+}

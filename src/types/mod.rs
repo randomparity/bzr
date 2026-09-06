@@ -30,7 +30,7 @@ pub use capabilities::{
 pub use classification::{Classification, ClassificationProduct};
 pub use comment::{AddCommentParams, Comment, UpdateCommentTagsParams};
 pub use component::{Component, CreateComponentParams};
-pub use field::{FieldValue, StatusTransition};
+pub use field::{FieldName, FieldNameSource, FieldValue, StatusTransition};
 pub use flag::{Flag, FlagStatus, FlagUpdate};
 pub use group::{CreateGroupParams, GroupInfo, GroupMember, UpdateGroupParams};
 pub use output::{OutputFormat, ProgressFormat, SortDirection};

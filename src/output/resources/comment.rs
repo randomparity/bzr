@@ -2,22 +2,10 @@ use std::io::Write;
 
 use colored::Colorize;
 
-use crate::output::formatting::{write_divider, write_formatted_projected};
+use crate::output::formatting::{escape_table_control, write_divider, write_formatted_projected};
 use crate::types::comment::Comment;
 use crate::types::output::OutputFormat;
 use crate::validation::fields::FieldProjection;
-
-fn escape_table_tag(tag: &str) -> String {
-    let mut escaped = String::with_capacity(tag.len());
-    for character in tag.chars() {
-        if character.is_control() {
-            escaped.extend(character.escape_default());
-        } else {
-            escaped.push(character);
-        }
-    }
-    escaped
-}
 
 pub fn write_comments<W: Write + ?Sized>(
     comments: &[Comment],
@@ -49,7 +37,7 @@ pub fn write_comments<W: Write + ?Sized>(
                 let tags = c
                     .tags
                     .iter()
-                    .map(|tag| escape_table_tag(tag))
+                    .map(|tag| escape_table_control(tag))
                     .collect::<Vec<_>>()
                     .join(", ");
                 let _ = writeln!(out, "  {} {tags}", "Tags:".bold());
