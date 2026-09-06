@@ -155,10 +155,12 @@ else
 fi
 
 # Acceptance criterion 2 against a real server: anything the listing shows is
-# accepted. The name is read OUT of the listing rather than hard-coded in the
-# comparison, so the assertion bites in both directions -- a listing that
-# stopped emitting server-only names yields an empty name and fails at the
-# guard, and a listing that emitted a name the validator rejects exits 7 here.
+# accepted. `short_desc` is pinned in the selector, so what the jq computes is
+# "is short_desc present with source == server"; reading it back OUT of the
+# listing is what makes the block bite rather than pass vacuously -- an absent
+# row yields an empty name and fails at the guard, and a listed name the
+# validator rejects exits 7 below. It proves bzr does not refuse a
+# catalogue-only name; it cannot prove Bugzilla honours the key.
 #
 # Placed last in the phase deliberately: it writes to $AFID, and the block above
 # asserts that bug's whiteboard is still empty. `short_desc` is pinned rather
@@ -166,19 +168,22 @@ fi
 # Bugzilla refuses on its own; 05-fields-classifications.sh already proves these
 # containers declare it, and `summary` (not `short_desc`) is the BUG_FIELDS
 # canonical, so `source: server` is the grounded expectation.
+#
+# The guards are nested inside the `assert_success` arm on purpose: assert_success
+# already calls test_fail on a non-zero exit, so a sibling `if [[ -z ... ]]`
+# would fire a second test_fail and count one failing test twice.
 test_begin "field-list-agrees-with-field-validator" "a server-only name from field list is accepted by --field"
 run_bzr field list
-_AF_SERVER_NAME=""
 if assert_success; then
     _AF_SERVER_NAME=$(jq -r 'map(select(.source == "server" and .name == "short_desc")) | .[0].name // empty' "$BZR_STDOUT")
-fi
-if [[ -z "$_AF_SERVER_NAME" ]]; then
-    test_fail "field list did not report short_desc as a server-declared name"
-elif [[ -z "$AFID" ]]; then
-    test_fail "no fixture bug: the --field create above did not succeed"
-else
-    run_bzr bug update "$AFID" --field "${_AF_SERVER_NAME}=oracle"
-    if assert_success; then test_pass; fi
+    if [[ -z "$_AF_SERVER_NAME" ]]; then
+        test_fail "field list did not report short_desc as a server-declared name"
+    elif [[ -z "$AFID" ]]; then
+        test_fail "no fixture bug: the --field create above did not succeed"
+    else
+        run_bzr bug update "$AFID" --field "${_AF_SERVER_NAME}=oracle"
+        if assert_success; then test_pass; fi
+    fi
 fi
 
 rm -r "$_AF_DIR"

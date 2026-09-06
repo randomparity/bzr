@@ -48,11 +48,16 @@ Building that mapping means a second hand-written table — precisely the drift 
 rejected when it chose `BUG_FIELDS` over a new alias table. The pairing is documented in
 prose in `docs/bzr-cli.md` and left out of the data.
 
-**Agreement is structural.** The listing and the validator read the same two sources
-through one function: `accepted_bug_fields()` in
-`src/commands/runtime/shared/field_catalogue.rs`, the module that already owns "what
-`--field` accepts". `validate_bug_fields()` keeps its fast paths, but neither side owns a
-private copy of the source list, so the two cannot drift apart without a compile error.
+**Agreement is structural on both halves.** The listing and the validator live in one
+module — `src/commands/runtime/shared/field_catalogue.rs`, which already owns "what
+`--field` accepts" — and neither half of the union is bound by convention. `BUG_FIELDS` is
+shared because both call `is_bzr_known_bug_field`. The catalogue is shared because
+`accepted_bug_fields()` fetches it *itself*, through the same
+`BugzillaClient::bug_field_names()` the validator probes with. Taking the catalogue as a
+`&[String]` parameter was the first shape and is rejected: it type-checks against any
+`Vec<String>`, so a later edit to the one call site could publish names the validator
+rejects with nothing failing to compile, and the ADR would be telling the next reader that
+this is impossible. `validate_bug_fields()` keeps its fast paths unchanged.
 
 **The listing always probes; it never reads the cache.** `ServerConfig.bug_field_names`
 is a validator fast path whose staleness is harmless there — a cache miss re-probes, so a
@@ -87,8 +92,16 @@ Adding a result type is additive under ADR 0007, so `SCHEMA_VERSION` goes 3.0.2 
   *every* bump as breaking, patch included, which is at odds with what a patch bump is
   supposed to mean for a consumer. All eleven are updated here because they are direct
   consequences of this change; the exact-match policy in `collect.py` is not, and is
-  recorded as follow-up rather than fixed under this charter. The 16 functional failures
-  it produced on the first full run all had this single cause.
+  recorded as follow-up rather than fixed under this charter, together with the fact that
+  nothing mechanically ties those eleven literals to `output::SCHEMA_VERSION` — the
+  coupling is found by grep and held by review. The 16 functional failures it produced on
+  the first full run all had this single cause.
+- **A shell variable that expands to nothing changes behaviour rather than failing.**
+  `bzr field list "$FIELD"` with `FIELD` unset was a clap usage error (exit 2); it is now
+  the listing, exiting 0 with a different JSON shape. Any script relying on the old
+  failure to catch an unset variable stops catching it. This is the unavoidable cost of
+  the no-argument form the issue asks for, and it is the only behaviour change to an
+  existing invocation.
 - One subcommand emits two shapes, selected by whether the positional is present:
   `FieldValue[]` with a name, `FieldName[]` without. `bzr schema` already does exactly
   this, so the pattern is not new to the CLI, but an agent that hard-codes `field list`'s
@@ -147,10 +160,13 @@ Adding a result type is additive under ADR 0007, so `SCHEMA_VERSION` goes 3.0.2 
   neither. It would also need no server at all, making it a different feature from the
   one asked for.
 - **Pair internal and REST names in the output (`status_whiteboard` → `whiteboard`).**
-  verified: no source for the pairing exists — `FIELD_ALIASES`
+  verified: bzr has no source for the pairing — `FIELD_ALIASES`
   (`src/types/field.rs:13`) holds six entries, none of them the five, and
-  `FieldDefinition` (`src/client/resources/field.rs:26`) deserializes `name`,
-  `type`, `is_custom`, and `values`, with no REST-name member to map from. judgment:
+  `FieldDefinition` (`src/client/resources/field.rs:26`) deserializes only `name`,
+  `type`, `is_custom`, and `values`, so nothing bzr parses today carries a REST name.
+  That is a fact about bzr's deserializer, not a proof that Bugzilla publishes nothing:
+  `field/bug` returns members bzr discards, and this record does not claim to have
+  audited them. judgment:
   the remaining option is a hand-written table, which is the drift ADR 0053's
   "Accepted name set" section rejected by choosing `BUG_FIELDS`.
 - **A new `bzr field names` subcommand instead of a no-argument form.** judgment: the
@@ -172,10 +188,11 @@ Adding a result type is additive under ADR 0007, so `SCHEMA_VERSION` goes 3.0.2 
   one property this feature must not have.
 - **Omit, or separately mark, the names no write can set** (`id`, `creator`,
   `creation_time`, `last_change_time` from `BUG_FIELDS`; `bug_id` and timestamps from the
-  catalogue). verified: Bugzilla publishes no writability oracle — `FieldDefinition`
+  catalogue). verified: bzr has no writability signal to split on — `FieldDefinition`
   (`src/client/resources/field.rs:26`) carries `name`, `type`, `is_custom`, and `values`
-  and nothing about writability, which is why ADR 0053 accepts that the server "silently
-  ignores request keys it does not recognise" rather than predicting them. judgment: any
+  and nothing about writability, and ADR 0053 accepts that the server "silently ignores
+  request keys it does not recognise" rather than predicting them. Whether Bugzilla
+  exposes such a signal in a member bzr discards was not audited. judgment: any
   split would therefore be a third hand-written table with the same drift this record
   rejects twice above, and criterion 2 permits omission only if the omitted set is
   documented — a wider caveat than the one being kept. The consequence is recorded

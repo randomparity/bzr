@@ -122,7 +122,7 @@ fn accepted_bug_fields_marks_each_source() {
         "keywords".to_string(),
         "status_whiteboard".to_string(),
     ];
-    let rows = super::accepted_bug_fields(&declared);
+    let rows = super::accepted_bug_fields_from(&declared);
 
     let find = |name: &str| {
         rows.iter()
@@ -150,7 +150,7 @@ fn accepted_bug_fields_marks_each_source() {
 
 #[test]
 fn accepted_bug_fields_with_empty_catalogue_is_bug_fields_only() {
-    let rows = super::accepted_bug_fields(&[]);
+    let rows = super::accepted_bug_fields_from(&[]);
     assert_eq!(rows.len(), crate::types::bug::BUG_FIELDS.len());
     assert!(rows
         .iter()
@@ -162,17 +162,24 @@ fn accepted_bug_fields_with_empty_catalogue_is_bug_fields_only() {
 /// backed by neither source makes `validate_bug_fields` return
 /// `InputValidation`, and the `expect` below fails naming the exact key.
 ///
-/// `expected_calls` is 1: the listed set contains catalogue-only names, which
-/// are not `is_bzr_known_bug_field`, and the fresh config carries no cached
-/// names, so the validator probes exactly once.
+/// `expected_calls` is 2: the listing probes once (it always does, never
+/// reading the cache), and the validator probes once more because the listed
+/// set contains catalogue-only names that are not `is_bzr_known_bug_field` and
+/// the fresh config carries no cached names.
 #[tokio::test]
 async fn everything_listed_is_accepted() {
     let declared_names = ["status_whiteboard", "short_desc", "keywords", "cf_example"];
-    let (server, tmp, client) = setup(&declared_names, 1).await;
+    let (server, tmp, client) = setup(&declared_names, 2).await;
     let config_path = write_config(&tmp, &server.uri(), "");
 
     let declared: Vec<String> = declared_names.iter().map(|n| (*n).to_string()).collect();
-    let listed: BTreeSet<String> = super::accepted_bug_fields(&declared)
+    // Drive the real entry point, which fetches the catalogue itself — the
+    // same `bug_field_names` the validator probes with. Feeding both sides a
+    // hand-built array would prove only that the pure union is consistent
+    // with itself.
+    let listed: BTreeSet<String> = super::accepted_bug_fields(&client)
+        .await
+        .expect("the listing fetches the catalogue")
         .into_iter()
         .map(|row| row.name)
         .collect();

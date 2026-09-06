@@ -149,29 +149,35 @@ fn is_bzr_known_bug_field(key: &str) -> bool {
         .any(|field| field.canonical() == key)
 }
 
-/// Every bug field name `--field` / `--field-json` accepts, given the names the
-/// server's catalogue declares, each marked with why it is accepted.
+/// Every bug field name `--field` / `--field-json` accepts, each marked with
+/// why it is accepted.
 ///
-/// This is the listing half of the contract [`validate_bug_fields`] enforces:
-/// the two read the same two sources — the catalogue and `BUG_FIELDS` via
-/// [`is_bzr_known_bug_field`] — so a name this function emits is a name that
-/// function accepts. Keeping them in one module is what makes that agreement
-/// structural rather than a comment (ADR 0062).
+/// This is the listing half of the contract [`validate_bug_fields`] enforces,
+/// and the agreement is structural on **both** halves rather than by
+/// convention. The `BUG_FIELDS` half is shared through
+/// [`is_bzr_known_bug_field`], which the validator also calls. The catalogue
+/// half is shared because this function fetches it itself, through the same
+/// [`BugzillaClient::bug_field_names`] the validator probes with — taking the
+/// names as a parameter would leave the two bound only by whatever a caller
+/// chose to pass, which is a convention a later edit can break silently
+/// (ADR 0062).
+pub(crate) async fn accepted_bug_fields(client: &BugzillaClient) -> Result<Vec<FieldName>> {
+    Ok(accepted_bug_fields_from(&client.bug_field_names().await?))
+}
+
+/// The pure union, split out so the unit tests can drive it without a server.
+/// Not a second entry point: [`accepted_bug_fields`] is the only production
+/// caller, and it supplies the catalogue itself.
 ///
 /// `BTreeMap` gives sorted, deduplicated output in one pass and collapses a
 /// name present in both sources into a single `Both` row.
-pub(crate) fn accepted_bug_fields(declared: &[String]) -> Vec<FieldName> {
+fn accepted_bug_fields_from(declared: &[String]) -> Vec<FieldName> {
     let mut rows: BTreeMap<&str, FieldNameSource> = BTreeMap::new();
     for name in declared {
         rows.insert(name.as_str(), FieldNameSource::Server);
     }
     for field in crate::types::bug::BUG_FIELDS {
-        let canonical = field.canonical();
-        debug_assert!(
-            is_bzr_known_bug_field(canonical),
-            "accepted_bug_fields and the validator must read BUG_FIELDS the same way"
-        );
-        rows.entry(canonical)
+        rows.entry(field.canonical())
             .and_modify(|source| *source = FieldNameSource::Both)
             .or_insert(FieldNameSource::Bzr);
     }

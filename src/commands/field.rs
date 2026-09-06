@@ -50,8 +50,7 @@ pub(crate) async fn execute(
             // Always a fresh probe: `ServerConfig.bug_field_names` is a
             // validator fast path whose staleness is harmless there but would
             // make a listing disagree with the server (ADR 0062).
-            let declared = client.bug_field_names().await?;
-            let names = super::runtime::shared::accepted_bug_fields(&declared);
+            let names = super::runtime::shared::accepted_bug_fields(&client).await?;
             write_field_names(&names, format, &projection, w.table_width(), w.out);
         }
     }

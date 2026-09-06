@@ -19,8 +19,8 @@ accept, each row marked with why it is accepted.
 ## Non-goals
 
 - Pairing internal catalogue names with their REST equivalents in the data
-  (`status_whiteboard` ↔ `whiteboard`). ADR 0062 records why: no source for the pairing
-  exists, and building one means a hand-written table.
+  (`status_whiteboard` ↔ `whiteboard`). ADR 0062 records why: nothing bzr parses carries
+  the pairing, so building one means a hand-written table.
 - `--custom` / `--all` filters.
 - Any change to `bzr server capabilities`, `bzr field aliases`, or
   `bzr field list <name>`.
@@ -111,14 +111,18 @@ function in the module that already owns the accept rule.
 
 ```rust
 // src/commands/runtime/shared/field_catalogue.rs
-pub(crate) fn accepted_bug_fields(declared: &[String]) -> Vec<FieldName>
+pub(crate) async fn accepted_bug_fields(client: &BugzillaClient) -> Result<Vec<FieldName>>
 ```
 
+It takes the client, not a `&[String]` of names, so it fetches the catalogue through the
+same `bug_field_names()` the validator probes with. A parameter would type-check against
+any `Vec<String>` and leave the two bound only by what one call site passes.
+
 `validate_bug_fields` accepts exactly
-`{k : is_bzr_known_bug_field(k)} ∪ {k : k ∈ declared}`; `accepted_bug_fields(declared)`
-emits exactly that union, defined in terms of the same `is_bzr_known_bug_field`. ADR 0062
-records why the sources are what they are; this section states only what the criterion
-requires.
+`{k : is_bzr_known_bug_field(k)} ∪ {k : k ∈ declared}`, where `declared` is what
+`bug_field_names()` returned; `accepted_bug_fields` emits exactly that union, over the
+same `is_bzr_known_bug_field` and the same `bug_field_names()`. ADR 0062 records why the
+sources are what they are; this section states only what the criterion requires.
 
 **Given one snapshot of the catalogue, nothing accepted is unlisted.** Three caveats
 bound that, and all three go in `docs/bzr-cli.md`:
