@@ -60,7 +60,10 @@ to a REST endpoint that ignores the configured auth method.
   owns that population and its remedy ("An already-affected user does not get the fix by
   upgrading"; re-run the full `config set-server` line), and declined an automatic migration as
   a separate decision. Nothing here reopens that.
-- On either route the version behaviour is the same. Measured on merged `main`: **5.2** loses
+- The two routes differ only in how `auth_method` acquired its value; everything downstream
+  reads that value, so the per-version behaviour below is identical for both. It was measured
+  under a pinned header on all three servers and under an inherited one on 5.2. Merged `main`:
+  **5.2** loses
   private content in both default dispatch and `--api rest` (3 of 5 comments, 1 of 2
   attachments, exit 0, no diagnostic), because `version_to_api_mode` maps it to `Rest`;
   **5.0.6** loses it only under forced `--api rest`, because 5.0.x maps to `Hybrid` and
