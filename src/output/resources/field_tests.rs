@@ -1,7 +1,58 @@
 #![expect(clippy::unwrap_used)]
 
-use super::{write_field_aliases, write_field_values};
-use crate::types::{FieldValue, OutputFormat, StatusTransition};
+use super::{write_field_aliases, write_field_names, write_field_values};
+use crate::types::field::FIELD_NAME_FIELDS;
+use crate::types::{FieldName, FieldNameSource, FieldValue, OutputFormat, StatusTransition};
+
+fn capture_names(
+    format: OutputFormat,
+    projection: &crate::validation::fields::FieldProjection,
+    rows: &[FieldName],
+) -> String {
+    let mut buf = Vec::new();
+    write_field_names(rows, format, projection, None, &mut buf);
+    String::from_utf8(buf).unwrap()
+}
+
+#[test]
+fn write_field_names_table() {
+    let rows = vec![
+        FieldName {
+            name: "keywords".into(),
+            source: FieldNameSource::Both,
+        },
+        FieldName {
+            name: "status_whiteboard".into(),
+            source: FieldNameSource::Server,
+        },
+    ];
+    let text = capture_names(
+        OutputFormat::Table,
+        &crate::validation::fields::FieldProjection::none(),
+        &rows,
+    );
+    assert!(text.contains("NAME"), "{text}");
+    assert!(text.contains("SOURCE"), "{text}");
+    assert!(text.contains("status_whiteboard"), "{text}");
+    assert!(text.contains("server"), "{text}");
+    assert!(text.contains("both"), "{text}");
+}
+
+#[test]
+fn write_field_names_json_projects() {
+    let rows = vec![FieldName {
+        name: "whiteboard".into(),
+        source: FieldNameSource::Bzr,
+    }];
+    let projection =
+        crate::validation::fields::FieldProjection::resolve(Some("name"), None, FIELD_NAME_FIELDS)
+            .unwrap();
+    let text = capture_names(OutputFormat::Json, &projection, &rows);
+    assert!(text.contains("whiteboard"), "{text}");
+    // The negative half is what bites: without it this passes whether or not
+    // the projection applied.
+    assert!(!text.contains("source"), "{text}");
+}
 
 fn capture_values(format: OutputFormat, values: &[FieldValue]) -> String {
     let mut buf = Vec::new();

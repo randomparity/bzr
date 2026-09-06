@@ -85,6 +85,10 @@ pub struct FieldName {
     pub source: FieldNameSource,
 }
 
+/// Serde JSON keys of [`FieldName`], for `--fields` / `--exclude-fields`
+/// validation on the no-argument `field list`.
+pub const FIELD_NAME_FIELDS: &[&str] = &["name", "source"];
+
 #[derive(Debug, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct StatusTransition {

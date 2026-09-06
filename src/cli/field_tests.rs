@@ -38,7 +38,7 @@ fn parse_field_aliases_rejects_positional() {
 #[test]
 fn parse_field_list_binds_name() {
     match field_action(&["bzr", "field", "list", "status"]) {
-        FieldAction::List { name, .. } => assert_eq!(name, "status"),
+        FieldAction::List { name, .. } => assert_eq!(name.as_deref(), Some("status")),
         FieldAction::Aliases => panic!("expected List"),
     }
 }
@@ -46,17 +46,19 @@ fn parse_field_list_binds_name() {
 #[test]
 fn parse_field_list_preserves_canonical_name() {
     match field_action(&["bzr", "field", "list", "bug_severity"]) {
-        FieldAction::List { name, .. } => assert_eq!(name, "bug_severity"),
+        FieldAction::List { name, .. } => assert_eq!(name.as_deref(), Some("bug_severity")),
         FieldAction::Aliases => panic!("expected List"),
     }
 }
 
+/// The no-argument form is the field-name listing (issue #718), so the missing
+/// positional that used to be a usage error is now a valid invocation.
 #[test]
-fn parse_field_list_requires_name() {
-    assert_eq!(
-        parse_error_kind(&["bzr", "field", "list"]),
-        ErrorKind::MissingRequiredArgument
-    );
+fn parse_field_list_without_a_name_is_the_listing_form() {
+    match field_action(&["bzr", "field", "list"]) {
+        FieldAction::List { name, .. } => assert_eq!(name, None),
+        FieldAction::Aliases => panic!("expected List"),
+    }
 }
 
 #[test]
