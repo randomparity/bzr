@@ -184,11 +184,14 @@ impl BugzillaClient {
     /// attachment from a server that ignores the configured auth
     /// method (issues #133, #714).
     ///
-    /// That last sentence rests on ADR-0059's measurement, not on a
-    /// functional case: the harness pins `query_param` auth, so no
-    /// `401` occurs there and the fallback never fires. A change to
-    /// `retry_with_alternate_auth` could falsify it with nothing
-    /// turning red.
+    /// No functional phase exercises that: the harness pins
+    /// `query_param` auth, so no `401` occurs there and the fallback
+    /// never fires. The fallback itself is pinned at the transport
+    /// level by `auth_fallback_header_to_query_param_on_401` and
+    /// `auth_fallback_query_param_to_header_on_401`
+    /// (`src/client/transport_tests.rs`), which assert the recovered
+    /// payload in both directions; ADR-0059 supplies the end-to-end
+    /// measurement against a live server.
     pub async fn get_attachment(&self, attachment_id: u64) -> Result<Attachment> {
         self.dispatch_xmlrpc_first(
             &format!("attachment fetch (id {attachment_id})"),

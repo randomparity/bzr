@@ -269,7 +269,10 @@ pub struct Cli {
     /// prefers Bugzilla's REST API. `xmlrpc` prefers XML-RPC.
     /// `hybrid` chooses per operation: bug search/view is generally
     /// REST-first with targeted XML-RPC fallback, while comments and
-    /// attachments use XML-RPC first to preserve private-data behavior.
+    /// attachments use XML-RPC first because it carries the API key in
+    /// the request body, so private comments and attachments still
+    /// come back from a server whose REST endpoint ignores the
+    /// configured auth method.
     /// Most users won't need this -- bzr probes on first use and
     /// caches the working transport per server (the auto-detected
     /// default depends on the server's Bugzilla version: `hybrid` for
