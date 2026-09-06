@@ -669,3 +669,20 @@ async fn current_proof_rejects_top_level_error_even_with_true_result() {
 
     assert!(matches!(result, Err(BzrError::Auth(_))));
 }
+
+#[tokio::test]
+async fn transport_failure_on_a_leg_is_not_confirmed() {
+    // Matrix row 1: a leg that cannot be sent at all. Nothing is observed, so
+    // nothing is proved, and the caller keeps the method `valid_login` proved.
+    // Port 1 refuses immediately, so this is deterministic rather than a timeout.
+    let confirmed = verify_header_auth_via_rest(
+        &strict_http_client(),
+        "http://127.0.0.1:1",
+        "test-key",
+        &HeaderValue::from_static("test-key"),
+        "user@example.com",
+    )
+    .await;
+
+    assert!(!confirmed);
+}
