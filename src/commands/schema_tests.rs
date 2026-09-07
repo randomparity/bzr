@@ -15,10 +15,10 @@ use serde_json::{json, Value};
 
 use super::SCHEMAS;
 use crate::output::result_types::{
-    ActionKind, ActionResult, BatchCreateResult, BatchFailure, BatchResult, BugViewFailure,
-    CompoundCreateResult, ConfigResult, CountResult, CreateFailure, DownloadResult, DryRunResult,
-    MembershipResult, MultiBugViewResult, ResourceKind, SearchResult, SubStepFailure, TagResult,
-    UploadResult,
+    ActionKind, ActionResult, BatchCreateResult, BatchFailure, BatchResult, BatchUploadResult,
+    BugViewFailure, CompoundCreateResult, ConfigResult, CountResult, CreateFailure, DownloadResult,
+    DryRunResult, MembershipResult, MultiBugViewResult, ResourceKind, SearchResult, SubStepFailure,
+    TagResult, UploadFailure, UploadResult, UploadTarget,
 };
 use crate::test_helpers::CapturedIo;
 use crate::types::{
@@ -457,6 +457,43 @@ fn download_result_conforms() {
 #[test]
 fn upload_result_conforms() {
     assert_conforms("upload-result", &to_value(&UploadResult::new(9, 1, 2048)));
+}
+
+#[test]
+fn attachment_upload_batch_result_conforms() {
+    // Maximal: one plain failure and one `comment_private`-stepped failure, so
+    // the bijection exercises every declared property including `step`.
+    let result = BatchUploadResult::new(
+        2048,
+        vec![
+            UploadTarget {
+                bug_id: 1,
+                attachment_id: 11,
+            },
+            UploadTarget {
+                bug_id: 2,
+                attachment_id: 22,
+            },
+        ],
+        vec![
+            UploadFailure::new(3, "boom"),
+            UploadFailure::comment_private(2, "403 forbidden"),
+        ],
+    );
+    let value = to_value(&result);
+    assert_conforms("attachment-upload-batch-result", &value);
+
+    // `assert_conforms` only checks top-level keys; it cannot see the
+    // bug-to-attachment pairing inside `uploaded[]`/`failed[]` or the `step`
+    // enum. `schema_accepts` walks nested items and is what binds them.
+    assert!(schema_accepts("attachment-upload-batch-result", &value));
+
+    let mut missing_attachment_id = value.clone();
+    missing_attachment_id["uploaded"] = json!([{"bug_id": 1}]);
+    assert!(!schema_accepts(
+        "attachment-upload-batch-result",
+        &missing_attachment_id
+    ));
 }
 
 #[test]

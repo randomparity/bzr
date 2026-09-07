@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/randomparity/bzr/schemas/attachment-upload-batch-result.json",
+  "title": "BatchUploadResult",
+  "description": "Result of one `attachment upload` fanned out over two or more bugs. A single-bug upload emits `upload-result` instead. Any `failed[]` entry means exit 11; a `failed[]` entry carrying `step: \"comment_private\"` means the attachment was created (the bug is also listed in `uploaded`) and only the follow-up comment-privacy flip failed.",
+  "type": "object",
+  "properties": {
+    "resource": {
+      "type": "string",
+      "enum": ["bug", "attachment", "comment", "user", "group", "product", "component", "server"]
+    },
+    "action": {
+      "type": "string",
+      "enum": ["created", "updated", "added", "removed", "renamed", "downloaded", "dry-run"]
+    },
+    "size": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Byte length of the uploaded file. Stated once: the same file is sent to every bug."
+    },
+    "uploaded": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "bug_id": { "type": "integer", "minimum": 0 },
+          "attachment_id": { "type": "integer", "minimum": 0 }
+        },
+        "required": ["bug_id", "attachment_id"],
+        "additionalProperties": false
+      }
+    },
+    "failed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "bug_id": { "type": "integer", "minimum": 0 },
+          "error": { "type": "string" },
+          "step": {
+            "description": "Present when the attachment was created and only the `--comment-private` follow-up failed; absent when the upload itself failed. Do not retry a `comment_private` failure with the same `--comment` text.",
+            "type": "string",
+            "enum": ["comment_private"]
+          }
+        },
+        "required": ["bug_id", "error"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["resource", "action", "size", "uploaded", "failed"],
+  "additionalProperties": false
+}

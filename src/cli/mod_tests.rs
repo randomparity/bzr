@@ -2164,13 +2164,13 @@ fn parse_attachment_upload_with_summary() {
         Commands::Attachment {
             action:
                 AttachmentAction::Upload(super::UploadArgs {
-                    bug_id,
+                    bug_ids,
                     file,
                     summary,
                     ..
                 }),
         } => {
-            assert_eq!(bug_id, 42);
+            assert_eq!(bug_ids, vec![42]);
             assert_eq!(file, "patch.diff");
             assert_eq!(summary.as_deref(), Some("Fix crash"));
         }
@@ -2193,10 +2193,10 @@ fn parse_attachment_upload_with_private_flag() {
         Commands::Attachment {
             action:
                 AttachmentAction::Upload(super::UploadArgs {
-                    bug_id, private, ..
+                    bug_ids, private, ..
                 }),
         } => {
-            assert_eq!(bug_id, 42);
+            assert_eq!(bug_ids, vec![42]);
             assert!(private, "--private should set the flag to true");
         }
         _ => panic!("expected Attachment Upload"),
@@ -2230,13 +2230,13 @@ fn parse_attachment_upload_with_comment() {
         Commands::Attachment {
             action:
                 AttachmentAction::Upload(super::UploadArgs {
-                    bug_id,
+                    bug_ids,
                     file,
                     comment,
                     ..
                 }),
         } => {
-            assert_eq!(bug_id, 42);
+            assert_eq!(bug_ids, vec![42]);
             assert_eq!(file, "patch.diff");
             assert_eq!(comment.as_deref(), Some("see this"));
         }
@@ -2260,10 +2260,10 @@ fn parse_attachment_upload_with_comment_dash() {
         Commands::Attachment {
             action:
                 AttachmentAction::Upload(super::UploadArgs {
-                    bug_id, comment, ..
+                    bug_ids, comment, ..
                 }),
         } => {
-            assert_eq!(bug_id, 42);
+            assert_eq!(bug_ids, vec![42]);
             assert_eq!(comment.as_deref(), Some("-"));
         }
         _ => panic!("expected Attachment Upload"),
@@ -2286,12 +2286,12 @@ fn parse_attachment_upload_with_comment_file() {
         Commands::Attachment {
             action:
                 AttachmentAction::Upload(super::UploadArgs {
-                    bug_id,
+                    bug_ids,
                     comment_file,
                     ..
                 }),
         } => {
-            assert_eq!(bug_id, 42);
+            assert_eq!(bug_ids, vec![42]);
             assert_eq!(
                 comment_file.as_deref(),
                 Some(std::path::Path::new("notes.md"))
@@ -2317,12 +2317,12 @@ fn parse_attachment_upload_with_comment_file_dash() {
         Commands::Attachment {
             action:
                 AttachmentAction::Upload(super::UploadArgs {
-                    bug_id,
+                    bug_ids,
                     comment_file,
                     ..
                 }),
         } => {
-            assert_eq!(bug_id, 42);
+            assert_eq!(bug_ids, vec![42]);
             assert_eq!(comment_file.as_deref(), Some(std::path::Path::new("-")));
         }
         _ => panic!("expected Attachment Upload"),
@@ -2367,13 +2367,13 @@ fn parse_attachment_upload_with_patch_flag() {
         Commands::Attachment {
             action:
                 AttachmentAction::Upload(super::UploadArgs {
-                    bug_id,
+                    bug_ids,
                     patch,
                     no_patch,
                     ..
                 }),
         } => {
-            assert_eq!(bug_id, 42);
+            assert_eq!(bug_ids, vec![42]);
             assert!(patch, "--patch should set the flag to true");
             assert!(!no_patch);
         }
@@ -2446,13 +2446,13 @@ fn parse_attachment_upload_with_comment_private() {
         Commands::Attachment {
             action:
                 AttachmentAction::Upload(super::UploadArgs {
-                    bug_id,
+                    bug_ids,
                     comment,
                     comment_private,
                     ..
                 }),
         } => {
-            assert_eq!(bug_id, 42);
+            assert_eq!(bug_ids, vec![42]);
             assert_eq!(comment.as_deref(), Some("sensitive"));
             assert!(comment_private, "--comment-private should set the flag");
         }

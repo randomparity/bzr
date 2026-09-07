@@ -5,7 +5,7 @@ use crate::cli::{AttachmentAction, AttachmentUpdateArgs, UploadArgs};
 
 fn upload_args() -> UploadArgs {
     UploadArgs {
-        bug_id: 1,
+        bug_ids: vec![1],
         file: "f.txt".into(),
         summary: None,
         content_type: None,
@@ -255,6 +255,28 @@ fn download_ignore_obsolete_without_bug_is_rejected() {
     assert!(
         err.to_string().contains("--ignore-obsolete"),
         "error should name the flag, got: {err}"
+    );
+}
+
+// ── validate_action upload duplicate bug IDs ─────────────────────────────────
+//
+// Mutant: delete the duplicate-bug-ID guard ahead of the match. Without it,
+// validation silently passes — the test below must fail under the mutant.
+
+#[test]
+fn upload_duplicate_bug_ids_are_rejected() {
+    let args = UploadArgs {
+        bug_ids: vec![1, 1],
+        ..upload_args()
+    };
+    let action = AttachmentAction::Upload(args);
+    let result = validate_action(&action);
+    assert!(result.is_err(), "a repeated bug ID must be rejected");
+    let err = result.unwrap_err();
+    assert_eq!(err.exit_code(), 7, "expected InputValidation exit 7");
+    assert!(
+        err.to_string().contains('1'),
+        "error should name the repeated ID, got: {err}"
     );
 }
 
