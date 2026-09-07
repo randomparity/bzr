@@ -119,11 +119,14 @@ The result shape splits on target count, per ADR 0063:
   `step` is optional and, when present, means the attachment was created (the
   bug also appears in `uploaded`) and only the `--comment-private` follow-up
   failed. Any `failed` entry returns `BatchPartialFailure` (exit 11) through
-  `ensure_batch_complete`, whose two counts are **target counts**, not array
-  lengths: a `comment_private` entry names a bug that did receive the attachment,
-  so it must not be subtracted from the succeeded side and counted on the failed
-  side at once. A per-bug upload failure does not abort the loop and does not roll
-  back earlier uploads.
+  `ensure_batch_complete`, whose two counts are **target counts**: each bug
+  contributes at most one `failed` entry, and duplicate IDs are rejected before
+  the loop, so `failed` is the failed-target count, `succeeded` is
+  `bug_ids.len() - failed`, and the two always sum to the number of bugs. A bug
+  that received its attachment but failed the privacy flip counts **once, on the
+  failed side** — it is listed in `uploaded` because the caller needs its
+  `attachment_id`, but it did not fully succeed. A per-bug upload failure does not
+  abort the loop and does not roll back earlier uploads.
 
   Table mode branches on `step` for the same reason: a `comment_private` entry
   renders as the attachment having landed with the privacy flip unapplied, never

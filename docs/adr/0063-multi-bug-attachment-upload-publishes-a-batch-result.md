@@ -120,6 +120,18 @@ Three properties are deliberate:
   path suppresses `flip_new_comment_private`'s own `warn_partial` pair so one
   failure produces one message rather than three.
 
+- **Such a bug is listed in `uploaded` and still counts as a failed target.**
+  The two are not in tension, and the pairing is the reason `step` exists: the
+  bug appears in `uploaded` because its `attachment_id` is the caller's handle
+  for setting the privacy by hand, and it counts on the failed side of
+  `BatchPartialFailure` because it did not fully succeed. Each bug contributes at
+  most one `failed` entry and duplicates are rejected before the loop, so the two
+  counts always sum to the number of bugs. Two bugs where one flip fails report
+  `succeeded: 1, failed: 1`, not `2` and `0` — a count that excluded sub-step
+  failures could never reach exit 11 at all, which would contradict the exit rule
+  above and leave the batch path exiting 0 on a failure the single-bug path
+  already reports.
+
 - **`BzrError::BatchPartialFailure`'s message reads `batch update: N succeeded,
   M failed`** (`src/error.rs`), which is inaccurate for an upload. The variant is
   shared with `bug update` and its text is not changed here; the accurate

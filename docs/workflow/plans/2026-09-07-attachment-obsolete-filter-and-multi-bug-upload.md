@@ -408,12 +408,20 @@ Provides to later tasks:
   Observable: with `--comment` and `--comment-private` over two bugs, bug 2's
   comment listing mounts an error; the result has bug 2 in `uploaded` **and** in
   `failed` with `step == "comment_private"`, and the returned error is
-  `BatchPartialFailure { succeeded: 2, failed: 0 }` — both bugs received the
-  attachment, so neither is a failed *target*. Test:
+  `BatchPartialFailure { succeeded: 1, failed: 1 }` — bug 2 received the
+  attachment but did not fully succeed, so it counts once, on the failed side,
+  and the two counts sum to the number of bugs. Test:
   `src/commands/attachment/upload_tests.rs`, new case
-  `upload_comment_private_failure_is_a_sub_step`. Expected red: bug 2 is absent
-  from `uploaded`, or the counts read `succeeded: 1, failed: 1`. Green:
+  `upload_comment_private_failure_is_a_sub_step`. Expected red: `Ok(())` is
+  returned, or bug 2 is absent from `uploaded`. Green:
   `make test-one T=upload_comment_private_failure`.
+- **Contract: the count invariant holds when every sub-step fails.** Mode:
+  focused-test. Observable: with `--comment-private` over two bugs whose flips
+  both fail, `succeeded + failed == bug_ids.len()`. Test:
+  `src/commands/attachment/upload_tests.rs`, new case
+  `upload_batch_invariant_holds_when_every_flip_fails`. Expected red: the counts
+  do not sum to the target count. Green:
+  `make test-one T=upload_batch_invariant`.
 - **Contract: table mode distinguishes a sub-step failure from an upload failure
   and does not double-narrate it.** Mode: focused-test. Observable: the same
   two-bug privacy-flip scenario under `OutputFormat::Table` writes one stderr line
@@ -676,11 +684,14 @@ Provides to later tasks:
        }
        let result = BatchUploadResult::new(prepared.size, uploaded, failed);
        write_batch_upload(&result, format, w);
-       // Count targets, not array lengths. A `comment_private` entry names a bug
-       // that did receive the attachment and is also in `uploaded`, so it is not
-       // a failed target; counting it on both sides would report more outcomes
-       // than there were bugs.
-       let failed_targets = result.failed.iter().filter(|f| f.step.is_none()).count();
+       // Count targets, not array lengths. Each bug contributes at most one
+       // `failed` entry — an upload failure or a sub-step failure, never both —
+       // and duplicate IDs were rejected before the loop, so the array length is
+       // the failed-target count and the two counts sum to the number of bugs.
+       // Subtracting from `bug_ids.len()` is what prevents the double-count; a
+       // bug in both `uploaded` and `failed` still counts once, on the failed
+       // side, because it did not fully succeed.
+       let failed_targets = result.failed.len();
        ensure_batch_complete(bug_ids.len() - failed_targets, failed_targets)
    }
 
@@ -780,16 +791,17 @@ Provides to later tasks:
    fn first_duplicate(ids: &[u64]) -> Option<u64> {
        ids.iter()
            .enumerate()
-           .find(|&&(i, id)| ids[..i].contains(id))
+           .find(|&(i, id)| ids[..i].contains(id))
            .map(|(_, id)| *id)
    }
    ```
 
-   The predicate pattern is `&&(i, id)`, not `(i, id)`: `Iterator::find` hands the
-   closure `&Self::Item`, and `Self::Item` here is `(usize, &u64)`, so an
-   un-dereferenced pattern binds `id` as `&&u64` and `slice::contains` wants
-   `&u64`. `find` itself returns `Option<(usize, &u64)>`, which is why the
-   following `map` dereferences once.
+   The predicate pattern is `&(i, id)`, with exactly one `&`: `Iterator::find`
+   hands the closure `&Self::Item`, and `Self::Item` here is `(usize, &u64)`, so
+   a bare `(i, id)` binds `id` as `&&u64` while `slice::contains` wants `&u64`,
+   and a doubled `&&(i, id)` over-dereferences and fails with `E0308`. `find`
+   itself returns `Option<(usize, &u64)>`, which is why the following `map`
+   dereferences once.
 
 8. Bump `SCHEMA_VERSION` from `"3.0.3"` to `"3.0.4"` in `src/output/mod.rs`, then
    update every hand-written pin. Find them with
