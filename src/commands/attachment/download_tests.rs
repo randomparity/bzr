@@ -912,6 +912,48 @@ async fn download_ignore_obsolete_leaves_positional_ids_alone() {
 }
 
 #[tokio::test]
+async fn download_bug_ignore_obsolete_keeps_attachment_missing_is_obsolete() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    let mut missing_flag = one_att(9876, 12345, "no-flag.patch", b"no obsolete flag");
+    missing_flag.as_object_mut().unwrap().remove("is_obsolete");
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/12345/attachment"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
+                12345,
+                &serde_json::json!([missing_flag]),
+            )),
+        )
+        .mount(&mock)
+        .await;
+
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+    let action = AttachmentAction::Download {
+        ids: vec![],
+        bug_ids: vec![12345],
+        out: None,
+        out_dir,
+        ignore_obsolete: true,
+    };
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+
+    let result = crate::commands::attachment::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "expected ok, got {result:?}");
+    assert!(
+        tmp.path().join("12345").join("9876.no-flag.patch").exists(),
+        "an attachment with an absent is_obsolete field must be kept under --ignore-obsolete",
+    );
+}
+
+#[tokio::test]
 async fn download_bug_all_obsolete_succeeds_with_no_files() {
     let (_lock, mock, tmp) = setup_test_env().await;
 
