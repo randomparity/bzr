@@ -233,8 +233,14 @@ if [[ -n "$BUG1" ]]; then
         _FANOUT_OK=1
         for _FANOUT_TARGET in "$BUG1" "$_FANOUT_BUG"; do
             run_bzr attachment list "$_FANOUT_TARGET"
-            if ! assert_success || ! jq -e \
-                '[.[] | select(.summary == "fanout")] | length == 1' \
+            # assert_success reports its own failure, so it gets its own arm —
+            # folding it into the jq condition would count one test failed
+            # twice and attribute a listing error to a missing attachment.
+            if ! assert_success; then
+                _FANOUT_OK=0
+                break
+            fi
+            if ! jq -e '[.[] | select(.summary == "fanout")] | length == 1' \
                 "$BZR_STDOUT" >/dev/null; then
                 test_fail "bug $_FANOUT_TARGET did not receive the fanout attachment"
                 _FANOUT_OK=0
@@ -254,12 +260,17 @@ else test_skip "no BUG1 or no fanout file"; fi
 test_begin "attachment-upload-fanout-reports-partial-failure" "attachment upload fan-out reports a partial failure"
 if [[ -n "$BUG1" ]] && [[ -n "${_FANOUT_FILE:-}" ]]; then
     run_bzr attachment upload "$BUG1" 999999 "$_FANOUT_FILE" --summary "fanout partial"
-    if assert_exit_code 11 && jq -e \
-        '(.uploaded | length == 1) and (.failed | length == 1)' \
-        "$BZR_STDOUT" >/dev/null; then
-        test_pass
-    else
-        test_fail "expected one uploaded and one failed entry, got: $(cat "$BZR_STDOUT")"
+    # Nested rather than `assert_exit_code 11 && jq ... || test_fail`: a failing
+    # assert_ helper reports the failure itself, so an `else` on the combined
+    # condition would count the same test failed twice and print a second,
+    # wrong reason.
+    if assert_exit_code 11; then
+        if jq -e '(.uploaded | length == 1) and (.failed | length == 1)' \
+            "$BZR_STDOUT" >/dev/null; then
+            test_pass
+        else
+            test_fail "expected one uploaded and one failed entry, got: $(cat "$BZR_STDOUT")"
+        fi
     fi
 else test_skip "no BUG1 or no fanout file"; fi
 # The fanout file is only created on the non-skip path, and phases run under
