@@ -54,7 +54,7 @@ For installation and quick start, see [README.md](../README.md).
 | `--retry <N>` | Retry transient failures up to N times with exponential backoff honoring `Retry-After`. 429 and connect failures are retried for any operation; 5xx and read timeouts only for safe reads (GET/HEAD), never for writes (create, update, comment) where a replay could duplicate the effect. Default 0 (disabled); max 10. Exhausted retries exit 5. |
 | `--progress <FORMAT>` | Emit structured progress events on stderr for long operations. `ndjson` streams newline-delimited JSON (`page`/`batch`/`done`, and `error` on failure) during `bug list`/`search --paginate`, `query run --paginate`, and `bug create`/`update --from-json` array form. stdout is unaffected; absent the flag stderr stays silent (or `-v` logs). Only `ndjson` is supported. Intended for non-verbose runs, since `-v` log lines interleave on the same stream. |
 | `--dry-run` | Preview a supported mutation without writing. Resolves and validates the request, then prints the would-be payload and affected IDs as `{"resource":"bug","action":"dry-run","ids":[...],"changes":{...}}` instead of calling the write API. Exits 0 on a valid request. Supported for `bug create`, `update`, `clone`, `resolve`, `close`, `reopen`, `dup`; `product`, `user`, and `group` `create` and `update`; and `component create`. On any other command it exits 7. `bug clone` still reads the source bug to build the preview. |
-| `-y, --yes` | Skip the confirmation prompt for a large batch mutation. A `bug update`/`resolve`/`close`/`reopen` targeting more than 10 bugs prompts for confirmation at an interactive terminal; `--yes` bypasses it. Non-interactive runs (piped stdin, agents) never prompt, so this is only needed in an interactive session. |
+| `-y, --yes` | Skip the confirmation prompt for a large batch mutation. A `bug update`/`resolve`/`close`/`reopen` or `attachment upload` targeting more than 10 bugs prompts for confirmation at an interactive terminal; `--yes` bypasses it. Non-interactive runs (piped stdin, agents) never prompt, so this is only needed in an interactive session. |
 | `-v, --verbose` | Increase log verbosity (`-v`=info, `-vv`=debug, `-vvv`=trace; `RUST_LOG` overrides) |
 | `-h, --help` | Print help |
 | `-V, --version` | Print version |
@@ -450,7 +450,7 @@ bzr bug list --version 9.4 --version 9.5 --op-sys Linux
 ```
 
 `platform` is the canonical Bugzilla hardware-field name for search, bug
-objects, create, update, and clone. Schema 3.0.4 publishes and accepts only the
+objects, create, update, and clone. Schema 3.0.5 publishes and accepts only the
 canonical `platform` spelling.
 
 ### `bzr bug view`
@@ -676,11 +676,11 @@ table always includes the fixed fields `ID`, `SUMMARY`, `STATUS`, `RESOLUTION`,
 `BLOCKS`, and `DEPENDS ON`; the two adjacency columns are complete,
 comma-separated ID lists.
 
-Under `--json`, the usual `3.0.4` envelope contains a closed result object:
+Under `--json`, the usual `3.0.5` envelope contains a closed result object:
 
 ```json
 {
-  "schema_version": "3.0.4",
+  "schema_version": "3.0.5",
   "data": {
     "requests": [
       {"requested": "00123", "bug_id": 123},
@@ -1467,16 +1467,24 @@ Agent note: for clearer audit trails, agents should usually pass `--summary` exp
 **Output:**
 
 One bug ID emits today's `UploadResult` (`bzr schema upload-result`) and the
-`Uploaded attachment #N to bug #M (X bytes)` line. Two or more bug IDs emit the
-published `attachment-upload-batch-result` (`BatchUploadResult`) instead: the
-same file is uploaded to every target, `uploaded` pairs each bug with the
-attachment it received, and `failed` pairs a bug with an error. A per-bug
-failure exits 11 (`BatchPartialFailure`) and leaves earlier uploads in place —
-Bugzilla has no attachment-delete call, so a partial fan-out is never rolled
-back. A `failed[]` entry carrying `step: "comment_private"` means the
+`Uploaded attachment #N to bug #M (X bytes)` line. Two or more bug IDs prompt
+for confirmation when the target count exceeds 10 (see `-y, --yes` above),
+then emit the published `attachment-upload-batch-result` (`BatchUploadResult`)
+instead: the same file is uploaded to every target, `uploaded` pairs each bug
+with the attachment it received, and `failed` pairs a bug with an error. A
+per-bug failure exits 11 (`BatchPartialFailure`) and leaves earlier uploads in
+place — Bugzilla has no attachment-delete call, so a partial fan-out is never
+rolled back. A `failed[]` entry carrying `step: "comment_private"` means the
 attachment landed (the bug also appears in `uploaded`) and only the follow-up
 `--comment-private` flip failed; do not retry it, or the same file uploads
-again.
+again. That failure also stops the fan-out to any remaining bugs — the flip
+almost always fails because the credential lacks `insider`/`editbugs`, which
+would recur on every target and publish the private comment text on each of
+them — and every bug the stop left untried gets its own `failed[]` entry with
+`step: "not_attempted"` naming the bug whose flip failed. A `failed[]` entry
+with no `step` is not proof the attachment was never created — a timeout after
+the POST was accepted, or a 2xx response with no id in its body, both surface
+as a bare failure — so list the bug's attachments before retrying one.
 
 **Argument order:** an option may no longer sit between the bug IDs and the
 file — it terminates the variadic, so the token after it has no positional
@@ -2636,7 +2644,7 @@ Every pretty `--json` response is wrapped in a stable envelope:
 
 ```json
 {
-  "schema_version": "3.0.4",
+  "schema_version": "3.0.5",
   "data": <the command's payload>
 }
 ```
@@ -2651,7 +2659,7 @@ bzr --json schema | jq -r '.schema_version'   # the contract version itself
 ```
 
 `--json` error output carries the version too, beside an `error` object:
-`{"schema_version":"3.0.4","error":{"type":...,"message":...,"exit_code":...}}`.
+`{"schema_version":"3.0.5","error":{"type":...,"message":...,"exit_code":...}}`.
 
 Two outputs are deliberately **not** enveloped:
 

@@ -5,6 +5,7 @@ use crate::client::BugzillaClient;
 use crate::commands::runtime::input::attachment_input::{
     prepare_attachment_params, AttachmentInput,
 };
+use crate::commands::runtime::interaction::confirm::confirm_batch;
 use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::mutation::ensure_batch_complete;
 use crate::error::Result;
@@ -27,7 +28,7 @@ pub(super) async fn handle(
     if let [bug_id] = args.bug_ids[..] {
         return upload_single(&client, &mut prepared, bug_id, format, w).await;
     }
-    upload_batch(&client, &mut prepared, &args.bug_ids, format, w).await
+    upload_batch(&client, &mut prepared, &args.bug_ids, ctx, w).await
 }
 
 /// One bug: the original shape, byte for byte. Kept separate from the
@@ -62,18 +63,29 @@ async fn upload_single(
 }
 
 /// Two or more bugs: upload the same prepared payload to each, recording
-/// per-bug outcomes and continuing past a failure. A bug whose upload
-/// succeeded but whose `--comment-private` flip failed appears in both
-/// `uploaded` and `failed`.
+/// per-bug outcomes and continuing past an ordinary upload failure. A bug
+/// whose upload succeeded but whose `--comment-private` flip failed appears
+/// in both `uploaded` and `failed`, and **stops the fan-out**: the flip
+/// almost always fails because the credential lacks `insider`/`editbugs`,
+/// which recurs on every remaining target, so continuing would post the
+/// user's private comment text publicly on each of them in turn. Every bug
+/// the stop left untried is recorded in `failed` with `step:
+/// "not_attempted"`, naming the bug whose flip failed, so `succeeded +
+/// failed` still accounts for every requested bug.
 async fn upload_batch(
     client: &BugzillaClient,
     prepared: &mut PreparedUpload,
     bug_ids: &[u64],
-    format: OutputFormat,
+    ctx: &CommandContext,
     w: &mut Writers<'_>,
 ) -> Result<()> {
+    if !confirm_batch(bug_ids.len(), ctx.assume_yes(), w)? {
+        let _ = writeln!(w.err, "Aborted; no changes made.");
+        return Ok(());
+    }
     let mut uploaded = Vec::new();
     let mut failed = Vec::new();
+    let mut stopped_after: Option<u64> = None;
     for &bug_id in bug_ids {
         prepared.params.bug_id = bug_id;
         match client.upload_attachment(&prepared.params).await {
@@ -90,18 +102,40 @@ async fn upload_batch(
                     // one message.
                     if let Err(e) = flip_new_comment_private_quiet(client, bug_id, att_id).await {
                         failed.push(UploadFailure::comment_private(bug_id, e.to_string()));
+                        // A flip failure is a property of the *credential*,
+                        // not of this bug, so it will recur on every
+                        // remaining target -- and each recurrence posts the
+                        // private comment text publicly. Stop rather than
+                        // repeat a confidentiality breach. An ordinary
+                        // upload failure (the `Err` arm below) does not stop
+                        // the loop: it has no such fan-out cost.
+                        stopped_after = Some(bug_id);
+                        break;
                     }
                 }
             }
             Err(e) => failed.push(UploadFailure::new(bug_id, e.to_string())),
         }
     }
+    if let Some(blocking_bug) = stopped_after {
+        let attempted: HashSet<u64> = uploaded
+            .iter()
+            .map(|t| t.bug_id)
+            .chain(failed.iter().map(|f| f.bug_id))
+            .collect();
+        for &bug_id in bug_ids {
+            if !attempted.contains(&bug_id) {
+                failed.push(UploadFailure::not_attempted(bug_id, blocking_bug));
+            }
+        }
+    }
     let result = BatchUploadResult::new(prepared.size, uploaded, failed);
-    write_batch_upload(&result, format, w);
+    write_batch_upload(&result, ctx.format(), w);
     // Counted over distinct bug IDs (each drawn from `bug_ids`) rather than
     // subtracted from `result.failed.len()`, so `failed_targets <= bug_ids.len()`
     // is a property of the set rather than an invariant hand-maintained across
-    // the loop's two `push` sites (upload failure, comment-private failure).
+    // the loop's push sites (upload failure, comment-private failure,
+    // not-attempted backfill).
     let failed_bugs: HashSet<u64> = result.failed.iter().map(|f| f.bug_id).collect();
     let failed_targets = failed_bugs.len();
     ensure_batch_complete(bug_ids.len() - failed_targets, failed_targets)
@@ -111,7 +145,10 @@ async fn upload_batch(
 /// table form prints one line per upload and sends each failure to stderr.
 /// A `comment_private` entry is **not** rendered as an upload failure: the
 /// attachment exists, and telling the operator the upload failed invites a
-/// retry that leaves a second attachment Bugzilla cannot delete.
+/// retry that leaves a second attachment Bugzilla cannot delete. A
+/// `not_attempted` entry is rendered separately again: it is neither an
+/// upload failure nor a landed attachment, and retrying it is exactly what
+/// the caller should do once the blocking bug's privacy is sorted out.
 fn write_batch_upload(result: &BatchUploadResult, format: OutputFormat, w: &mut Writers<'_>) {
     match format {
         OutputFormat::Json | OutputFormat::Ndjson => write_result(result, "", format, w.out),
@@ -124,14 +161,21 @@ fn write_batch_upload(result: &BatchUploadResult, format: OutputFormat, w: &mut 
                 );
             }
             for f in &result.failed {
-                if f.step.is_some() {
-                    let _ = writeln!(
-                        w.err,
-                        "Uploaded to bug #{} but could not make the comment private: {}",
-                        f.bug_id, f.error,
-                    );
-                } else {
-                    let _ = writeln!(w.err, "Failed to upload to bug #{}: {}", f.bug_id, f.error);
+                match f.step.as_deref() {
+                    Some("comment_private") => {
+                        let _ = writeln!(
+                            w.err,
+                            "Uploaded to bug #{} but could not make the comment private: {}",
+                            f.bug_id, f.error,
+                        );
+                    }
+                    Some("not_attempted") => {
+                        let _ = writeln!(w.err, "Not attempted for bug #{}: {}", f.bug_id, f.error);
+                    }
+                    _ => {
+                        let _ =
+                            writeln!(w.err, "Failed to upload to bug #{}: {}", f.bug_id, f.error);
+                    }
                 }
             }
         }

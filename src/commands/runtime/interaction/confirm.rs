@@ -12,6 +12,7 @@
 use std::io::{BufRead, Write};
 
 use crate::error::Result;
+use crate::output::writers::Writers;
 
 /// Batches strictly larger than this prompt for confirmation at a TTY.
 pub const BATCH_THRESHOLD: usize = 10;
@@ -55,6 +56,22 @@ pub fn read_yes_no<R: BufRead, W: Write + ?Sized>(
         line.trim().to_ascii_lowercase().as_str(),
         "y" | "yes"
     ))
+}
+
+/// Prompt for confirmation before a large batch mutation, wiring the real
+/// stdin/TTY into [`should_prompt`] and [`read_yes_no`]. The `should_prompt`
+/// gate is checked first, so stdin is locked only when a prompt is actually
+/// shown. Returns whether to proceed. Shared by every command that fans a
+/// single mutation across a user-supplied ID list (`bug update` and its
+/// convenience verbs, `attachment upload`).
+pub fn confirm_batch(count: usize, assume_yes: bool, w: &mut Writers<'_>) -> Result<bool> {
+    use std::io::IsTerminal;
+    let is_tty = std::io::stdin().is_terminal();
+    if !should_prompt(count, assume_yes, is_tty) {
+        return Ok(true);
+    }
+    let stdin = std::io::stdin();
+    read_yes_no(&mut stdin.lock(), w.err, count)
 }
 
 #[cfg(test)]

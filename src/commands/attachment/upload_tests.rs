@@ -955,38 +955,38 @@ async fn upload_comment_private_failure_is_a_sub_step() {
     assert_eq!(failed[0]["step"], "comment_private");
 }
 
-/// Not one of the twelve planned contracts, but a direct check of the
-/// invariant `succeeded + failed == bug_ids.len()` for the fourth shape the
-/// other tests don't cover: every bug's privacy flip fails. Each bug
-/// contributes exactly one `failed` entry (never two, never zero), so the
-/// counts must still sum to the target count.
+/// The first `comment_private` failure stops the fan-out: a flip failure is
+/// almost always a credential property, so it recurs on every remaining
+/// target, and continuing would post the same private comment publicly on
+/// each of them. Bug 1's flip fails and bug 1 keeps its `comment_private`
+/// entry; bug 2 must never be contacted at all — no mock is mounted for it,
+/// so if `upload_batch` wrongly kept looping, bug 2's request would 404 and
+/// surface as an ordinary (stepless) failure instead of `not_attempted`,
+/// which the assertions below would catch. Also a direct check of the
+/// invariant `succeeded + failed == bug_ids.len()` for this shape.
 #[tokio::test]
-async fn upload_batch_invariant_holds_when_every_flip_fails() {
+async fn upload_batch_stops_after_first_flip_failure_and_marks_the_rest_not_attempted() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let (_lock, mock, tmp) = setup_test_env().await;
 
     let upload_file = tmp.path().join("p.diff");
     std::fs::write(&upload_file, "diff --git a b").unwrap();
 
-    for bug_id in [1u64, 2] {
-        Mock::given(method("POST"))
-            .and(path(format!("/rest/bug/{bug_id}/attachment")))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [10 + bug_id]})),
-            )
-            .mount(&mock)
-            .await;
-        Mock::given(method("GET"))
-            .and(path(format!("/rest/bug/{bug_id}/comment")))
-            .respond_with(
-                ResponseTemplate::new(403).set_body_string("Forbidden: editbugs required"),
-            )
-            .mount(&mock)
-            .await;
-    }
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/1/attachment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [11]})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1/comment"))
+        .respond_with(ResponseTemplate::new(403).set_body_string("Forbidden: editbugs required"))
+        .expect(1)
+        .mount(&mock)
+        .await;
 
     let action = AttachmentAction::Upload(UploadArgs {
-        bug_ids: vec![1, 2],
+        bug_ids: vec![1, 2, 3],
         file: upload_file.to_string_lossy().into_owned(),
         summary: None,
         content_type: None,
@@ -1007,9 +1007,9 @@ async fn upload_batch_invariant_holds_when_every_flip_fails() {
     .await;
     match result {
         Err(crate::error::BzrError::BatchPartialFailure { succeeded, failed }) => {
-            assert_eq!(succeeded + failed, 2, "counts must sum to the target count");
+            assert_eq!(succeeded + failed, 3, "counts must sum to the target count");
             assert_eq!(succeeded, 0);
-            assert_eq!(failed, 2);
+            assert_eq!(failed, 3);
         }
         other => panic!("expected BatchPartialFailure, got {other:?}"),
     }
@@ -1017,15 +1017,182 @@ async fn upload_batch_invariant_holds_when_every_flip_fails() {
     let data = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(
         data["uploaded"],
-        serde_json::json!([
-            {"bug_id": 1, "attachment_id": 11},
-            {"bug_id": 2, "attachment_id": 12},
-        ]),
-        "both bugs still received the attachment"
+        serde_json::json!([{"bug_id": 1, "attachment_id": 11}]),
+        "only bug 1 was attempted before the stop"
     );
     let failed = data["failed"].as_array().unwrap();
-    assert_eq!(failed.len(), 2);
-    assert!(failed.iter().all(|f| f["step"] == "comment_private"));
+    assert_eq!(failed.len(), 3);
+    assert_eq!(failed[0]["bug_id"], 1);
+    assert_eq!(failed[0]["step"], "comment_private");
+    for (idx, bug_id) in [2u64, 3].into_iter().enumerate() {
+        let entry = &failed[idx + 1];
+        assert_eq!(entry["bug_id"], bug_id);
+        assert_eq!(entry["step"], "not_attempted");
+        assert!(
+            entry["error"].as_str().unwrap().contains("bug #1"),
+            "not_attempted error should name the blocking bug, got: {entry:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn upload_batch_table_mode_labels_not_attempted_distinctly() {
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    let upload_file = tmp.path().join("p.diff");
+    std::fs::write(&upload_file, "diff --git a b").unwrap();
+
+    Mock::given(method("POST"))
+        .and(path("/rest/bug/1/attachment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [11]})))
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/1/comment"))
+        .respond_with(ResponseTemplate::new(403).set_body_string("Forbidden: editbugs required"))
+        .mount(&mock)
+        .await;
+
+    let action = AttachmentAction::Upload(UploadArgs {
+        bug_ids: vec![1, 2],
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: None,
+        content_type: None,
+        private: false,
+        no_private: false,
+        patch: false,
+        no_patch: false,
+        comment: Some("sensitive".into()),
+        comment_file: None,
+        comment_private: true,
+        flag: vec![],
+    });
+    let result = crate::commands::attachment::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &mut __io.writers(),
+    )
+    .await;
+    assert!(result.is_err(), "expected BatchPartialFailure");
+
+    let err_out = __io.err_str();
+    assert!(
+        !err_out.contains("Failed to upload to bug #2"),
+        "bug 2 was never attempted; it must not be narrated as an upload \
+         failure, got: {err_out:?}"
+    );
+    assert!(
+        err_out.contains("Not attempted for bug #2") && err_out.contains("bug #1"),
+        "expected a distinct not_attempted line naming the blocking bug, got: {err_out:?}"
+    );
+}
+
+/// The gate reuses `confirm_batch`'s threshold and non-TTY bypass
+/// (`should_prompt` returns false off a TTY), so a batch above
+/// `BATCH_THRESHOLD` run the way every functional test runs -- with no
+/// controlling terminal -- must proceed exactly as before rather than
+/// blocking on a prompt that can never be answered.
+#[tokio::test]
+async fn upload_batch_above_threshold_proceeds_without_a_controlling_tty() {
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    let upload_file = tmp.path().join("upload.txt");
+    std::fs::write(&upload_file, "test content").unwrap();
+
+    let bug_ids: Vec<u64> = (1..=11).collect();
+    for &bug_id in &bug_ids {
+        Mock::given(method("POST"))
+            .and(path(format!("/rest/bug/{bug_id}/attachment")))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [bug_id]})),
+            )
+            .mount(&mock)
+            .await;
+    }
+
+    let action = AttachmentAction::Upload(UploadArgs {
+        bug_ids: bug_ids.clone(),
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: None,
+        content_type: None,
+        private: false,
+        no_private: false,
+        patch: false,
+        no_patch: false,
+        comment: None,
+        comment_file: None,
+        comment_private: false,
+        flag: vec![],
+    });
+    let result = crate::commands::attachment::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "an 11-bug batch must not block on an unanswerable prompt: {result:?}"
+    );
+    assert!(
+        !__io.err_str().contains("Aborted"),
+        "no prompt should fire without a controlling TTY"
+    );
+    let output = __io.out_str().to_string();
+    let data = crate::test_helpers::json_envelope_data(&output);
+    assert_eq!(data["uploaded"].as_array().unwrap().len(), 11);
+}
+
+/// `--yes` (`ctx.assume_yes()`) must reach `upload_batch`'s confirmation
+/// gate: this is the same 11-bug batch as above but with `assume_yes` set,
+/// proving the flag is actually threaded through rather than only working by
+/// accident of the test harness having no TTY.
+#[tokio::test]
+async fn upload_batch_above_threshold_with_assume_yes_bypasses_the_gate() {
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    let upload_file = tmp.path().join("upload.txt");
+    std::fs::write(&upload_file, "test content").unwrap();
+
+    let bug_ids: Vec<u64> = (1..=11).collect();
+    for &bug_id in &bug_ids {
+        Mock::given(method("POST"))
+            .and(path(format!("/rest/bug/{bug_id}/attachment")))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"ids": [bug_id]})),
+            )
+            .mount(&mock)
+            .await;
+    }
+
+    let action = AttachmentAction::Upload(UploadArgs {
+        bug_ids: bug_ids.clone(),
+        file: upload_file.to_string_lossy().into_owned(),
+        summary: None,
+        content_type: None,
+        private: false,
+        no_private: false,
+        patch: false,
+        no_patch: false,
+        comment: None,
+        comment_file: None,
+        comment_private: false,
+        flag: vec![],
+    });
+    let ctx =
+        crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_assume_yes(true);
+    let result = crate::commands::attachment::execute(&action, &ctx, &mut __io.writers()).await;
+    assert!(
+        result.is_ok(),
+        "assume_yes should bypass the gate: {result:?}"
+    );
+    let output = __io.out_str().to_string();
+    let data = crate::test_helpers::json_envelope_data(&output);
+    assert_eq!(data["uploaded"].as_array().unwrap().len(), 11);
 }
 
 #[tokio::test]

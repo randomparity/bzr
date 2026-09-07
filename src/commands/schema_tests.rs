@@ -461,8 +461,9 @@ fn upload_result_conforms() {
 
 #[test]
 fn attachment_upload_batch_result_conforms() {
-    // Maximal: one plain failure and one `comment_private`-stepped failure, so
-    // the bijection exercises every declared property including `step`.
+    // Maximal: one plain failure, one `comment_private`-stepped failure, and
+    // one `not_attempted`-stepped failure, so the bijection exercises every
+    // declared property including every `step` enum value.
     let result = BatchUploadResult::new(
         2048,
         vec![
@@ -478,6 +479,7 @@ fn attachment_upload_batch_result_conforms() {
         vec![
             UploadFailure::new(3, "boom"),
             UploadFailure::comment_private(2, "403 forbidden"),
+            UploadFailure::not_attempted(4, 2),
         ],
     );
     let value = to_value(&result);
