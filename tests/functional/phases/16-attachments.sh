@@ -250,6 +250,18 @@ if [[ -n "$BUG1" ]] && [[ -n "${_FANOUT_FILE:-}" ]]; then
     run_bzr attachment upload "$BUG1" "$BUG1" "$_FANOUT_FILE"
     if assert_exit_code 7; then test_pass; fi
 else test_skip "no BUG1 or no fanout file"; fi
+
+test_begin "attachment-upload-fanout-reports-partial-failure" "attachment upload fan-out reports a partial failure"
+if [[ -n "$BUG1" ]] && [[ -n "${_FANOUT_FILE:-}" ]]; then
+    run_bzr attachment upload "$BUG1" 999999 "$_FANOUT_FILE" --summary "fanout partial"
+    if assert_exit_code 11 && jq -e \
+        '(.uploaded | length == 1) and (.failed | length == 1)' \
+        "$BZR_STDOUT" >/dev/null; then
+        test_pass
+    else
+        test_fail "expected one uploaded and one failed entry, got: $(cat "$BZR_STDOUT")"
+    fi
+else test_skip "no BUG1 or no fanout file"; fi
 # The fanout file is only created on the non-skip path, and phases run under
 # set -u, so an unguarded expansion here would abort the whole suite instead
 # of skipping.
