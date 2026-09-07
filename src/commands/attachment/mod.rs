@@ -59,6 +59,7 @@ pub(crate) async fn execute(
             bug_ids,
             out,
             out_dir,
+            ignore_obsolete,
         } => {
             download::handle(
                 download::DownloadArgs {
@@ -66,6 +67,7 @@ pub(crate) async fn execute(
                     bug_ids,
                     out: out.as_deref(),
                     out_dir,
+                    ignore_obsolete: *ignore_obsolete,
                 },
                 ctx,
                 format,
@@ -94,6 +96,13 @@ fn validate_action(action: &AttachmentAction) -> Result<()> {
                 "specify at least one attachment ID or --bug <ID>".into(),
             ))
         }
+        AttachmentAction::Download {
+            bug_ids,
+            ignore_obsolete: true,
+            ..
+        } if bug_ids.is_empty() => Err(crate::error::BzrError::input(
+            "--ignore-obsolete filters bulk bug targets; add --bug <ID>".into(),
+        )),
         AttachmentAction::Download {
             ids, out: Some(_), ..
         } if ids.len() != 1 => Err(crate::error::BzrError::input(

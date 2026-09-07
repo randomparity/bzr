@@ -51,11 +51,13 @@ fn parse_attachment_download_single_id_defaults_out_dir() {
             bug_ids,
             out,
             out_dir,
+            ignore_obsolete,
         } => {
             assert_eq!(ids, vec![9876]);
             assert!(bug_ids.is_empty());
             assert!(out.is_none());
             assert_eq!(out_dir, "./attachments");
+            assert!(!ignore_obsolete);
         }
         _ => panic!("expected Download"),
     }
@@ -116,6 +118,28 @@ fn parse_attachment_download_mixes_bug_and_positional_ids() {
         AttachmentAction::Download { ids, bug_ids, .. } => {
             assert_eq!(ids, vec![9876]);
             assert_eq!(bug_ids, vec![12345]);
+        }
+        _ => panic!("expected Download"),
+    }
+}
+
+#[test]
+fn download_parses_ignore_obsolete() {
+    match attachment_action(&[
+        "bzr",
+        "attachment",
+        "download",
+        "--bug",
+        "12345",
+        "--ignore-obsolete",
+    ]) {
+        AttachmentAction::Download {
+            bug_ids,
+            ignore_obsolete,
+            ..
+        } => {
+            assert_eq!(bug_ids, vec![12345]);
+            assert!(ignore_obsolete);
         }
         _ => panic!("expected Download"),
     }

@@ -210,6 +210,8 @@ pub(crate) enum AttachmentAction {
     ///   bzr attachment download 9876 9877 9878 --out-dir /tmp/patches
     ///   bzr attachment download --bug 12345 --bug 67890 --out-dir /tmp/all
     ///   bzr attachment download --bug 12345 9876 --out-dir /tmp/mixed
+    ///   bzr attachment download --bug 12345 --ignore-obsolete
+    ///   bzr attachment download --bug 12345 --bug 67890 --ignore-obsolete --out-dir /tmp/live
     ///
     /// See bzr-attachment-list(1) to discover IDs for a bug.
     #[command(verbatim_doc_comment)]
@@ -221,6 +223,12 @@ pub(crate) enum AttachmentAction {
         /// Download every attachment for the given bug. Repeatable.
         #[arg(long = "bug", value_name = "BUG_ID")]
         bug_ids: Vec<u64>,
+
+        /// Skip attachments the server marks obsolete. Applies to
+        /// `--bug <ID>` targets only; an attachment named by its own
+        /// positional ID is always downloaded.
+        #[arg(long = "ignore-obsolete")]
+        ignore_obsolete: bool,
 
         /// Output file path, or `-` for stdout (single-attachment shape only).
         #[arg(

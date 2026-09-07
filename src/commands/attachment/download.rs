@@ -20,6 +20,7 @@ pub(super) struct DownloadArgs<'a> {
     pub(super) bug_ids: &'a [u64],
     pub(super) out: Option<&'a str>,
     pub(super) out_dir: &'a str,
+    pub(super) ignore_obsolete: bool,
 }
 
 pub(super) async fn handle(
@@ -38,6 +39,7 @@ pub(super) async fn handle(
             ids: args.ids,
             bug_ids: args.bug_ids,
             out_dir: args.out_dir,
+            ignore_obsolete: args.ignore_obsolete,
         };
         download_batch(&client, targets, format, w).await
     }
@@ -205,6 +207,7 @@ struct BatchTargets<'a> {
     ids: &'a [u64],
     bug_ids: &'a [u64],
     out_dir: &'a str,
+    ignore_obsolete: bool,
 }
 
 /// Bulk attachment download: walks every `--bug <ID>` then every
@@ -224,7 +227,9 @@ async fn download_batch(
     let mut attachment_results: Vec<AttachmentDownloadResult> = Vec::new();
 
     for &bug_id in targets.bug_ids {
-        bug_results.push(download_bug_target(client, bug_id, targets.out_dir).await);
+        bug_results.push(
+            download_bug_target(client, bug_id, targets.out_dir, targets.ignore_obsolete).await,
+        );
     }
 
     for &att_id in targets.ids {
@@ -251,6 +256,7 @@ async fn download_bug_target(
     client: &BugzillaClient,
     bug_id: u64,
     out_dir: &str,
+    ignore_obsolete: bool,
 ) -> BugDownloadResult {
     let atts = match client.get_attachments(bug_id).await {
         Ok(atts) => atts,
@@ -266,7 +272,10 @@ async fn download_bug_target(
 
     let mut files = Vec::new();
     let mut first_error: Option<String> = None;
-    for att in &atts {
+    for att in atts
+        .iter()
+        .filter(|att| !skip_obsolete(att, ignore_obsolete))
+    {
         match write_one_attachment(client, att, out_dir).await {
             Ok(file) => {
                 files.push(file);
@@ -289,6 +298,17 @@ async fn download_bug_target(
         files,
         error: first_error,
     }
+}
+
+/// True when `--ignore-obsolete` is set and the server marked this
+/// attachment obsolete. An absent `is_obsolete` is treated as
+/// not-obsolete, matching how the attachment table renders it.
+fn skip_obsolete(att: &Attachment, ignore_obsolete: bool) -> bool {
+    let skipped = ignore_obsolete && att.is_obsolete.unwrap_or(false);
+    if skipped {
+        tracing::debug!(att_id = att.id, "skipping obsolete attachment");
+    }
+    skipped
 }
 
 /// Download one positional attachment-ID target. The returned record

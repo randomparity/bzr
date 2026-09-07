@@ -1113,12 +1113,14 @@ fn parse_attachment_download_single_id_legacy() {
                     bug_ids,
                     out,
                     out_dir,
+                    ignore_obsolete,
                 },
         } => {
             assert_eq!(ids, vec![100]);
             assert!(bug_ids.is_empty());
             assert!(out.is_none());
             assert_eq!(out_dir, "./attachments");
+            assert!(!ignore_obsolete);
         }
         _ => panic!("expected Attachment Download"),
     }

@@ -69,6 +69,7 @@ fn capabilities_are_anonymous_for_reads() {
         bug_ids: vec![],
         out: None,
         out_dir: "x".into(),
+        ignore_obsolete: false,
     });
     assert!(!download.supports_dry_run());
     assert_eq!(download.credential_requirement(), None);
@@ -226,6 +227,34 @@ fn validate_action_allows_upload_comment_private_with_comment() {
     assert!(
         validate_action(&action).is_ok(),
         "--comment-private + --comment should pass validation"
+    );
+}
+
+// ── validate_action download --ignore-obsolete without --bug ────────────────
+//
+// Mutant: delete the match arm that rejects Download with
+// ignore_obsolete=true but no --bug targets. Without that arm, validation
+// silently passes — the test below must fail under the mutant.
+
+#[test]
+fn download_ignore_obsolete_without_bug_is_rejected() {
+    let action = AttachmentAction::Download {
+        ids: vec![9876],
+        bug_ids: vec![],
+        out: None,
+        out_dir: "./attachments".into(),
+        ignore_obsolete: true,
+    };
+    let result = validate_action(&action);
+    assert!(
+        result.is_err(),
+        "--ignore-obsolete without --bug must be rejected"
+    );
+    let err = result.unwrap_err();
+    assert_eq!(err.exit_code(), 7, "expected InputValidation exit 7");
+    assert!(
+        err.to_string().contains("--ignore-obsolete"),
+        "error should name the flag, got: {err}"
     );
 }
 
