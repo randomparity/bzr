@@ -45,7 +45,13 @@ Frozen as operator-approved exclusions on the issue's `WORK:SCOPE` annotation:
 - **E1** `--ignore-obsolete` does not filter positional attachment-ID targets.
 - **E2** No obsolete filter on `attachment list` or `attachment view`.
 - **E3** No other attachment verb gains multi-bug targeting.
-- **E4** python-bugzilla's `--getall` / `--get` / `-f` spellings are not adopted.
+- **E4** python-bugzilla's `--getall` / `--get` option spellings are not adopted;
+  `bzr` keeps its `--bug` / positional-ID shape.
+
+`-f/--file` is **not** an operator-approved exclusion. It is a live alternative
+that ADR 0063 considers and rejects on its own stated grounds — compatibility
+with the documented file-after-bug spelling — and it remains reconsiderable on
+those grounds.
 
 Also out of scope, and recorded rather than fixed: `AttachmentBatchResult`
 (the `attachment download` bulk shape) has no published schema. ADR 0063 states
