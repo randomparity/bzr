@@ -15,11 +15,22 @@ JSON contracts. Both changes stay inside `src/cli/attachment.rs` and
 `#[tokio::test]`), `wiremock` for HTTP mocking, `tabled` for tables, `bash` for
 the functional and comparison harnesses.
 
-Expected implementation size: 900–1300 changed lines (L) — derived from the file
+Expected implementation size: 1450–1650 changed lines (L) — derived from the file
 map and task list below: ~350 lines of `src/` production code and new schema,
-~450 lines of Rust unit tests across five sibling test files, ~250 lines of bash
+~850 lines of Rust unit tests across six sibling test files, ~300 lines of bash
 across the functional phase, the comparison phase, and the harness self-tests,
 and ~60 lines of documentation.
+
+Corrected after the build from an original 900–1300. The measured implementation
+diff is 1584 changed lines, of which 854 are Rust test code. The original band
+under-counted the test half twice: it assumed five sibling test files rather than
+six — `src/cli/mod_tests.rs` also destructures `UploadArgs` and
+`AttachmentAction::Download`, so the `bug_id` → `bug_ids` rename and the new
+`ignore_obsolete` field reach it mechanically — and it priced the fan-out's
+wiremock coverage at a fraction of what the Validation map already required
+(`upload_tests.rs` alone is +437). Every changed file is named in the design's
+Validation coverage map; no work outside the frozen scope or the reviewed design
+appears in the diff, so this is a corrected estimate, not a scope change.
 
 ## Global Constraints
 
