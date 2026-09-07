@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::client::BugzillaClient;
@@ -98,11 +98,12 @@ async fn upload_batch(
     }
     let result = BatchUploadResult::new(prepared.size, uploaded, failed);
     write_batch_upload(&result, format, w);
-    // Each bug contributes at most one `failed` entry — an upload failure or a
-    // sub-step failure, never both — and duplicate IDs were rejected before the
-    // loop, so the array length is the failed-*target* count and the two counts
-    // sum to the number of bugs.
-    let failed_targets = result.failed.len();
+    // Counted over distinct bug IDs (each drawn from `bug_ids`) rather than
+    // subtracted from `result.failed.len()`, so `failed_targets <= bug_ids.len()`
+    // is a property of the set rather than an invariant hand-maintained across
+    // the loop's two `push` sites (upload failure, comment-private failure).
+    let failed_bugs: HashSet<u64> = result.failed.iter().map(|f| f.bug_id).collect();
+    let failed_targets = failed_bugs.len();
     ensure_batch_complete(bug_ids.len() - failed_targets, failed_targets)
 }
 
