@@ -250,7 +250,10 @@ if [[ -n "$BUG1" ]] && [[ -n "${_FANOUT_FILE:-}" ]]; then
     run_bzr attachment upload "$BUG1" "$BUG1" "$_FANOUT_FILE"
     if assert_exit_code 7; then test_pass; fi
 else test_skip "no BUG1 or no fanout file"; fi
-rm -f "$_FANOUT_FILE"
+# The fanout file is only created on the non-skip path, and phases run under
+# set -u, so an unguarded expansion here would abort the whole suite instead
+# of skipping.
+if [[ -n "${_FANOUT_FILE:-}" ]]; then rm -f "$_FANOUT_FILE"; fi
 unset _FANOUT_BUG _FANOUT_FILE _FANOUT_OK _FANOUT_TARGET
 
 test_begin "attachment-download-ignore-obsolete-skips-obsolete" "attachment download --ignore-obsolete skips obsolete"
@@ -311,7 +314,10 @@ if [[ -n "${_OBS_BUG:-}" ]]; then
     fi
     run_bzr config remove-server obsolete-anon
 else test_skip "no obsolete-download bug"; fi
-rm -rf "$_OBS_DIR"
+# Assigned only once the upload/obsolete-marking chain succeeds. Unguarded,
+# a failure in that chain would abort every later phase under set -u rather
+# than reporting the one failed test.
+if [[ -n "${_OBS_DIR:-}" ]]; then rm -rf "$_OBS_DIR"; fi
 unset _OBS_BUG _OBS_FILE1 _OBS_FILE2 _OBS_ID1 _OBS_DIR _REQ_DIR _OBS_ANON_DIR
 unset NUM_FILES OBSOLETE_FILE_COUNT
 
