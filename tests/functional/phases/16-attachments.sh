@@ -265,7 +265,12 @@ if [[ -n "$BUG1" ]] && [[ -n "${_FANOUT_FILE:-}" ]]; then
     # condition would count the same test failed twice and print a second,
     # wrong reason.
     if assert_exit_code 11; then
-        if jq -e '(.uploaded | length == 1) and (.failed | length == 1)' \
+        # Pair each bug with its outcome, not just the array lengths: lengths
+        # alone are symmetric, so a regression that swapped the two bugs would
+        # still satisfy them, and the pairing is what the published schema
+        # exists to carry.
+        if jq -e '(.uploaded | length == 1) and (.failed | length == 1)
+            and (.uploaded[0].bug_id != 999999) and (.failed[0].bug_id == 999999)' \
             "$BZR_STDOUT" >/dev/null; then
             test_pass
         else

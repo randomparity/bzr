@@ -141,7 +141,9 @@ Operate on bugs.
   - `--comment-private` marks that comment private; `--patch`/`--no-patch` and
     `--private`/`--no-private` set the booleans.
   - `bzr attachment upload <BUG_ID>... <FILE>`: one bug ID emits `upload-result`;
-    two or more emit `attachment-upload-batch-result`. A repeated bug ID exits 7;
+    two or more emit `attachment-upload-batch-result`. Options go after `<FILE>`;
+    an option placed between the bug IDs and the file terminates the variadic
+    and exits 2. A repeated bug ID exits 7;
     any per-bug failure exits 11. A `failed[]` entry with `step:
     "comment_private"` means the attachment landed and only the privacy flip
     failed — do not retry it, Bugzilla has no attachment-delete call and a

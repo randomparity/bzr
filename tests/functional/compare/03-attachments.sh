@@ -276,9 +276,16 @@ attachment_multi_upload_check() {
     fi
     for target_bug in "$first" "$second"; do
         n=$((n + 1))
-        if ! resource_bzr "multi-bzr-list-$n" rest REST attachment list "$target_bug" ||
-            ! jq -e '[.[] | select(.summary == "multi upload bzr")] | length == 1' \
-                "$COMPARE_EXCHANGE_DIR/multi-bzr-list-$n.bzr.stdout.json" >/dev/null; then
+        # resource_bzr reports its own failure and returns 1, so it gets its
+        # own arm. Sharing one with the jq check would count the test failed
+        # twice, and under the compare prefix test_fail defers rendering — the
+        # second call overwrites the reason, so a listing or transport failure
+        # would print as a missing attachment.
+        if ! resource_bzr "multi-bzr-list-$n" rest REST attachment list "$target_bug"; then
+            return
+        fi
+        if ! jq -e '[.[] | select(.summary == "multi upload bzr")] | length == 1' \
+            "$COMPARE_EXCHANGE_DIR/multi-bzr-list-$n.bzr.stdout.json" >/dev/null; then
             test_fail "bug #$target_bug does not carry the bzr multi-bug upload"
             return
         fi
