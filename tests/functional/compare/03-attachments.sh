@@ -260,19 +260,30 @@ attachment_private_case private-rest rest REST
 test_begin "private-attachments-xmlrpc" "private attachment visibility over XML-RPC"
 attachment_private_case private-xmlrpc xmlrpc XMLRPC
 
-attachment_parser_gap() {
-    local issue="$1" diagnostic="$2" usage="$3"
+attachment_multi_upload_check() {
+    local first="$1" second="$2" n=0 target_bug
 
-    if [[ $BZR_EXIT -eq 0 ]]; then
-        test_pass
-    elif [[ $BZR_EXIT -eq 2 ]] && grep -Fxq "$diagnostic" "$BZR_STDERR" &&
-        grep -Fxq "$usage" "$BZR_STDERR"; then
-        test_fail "bzr attachment capability is not implemented"
-        resource_gap_allow
-    else
-        test_fail "bzr attachment parser result was not the controlled gap"
+    if ! jq -e '.uploaded | length == 2' \
+        "$COMPARE_EXCHANGE_DIR/multi-bzr-upload.bzr.stdout.json" >/dev/null; then
+        test_fail "bzr upload did not report two uploaded targets"
+        return
     fi
-    resource_expect_gap "$issue"
+    if ! jq -e --argjson a "$first" --argjson b "$second" \
+        '[.uploaded[].bug_id] | sort == ([$a, $b] | sort)' \
+        "$COMPARE_EXCHANGE_DIR/multi-bzr-upload.bzr.stdout.json" >/dev/null; then
+        test_fail "bzr upload did not pair both requested bug IDs"
+        return
+    fi
+    for target_bug in "$first" "$second"; do
+        n=$((n + 1))
+        if ! resource_bzr "multi-bzr-list-$n" rest REST attachment list "$target_bug" ||
+            ! jq -e '[.[] | select(.summary == "multi upload bzr")] | length == 1' \
+                "$COMPARE_EXCHANGE_DIR/multi-bzr-list-$n.bzr.stdout.json" >/dev/null; then
+            test_fail "bug #$target_bug does not carry the bzr multi-bug upload"
+            return
+        fi
+    done
+    test_pass
 }
 
 test_begin "multi-bug-upload" "attachment upload accepts multiple bug targets"
@@ -288,22 +299,32 @@ if attachment_create_bug multi-pybz-second "$ATTACHMENT_STEM multi second"; then
               file_name:"attachment-source.txt",content_type:"text/plain",comment:"multi",
               is_private:false}')" REST &&
         jq -e '.attachment_ids | length == 2 and all(.[]; type == "number" and . > 0)' \
-            "$COMPARE_EXCHANGE_DIR/multi-pybz-upload.pybz.result.json" >/dev/null; then
-        run_bzr --server "$RESOURCE_SERVER" attachment upload "$ATTACHMENT_BZR_BUG_ID" \
-            "$_ATTACH_MULTI_BUG" "$ATTACHMENT_SOURCE"
-        attachment_parser_gap 674 \
-            "error: unexpected argument '$ATTACHMENT_SOURCE' found" \
-            'Usage: bzr attachment upload [OPTIONS] <BUG_ID> <FILE>'
+            "$COMPARE_EXCHANGE_DIR/multi-pybz-upload.pybz.result.json" >/dev/null &&
+        resource_bzr multi-bzr-upload rest REST attachment upload \
+            "$ATTACHMENT_BZR_BUG_ID" "$_ATTACH_MULTI_BUG" "$ATTACHMENT_SOURCE" \
+            --summary "multi upload bzr"; then
+        attachment_multi_upload_check "$ATTACHMENT_BZR_BUG_ID" "$_ATTACH_MULTI_BUG"
     elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
-        test_fail "python-bugzilla multi-bug upload evidence is invalid"
+        test_fail "python-bugzilla or bzr multi-bug upload evidence is invalid"
     fi
 elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail "multi-bug upload precondition failed"
 fi
 
+# Depends on multi-bug-upload above having already run, on both sides: its
+# python leg put a second (non-obsolete) attachment on $ATTACHMENT_PYBZ_BUG_ID
+# and its bzr leg put a second (non-obsolete) attachment on
+# $ATTACHMENT_BZR_BUG_ID. That second attachment on each bug is what makes the
+# ignore-obsolete download below land on exactly one file once
+# $ATTACHMENT_PYBZ_ID / $ATTACHMENT_BZR_ID are marked obsolete. Do not add
+# another upload here, and do not reorder this phase — either would break the
+# symmetry this comparison depends on.
 test_begin "ignore-obsolete" "bulk attachment download ignores obsolete records"
 resource_gap_reset
-if [[ -n $ATTACHMENT_PYBZ_ID ]] &&
+# The out-dir name is fixed, not mktemp-generated, so clear any stale files
+# left by an earlier invocation before counting what this run writes.
+rm -rf "$COMPARE_EXCHANGE_DIR/obsolete-bzr"
+if [[ -n $ATTACHMENT_PYBZ_ID && -n $ATTACHMENT_BZR_ID ]] &&
     resource_bzr obsolete-setup rest REST attachment update "$ATTACHMENT_PYBZ_ID" --obsolete &&
     resource_pybz obsolete-pybz-download attachment_cli_download_bug \
         "$(jq -cn --argjson id "$ATTACHMENT_PYBZ_BUG_ID" \
@@ -311,13 +332,24 @@ if [[ -n $ATTACHMENT_PYBZ_ID ]] &&
               destination:"/work/compare/obsolete-pybz",ignore_obsolete:true}')" REST &&
     jq -e '.files | length == 1 and
         all(.[]; startswith("attachment-source.txt"))' \
-        "$COMPARE_EXCHANGE_DIR/obsolete-pybz-download.pybz.result.json" >/dev/null; then
-    run_bzr --server "$RESOURCE_SERVER" attachment download \
+        "$COMPARE_EXCHANGE_DIR/obsolete-pybz-download.pybz.result.json" >/dev/null &&
+    resource_bzr obsolete-bzr-setup rest REST attachment update "$ATTACHMENT_BZR_ID" --obsolete &&
+    resource_bzr obsolete-bzr-download rest REST attachment download \
         --bug "$ATTACHMENT_BZR_BUG_ID" --ignore-obsolete \
-        --out-dir "$COMPARE_EXCHANGE_DIR/obsolete-bzr"
-    attachment_parser_gap 674 \
-        "error: unexpected argument '--ignore-obsolete' found" \
-        'Usage: bzr attachment download --bug <BUG_ID> [ID]...'
+        --out-dir "$COMPARE_EXCHANGE_DIR/obsolete-bzr"; then
+    _ATTACH_OBSOLETE_PYBZ_COUNT=$(jq '.files | length' \
+        "$COMPARE_EXCHANGE_DIR/obsolete-pybz-download.pybz.result.json")
+    _ATTACH_OBSOLETE_BZR_COUNT=$(find \
+        "$COMPARE_EXCHANGE_DIR/obsolete-bzr/$ATTACHMENT_BZR_BUG_ID" -type f 2>/dev/null |
+        wc -l | tr -d ' ')
+    if [[ $_ATTACH_OBSOLETE_BZR_COUNT -eq 1 ]] &&
+        [[ $_ATTACH_OBSOLETE_BZR_COUNT -eq $_ATTACH_OBSOLETE_PYBZ_COUNT ]] &&
+        ! find "$COMPARE_EXCHANGE_DIR/obsolete-bzr/$ATTACHMENT_BZR_BUG_ID" -type f \
+            -name "${ATTACHMENT_BZR_ID}.*" 2>/dev/null | grep -q .; then
+        test_pass
+    else
+        test_fail "obsolete-filter file count or naming differs between bzr and python-bugzilla"
+    fi
 elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
-    test_fail "python-bugzilla obsolete-filter evidence is invalid"
+    test_fail "python-bugzilla or bzr obsolete-filter evidence is invalid"
 fi
