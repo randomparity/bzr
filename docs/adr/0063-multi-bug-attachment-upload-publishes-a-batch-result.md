@@ -204,3 +204,41 @@ Three properties are deliberate:
   consequences above — the interleaved-option break and the omitted-file
   ambiguity — into clean usage errors. Compatibility with the documented
   spelling is what is being bought, and those two behaviours are the price.
+
+## Amendment (2026-09-07): a flip failure stops the fan-out, and the batch gets the same gate `bug update` has
+
+Issue #674, security review `.agent/sdd/security-674.md` (medium findings 1 and 2, low
+finding 3). The decision above is unchanged; this amends the fan-out's failure behavior and
+adds the missing confirmation gate.
+
+**A `comment_private` failure now stops the fan-out.** The two-call design (`Bug.add_attachment`
+posts the comment public, a follow-up `Bug.update` flips it private) means the dominant flip
+failure is a 403 for a credential lacking `insider`/`editbugs` — a property of the credential,
+not of the bug, so it recurs on every remaining target. Continuing past it, as the original
+decision allowed, republishes the user's private comment text on every bug still to come. On the
+first `comment_private` failure, `upload_batch` now stops issuing new uploads; every bug it never
+reached gets a `failed[]` entry with `step: "not_attempted"` naming the bug whose flip failed. An
+ordinary upload failure (the non-privacy `Err` arm) still does not stop the loop — it carries no
+such confidentiality cost, so the original partial-fan-out reasoning still applies to it. The
+bug whose own flip failed keeps its `step: "comment_private"` entry and stays in `uploaded`,
+unchanged. `succeeded + failed` still equals the bug count. `SCHEMA_VERSION` moves `3.0.4` →
+`3.0.5`: `not_attempted` is a new enum value on an already-published field, additive under ADR
+0007.
+
+**`attachment upload` now calls the same `confirm_batch` gate as `bug update`.** Before this
+amendment the command had neither of the repo's two batch-mutation safety gates, despite being
+the less recoverable of the two: `bug update` is correctable by a second `bug update`, while
+Bugzilla has no attachment-delete call. `upload_batch` now calls `confirm_batch(bug_ids.len(),
+ctx.assume_yes(), w)` before the first upload, reusing the existing `BATCH_THRESHOLD` (10) and
+`-y`/`--yes` bypass; a decline prints `Aborted; no changes made.` and exits 0. `--dry-run` support is
+not added — `attachment upload` stays a `CommandCapabilities::authenticated` command, and
+`confirm_batch` moved from `bug/update/execute.rs` into `runtime::interaction::confirm` so both
+commands can share it.
+
+**A bare `failed[]` entry was never proof the attachment was not created.** A read timeout or
+dropped connection after the POST was accepted, or a 2xx response whose body carried no id, both
+surface as an ordinary `Err` with no `step`, indistinguishable in the result from an upload that
+never reached the server. A caller that retries a bare failure risks creating a second,
+undeletable attachment on that bug. This was always true and is documentary only: the schema's
+`step` description now says so, and names the remedy — list the bug's attachments before
+retrying.
