@@ -132,10 +132,20 @@ Operate on bugs.
 - `bzr attachment download 12345`
 - `bzr attachment download <id> --out - > attachment.bin`
   - `--out -` streams one attachment's raw bytes to stdout and suppresses result output.
+- `bzr attachment download --bug 12345 --ignore-obsolete`
+  - `--ignore-obsolete` skips attachments the server marks obsolete; it applies
+    to `--bug` targets only (a positional attachment ID is always downloaded)
+    and requires at least one `--bug`, or exits 7.
 - `bzr attachment upload 12345 patch.diff --flag "review?(a@b.com)" --comment "context"`
   - `--comment <body>` and `--comment-file <path|->` post context with the upload.
   - `--comment-private` marks that comment private; `--patch`/`--no-patch` and
     `--private`/`--no-private` set the booleans.
+  - `bzr attachment upload <BUG_ID>... <FILE>`: one bug ID emits `upload-result`;
+    two or more emit `attachment-upload-batch-result`. A repeated bug ID exits 7;
+    any per-bug failure exits 11. A `failed[]` entry with `step:
+    "comment_private"` means the attachment landed and only the privacy flip
+    failed — do not retry it, Bugzilla has no attachment-delete call and a
+    retry leaves a second, permanent attachment on the bug.
 - `bzr attachment update <id> ...`
   - Boolean grammar: `--patch`/`--no-patch`, `--private`/`--no-private`,
     `--obsolete`/`--no-obsolete` (omit both forms to leave a property unchanged).
