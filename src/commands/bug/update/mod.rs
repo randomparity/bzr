@@ -9,12 +9,12 @@ mod output;
 mod payload;
 mod validate;
 
+pub(super) use crate::commands::runtime::interaction::confirm::confirm_batch;
 pub(super) use crate::commands::runtime::mutation::ensure_batch_complete;
 pub(super) use draft::BugUpdateDraft;
 pub(super) use execute::{
-    apply_checked, apply_checked_connected, apply_comment_tags, confirm_batch,
-    ensure_unchanged_since, warn_comment_tags_failed, warn_if_minor_update_unsupported,
-    ApplyRequest,
+    apply_checked, apply_checked_connected, apply_comment_tags, ensure_unchanged_since,
+    warn_comment_tags_failed, warn_if_minor_update_unsupported, ApplyRequest,
 };
 pub(super) use output::write_batch_result;
 use payload::build_update_params;

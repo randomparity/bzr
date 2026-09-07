@@ -5,7 +5,7 @@ use crate::cli::{AttachmentAction, AttachmentUpdateArgs, UploadArgs};
 
 fn upload_args() -> UploadArgs {
     UploadArgs {
-        bug_id: 1,
+        bug_ids: vec![1],
         file: "f.txt".into(),
         summary: None,
         content_type: None,
@@ -69,6 +69,7 @@ fn capabilities_are_anonymous_for_reads() {
         bug_ids: vec![],
         out: None,
         out_dir: "x".into(),
+        ignore_obsolete: false,
     });
     assert!(!download.supports_dry_run());
     assert_eq!(download.credential_requirement(), None);
@@ -226,6 +227,80 @@ fn validate_action_allows_upload_comment_private_with_comment() {
     assert!(
         validate_action(&action).is_ok(),
         "--comment-private + --comment should pass validation"
+    );
+}
+
+// ── validate_action download --ignore-obsolete without --bug ────────────────
+//
+// Mutant: delete the match arm that rejects Download with
+// ignore_obsolete=true but no --bug targets. Without that arm, validation
+// silently passes — the test below must fail under the mutant.
+
+#[test]
+fn download_ignore_obsolete_without_bug_is_rejected() {
+    let action = AttachmentAction::Download {
+        ids: vec![9876],
+        bug_ids: vec![],
+        out: None,
+        out_dir: "./attachments".into(),
+        ignore_obsolete: true,
+    };
+    let result = validate_action(&action);
+    assert!(
+        result.is_err(),
+        "--ignore-obsolete without --bug must be rejected"
+    );
+    let err = result.unwrap_err();
+    assert_eq!(err.exit_code(), 7, "expected InputValidation exit 7");
+    assert!(
+        err.to_string().contains("--ignore-obsolete"),
+        "error should name the flag, got: {err}"
+    );
+}
+
+// ── validate_action upload duplicate bug IDs ─────────────────────────────────
+//
+// Mutant: delete the duplicate-bug-ID guard ahead of the match. Without it,
+// validation silently passes — the test below must fail under the mutant.
+
+#[test]
+fn upload_duplicate_bug_ids_are_rejected() {
+    let args = UploadArgs {
+        bug_ids: vec![1, 1],
+        ..upload_args()
+    };
+    let action = AttachmentAction::Upload(args);
+    let result = validate_action(&action);
+    assert!(result.is_err(), "a repeated bug ID must be rejected");
+    let err = result.unwrap_err();
+    assert_eq!(err.exit_code(), 7, "expected InputValidation exit 7");
+    assert!(
+        err.to_string().contains('1'),
+        "error should name the repeated ID, got: {err}"
+    );
+}
+
+// ── validate_action upload empty bug-ID list ─────────────────────────────────
+//
+// Mutant: delete the empty-bug_ids guard ahead of the duplicate check.
+// Unreachable through clap (`required = true, num_args = 1..`), but
+// `UploadArgs` is constructible in-crate, and `validate_action` is where this
+// command puts every other semantic guard.
+
+#[test]
+fn upload_empty_bug_ids_are_rejected() {
+    let args = UploadArgs {
+        bug_ids: vec![],
+        ..upload_args()
+    };
+    let action = AttachmentAction::Upload(args);
+    let result = validate_action(&action);
+    assert!(result.is_err(), "an empty bug-ID list must be rejected");
+    let err = result.unwrap_err();
+    assert_eq!(err.exit_code(), 7, "expected InputValidation exit 7");
+    assert!(
+        err.to_string().contains("bug ID"),
+        "error should name the missing bug ID, got: {err}"
     );
 }
 

@@ -180,6 +180,97 @@ impl UploadResult {
     }
 }
 
+/// One bug that received the uploaded file, paired with the attachment
+/// the server created on it.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct UploadTarget {
+    pub bug_id: u64,
+    pub attachment_id: u64,
+}
+
+/// One bug that did not fully receive the upload. `step` is
+/// `Some("comment_private")` when the attachment itself was created — the
+/// bug then also appears in [`BatchUploadResult::uploaded`] — and only the
+/// follow-up `--comment-private` flip failed. A caller must not retry a
+/// `comment_private`-stepped failure with the same `--comment` text:
+/// `Bug.add_attachment` posts a new comment on every call. `step` is
+/// `Some("not_attempted")` when this bug was never tried because an earlier
+/// `comment_private` failure stopped the fan-out (see
+/// [`UploadFailure::not_attempted`]). `step` is absent when the upload
+/// attempt itself failed for this bug — which is not proof the attachment
+/// was not created; a timeout after the POST was accepted, or a 2xx body
+/// with no id, both surface as a bare failure, so list the bug's
+/// attachments before retrying.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct UploadFailure {
+    pub bug_id: u64,
+    pub error: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step: Option<String>,
+}
+
+impl UploadFailure {
+    pub fn new(bug_id: u64, error: impl Into<String>) -> Self {
+        Self {
+            bug_id,
+            error: error.into(),
+            step: None,
+        }
+    }
+
+    pub fn comment_private(bug_id: u64, error: impl Into<String>) -> Self {
+        Self {
+            bug_id,
+            error: error.into(),
+            step: Some("comment_private".into()),
+        }
+    }
+
+    /// A bug the fan-out never reached because `blocking_bug_id`'s
+    /// `--comment-private` flip failed first. Continuing past that failure
+    /// would post the same private comment text publicly on every remaining
+    /// bug, so `upload_batch` stops instead of repeating it.
+    pub fn not_attempted(bug_id: u64, blocking_bug_id: u64) -> Self {
+        Self {
+            bug_id,
+            error: format!(
+                "not attempted: upload stopped because the comment-privacy flip failed for \
+                 bug #{blocking_bug_id}, to avoid posting the same private comment publicly \
+                 on additional bugs"
+            ),
+            step: Some("not_attempted".into()),
+        }
+    }
+}
+
+/// Result of one `attachment upload` fanned out over two or more bugs.
+/// A single-bug upload emits [`UploadResult`] instead, so this body
+/// appears only for a multi-bug invocation.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct BatchUploadResult {
+    pub resource: ResourceKind,
+    pub action: ActionKind,
+    pub size: usize,
+    pub uploaded: Vec<UploadTarget>,
+    pub failed: Vec<UploadFailure>,
+}
+
+impl BatchUploadResult {
+    #[must_use]
+    pub fn new(size: usize, uploaded: Vec<UploadTarget>, failed: Vec<UploadFailure>) -> Self {
+        Self {
+            resource: ResourceKind::Attachment,
+            action: ActionKind::Created,
+            size,
+            uploaded,
+            failed,
+        }
+    }
+}
+
 /// Typed result payload for comment tag operations.
 #[derive(Debug, Serialize)]
 #[non_exhaustive]

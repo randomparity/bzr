@@ -222,6 +222,133 @@ if [[ -n "$BUG1" ]] && [[ -n "${ATTACH_ID:-}" ]] && [[ "$ATTACH_ID" != "null" ]]
     rm -rf "$MIX_DIR"
 else test_skip "no BUG1 or no ATTACH_ID"; fi
 
+test_begin "attachment-upload-fans-out-to-several-bugs" "attachment upload fans out to several bugs"
+if [[ -n "$BUG1" ]]; then
+    _FANOUT_BUG=$(make_bug --product FuncTestProd --component Backend --op-sys Linux \
+        --platform PC --description d --summary "fanout upload target")
+    _FANOUT_FILE=$(mktemp /tmp/bzr-func-fanout.XXXXXX)
+    printf 'fanout upload bytes' >"$_FANOUT_FILE"
+    run_bzr attachment upload "$BUG1" "$_FANOUT_BUG" "$_FANOUT_FILE" --summary "fanout"
+    if assert_success; then
+        _FANOUT_OK=1
+        for _FANOUT_TARGET in "$BUG1" "$_FANOUT_BUG"; do
+            run_bzr attachment list "$_FANOUT_TARGET"
+            # assert_success reports its own failure, so it gets its own arm —
+            # folding it into the jq condition would count one test failed
+            # twice and attribute a listing error to a missing attachment.
+            if ! assert_success; then
+                _FANOUT_OK=0
+                break
+            fi
+            if ! jq -e '[.[] | select(.summary == "fanout")] | length == 1' \
+                "$BZR_STDOUT" >/dev/null; then
+                test_fail "bug $_FANOUT_TARGET did not receive the fanout attachment"
+                _FANOUT_OK=0
+                break
+            fi
+        done
+        if [[ $_FANOUT_OK -eq 1 ]]; then test_pass; fi
+    fi
+else test_skip "no BUG1"; fi
+
+test_begin "attachment-upload-rejects-a-repeated-bug-id" "attachment upload rejects a repeated bug ID"
+if [[ -n "$BUG1" ]] && [[ -n "${_FANOUT_FILE:-}" ]]; then
+    run_bzr attachment upload "$BUG1" "$BUG1" "$_FANOUT_FILE"
+    if assert_exit_code 7; then test_pass; fi
+else test_skip "no BUG1 or no fanout file"; fi
+
+test_begin "attachment-upload-fanout-reports-partial-failure" "attachment upload fan-out reports a partial failure"
+if [[ -n "$BUG1" ]] && [[ -n "${_FANOUT_FILE:-}" ]]; then
+    run_bzr attachment upload "$BUG1" 999999 "$_FANOUT_FILE" --summary "fanout partial"
+    # Nested rather than `assert_exit_code 11 && jq ... || test_fail`: a failing
+    # assert_ helper reports the failure itself, so an `else` on the combined
+    # condition would count the same test failed twice and print a second,
+    # wrong reason.
+    if assert_exit_code 11; then
+        # Pair each bug with its outcome, not just the array lengths: lengths
+        # alone are symmetric, so a regression that swapped the two bugs would
+        # still satisfy them, and the pairing is what the published schema
+        # exists to carry.
+        if jq -e '(.uploaded | length == 1) and (.failed | length == 1)
+            and (.uploaded[0].bug_id != 999999) and (.failed[0].bug_id == 999999)' \
+            "$BZR_STDOUT" >/dev/null; then
+            test_pass
+        else
+            test_fail "expected one uploaded and one failed entry, got: $(cat "$BZR_STDOUT")"
+        fi
+    fi
+else test_skip "no BUG1 or no fanout file"; fi
+# The fanout file is only created on the non-skip path, and phases run under
+# set -u, so an unguarded expansion here would abort the whole suite instead
+# of skipping.
+if [[ -n "${_FANOUT_FILE:-}" ]]; then rm -f "$_FANOUT_FILE"; fi
+unset _FANOUT_BUG _FANOUT_FILE _FANOUT_OK _FANOUT_TARGET
+
+test_begin "attachment-download-ignore-obsolete-skips-obsolete" "attachment download --ignore-obsolete skips obsolete"
+_OBS_BUG=$(make_bug --product FuncTestProd --component Backend --op-sys Linux \
+    --platform PC --description d --summary "ignore-obsolete download host")
+_OBS_FILE1=$(mktemp /tmp/bzr-func-obsolete-1.XXXXXX)
+_OBS_FILE2=$(mktemp /tmp/bzr-func-obsolete-2.XXXXXX)
+printf 'obsolete attachment bytes' >"$_OBS_FILE1"
+printf 'live attachment bytes' >"$_OBS_FILE2"
+run_bzr attachment upload "$_OBS_BUG" "$_OBS_FILE1" --summary "obsolete one"
+if assert_success && assert_json_exists '.id'; then
+    _OBS_ID1=$(jq -r '.id' "$BZR_STDOUT" 2>/dev/null)
+    run_bzr attachment upload "$_OBS_BUG" "$_OBS_FILE2" --summary "obsolete two"
+    if assert_success; then
+        run_bzr attachment update "$_OBS_ID1" --obsolete
+        if assert_success; then
+            _OBS_DIR="$(mktemp -d /tmp/bzr-func-obsolete.XXXXXX)"
+            run_bzr attachment download --bug "$_OBS_BUG" --ignore-obsolete --out-dir "$_OBS_DIR"
+            if assert_success; then
+                NUM_FILES=$(find "$_OBS_DIR/$_OBS_BUG" -type f | wc -l | tr -d ' ')
+                OBSOLETE_FILE_COUNT=$(find "$_OBS_DIR/$_OBS_BUG" -name "${_OBS_ID1}.*" -type f |
+                    wc -l | tr -d ' ')
+                if [[ "$NUM_FILES" -eq 1 ]] && [[ "$OBSOLETE_FILE_COUNT" -eq 0 ]]; then
+                    test_pass
+                else
+                    test_fail "expected exactly 1 non-obsolete file in $_OBS_DIR/$_OBS_BUG, found $NUM_FILES (obsolete matches: $OBSOLETE_FILE_COUNT)"
+                fi
+            fi
+        fi
+    fi
+fi
+rm -f "$_OBS_FILE1" "$_OBS_FILE2"
+
+test_begin "attachment-download-ignore-obsolete-requires-bug" "attachment download --ignore-obsolete without --bug exits 7"
+if [[ -n "${ATTACH_ID:-}" ]] && [[ "$ATTACH_ID" != "null" ]]; then
+    _REQ_DIR="$(mktemp -d /tmp/bzr-func-obsolete-req.XXXXXX)"
+    run_bzr attachment download "$ATTACH_ID" --ignore-obsolete --out-dir "$_REQ_DIR"
+    if assert_exit_code 7; then test_pass; fi
+    rm -rf "$_REQ_DIR"
+else test_skip "no attachment ID"; fi
+
+test_begin "attachment-download-ignore-obsolete-anonymous" "attachment download --ignore-obsolete without credentials"
+if [[ -n "${_OBS_BUG:-}" ]]; then
+    run_bzr config set-server obsolete-anon --url "$BZ_URL" --api rest
+    if assert_success; then
+        _OBS_ANON_DIR="$(mktemp -d /tmp/bzr-func-obsolete-anon.XXXXXX)"
+        run_bzr --server obsolete-anon attachment download --bug "$_OBS_BUG" \
+            --ignore-obsolete --out-dir "$_OBS_ANON_DIR"
+        if assert_success; then
+            NUM_FILES=$(find "$_OBS_ANON_DIR/$_OBS_BUG" -type f | wc -l | tr -d ' ')
+            if [[ "$NUM_FILES" -eq 1 ]]; then
+                test_pass
+            else
+                test_fail "expected exactly 1 file in $_OBS_ANON_DIR/$_OBS_BUG, found $NUM_FILES"
+            fi
+        fi
+        rm -rf "$_OBS_ANON_DIR"
+    fi
+    run_bzr config remove-server obsolete-anon
+else test_skip "no obsolete-download bug"; fi
+# Assigned only once the upload/obsolete-marking chain succeeds. Unguarded,
+# a failure in that chain would abort every later phase under set -u rather
+# than reporting the one failed test.
+if [[ -n "${_OBS_DIR:-}" ]]; then rm -rf "$_OBS_DIR"; fi
+unset _OBS_BUG _OBS_FILE1 _OBS_FILE2 _OBS_ID1 _OBS_DIR _REQ_DIR _OBS_ANON_DIR
+unset NUM_FILES OBSOLETE_FILE_COUNT
+
 # attachment view (metadata only) and attachment update --file-name. Self-
 # contained: creates its own bug and attachment.
 _AB=$(make_bug --product FuncTestProd --component Backend --op-sys Linux --platform PC --description d --summary "att view host")

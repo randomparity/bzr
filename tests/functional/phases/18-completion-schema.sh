@@ -51,6 +51,7 @@ if assert_success && assert_json_valid &&
     assert_schema_list_contains "group-create-input" &&
     assert_schema_list_contains "group-update-input" &&
     assert_schema_list_contains "server-capabilities" &&
+    assert_schema_list_contains "attachment-upload-batch-result" &&
     assert_schema_list_contains "error"; then test_pass; fi
 
 test_begin "schema-bug-valid-draft-2020-12-schema" "schema bug (valid draft 2020-12 schema)"

@@ -330,10 +330,11 @@ pub struct Cli {
 
     /// Skip confirmation prompts for large batch mutations.
     ///
-    /// A `bug update` (or `resolve`/`close`/`reopen`) targeting more than 10
-    /// bugs prompts for confirmation at an interactive terminal; `--yes`
-    /// bypasses that prompt. Non-interactive runs (piped stdin, agents) never
-    /// prompt, so this flag is only needed to override an interactive session.
+    /// A `bug update` (or `resolve`/`close`/`reopen`) or `attachment upload`
+    /// targeting more than 10 bugs prompts for confirmation at an
+    /// interactive terminal; `--yes` bypasses that prompt. Non-interactive
+    /// runs (piped stdin, agents) never prompt, so this flag is only needed
+    /// to override an interactive session.
     #[arg(short = 'y', long, global = true)]
     pub yes: bool,
 

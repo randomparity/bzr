@@ -1184,8 +1184,8 @@ run_parity_report_fixture() {
         '| Attachment flags | `bzr attachment update --flag` | parity | `compare/03-attachments/attachment-flags` |'
         '| Private attachments over REST | `bzr attachment list/view/download` | parity | `compare/03-attachments/private-attachments-rest` |'
         '| Private attachments over XML-RPC | `bzr attachment list/view/download` | parity | `compare/03-attachments/private-attachments-xmlrpc` |'
-        '| Multi-bug attachment upload | `bzr attachment upload` | expected gap (#674) | `compare/03-attachments/multi-bug-upload` |'
-        '| Ignore obsolete attachments | `bzr attachment download --bug --ignore-obsolete` | expected gap (#674) | `compare/03-attachments/ignore-obsolete` |'
+        '| Multi-bug attachment upload | `bzr attachment upload` | parity | `compare/03-attachments/multi-bug-upload` |'
+        '| Ignore obsolete attachments | `bzr attachment download --bug --ignore-obsolete` | parity | `compare/03-attachments/ignore-obsolete` |'
         '| User create, get, and search | `bzr user create`, `bzr user search` | parity | `compare/04-users-groups/user-create-get-search` |'
         '| Group get and list | `bzr group view` | parity | `compare/04-users-groups/group-get-and-list` |'
         '| Membership add and remove | `bzr group add-user/remove-user`, `bzr user search` | parity | `compare/04-users-groups/membership-add-remove` |'
@@ -2402,22 +2402,13 @@ run_attachment_phase_fixture() (
     TEST_ID_PREFIX=compare CURRENT_TEST_GROUP=03-attachments BZ_VERSION=bz50
     RESOURCE_SERVER=compare-resource
 
-    eval "$(declare -f expect_gap | sed '1s/expect_gap/attachment_fixture_expect_gap/')"
-    expect_gap() {
-        local issue="$1"
-
-        if [[ ${ATTACHMENT_GAP_OWNER_FAULT:-0} -eq 1 ]]; then
-            issue=999
-        fi
-        attachment_fixture_expect_gap "$issue"
-    }
-
     reset_attachment_fixture() {
         PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
         SEEN_TEST_IDS=$'\n' TEST_RESULT_PENDING=0 GAP_APPLIED=0
         RESOURCE_GAP_ELIGIBLE=0
         RESOURCE_GAP_FILE="$COMPARE_EXCHANGE_DIR/.resource-gap-eligible"
         next_bug=100 next_bzr_attachment=200 next_pybz_attachment=300
+        ATTACHMENT_FIXTURE_MULTI_BZR_FIRST_ATT_ID=""
         : >"$fixture_output"
     }
     attachment_fixture_write_bzr() {
@@ -2430,6 +2421,8 @@ run_attachment_phase_fixture() (
     }
     resource_bzr() {
         local name="$1" api="$2" transport="$3" command id out summary private=false path
+        local up_args upload_bug_count=0 up_idx upload_bug1 upload_bug2 upload_att1 upload_att2
+        local dl_ignore_obsolete=0
         shift 3
         command="$*"
         if [[ ${ATTACHMENT_TRANSPORT_FAULT:-0} -eq 1 &&
@@ -2448,14 +2441,46 @@ run_attachment_phase_fixture() (
             next_bug=$((next_bug + 1))
             ;;
         "attachment upload "*)
-            attachment_fixture_write_bzr "$name" "{\"id\":$next_bzr_attachment}"
-            next_bzr_attachment=$((next_bzr_attachment + 1))
+            up_args=("$@")
+            upload_bug_count=0
+            for ((up_idx = 2; up_idx < ${#up_args[@]}; up_idx++)); do
+                if [[ ${up_args[up_idx]} =~ ^[0-9]+$ ]]; then
+                    upload_bug_count=$((upload_bug_count + 1))
+                else
+                    break
+                fi
+            done
+            if [[ $upload_bug_count -ge 2 ]]; then
+                upload_bug1="${up_args[2]}"
+                upload_bug2="${up_args[3]}"
+                upload_att1=$next_bzr_attachment
+                upload_att2=$((next_bzr_attachment + 1))
+                next_bzr_attachment=$((next_bzr_attachment + 2))
+                ATTACHMENT_FIXTURE_MULTI_BZR_FIRST_ATT_ID="$upload_att1"
+                if [[ ${ATTACHMENT_MULTI_PARITY_FAULT:-0} -eq 1 ]]; then
+                    attachment_fixture_write_bzr "$name" \
+                        "$(jq -cn --argjson bug_id "$upload_bug1" \
+                            --argjson attachment_id "$upload_att1" \
+                            '{uploaded:[{bug_id:$bug_id,attachment_id:$attachment_id}],
+                              failed:[],size:19}')"
+                else
+                    attachment_fixture_write_bzr "$name" \
+                        "$(jq -cn --argjson b1 "$upload_bug1" --argjson a1 "$upload_att1" \
+                            --argjson b2 "$upload_bug2" --argjson a2 "$upload_att2" \
+                            '{uploaded:[{bug_id:$b1,attachment_id:$a1},
+                              {bug_id:$b2,attachment_id:$a2}],failed:[],size:19}')"
+                fi
+            else
+                attachment_fixture_write_bzr "$name" "{\"id\":$next_bzr_attachment}"
+                next_bzr_attachment=$((next_bzr_attachment + 1))
+            fi
             ;;
         "attachment list "*)
             case $name in
             public-*) summary="$ATTACHMENT_STEM public" ;;
             private-rest-*) summary="$ATTACHMENT_STEM private-rest"; private=true ;;
             private-xmlrpc-*) summary="$ATTACHMENT_STEM private-xmlrpc"; private=true ;;
+            multi-bzr-list-*) summary="multi upload bzr" ;;
             esac
             id="$ATTACHMENT_BZR_ID"
             jq -cn --argjson id "$id" --arg summary "$summary" \
@@ -2484,11 +2509,26 @@ run_attachment_phase_fixture() (
             ;;
         "attachment download "*)
             path=''
+            dl_ignore_obsolete=0
             while [[ $# -gt 0 ]]; do
                 case $1 in
                 --out) path="$2"; shift 2 ;;
+                --ignore-obsolete) dl_ignore_obsolete=1; shift ;;
                 --out-dir)
-                    path="$2/$ATTACHMENT_BZR_BUG_ID/${ATTACHMENT_BZR_ID}.attachment-source.txt"
+                    if [[ $dl_ignore_obsolete -eq 1 ]]; then
+                        # Falls back to a synthetic ID (never $ATTACHMENT_BZR_ID,
+                        # which the naming assertion below requires to be
+                        # absent) when a fault prevented the multi-bug-upload
+                        # arm from ever assigning the real second attachment ID
+                        # — e.g. ATTACHMENT_MULTI_COMMAND_FAILURE — so that
+                        # fault stays isolated to the multi-bug-upload test
+                        # instead of also failing ignore-obsolete.
+                        path="$2/$ATTACHMENT_BZR_BUG_ID/"
+                        path+="${ATTACHMENT_FIXTURE_MULTI_BZR_FIRST_ATT_ID:-$((ATTACHMENT_BZR_ID + 1))}"
+                        path+=".attachment-source.txt"
+                    else
+                        path="$2/$ATTACHMENT_BZR_BUG_ID/${ATTACHMENT_BZR_ID}.attachment-source.txt"
+                    fi
                     shift 2
                     ;;
                 *) shift ;;
@@ -2496,6 +2536,9 @@ run_attachment_phase_fixture() (
             done
             mkdir -p "${path%/*}"
             cp "$ATTACHMENT_SOURCE" "$path"
+            if [[ $dl_ignore_obsolete -eq 1 && ${ATTACHMENT_OBSOLETE_PARITY_FAULT:-0} -eq 1 ]]; then
+                cp "$ATTACHMENT_SOURCE" "${path%/*}/${ATTACHMENT_BZR_ID}.attachment-source.txt"
+            fi
             if [[ $name == public-bzr-bulk ]]; then
                 jq -cn --argjson id "$ATTACHMENT_BZR_ID" --arg path "$path" \
                     '{bug_results:[{files:[{attachment_id:$id,path:$path}]}]}' \
@@ -2612,26 +2655,6 @@ run_attachment_phase_fixture() (
             printf 'REST\n' >"$COMPARE_EXCHANGE_DIR/${name}.pybz.transport"
         fi
     }
-    run_bzr() {
-        local command="$*" diagnostic usage
-        : >"$BZR_STDOUT"
-        cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
-        if [[ ${ATTACHMENT_GAP_STALE:-0} -eq 1 ]]; then
-            BZR_EXIT=0
-            : >"$BZR_STDERR"
-            return
-        fi
-        if [[ $command == *'attachment upload'* ]]; then
-            diagnostic="error: unexpected argument '$ATTACHMENT_SOURCE' found"
-            usage='Usage: bzr attachment upload [OPTIONS] <BUG_ID> <FILE>'
-        else
-            diagnostic="error: unexpected argument '--ignore-obsolete' found"
-            usage='Usage: bzr attachment download --bug <BUG_ID> [ID]...'
-        fi
-        [[ ${ATTACHMENT_GAP_WRONG_DIAGNOSTIC:-0} -eq 1 ]] && diagnostic='error: unrelated'
-        printf '%s\n\n%s\n' "$diagnostic" "$usage" >"$BZR_STDERR"
-        BZR_EXIT=2
-    }
     run_attachment_control() {
         local flag="$1" slug="$2" expected_failures="${3:-minimum}"
         reset_attachment_fixture
@@ -2647,27 +2670,14 @@ run_attachment_phase_fixture() (
         fi
         printf 'controlled red: attachments %s=1\n' "$flag"
     }
-    attachment_assert_gap_owners() {
-        local slug
-
-        for slug in multi-bug-upload ignore-obsolete; do
-            if ! grep -Eq \
-                "\\[compare/03-attachments/${slug}\\].*GAP \\(#674\\)$" \
-                "$fixture_output"; then
-                printf 'attachment gap %s did not render owner #674\n' "$slug" >&2
-                return 1
-            fi
-        done
-    }
 
     reset_attachment_fixture
     # shellcheck source=tests/functional/compare/03-attachments.sh
     source "$phase" >"$fixture_output"
     _render_test_result >>"$fixture_output"
-    assert_equals 5 "$PASS_COUNT" "attachment comparison pass count"
+    assert_equals 7 "$PASS_COUNT" "attachment comparison pass count"
     assert_equals 0 "$FAIL_COUNT" "attachment comparison fail count"
-    assert_equals 2 "$GAP_COUNT" "attachment comparison gap count"
-    attachment_assert_gap_owners
+    assert_equals 0 "$GAP_COUNT" "attachment comparison gap count"
     for slug in upload-metadata-comment download-content attachment-flags \
         private-attachments-rest private-attachments-xmlrpc multi-bug-upload ignore-obsolete; do
         if ! grep -Fq "[compare/03-attachments/${slug}]" "$fixture_output"; then
@@ -2682,10 +2692,10 @@ run_attachment_phase_fixture() (
     run_attachment_control ATTACHMENT_FLAG_EQUALITY_FAULT attachment-flags 1
     run_attachment_control ATTACHMENT_PRIVACY_FAULT private-attachments-rest
     run_attachment_control ATTACHMENT_TRANSPORT_FAULT private-attachments-xmlrpc
-    run_attachment_control ATTACHMENT_GAP_WRONG_DIAGNOSTIC multi-bug-upload
-    run_attachment_control ATTACHMENT_GAP_STALE multi-bug-upload
     run_attachment_control ATTACHMENT_MULTI_COMMAND_FAILURE multi-bug-upload 1
     run_attachment_control ATTACHMENT_OBSOLETE_COMMAND_FAILURE ignore-obsolete 1
+    run_attachment_control ATTACHMENT_MULTI_PARITY_FAULT multi-bug-upload
+    run_attachment_control ATTACHMENT_OBSOLETE_PARITY_FAULT ignore-obsolete
     reset_attachment_fixture
     ATTACHMENT_DOWNLOAD_COMMAND_FAILURE=1
     source "$phase" >"$fixture_output"
@@ -2697,16 +2707,6 @@ run_attachment_phase_fixture() (
         return 1
     fi
     printf 'controlled red: attachment download command failure counted once\n'
-    reset_attachment_fixture
-    ATTACHMENT_GAP_OWNER_FAULT=1
-    source "$phase" >"$fixture_output"
-    _render_test_result >>"$fixture_output"
-    unset ATTACHMENT_GAP_OWNER_FAULT
-    if attachment_assert_gap_owners; then
-        printf 'attachment wrong-owner control unexpectedly passed\n' >&2
-        return 1
-    fi
-    printf 'controlled red: attachments wrong gap owner\n'
 )
 
 run_attachment_seed_fixture() (

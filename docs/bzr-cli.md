@@ -54,7 +54,7 @@ For installation and quick start, see [README.md](../README.md).
 | `--retry <N>` | Retry transient failures up to N times with exponential backoff honoring `Retry-After`. 429 and connect failures are retried for any operation; 5xx and read timeouts only for safe reads (GET/HEAD), never for writes (create, update, comment) where a replay could duplicate the effect. Default 0 (disabled); max 10. Exhausted retries exit 5. |
 | `--progress <FORMAT>` | Emit structured progress events on stderr for long operations. `ndjson` streams newline-delimited JSON (`page`/`batch`/`done`, and `error` on failure) during `bug list`/`search --paginate`, `query run --paginate`, and `bug create`/`update --from-json` array form. stdout is unaffected; absent the flag stderr stays silent (or `-v` logs). Only `ndjson` is supported. Intended for non-verbose runs, since `-v` log lines interleave on the same stream. |
 | `--dry-run` | Preview a supported mutation without writing. Resolves and validates the request, then prints the would-be payload and affected IDs as `{"resource":"bug","action":"dry-run","ids":[...],"changes":{...}}` instead of calling the write API. Exits 0 on a valid request. Supported for `bug create`, `update`, `clone`, `resolve`, `close`, `reopen`, `dup`; `product`, `user`, and `group` `create` and `update`; and `component create`. On any other command it exits 7. `bug clone` still reads the source bug to build the preview. |
-| `-y, --yes` | Skip the confirmation prompt for a large batch mutation. A `bug update`/`resolve`/`close`/`reopen` targeting more than 10 bugs prompts for confirmation at an interactive terminal; `--yes` bypasses it. Non-interactive runs (piped stdin, agents) never prompt, so this is only needed in an interactive session. |
+| `-y, --yes` | Skip the confirmation prompt for a large batch mutation. A `bug update`/`resolve`/`close`/`reopen` or `attachment upload` targeting more than 10 bugs prompts for confirmation at an interactive terminal; `--yes` bypasses it. Non-interactive runs (piped stdin, agents) never prompt, so this is only needed in an interactive session. |
 | `-v, --verbose` | Increase log verbosity (`-v`=info, `-vv`=debug, `-vvv`=trace; `RUST_LOG` overrides) |
 | `-h, --help` | Print help |
 | `-V, --version` | Print version |
@@ -213,8 +213,8 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 ├── attachment
 │   ├── list <BUG_ID> [--fields <F>] [--exclude-fields <F>]
 │   ├── view <ATTACHMENT_ID>
-│   ├── download <ATTACHMENT_ID> [--bug <ID>] [-o|--out <FILE>] [--out-dir <DIR>]
-│   ├── upload <BUG_ID> <FILE> [--summary <S>] [--content-type <MIME>] [--comment <BODY>]
+│   ├── download <ATTACHMENT_ID> [--bug <ID>] [--ignore-obsolete] [-o|--out <FILE>] [--out-dir <DIR>]
+│   ├── upload <BUG_ID>... <FILE> [--summary <S>] [--content-type <MIME>] [--comment <BODY>]
 │   │                          [--comment-file <PATH>] [--comment-private]
 │   │                          [--private|--no-private] [--patch|--no-patch] [--flag <F>...]
 │   └── update <ATTACHMENT_ID> [--summary <S>] [--file-name <N>] [--content-type <MIME>]
@@ -450,7 +450,7 @@ bzr bug list --version 9.4 --version 9.5 --op-sys Linux
 ```
 
 `platform` is the canonical Bugzilla hardware-field name for search, bug
-objects, create, update, and clone. Schema 3.0.3 publishes and accepts only the
+objects, create, update, and clone. Schema 3.0.5 publishes and accepts only the
 canonical `platform` spelling.
 
 ### `bzr bug view`
@@ -676,11 +676,11 @@ table always includes the fixed fields `ID`, `SUMMARY`, `STATUS`, `RESOLUTION`,
 `BLOCKS`, and `DEPENDS ON`; the two adjacency columns are complete,
 comma-separated ID lists.
 
-Under `--json`, the usual `3.0.3` envelope contains a closed result object:
+Under `--json`, the usual `3.0.5` envelope contains a closed result object:
 
 ```json
 {
-  "schema_version": "3.0.3",
+  "schema_version": "3.0.5",
   "data": {
     "requests": [
       {"requested": "00123", "bug_id": 123},
@@ -1367,7 +1367,7 @@ Download one or more attachments to disk, or stream one attachment's bytes to st
 bzr attachment download <ID>...
 bzr attachment download <ID> --out <PATH>
 bzr attachment download <ID> --out -
-bzr attachment download [<ID>...] --bug <BUG_ID>... [--out-dir <DIR>]
+bzr attachment download [<ID>...] --bug <BUG_ID>... [--ignore-obsolete] [--out-dir <DIR>]
 ```
 
 **Arguments and flags:**
@@ -1376,6 +1376,7 @@ bzr attachment download [<ID>...] --bug <BUG_ID>... [--out-dir <DIR>]
 |---|---|
 | `<ID>` | Attachment ID(s). Repeatable as positional arguments. |
 | `--bug <BUG_ID>` | Download every attachment for the given bug. Repeatable. |
+| `--ignore-obsolete` | Skip attachments the server marks obsolete. Applies to `--bug` targets only; a positional `<ID>` is always downloaded. Requires at least one `--bug`. |
 | `-o`, `--out <PATH>` | Output file path, or `-` for stdout. Single-attachment shape only. |
 | `--out-dir <DIR>` | Output directory for batch downloads. Default: `./attachments`. Files land at `<out-dir>/<bug-id>/<att-id>.<file_name>`. |
 
@@ -1402,6 +1403,9 @@ bzr attachment download --bug 12345 --bug 67890 --out-dir /tmp/all
 
 # Mixed: per-bug + explicit attachment ID
 bzr attachment download --bug 12345 9876 --out-dir /tmp/mixed
+
+# Every non-obsolete attachment of a bug; the named ID downloads regardless
+bzr attachment download --bug 12345 9876 --ignore-obsolete --out-dir /tmp/current
 ```
 
 **Output:**
@@ -1420,7 +1424,7 @@ The bulk shapes emit an `AttachmentBatchResult` (table or JSON): per-bug success
 
 - `0` — every target succeeded
 - `6` — `--out-dir` could not be created (pre-flight)
-- `7` — input validation (no IDs and no `--bug`; `--out` with `--bug` or with multiple IDs; `--out` paired with `--out-dir`)
+- `7` — input validation (no IDs and no `--bug`; `--out` with `--bug` or with multiple IDs; `--out` paired with `--out-dir`; `--ignore-obsolete` with no `--bug`)
 - `11` — at least one target failed (`BatchPartialFailure`)
 - other — see the global exit-code table
 
@@ -1442,11 +1446,12 @@ bzr attachment upload 12345 fix.patch --comment-file notes.md
 printf '%s\n' "Generated test log" | bzr attachment upload 12345 logs.txt --comment-file -
 bzr attachment upload 12345 patch.diff --comment "sensitive context" --comment-private
 bzr attachment upload 12345 fix.patch --patch
+bzr attachment upload 12345 67890 24680 patch.diff --summary "Backport"
 ```
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `<BUG_ID>` | Yes | Bug ID |
+| `<BUG_ID>...` | Yes | Bug ID(s). One or more, before the file. A repeated ID exits 7. |
 | `<FILE>` | Yes | File to upload |
 | `--summary <S>` | No | Description of the attachment (default: filename) |
 | `--content-type <MIME>` | No | MIME type (auto-detected if omitted; defaults to `text/plain` when `--patch` is set without an explicit type) |
@@ -1458,6 +1463,37 @@ bzr attachment upload 12345 fix.patch --patch
 | `--flag <F>` | No | Set flags (repeatable; see [Flag Syntax](#flag-syntax)) |
 
 Agent note: for clearer audit trails, agents should usually pass `--summary` explicitly instead of relying on the filename-derived default.
+
+**Output:**
+
+One bug ID emits today's `UploadResult` (`bzr schema upload-result`) and the
+`Uploaded attachment #N to bug #M (X bytes)` line. Two or more bug IDs prompt
+for confirmation when the target count exceeds 10 (see `-y, --yes` above),
+then emit the published `attachment-upload-batch-result` (`BatchUploadResult`)
+instead: the same file is uploaded to every target, `uploaded` pairs each bug
+with the attachment it received, and `failed` pairs a bug with an error. A
+per-bug failure exits 11 (`BatchPartialFailure`) and leaves earlier uploads in
+place — Bugzilla has no attachment-delete call, so a partial fan-out is never
+rolled back. A `failed[]` entry carrying `step: "comment_private"` means the
+attachment landed (the bug also appears in `uploaded`) and only the follow-up
+`--comment-private` flip failed; do not retry it, or the same file uploads
+again. That failure also stops the fan-out to any remaining bugs — the flip
+almost always fails because the credential lacks `insider`/`editbugs`, which
+would recur on every target and publish the private comment text on each of
+them — and every bug the stop left untried gets its own `failed[]` entry with
+`step: "not_attempted"` naming the bug whose flip failed. A `failed[]` entry
+with no `step` is not proof the attachment was never created — a timeout after
+the POST was accepted, or a 2xx response with no id in its body, both surface
+as a bare failure — so list the bug's attachments before retrying one.
+
+**Argument order:** an option may no longer sit between the bug IDs and the
+file — it terminates the variadic, so the token after it has no positional
+slot left. `bzr attachment upload 12345 --summary s patch.diff` now fails with
+a clap `UnknownArgument` (exit 2). `upload 12345 patch.diff --summary s` and
+`upload --summary s 12345 patch.diff` both still work. Separately, with an
+all-numeric argument list the last token is always taken as the file, so
+`bzr attachment upload 12345 67890` means bug `12345` and a file named `67890`,
+not two bugs with a missing file.
 
 ### `bzr attachment update`
 
@@ -2574,6 +2610,7 @@ Available schemas: `bug`, `bug-adjacency`, `comment`, `attachment`, `product`, `
 mutation/result envelopes `action-result`, `batch-result`,
 `batch-create-result`, `compound-create-result`, `multi-bug-view`, `tag-result`,
 `membership-result`, `count-result`, `download-result`, `upload-result`,
+`attachment-upload-batch-result`,
 `config-result`, `search-result`, `dry-run-result`, `error`; and the structured
 input contracts
 `bug-create-input`, `bug-update-input`, `product-create-input`,
@@ -2607,7 +2644,7 @@ Every pretty `--json` response is wrapped in a stable envelope:
 
 ```json
 {
-  "schema_version": "3.0.3",
+  "schema_version": "3.0.5",
   "data": <the command's payload>
 }
 ```
@@ -2622,7 +2659,7 @@ bzr --json schema | jq -r '.schema_version'   # the contract version itself
 ```
 
 `--json` error output carries the version too, beside an `error` object:
-`{"schema_version":"3.0.3","error":{"type":...,"message":...,"exit_code":...}}`.
+`{"schema_version":"3.0.5","error":{"type":...,"message":...,"exit_code":...}}`.
 
 Two outputs are deliberately **not** enveloped:
 

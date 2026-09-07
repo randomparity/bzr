@@ -88,6 +88,7 @@ async fn attachment_download_api_error_propagates() {
         bug_ids: vec![],
         out: None,
         out_dir: "./attachments".into(),
+        ignore_obsolete: false,
     };
     let result = crate::commands::attachment::execute(
         &action,
@@ -106,6 +107,7 @@ async fn attachment_download_validation_rejects_no_ids_no_bugs() {
         bug_ids: vec![],
         out: None,
         out_dir: "./attachments".into(),
+        ignore_obsolete: false,
     };
     let result = crate::commands::attachment::execute(
         &action,
@@ -129,6 +131,7 @@ async fn attachment_download_validation_rejects_out_with_multiple_ids() {
         bug_ids: vec![],
         out: Some("file.bin".into()),
         out_dir: "./attachments".into(),
+        ignore_obsolete: false,
     };
     let result = crate::commands::attachment::execute(
         &action,
@@ -314,6 +317,7 @@ async fn attachment_download_batch_per_bug_writes_per_bug_subdir() {
         bug_ids: vec![12345],
         out: None,
         out_dir: out_dir.clone(),
+        ignore_obsolete: false,
     };
 
     let mut __io_a4 = crate::test_helpers::CapturedIo::new();
@@ -380,6 +384,7 @@ async fn attachment_download_batch_hybrid_uses_xmlrpc_inline_data_without_fallba
         bug_ids: vec![12345],
         out: None,
         out_dir,
+        ignore_obsolete: false,
     };
 
     let mut io = crate::test_helpers::CapturedIo::new();
@@ -429,6 +434,7 @@ async fn attachment_download_batch_collision_filenames_resolved_by_att_id_prefix
         bug_ids: vec![12345],
         out: None,
         out_dir,
+        ignore_obsolete: false,
     };
 
     let mut __io = crate::test_helpers::CapturedIo::new();
@@ -480,6 +486,7 @@ async fn attachment_download_batch_mixed_bug_and_positional_ids() {
         bug_ids: vec![12345],
         out: None,
         out_dir: out_dir.clone(),
+        ignore_obsolete: false,
     };
 
     let mut __io_a5 = crate::test_helpers::CapturedIo::new();
@@ -523,6 +530,7 @@ async fn attachment_download_batch_empty_bug_zero_files_success() {
         bug_ids: vec![12345],
         out: None,
         out_dir,
+        ignore_obsolete: false,
     };
 
     let mut __io_a6 = crate::test_helpers::CapturedIo::new();
@@ -562,6 +570,7 @@ async fn attachment_download_batch_legacy_single_id_unchanged() {
         bug_ids: vec![],
         out: Some(out_path.to_string_lossy().into_owned()),
         out_dir: "./attachments".into(),
+        ignore_obsolete: false,
     };
 
     let mut __io_a7 = crate::test_helpers::CapturedIo::new();
@@ -610,6 +619,7 @@ async fn attachment_download_single_out_dash_streams_bytes_without_result() {
         bug_ids: vec![],
         out: Some("-".into()),
         out_dir: "./attachments".into(),
+        ignore_obsolete: false,
     };
     let mut io = crate::test_helpers::CapturedIo::new();
 
@@ -669,6 +679,7 @@ async fn attachment_download_batch_bug_not_found_partial_failure() {
         bug_ids: vec![12345, 99999],
         out: None,
         out_dir,
+        ignore_obsolete: false,
     };
 
     let mut __io_a8 = crate::test_helpers::CapturedIo::new();
@@ -705,6 +716,7 @@ async fn attachment_download_batch_creates_out_dir_before_connect() {
         bug_ids: vec![12345],
         out: None,
         out_dir: out_dir.to_string_lossy().into_owned(),
+        ignore_obsolete: false,
     };
 
     let mut io = crate::test_helpers::CapturedIo::new();
@@ -746,6 +758,7 @@ async fn attachment_download_batch_all_targets_fail_still_exit_11() {
         bug_ids: vec![99999],
         out: None,
         out_dir,
+        ignore_obsolete: false,
     };
     let result = crate::commands::attachment::execute(
         &action,
@@ -782,6 +795,7 @@ async fn attachment_download_batch_obsolete_attachments_included() {
         bug_ids: vec![12345],
         out: None,
         out_dir: out_dir.clone(),
+        ignore_obsolete: false,
     };
 
     let mut __io2 = crate::test_helpers::CapturedIo::new();
@@ -796,6 +810,202 @@ async fn attachment_download_batch_obsolete_attachments_included() {
     let _ = __io2.out_str().to_string();
     assert!(result.is_ok(), "expected ok, got {result:?}");
     assert!(tmp.path().join("12345").join("9876.old.patch").exists());
+}
+
+#[tokio::test]
+async fn download_bug_ignore_obsolete_skips_obsolete_attachments() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    let mut obsolete = one_att(9876, 12345, "old.patch", b"obsolete content");
+    obsolete["is_obsolete"] = serde_json::json!(true);
+    let current = one_att(9877, 12345, "current.patch", b"current content");
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/12345/attachment"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
+                12345,
+                &serde_json::json!([obsolete, current]),
+            )),
+        )
+        .mount(&mock)
+        .await;
+
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+    let action = AttachmentAction::Download {
+        ids: vec![],
+        bug_ids: vec![12345],
+        out: None,
+        out_dir: out_dir.clone(),
+        ignore_obsolete: true,
+    };
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+
+    let result = crate::commands::attachment::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    let output = io.out_str().to_string();
+    assert!(result.is_ok(), "expected ok, got {result:?}");
+
+    let parsed = crate::test_helpers::json_envelope_data(&output);
+    let files = parsed["bug_results"][0]["files"].as_array().unwrap();
+    assert_eq!(files.len(), 1, "expected only the non-obsolete attachment");
+    assert_eq!(files[0]["attachment_id"], 9877);
+
+    assert!(!tmp.path().join("12345").join("9876.old.patch").exists());
+    assert!(tmp.path().join("12345").join("9877.current.patch").exists());
+}
+
+#[tokio::test]
+async fn download_ignore_obsolete_leaves_positional_ids_alone() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/12345/attachment"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
+                12345,
+                &serde_json::json!([one_att(1111, 12345, "kept.patch", b"kept")]),
+            )),
+        )
+        .mount(&mock)
+        .await;
+
+    let mut positional_obsolete = one_att(9876, 67890, "obsolete.patch", b"still fetched");
+    positional_obsolete["is_obsolete"] = serde_json::json!(true);
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/9876"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "attachments": { "9876": positional_obsolete }
+        })))
+        .mount(&mock)
+        .await;
+
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+    let action = AttachmentAction::Download {
+        ids: vec![9876],
+        bug_ids: vec![12345],
+        out: None,
+        out_dir,
+        ignore_obsolete: true,
+    };
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+
+    let result = crate::commands::attachment::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "expected ok, got {result:?}");
+    assert!(tmp
+        .path()
+        .join("67890")
+        .join("9876.obsolete.patch")
+        .exists());
+}
+
+#[tokio::test]
+async fn download_bug_ignore_obsolete_keeps_attachment_missing_is_obsolete() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    let mut missing_flag = one_att(9876, 12345, "no-flag.patch", b"no obsolete flag");
+    missing_flag.as_object_mut().unwrap().remove("is_obsolete");
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/12345/attachment"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
+                12345,
+                &serde_json::json!([missing_flag]),
+            )),
+        )
+        .mount(&mock)
+        .await;
+
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+    let action = AttachmentAction::Download {
+        ids: vec![],
+        bug_ids: vec![12345],
+        out: None,
+        out_dir,
+        ignore_obsolete: true,
+    };
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+
+    let result = crate::commands::attachment::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(result.is_ok(), "expected ok, got {result:?}");
+    assert!(
+        tmp.path().join("12345").join("9876.no-flag.patch").exists(),
+        "an attachment with an absent is_obsolete field must be kept under --ignore-obsolete",
+    );
+}
+
+#[tokio::test]
+async fn download_bug_all_obsolete_succeeds_with_no_files() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    let mut obsolete = one_att(9876, 12345, "old.patch", b"obsolete content");
+    obsolete["is_obsolete"] = serde_json::json!(true);
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/12345/attachment"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
+                12345,
+                &serde_json::json!([obsolete]),
+            )),
+        )
+        .mount(&mock)
+        .await;
+
+    let out_dir = tmp.path().to_string_lossy().into_owned();
+    let action = AttachmentAction::Download {
+        ids: vec![],
+        bug_ids: vec![12345],
+        out: None,
+        out_dir,
+        ignore_obsolete: true,
+    };
+
+    let mut io = crate::test_helpers::CapturedIo::new();
+
+    let result = crate::commands::attachment::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    let output = io.out_str().to_string();
+    assert!(result.is_ok(), "expected ok, got {result:?}");
+
+    let parsed = crate::test_helpers::json_envelope_data(&output);
+    assert_eq!(parsed["bug_results"][0]["status"], "ok");
+    // `files` is omitted from the JSON entirely when empty (see
+    // `#[serde(skip_serializing_if = "Vec::is_empty")]` on
+    // `BugDownloadResult::files`), so an empty result is a missing key,
+    // not an empty array.
+    assert!(
+        parsed["bug_results"][0]
+            .get("files")
+            .is_none_or(|f| f.as_array().is_some_and(std::vec::Vec::is_empty)),
+        "expected no files, got {:?}",
+        parsed["bug_results"][0]["files"]
+    );
+    assert_eq!(parsed["summary"]["succeeded"], 0);
+    assert_eq!(parsed["summary"]["failed"], 0);
 }
 
 #[tokio::test]
@@ -832,6 +1042,7 @@ async fn attachment_download_batch_data_missing_falls_back_via_get() {
         bug_ids: vec![12345],
         out: None,
         out_dir,
+        ignore_obsolete: false,
     };
 
     let mut __io3 = crate::test_helpers::CapturedIo::new();
@@ -862,6 +1073,7 @@ async fn attachment_download_batch_top_level_out_dir_unwritable_fails_fast() {
         bug_ids: vec![12345],
         out: None,
         out_dir: "/dev/null/attachments".into(),
+        ignore_obsolete: false,
     };
     let result = crate::commands::attachment::execute(
         &action,

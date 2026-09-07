@@ -7,8 +7,10 @@ use clap::{Args, Subcommand};
     reason = "each bool is a distinct CLI flag (--private/--no-private, --patch/--no-patch, --comment-private); they are not a state enum"
 )]
 pub(crate) struct UploadArgs {
-    /// Bug ID
-    pub bug_id: u64,
+    /// Bug ID(s) to attach the file to. Repeatable; the file is
+    /// uploaded once to each bug. A repeated ID is rejected.
+    #[arg(value_name = "BUG_ID", required = true, num_args = 1..)]
+    pub bug_ids: Vec<u64>,
     /// File to upload
     pub file: String,
     /// Attachment summary/description
@@ -210,6 +212,8 @@ pub(crate) enum AttachmentAction {
     ///   bzr attachment download 9876 9877 9878 --out-dir /tmp/patches
     ///   bzr attachment download --bug 12345 --bug 67890 --out-dir /tmp/all
     ///   bzr attachment download --bug 12345 9876 --out-dir /tmp/mixed
+    ///   bzr attachment download --bug 12345 --ignore-obsolete
+    ///   bzr attachment download --bug 12345 --bug 67890 --ignore-obsolete --out-dir /tmp/live
     ///
     /// See bzr-attachment-list(1) to discover IDs for a bug.
     #[command(verbatim_doc_comment)]
@@ -221,6 +225,12 @@ pub(crate) enum AttachmentAction {
         /// Download every attachment for the given bug. Repeatable.
         #[arg(long = "bug", value_name = "BUG_ID")]
         bug_ids: Vec<u64>,
+
+        /// Skip attachments the server marks obsolete. Applies to
+        /// `--bug <ID>` targets only; an attachment named by its own
+        /// positional ID is always downloaded.
+        #[arg(long = "ignore-obsolete")]
+        ignore_obsolete: bool,
 
         /// Output file path, or `-` for stdout (single-attachment shape only).
         #[arg(
@@ -239,10 +249,10 @@ pub(crate) enum AttachmentAction {
     /// Upload a file as an attachment on a bug.
     ///
     /// Reads the local file at `<file>` and uploads it as an
-    /// attachment on `<bug_id>`. MIME type is auto-detected from the
-    /// file extension and may be overridden with `--content-type`.
-    /// `--summary` sets the attachment's display label;
-    /// it defaults to the file name if omitted.
+    /// attachment on every bug in `<bug_id>...`. MIME type is
+    /// auto-detected from the file extension and may be overridden
+    /// with `--content-type`. `--summary` sets the attachment's
+    /// display label; it defaults to the file name if omitted.
     ///
     /// `--comment <BODY>` or `--comment-file <PATH>` posts a comment
     /// alongside the attachment in a single API call. Use this when
@@ -262,6 +272,7 @@ pub(crate) enum AttachmentAction {
     /// Examples:
     ///
     ///   bzr attachment upload 12345 patch.diff
+    ///   bzr attachment upload 12345 67890 patch.diff
     ///   bzr attachment upload 12345 trace.log --summary "Stack trace" \
     ///     --content-type text/plain
     ///   bzr attachment upload 12345 fix.patch \

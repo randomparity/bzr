@@ -23,8 +23,8 @@ This report tracks bzr against python-bugzilla 3.3.0 using stable comparison tes
 | Attachment flags | `bzr attachment update --flag` | parity | `compare/03-attachments/attachment-flags` |
 | Private attachments over REST | `bzr attachment list/view/download` | parity | `compare/03-attachments/private-attachments-rest` |
 | Private attachments over XML-RPC | `bzr attachment list/view/download` | parity | `compare/03-attachments/private-attachments-xmlrpc` |
-| Multi-bug attachment upload | `bzr attachment upload` | expected gap (#674) | `compare/03-attachments/multi-bug-upload` |
-| Ignore obsolete attachments | `bzr attachment download --bug --ignore-obsolete` | expected gap (#674) | `compare/03-attachments/ignore-obsolete` |
+| Multi-bug attachment upload | `bzr attachment upload` | parity | `compare/03-attachments/multi-bug-upload` |
+| Ignore obsolete attachments | `bzr attachment download --bug --ignore-obsolete` | parity | `compare/03-attachments/ignore-obsolete` |
 | User create, get, and search | `bzr user create`, `bzr user search` | parity | `compare/04-users-groups/user-create-get-search` |
 | Group get and list | `bzr group view` | parity | `compare/04-users-groups/group-get-and-list` |
 | Membership add and remove | `bzr group add-user/remove-user`, `bzr user search` | parity | `compare/04-users-groups/membership-add-remove` |

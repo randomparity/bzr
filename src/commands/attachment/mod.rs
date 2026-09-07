@@ -59,6 +59,7 @@ pub(crate) async fn execute(
             bug_ids,
             out,
             out_dir,
+            ignore_obsolete,
         } => {
             download::handle(
                 download::DownloadArgs {
@@ -66,6 +67,7 @@ pub(crate) async fn execute(
                     bug_ids,
                     out: out.as_deref(),
                     out_dir,
+                    ignore_obsolete: *ignore_obsolete,
                 },
                 ctx,
                 format,
@@ -80,6 +82,18 @@ pub(crate) async fn execute(
 }
 
 fn validate_action(action: &AttachmentAction) -> Result<()> {
+    if let AttachmentAction::Upload(crate::cli::UploadArgs { bug_ids, .. }) = action {
+        if bug_ids.is_empty() {
+            return Err(crate::error::BzrError::input(
+                "specify at least one bug ID to upload the attachment to".into(),
+            ));
+        }
+        if let Some(dup) = first_duplicate(bug_ids) {
+            return Err(crate::error::BzrError::input(format!(
+                "bug #{dup} is listed more than once; each bug may be named once",
+            )));
+        }
+    }
     match action {
         AttachmentAction::Upload(crate::cli::UploadArgs {
             comment_private: true,
@@ -95,6 +109,13 @@ fn validate_action(action: &AttachmentAction) -> Result<()> {
             ))
         }
         AttachmentAction::Download {
+            bug_ids,
+            ignore_obsolete: true,
+            ..
+        } if bug_ids.is_empty() => Err(crate::error::BzrError::input(
+            "--ignore-obsolete filters bulk bug targets; add --bug <ID>".into(),
+        )),
+        AttachmentAction::Download {
             ids, out: Some(_), ..
         } if ids.len() != 1 => Err(crate::error::BzrError::input(
             "--out requires exactly one attachment ID".into(),
@@ -109,6 +130,16 @@ fn validate_action(action: &AttachmentAction) -> Result<()> {
         }
         _ => Ok(()),
     }
+}
+
+/// The first bug ID that appears twice in `ids`, if any. `ids` is a
+/// hand-typed command line, so the quadratic scan is bounded by what a
+/// person types and avoids pulling in a set for a handful of numbers.
+fn first_duplicate(ids: &[u64]) -> Option<u64> {
+    ids.iter()
+        .enumerate()
+        .find(|&(i, id)| ids[..i].contains(id))
+        .map(|(_, id)| *id)
 }
 
 fn update_has_changes(args: &crate::cli::AttachmentUpdateArgs) -> bool {

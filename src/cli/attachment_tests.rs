@@ -51,11 +51,13 @@ fn parse_attachment_download_single_id_defaults_out_dir() {
             bug_ids,
             out,
             out_dir,
+            ignore_obsolete,
         } => {
             assert_eq!(ids, vec![9876]);
             assert!(bug_ids.is_empty());
             assert!(out.is_none());
             assert_eq!(out_dir, "./attachments");
+            assert!(!ignore_obsolete);
         }
         _ => panic!("expected Download"),
     }
@@ -122,6 +124,28 @@ fn parse_attachment_download_mixes_bug_and_positional_ids() {
 }
 
 #[test]
+fn download_parses_ignore_obsolete() {
+    match attachment_action(&[
+        "bzr",
+        "attachment",
+        "download",
+        "--bug",
+        "12345",
+        "--ignore-obsolete",
+    ]) {
+        AttachmentAction::Download {
+            bug_ids,
+            ignore_obsolete,
+            ..
+        } => {
+            assert_eq!(bug_ids, vec![12345]);
+            assert!(ignore_obsolete);
+        }
+        _ => panic!("expected Download"),
+    }
+}
+
+#[test]
 fn parse_attachment_download_rejects_out_with_out_dir() {
     assert_eq!(
         parse_error_kind(&[
@@ -158,7 +182,7 @@ fn parse_attachment_download_rejects_out_with_bug() {
 fn parse_attachment_upload_binds_positionals_with_default_flags() {
     match attachment_action(&["bzr", "attachment", "upload", "12345", "patch.diff"]) {
         AttachmentAction::Upload(UploadArgs {
-            bug_id,
+            bug_ids,
             file,
             private,
             no_private,
@@ -167,7 +191,7 @@ fn parse_attachment_upload_binds_positionals_with_default_flags() {
             comment_private,
             ..
         }) => {
-            assert_eq!(bug_id, 12345);
+            assert_eq!(bug_ids, vec![12345]);
             assert_eq!(file, "patch.diff");
             assert!(!private);
             assert!(!no_private);
@@ -177,6 +201,93 @@ fn parse_attachment_upload_binds_positionals_with_default_flags() {
         }
         _ => panic!("expected Upload"),
     }
+}
+
+#[test]
+fn upload_parses_single_bug_id() {
+    match attachment_action(&["bzr", "attachment", "upload", "1", "f.txt"]) {
+        AttachmentAction::Upload(UploadArgs { bug_ids, file, .. }) => {
+            assert_eq!(bug_ids, vec![1]);
+            assert_eq!(file, "f.txt");
+        }
+        _ => panic!("expected Upload"),
+    }
+}
+
+#[test]
+fn upload_parses_multiple_bug_ids() {
+    match attachment_action(&["bzr", "attachment", "upload", "1", "2", "f.txt"]) {
+        AttachmentAction::Upload(UploadArgs { bug_ids, file, .. }) => {
+            assert_eq!(bug_ids, vec![1, 2]);
+            assert_eq!(file, "f.txt");
+        }
+        _ => panic!("expected Upload"),
+    }
+}
+
+#[test]
+fn upload_without_file_is_a_usage_error() {
+    assert_eq!(
+        parse_error_kind(&["bzr", "attachment", "upload", "12345"]),
+        ErrorKind::MissingRequiredArgument
+    );
+}
+
+#[test]
+fn upload_all_numeric_args_take_the_last_as_the_file() {
+    // Ambiguity, not endorsement: an omitted file silently drops the last bug
+    // target rather than failing. Recorded per ADR 0063's second consequence.
+    match attachment_action(&["bzr", "attachment", "upload", "1", "2"]) {
+        AttachmentAction::Upload(UploadArgs { bug_ids, file, .. }) => {
+            assert_eq!(bug_ids, vec![1]);
+            assert_eq!(file, "2");
+        }
+        _ => panic!("expected Upload"),
+    }
+}
+
+#[test]
+fn upload_rejects_an_option_between_bug_ids_and_file() {
+    assert_eq!(
+        parse_error_kind(&[
+            "bzr",
+            "attachment",
+            "upload",
+            "1",
+            "--summary",
+            "s",
+            "f.txt",
+        ]),
+        ErrorKind::UnknownArgument
+    );
+    assert!(Cli::try_parse_from([
+        "bzr",
+        "attachment",
+        "upload",
+        "1",
+        "f.txt",
+        "--summary",
+        "s",
+    ])
+    .is_ok());
+    assert!(Cli::try_parse_from([
+        "bzr",
+        "attachment",
+        "upload",
+        "--summary",
+        "s",
+        "1",
+        "f.txt",
+    ])
+    .is_ok());
+}
+
+#[test]
+fn upload_rejects_a_non_numeric_bug_id() {
+    assert_eq!(
+        parse_error_kind(&["bzr", "attachment", "upload", "1", "x", "f.txt"]),
+        ErrorKind::ValueValidation
+    );
 }
 
 #[test]

@@ -67,3 +67,5 @@ rejected.
 | [0060](0060-bug-links-reads-its-root-on-the-direct-path.md) | `bug links` reads its root on the direct path | Accepted |
 | [0061](0061-prove-vendor-extension-behaviour-against-a-shaped-proxy.md) | Prove vendor-extension behaviour against a shaped proxy | Accepted |
 | [0062](0062-field-list-enumerates-the-accepted-write-field-set.md) | `field list` enumerates the accepted write-field set | Accepted |
+| [0063](0063-multi-bug-attachment-upload-publishes-a-batch-result.md) | Multi-bug attachment upload publishes a batch result | Accepted |
+| [0064](0064-ignore-obsolete-filters-bulk-bug-targets-only.md) | `--ignore-obsolete` filters bulk bug targets only | Accepted |
