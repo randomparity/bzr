@@ -342,10 +342,16 @@ if [[ -n $ATTACHMENT_PYBZ_ID && -n $ATTACHMENT_BZR_ID ]] &&
     _ATTACH_OBSOLETE_BZR_COUNT=$(find \
         "$COMPARE_EXCHANGE_DIR/obsolete-bzr/$ATTACHMENT_BZR_BUG_ID" -type f 2>/dev/null |
         wc -l | tr -d ' ')
+    # Counted rather than piped into `grep -q`: the runner sets pipefail, and a
+    # grep that quits on the first match can leave find killed by SIGPIPE, whose
+    # non-zero status the negation would read as "no obsolete file found" — a
+    # false pass on exactly the regression this assertion exists to catch.
+    _ATTACH_OBSOLETE_STALE_COUNT=$(find \
+        "$COMPARE_EXCHANGE_DIR/obsolete-bzr/$ATTACHMENT_BZR_BUG_ID" -type f \
+        -name "${ATTACHMENT_BZR_ID}.*" 2>/dev/null | wc -l | tr -d ' ')
     if [[ $_ATTACH_OBSOLETE_BZR_COUNT -eq 1 ]] &&
         [[ $_ATTACH_OBSOLETE_BZR_COUNT -eq $_ATTACH_OBSOLETE_PYBZ_COUNT ]] &&
-        ! find "$COMPARE_EXCHANGE_DIR/obsolete-bzr/$ATTACHMENT_BZR_BUG_ID" -type f \
-            -name "${ATTACHMENT_BZR_ID}.*" 2>/dev/null | grep -q .; then
+        [[ $_ATTACH_OBSOLETE_STALE_COUNT -eq 0 ]]; then
         test_pass
     else
         test_fail "obsolete-filter file count or naming differs between bzr and python-bugzilla"
