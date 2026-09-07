@@ -780,10 +780,16 @@ Provides to later tasks:
    fn first_duplicate(ids: &[u64]) -> Option<u64> {
        ids.iter()
            .enumerate()
-           .find(|(i, id)| ids[..*i].contains(id))
+           .find(|&&(i, id)| ids[..i].contains(id))
            .map(|(_, id)| *id)
    }
    ```
+
+   The predicate pattern is `&&(i, id)`, not `(i, id)`: `Iterator::find` hands the
+   closure `&Self::Item`, and `Self::Item` here is `(usize, &u64)`, so an
+   un-dereferenced pattern binds `id` as `&&u64` and `slice::contains` wants
+   `&u64`. `find` itself returns `Option<(usize, &u64)>`, which is why the
+   following `map` dereferences once.
 
 8. Bump `SCHEMA_VERSION` from `"3.0.3"` to `"3.0.4"` in `src/output/mod.rs`, then
    update every hand-written pin. Find them with
