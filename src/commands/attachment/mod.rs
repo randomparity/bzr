@@ -83,6 +83,11 @@ pub(crate) async fn execute(
 
 fn validate_action(action: &AttachmentAction) -> Result<()> {
     if let AttachmentAction::Upload(crate::cli::UploadArgs { bug_ids, .. }) = action {
+        if bug_ids.is_empty() {
+            return Err(crate::error::BzrError::input(
+                "specify at least one bug ID to upload the attachment to".into(),
+            ));
+        }
         if let Some(dup) = first_duplicate(bug_ids) {
             return Err(crate::error::BzrError::input(format!(
                 "bug #{dup} is listed more than once; each bug may be named once",
