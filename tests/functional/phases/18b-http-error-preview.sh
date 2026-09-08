@@ -84,6 +84,7 @@ _oversize_port_file=$(mktemp /tmp/bzr-func-oversize-port.XXXXXX)
 python3 -c '
 import http.server
 import sys
+import threading
 
 version = b"{\"version\":\"5.0.4\"}"
 filler = b"a" * 65536
@@ -122,6 +123,11 @@ class Server(http.server.ThreadingHTTPServer):
         pass
 
 server = Server(("127.0.0.1", 0), Handler)
+# The harness kills this fixture explicitly, but its cleanup trap does not know
+# the PID. Without a watchdog an orphan would keep serving 96 MiB per GET for as
+# long as the host stayed up; 120s is far longer than the single request this
+# case makes.
+threading.Timer(120, server.shutdown).start()
 with open(sys.argv[1], "w", encoding="utf-8") as port_file:
     port_file.write(str(server.server_address[1]))
 server.serve_forever()

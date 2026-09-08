@@ -121,8 +121,11 @@ request timeout covers it, a size bound cannot.
    the HTTP status where one is known; `is_transport_failure` is `false` for it.
 3. An over-limit body on an auth or version probe aborts detection with that
    error rather than continuing the probe chain or selecting a protocol.
-4. `bzr schema error` publishes an `exit_code` maximum of 16, and both bundled
-   readers accept an exit-16 envelope.
+4. `bzr schema error` publishes an `exit_code` maximum of 16, and
+   `collect.py`'s envelope validator accepts an exit-16 envelope. The
+   `bzr-reference` error table is deliberately **not** covered — it is deferred
+   below — so an agent reading that bundled table sees fifteen exit codes until
+   the caller lands the row.
 5. Bodies under the limit are returned byte-identically to `.text()` today.
 
 ## Validation
@@ -144,7 +147,7 @@ request timeout covers it, a size bound cannot.
 
 Two documents this change falsifies sit outside its frozen surface and are not
 edited here: `content/skills/bzr-reference/SKILL.md:145-162`, whose error-type
-table asserts "That is the whole set", and `CLAUDE.md`'s "19 variants"
-description of `BzrError`. Separately, the `attachment.cgi` streaming follow-up
+table asserts "That is the whole set", and `AGENTS.md`'s "19 variants"
+description of `BzrError` (`CLAUDE.md` is a symlink to it). Separately, the `attachment.cgi` streaming follow-up
 that owns exclusion (a) — and so the ~48 MiB download ceiling introduced here —
 had not been filed when this design was written and needs an issue.

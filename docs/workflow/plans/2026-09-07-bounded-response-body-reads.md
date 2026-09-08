@@ -182,9 +182,9 @@ ResponseTooLarge` for the fifth.
 exits 0; no existing exit code, error type, or transport classification
 changed.
 
-**Adjacent, do not fix.** `CLAUDE.md` describes `BzrError` as having "19
-variants" and becomes stale at 20. `CLAUDE.md` is outside this change's frozen
-surface — report it, do not edit it.
+**Adjacent, do not fix.** `AGENTS.md` describes `BzrError` as having "19
+variants" and becomes stale at 20 (`CLAUDE.md` is a symlink to it). It is
+outside this change's frozen surface — report it, do not edit it.
 
 ## Task 2 — route all thirteen call sites
 
@@ -374,7 +374,8 @@ bundled readers, and the twelve `SCHEMA_VERSION` pins.
 5. Do **not** edit `content/skills/bzr-reference/SKILL.md`. Its error-type
    table (`:145-162`) asserts "That is the whole set" and this change falsifies
    it, but the file carries no `SCHEMA_VERSION` pin and is outside the frozen
-   surface; it is deferred to the caller along with `CLAUDE.md`. Report both.
+   surface; it is deferred to the caller along with `AGENTS.md`'s variant count
+   (`CLAUDE.md` is a symlink to it). Report both.
 6. `docs/bzr-cli.md`: add the exit-code table row after the row for 15 —
    `| 16 | Response too large (the server's response body exceeds bzr's 64 MiB
    response-body limit; the read stops at the limit and the response is

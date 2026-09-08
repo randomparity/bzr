@@ -178,7 +178,7 @@ pub async fn detect_server_settings(
     let http = crate::tls::build_tls_client(tls_config, request_timeout)?;
 
     let method = detect_auth_method(&http, url, api_key, email).await?;
-    let (version, api_mode) = detect_version_and_mode(&http, url, api_key, method).await;
+    let (version, api_mode) = detect_version_and_mode(&http, url, api_key, method).await?;
 
     tracing::info!(
         %method,

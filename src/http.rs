@@ -72,9 +72,13 @@ pub(crate) async fn read_body_within(
         }
         body.extend_from_slice(&chunk);
     }
-    // `from_utf8` reuses the buffer when the body is valid UTF-8 and falls back
-    // to the same lossy decode `Response::text()` performs, so the output is
-    // byte-identical to the call this replaces at half the peak allocation.
+    // `from_utf8` reuses the buffer when the body is valid UTF-8 — the ordinary
+    // case, and the one `Response::text()` pays a full copy for. Invalid UTF-8
+    // still costs what `text()` costs: the failed `String` keeps the buffer
+    // alive while `from_utf8_lossy` builds a replacement that can reach three
+    // bytes per input byte, so an accepted body of pathological bytes peaks
+    // near seven times the limit. That is not a regression and is bounded by
+    // the limit; it is why the ceiling is stated per-path rather than flat.
     // The Vec is never pre-sized from Content-Length: the server writes it.
     Ok(String::from_utf8(body)
         .unwrap_or_else(|error| String::from_utf8_lossy(error.as_bytes()).into_owned()))

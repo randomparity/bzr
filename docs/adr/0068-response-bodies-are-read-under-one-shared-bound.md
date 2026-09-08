@@ -76,10 +76,16 @@ exit code 16.**
   retries, and when both legs oversize its `map_err` reports `XmlRpc` — exit 4,
   with `operation` and `limit_bytes` surviving only inside the message. Left
   alone; changing it would reopen ADR-0052.
-- **Cost per refused read is about twice the limit** — the `Vec` doubles as it
-  grows, so a body refused near the limit holds roughly 96 MiB across the old
-  and new buffers. The probe abort stops at the first refusal rather than
-  paying that again through the chain.
+- **Peak allocation is stated per path, not flat.** A refused read holds about
+  twice the limit — roughly 96 MiB — while the `Vec` doubles. An accepted body
+  of valid UTF-8 holds the limit once, because `String::from_utf8` reuses the
+  buffer. An accepted body that is *not* valid UTF-8 costs what
+  `Response::text()` costs today: the failed `String` keeps the buffer alive
+  while the lossy decode builds a replacement of up to three bytes per input
+  byte, peaking near seven times the limit. That last case is not a regression
+  and is still bounded — which is the point — but a flat "twice the limit" would
+  be wrong. The probe abort stops at the first refusal rather than paying any of
+  this again through the chain.
 - **No knob** — no flag, config key, or environment variable overrides the
   limit. The first deployment that reports 64 MiB too low reopens it.
 
