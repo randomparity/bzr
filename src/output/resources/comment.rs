@@ -2,7 +2,9 @@ use std::io::Write;
 
 use colored::Colorize;
 
-use crate::output::formatting::{escape_table_control, write_divider, write_formatted_projected};
+use crate::output::formatting::{
+    escape_terminal_controls, write_divider, write_formatted_projected,
+};
 use crate::types::comment::Comment;
 use crate::types::output::OutputFormat;
 use crate::validation::fields::FieldProjection;
@@ -37,7 +39,7 @@ pub fn write_comments<W: Write + ?Sized>(
                 let tags = c
                     .tags
                     .iter()
-                    .map(|tag| escape_table_control(tag))
+                    .map(|tag| escape_terminal_controls(tag))
                     .collect::<Vec<_>>()
                     .join(", ");
                 let _ = writeln!(out, "  {} {tags}", "Tags:".bold());

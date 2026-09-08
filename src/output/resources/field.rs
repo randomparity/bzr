@@ -3,7 +3,7 @@ use std::io::Write;
 use serde::Serialize;
 
 use crate::output::formatting::{
-    escape_table_control, opt_yes_no, write_formatted, write_formatted_projected,
+    escape_terminal_controls, opt_yes_no, write_formatted, write_formatted_projected,
     write_table_records,
 };
 use crate::types::{FieldName, FieldValue, OutputFormat};
@@ -68,7 +68,7 @@ pub fn write_field_names<W: Write + ?Sized>(
                 // The server chooses these names; `source` is a closed set
                 // of three literals and needs no escaping.
                 vec![
-                    escape_table_control(&row.name),
+                    escape_terminal_controls(&row.name),
                     row.source.as_str().to_string(),
                 ]
             }),

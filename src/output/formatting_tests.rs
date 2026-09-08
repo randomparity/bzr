@@ -211,6 +211,24 @@ fn write_records_or_empty_populated_table_remains_unbounded_by_default() {
     );
 }
 
+// ── escape_terminal_controls ─────────────────────────────────────
+
+#[test]
+fn escape_terminal_controls_escapes_cc_and_bidi_only() {
+    let escaped = escape_terminal_controls(
+        "a\u{1b}b\tc\u{202a}\u{202b}\u{202c}\u{202d}\u{202e}d\u{2066}\u{2067}\u{2068}\u{2069}\
+         e\u{200e}\u{200f}f\u{61c}g\u{200c}h\u{200d}i\u{200b}j\u{feff}ké\\",
+    );
+
+    assert_eq!(
+        escaped,
+        "a\\u{1b}b\\tc\\u{202a}\\u{202b}\\u{202c}\\u{202d}\\u{202e}\
+         d\\u{2066}\\u{2067}\\u{2068}\\u{2069}e\\u{200e}\\u{200f}f\\u{61c}\
+         g\u{200c}h\u{200d}i\u{200b}j\u{feff}ké\\",
+        "must escape Cc and the Trojan-Source bidi set and nothing else"
+    );
+}
+
 fn table(headers: &[&str], rows: &[&[&str]]) -> tabled::Table {
     let mut builder = tabled::builder::Builder::default();
     builder.push_record(headers.iter().copied());
