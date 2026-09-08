@@ -163,6 +163,14 @@ cmd_stop() {
             "(\`${CONTAINER_RT} rm -f <sidecar>\`) and retry."
         return 1
     fi
+    # `container_exists` reports "gone" for an unreachable runtime too, so probe
+    # before concluding success -- otherwise a dead daemon reproduces exactly the
+    # false success this check exists to remove.
+    if ! $CONTAINER_RT version >/dev/null 2>&1; then
+        err "Could not confirm ${CONTAINER_NAME} was removed: ${CONTAINER_RT} is" \
+            "not answering. Start it and retry."
+        return 1
+    fi
     log "Container removed."
     return 0
 }
