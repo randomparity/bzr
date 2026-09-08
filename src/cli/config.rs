@@ -79,6 +79,11 @@ pub(crate) enum ConfigAction {
         /// first use and caches the working method per server;
         /// override only when the cached value is wrong (e.g. the
         /// server changed configuration).
+        ///
+        /// Setting this pins the value: bzr records it as a deliberate
+        /// override and never re-probes it, while a value bzr detected
+        /// itself is re-probed once after an upgrade that changes how
+        /// detection works.
         #[arg(long)]
         auth_method: Option<AuthMethod>,
         /// Accept invalid TLS certificates -- self-signed, expired, wrong host.

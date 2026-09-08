@@ -498,6 +498,81 @@ async fn connect_client_redetects_unstamped_auth_method_and_stamps_it() {
     );
 }
 
+/// Make `dir` non-writable and report whether that actually took effect, so a
+/// test running as root (where mode bits are advisory) skips rather than fails.
+#[cfg(unix)]
+fn deny_writes(dir: &std::path::Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let probe = dir.join(".write-probe");
+    let denied = std::fs::write(&probe, b"x").is_err();
+    let _ = std::fs::remove_file(&probe);
+    denied
+}
+
+#[cfg(unix)]
+fn allow_writes(dir: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+}
+
+/// A server that was fully cached before ADR-0066 connected without ever
+/// writing to the config file. Routing it into re-detection must not make a
+/// read-only config directory — an immutable image, a read-only mount — a hard
+/// failure: the detected settings are usable in memory, and the only cost of
+/// not recording them is detecting again next run.
+#[cfg(unix)]
+#[tokio::test]
+async fn unwritable_config_does_not_break_a_previously_cached_server() {
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = write_config(
+        &tmp,
+        &mock.uri(),
+        "auth_method = \"header\"\napi_mode = \"rest\"",
+    );
+    mount_detection_mocks(&mock).await;
+
+    let config_dir = config_path.parent().unwrap().to_path_buf();
+    if !deny_writes(&config_dir) {
+        allow_writes(&config_dir);
+        return; // running as root: mode bits do not deny the write
+    }
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
+    allow_writes(&config_dir);
+
+    assert!(
+        result.is_ok(),
+        "a stamp that cannot be written must not fail the connect: {:?}",
+        result.err()
+    );
+}
+
+/// The complement: a genuinely uncached server still fails on an unwritable
+/// config, because there the write is how the detected setting survives at all.
+/// Without this, the tolerance above would silently widen to every connect.
+#[cfg(unix)]
+#[tokio::test]
+async fn unwritable_config_still_fails_an_uncached_server() {
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = write_config(&tmp, &mock.uri(), "");
+    mount_detection_mocks(&mock).await;
+
+    let config_dir = config_path.parent().unwrap().to_path_buf();
+    if !deny_writes(&config_dir) {
+        allow_writes(&config_dir);
+        return;
+    }
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
+    allow_writes(&config_dir);
+
+    assert!(
+        result.is_err(),
+        "an uncached server must still report that it could not persist detection"
+    );
+}
+
 /// Success criterion 4 (ADR-0066): a deliberate `--auth-method` pin is stamped
 /// `"pinned"`, so a connect against a server that disagrees neither re-detects
 /// nor overwrites it. This is the case a value-triggered invalidation rule

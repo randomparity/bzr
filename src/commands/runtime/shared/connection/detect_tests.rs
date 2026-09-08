@@ -96,12 +96,23 @@ fn persist_and_capture(
     detected: Option<crate::types::AuthMethod>,
     persist_auth: bool,
 ) -> (crate::config::ServerConfig, String) {
+    persist_and_capture_with_version(extra, detected, persist_auth, Some("5.2".into()))
+}
+
+/// As [`persist_and_capture`], with control over `server_version` — the local
+/// signal for whether detection actually reached the server.
+fn persist_and_capture_with_version(
+    extra: &str,
+    detected: Option<crate::types::AuthMethod>,
+    persist_auth: bool,
+    server_version: Option<String>,
+) -> (crate::config::ServerConfig, String) {
     let tmp = tempfile::TempDir::new().unwrap();
     let config_path = write_config(&tmp, "https://example.test", extra);
     let settings = crate::client::DetectedServerSettings {
         auth_method: detected,
         api_mode: crate::types::ApiMode::Rest,
-        server_version: Some("5.2".into()),
+        server_version,
     };
 
     let (capture, guard) = crate::test_helpers::TracingCapture::install(tracing::Level::WARN);
@@ -181,6 +192,28 @@ fn persist_detected_leaves_the_stamp_alone_when_auth_is_not_persisted() {
     assert_eq!(
         srv.auth_method_source.as_deref(),
         Some(crate::config::AUTH_METHOD_SOURCE_PINNED)
+    );
+}
+
+#[test]
+fn persist_detected_does_not_stamp_an_unreachable_server() {
+    // `detect_auth_method` answers `header` without probing when the server is
+    // unreachable, so stamping it would mark a guess as probe-derived and
+    // permanently trust it — re-creating the stale-header state ADR-0066 ends.
+    // A failed version probe is the local signal that this happened.
+    let (srv, _) = persist_and_capture_with_version(
+        "auth_method = \"header\"",
+        Some(crate::types::AuthMethod::Header),
+        true,
+        None,
+    );
+    assert_eq!(
+        srv.auth_method_source, None,
+        "a fallback method from an unreachable server must stay unstamped"
+    );
+    assert!(
+        !srv.auth_method_is_trusted(),
+        "leaving it unstamped is what makes the next connect retry detection"
     );
 }
 

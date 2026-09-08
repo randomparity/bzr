@@ -2857,6 +2857,11 @@ api_key_env = "MOZILLA_BZ_API_KEY"
 url = "https://bugzilla.example.com"
 api_key = "old-server-key"
 email = "you@example.com"
+auth_method = "query_param"               # auto-detected: header or query_param
+auth_method_source = "differential-probe" # provenance of auth_method: "differential-probe"
+                                          # when bzr detected it, "pinned" when --auth-method
+                                          # set it. Absent or unrecognised means bzr re-probes
+                                          # auth_method once on the next credentialed connect.
 api_mode = "hybrid"        # auto-detected: rest, xmlrpc, or hybrid
 server_version = "5.0.4"   # auto-detected (absent if version endpoint unavailable)
 

@@ -40,8 +40,25 @@ The stamp is `Option<String>` compared against constants, matching
 invalidates a detection cache by comparing persisted strings against what this build knows.
 
 When re-detection changes the persisted value, `persist_detected_settings` logs one `warn`
-naming the old method, the new one, and the `--auth-method` command that pins it back. That
-is the signal the issue reports as missing.
+naming the old method, the new one, and how to pin the old one back. That is the signal the
+issue reports as missing. It describes the pin rather than printing a runnable command:
+`set_server::handle` builds a fresh `ServerConfig` and inserts it
+(`src/commands/config/set_server.rs`), so a command short enough to log would drop the
+server's credential, email and TLS settings if pasted.
+
+The stamp is written only when detection reached the server. `detect_auth_method` does not
+fail on an unreachable one: `network_error_outcome` (`src/client/auth/mod.rs`) turns any
+non-TLS transport error into `Ok(AuthMethod::Header)`, so a timeout during the probe is
+indistinguishable from a real answer at the persistence layer. Stamping that fallback would
+mark a guess as probe-derived and trust it permanently — the stale-`header` state this record
+exists to end, re-created by the correction. `server_version.is_some()` is the local signal
+for reachability, and the same field already gates `api_mode` persistence for the same reason.
+
+Re-detection triggered *only* by a missing stamp persists best-effort. Such a server connected
+without touching the config file before this record, so a config directory that cannot be
+written must not become a hard failure on the first post-upgrade connect: the detected values
+are usable in memory and the cost of not recording them is one more detection next run. A
+genuinely uncached server still fails, because there the write is how the setting survives.
 
 ## Consequences
 
@@ -53,9 +70,15 @@ is the signal the issue reports as missing.
   the pin. Pins written from here on carry `"pinned"` and are never re-detected.
 - Credentialless servers are unaffected: `resolve_config_target` reads `auth_method` only
   when an API key resolves, so a config with no credential never reaches the stamp check.
-- On that one re-detection, a detection failure surfaces as an error instead of a silently
+- On that one re-detection, a TLS or auth failure surfaces as an error instead of a silently
   stale success. The cached path already contacts the server (`probe_cached_connection`),
-  so this adds no new network dependency, only a louder failure on the transition.
+  so this adds no new network dependency, only a louder failure on the transition. A
+  transport failure does not surface, by design: it leaves the entry unstamped, so the
+  correction is retried rather than resolved wrongly.
+- Residual: a server that answers the auth probes but not `rest/version` is stamped even
+  though its method may be the transport fallback. Separating "probed" from "fell back"
+  needs a flag on `DetectedServerSettings`, which lives behind the client boundary
+  (`src/client/`) and is tracked separately.
 - `bzr config show` is unchanged. Its `ServerDisplayInfo`
   (`src/output/resources/config.rs`) is a curated view, not a serialization of
   `ServerConfig`, so the stamp stays out of user-facing output.

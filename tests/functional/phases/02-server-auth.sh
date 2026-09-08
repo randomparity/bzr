@@ -311,8 +311,16 @@ test_begin "auth-method-unstamped-entry-redetects" "an unstamped auth_method is 
 # some other difference.
 _SA_REDETECT_FAIL=""
 _sa_server_set auto 'auth_method = "header"' auth_method_source
+if [[ $(_sa_server_key auto auth_method) != "header" ]] ||
+    [[ -n $(_sa_server_key auto auth_method_source) ]]; then
+    # Without this the case passes vacuously when the edit misses the table:
+    # `auto` would still be correctly stamped and take the cached path.
+    _SA_REDETECT_FAIL="fixture edit did not land on [servers.auto]"
+fi
 RUST_LOG=bzr=debug run_bzr --server auto whoami
-if [[ $BZR_EXIT -ne 0 ]]; then
+if [[ -n $_SA_REDETECT_FAIL ]]; then
+    : # already failed on the fixture plant
+elif [[ $BZR_EXIT -ne 0 ]]; then
     _SA_REDETECT_FAIL="re-detecting connect exited $BZR_EXIT"
 elif [[ $(_sa_server_key auto auth_method_source) != "differential-probe" ]]; then
     _SA_REDETECT_FAIL="re-detection did not re-stamp the auth_method"
@@ -393,6 +401,7 @@ fi
 # Leave `public` as later phases expect it.
 _sa_server_set public auth_method auth_method_source
 if [[ -z $_SA_ANON_FAIL ]]; then test_pass; else test_fail "$_SA_ANON_FAIL"; fi
-unset _SA_ANON_FAIL _SA_DETECTED_METHOD
+unset _SA_ANON_FAIL _SA_DETECTED_METHOD _SA_CONFIG
+unset -f _sa_server_key _sa_server_set
 
 echo ""

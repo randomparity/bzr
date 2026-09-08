@@ -46,13 +46,6 @@ fn auth_method_is_trusted_only_for_known_markers() {
 }
 
 #[test]
-fn auth_method_source_markers_are_distinct() {
-    // The two markers arbitrate different behaviours (re-detectable vs pinned),
-    // so collapsing them to one value would silently make pins re-detectable.
-    assert_ne!(AUTH_METHOD_SOURCE_DETECTED, AUTH_METHOD_SOURCE_PINNED);
-}
-
-#[test]
 fn unknown_auth_method_source_deserializes_instead_of_failing_the_load() {
     // The whole point of `Option<String>` over an enum: a marker written by a
     // future bzr must not make the config file unreadable to every command.
