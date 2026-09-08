@@ -450,7 +450,7 @@ bzr bug list --version 9.4 --version 9.5 --op-sys Linux
 ```
 
 `platform` is the canonical Bugzilla hardware-field name for search, bug
-objects, create, update, and clone. Schema 3.0.5 publishes and accepts only the
+objects, create, update, and clone. Schema 3.0.6 publishes and accepts only the
 canonical `platform` spelling.
 
 ### `bzr bug view`
@@ -676,11 +676,11 @@ table always includes the fixed fields `ID`, `SUMMARY`, `STATUS`, `RESOLUTION`,
 `BLOCKS`, and `DEPENDS ON`; the two adjacency columns are complete,
 comma-separated ID lists.
 
-Under `--json`, the usual `3.0.5` envelope contains a closed result object:
+Under `--json`, the usual `3.0.6` envelope contains a closed result object:
 
 ```json
 {
-  "schema_version": "3.0.5",
+  "schema_version": "3.0.6",
   "data": {
     "requests": [
       {"requested": "00123", "bug_id": 123},
@@ -1418,7 +1418,10 @@ With `--out -`, stdout is the raw attachment byte stream. `--json`, `--output js
 and `--output table` do not emit a `DownloadResult`; success is reported by exit code
 only, and stderr is left for diagnostics.
 
-The bulk shapes emit an `AttachmentBatchResult` (table or JSON): per-bug success rows with each saved file, per-attachment rows for positional IDs, and a `Summary: X succeeded, Y failed, Z total bytes` trailer. Bug-level and per-attachment failures are written to stderr in table mode.
+The bulk shapes emit an `AttachmentBatchResult` (table or JSON, published as
+`attachment-download-batch-result`): per-bug success rows with each saved file,
+per-attachment rows for positional IDs, and a `Summary: X succeeded, Y failed, Z total bytes`
+trailer. Bug-level and per-attachment failures are written to stderr in table mode.
 
 **Exit codes:**
 
@@ -2610,7 +2613,7 @@ Available schemas: `bug`, `bug-adjacency`, `comment`, `attachment`, `product`, `
 mutation/result envelopes `action-result`, `batch-result`,
 `batch-create-result`, `compound-create-result`, `multi-bug-view`, `tag-result`,
 `membership-result`, `count-result`, `download-result`, `upload-result`,
-`attachment-upload-batch-result`,
+`attachment-download-batch-result`, `attachment-upload-batch-result`,
 `config-result`, `search-result`, `dry-run-result`, `error`; and the structured
 input contracts
 `bug-create-input`, `bug-update-input`, `product-create-input`,
@@ -2644,7 +2647,7 @@ Every pretty `--json` response is wrapped in a stable envelope:
 
 ```json
 {
-  "schema_version": "3.0.5",
+  "schema_version": "3.0.6",
   "data": <the command's payload>
 }
 ```
@@ -2659,7 +2662,7 @@ bzr --json schema | jq -r '.schema_version'   # the contract version itself
 ```
 
 `--json` error output carries the version too, beside an `error` object:
-`{"schema_version":"3.0.5","error":{"type":...,"message":...,"exit_code":...}}`.
+`{"schema_version":"3.0.6","error":{"type":...,"message":...,"exit_code":...}}`.
 
 Two outputs are deliberately **not** enveloped:
 
@@ -2726,6 +2729,33 @@ independent of the crate version, by these rules:
 Agents should branch on `schema_version` and either adapt or warn. For pinned
 line-oriented automation, prefer `--output ndjson` (its record shapes are the
 `data` payloads and are unaffected by the envelope).
+
+### Terminal-control escaping in table output
+
+Table output goes straight to a terminal, so bzr escapes the characters a
+server-supplied value could use to manipulate what you see. Two sets are
+escaped, rendered as `\u{…}`:
+
+- **C0/C1 control characters** (Unicode `Cc`), including ESC — an unescaped ESC
+  lets a hostile or compromised Bugzilla clear the screen, move the cursor, or
+  forge table rows.
+- **The Trojan-Source bidirectional controls** (`U+202A`–`U+202E`,
+  `U+2066`–`U+2069`, `U+200E`, `U+200F`, `U+061C`), which reorder rendered text
+  invisibly. This is the same set rustc's `text_direction_codepoint_in_literal`
+  lint covers for CVE-2021-42574.
+
+Consequences worth knowing:
+
+- A tab inside a comment body renders as `\t`. Comment bodies frequently carry
+  pasted logs, and a raw tab breaks a table frame.
+- Other invisible format characters are **not** escaped: `U+200C`/`U+200D`
+  (ZWNJ, ZWJ) are load-bearing for Persian and Hindi orthography and for emoji
+  sequences, and `U+200B`/`U+FEFF` are invisible but do not reorder.
+- A script matching on a value that contains one of these characters sees the
+  escaped spelling. Match against `--json` output instead.
+
+`--json` and `--output ndjson` are unchanged: they are a published schema
+surface, and their encoding stays standard JSON.
 
 ### Auto-detection
 

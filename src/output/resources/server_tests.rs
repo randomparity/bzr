@@ -123,3 +123,46 @@ fn print_server_info_json_combined() {
     assert_eq!(parsed["version"], "5.0.4");
     assert!(parsed["extensions"]["BmpConvert"].is_object());
 }
+
+// ── terminal-control escaping (ADR 0065) ─────────────────────────
+
+use crate::test_helpers::{
+    assert_terminal_controls_escaped as assert_escaped, TERMINAL_CONTROL_PROBE as PROBE,
+};
+
+#[test]
+fn server_writers_table_escape_terminal_controls() {
+    let mut caps = sample_capabilities();
+    caps.version = PROBE.into();
+    caps.api_modes = vec![PROBE.into()];
+    caps.auth_modes = vec![PROBE.into()];
+    caps.status_transitions[0].from = PROBE.into();
+    caps.status_transitions[0].can_change_to = vec![PROBE.into()];
+    caps.custom_fields[0].name = PROBE.into();
+    caps.custom_fields[0].field_type = PROBE.into();
+    caps.custom_fields[0].values = vec![PROBE.into()];
+
+    let mut out: Vec<u8> = Vec::new();
+    super::write_server_capabilities(&caps, OutputFormat::Table, &mut out);
+    assert_escaped(
+        &String::from_utf8(out).unwrap(),
+        "write_server_capabilities",
+    );
+
+    let mut extensions = std::collections::HashMap::new();
+    extensions.insert(
+        PROBE.to_string(),
+        crate::types::ExtensionInfo {
+            version: Some(PROBE.into()),
+        },
+    );
+    let response = crate::types::server_info::ServerInfoResponse {
+        version: ServerVersion {
+            version: PROBE.into(),
+        },
+        extensions: ServerExtensions { extensions },
+    };
+    let mut out: Vec<u8> = Vec::new();
+    super::write_server_info(&response, OutputFormat::Table, &mut out);
+    assert_escaped(&String::from_utf8(out).unwrap(), "write_server_info");
+}

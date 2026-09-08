@@ -3,8 +3,8 @@ use std::io::Write;
 use colored::Colorize;
 
 use crate::output::formatting::{
-    opt_yes_no, write_field, write_formatted, write_formatted_projected, write_optional_field,
-    write_records_or_empty, TableSpec,
+    escape_terminal_controls, opt_yes_no, write_field, write_formatted, write_formatted_projected,
+    write_optional_field, write_records_or_empty, TableSpec,
 };
 use crate::types::output::OutputFormat;
 use crate::types::user::{BugzillaUser, WhoamiOutput};
@@ -122,7 +122,7 @@ pub fn write_whoami<W: Write + ?Sized>(whoami: &WhoamiOutput, format: OutputForm
             out,
             "{} {}",
             "User".bold(),
-            whoami.identity.name.as_deref().unwrap_or("unknown").bold()
+            escape_terminal_controls(whoami.identity.name.as_deref().unwrap_or("unknown")).bold()
         );
         write_optional_field(out, "Name", whoami.identity.real_name.as_deref());
         write_optional_field(out, "Login", whoami.identity.login.as_deref());

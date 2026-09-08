@@ -17,7 +17,7 @@ ANALYZE = SKILL_ROOT / "scripts" / "analyze.py"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 RUNNER = FIXTURES / "recording_runner.py"
 TIMESTAMP = "2026-08-28T12:00:00Z"
-SCHEMA_VERSION = "3.0.5"
+SCHEMA_VERSION = "3.0.6"
 DETAIL_FIELDS = (
     "id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on"
 )
@@ -483,7 +483,7 @@ class CollectorTestCase(unittest.TestCase):
                 "preserved = os.environ.get('DEPENDENCY_TEST_PRESERVED') == 'yes'\n"
                 "error_type = 'http' if preserved else 'api'\n"
                 "exit_code = 5 if preserved else 4\n"
-                "json.dump({'schema_version': '3.0.5', 'error': {\n"
+                "json.dump({'schema_version': '3.0.6', 'error': {\n"
                 "    'type': error_type, 'message': 'private',\n"
                 "    'exit_code': exit_code}}, sys.stderr)\n"
                 "sys.stderr.write('\\n')\n"
@@ -507,7 +507,7 @@ class CollectorTestCase(unittest.TestCase):
             script = Path(directory) / "utf8_output.py"
             script.write_text(
                 "import json\n"
-                "json.dump({'schema_version': '3.0.5', 'data': "
+                "json.dump({'schema_version': '3.0.6', 'data': "
                 "{'summary': 'Résumé'}}, open(1, 'w', encoding='utf-8'), "
                 "ensure_ascii=False)\n",
                 encoding="utf-8",
@@ -522,6 +522,46 @@ class CollectorTestCase(unittest.TestCase):
         self.assertIsNone(error)
         self.assertEqual(data, {"summary": "Résumé"})
         self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
+
+    def test_validate_envelope_version_accepts_same_major_minor_patch_drift(self):
+        for candidate in ("3.0.6", "3.1.0", "3.9.9"):
+            with self.subTest(candidate=candidate):
+                COLLECTOR.validate_envelope_version({"schema_version": candidate})
+
+    def test_validate_envelope_version_rejects_major_mismatch(self):
+        with self.assertRaises(COLLECTOR.FatalCollection) as raised:
+            COLLECTOR.validate_envelope_version({"schema_version": "4.0.0"})
+        self.assertEqual(raised.exception.limitation, "collection-schema-version")
+        self.assertEqual(raised.exception.error_type, "schema-version")
+
+    def test_child_runner_accepts_compatible_minor_schema_version_drift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            script = Path(directory) / "minor_drift.py"
+            script.write_text(
+                "import json\n"
+                "json.dump({'schema_version': '3.1.0', 'data': {'ok': True}}, "
+                "open(1, 'w', encoding='utf-8'))\n",
+                encoding="utf-8",
+            )
+            runner = COLLECTOR.CommandRunner(sys.executable)
+            data, error = runner.run_json([str(script)])
+        self.assertIsNone(error)
+        self.assertEqual(data, {"ok": True})
+
+    def test_child_runner_rejects_major_schema_version_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            script = Path(directory) / "major_mismatch.py"
+            script.write_text(
+                "import json\n"
+                "json.dump({'schema_version': '4.0.0', 'data': {'ok': True}}, "
+                "open(1, 'w', encoding='utf-8'))\n",
+                encoding="utf-8",
+            )
+            runner = COLLECTOR.CommandRunner(sys.executable)
+            with self.assertRaises(COLLECTOR.FatalCollection) as raised:
+                runner.run_json([str(script)])
+        self.assertEqual(raised.exception.limitation, "collection-schema-version")
+        self.assertEqual(raised.exception.error_type, "schema-version")
 
     def test_failed_preflight_and_ambiguous_api_102_are_command_fatal(self):
         input_policy = policy([bug_scope("primary", 1)])

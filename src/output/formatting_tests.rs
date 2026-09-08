@@ -211,6 +211,104 @@ fn write_records_or_empty_populated_table_remains_unbounded_by_default() {
     );
 }
 
+// ── escape_terminal_controls ─────────────────────────────────────
+
+/// Pins the exclusion ADR 0065 records rather than a behaviour it adds: the
+/// JSON family is a published schema surface, so the escaping must not migrate
+/// into it. `serde_json` escapes only `"`, `\`, and code points below `0x20`,
+/// which is why the bidi override survives there and the ESC does not.
+#[test]
+fn json_family_output_is_not_escaped_for_bidi() {
+    let value = serde_json::json!({ "summary": "ev\u{1b}[2Jil\u{202e}" });
+
+    let mut json = Vec::new();
+    write_json(&value, &mut json);
+    let mut ndjson = Vec::new();
+    write_ndjson(&value, &mut ndjson);
+
+    for (rendered, what) in [(json, "write_json"), (ndjson, "write_ndjson")] {
+        let rendered = String::from_utf8(rendered).unwrap();
+        assert!(
+            rendered.contains('\u{202e}'),
+            "{what} must leave the bidi override to the JSON contract: {rendered:?}"
+        );
+        assert!(
+            !rendered.contains("\\u{202e}"),
+            "{what} must not carry bzr's non-JSON escape spelling: {rendered:?}"
+        );
+    }
+}
+
+#[test]
+fn write_field_family_escapes_labels_and_values() {
+    let mut buf = Vec::new();
+    write_field(&mut buf, "la\u{1b}bel", "va\u{202e}lue");
+    write_optional_field(&mut buf, "op\u{202e}t", Some("so\u{1b}me"));
+    write_list_field(
+        &mut buf,
+        "li\u{1b}st",
+        &["fi\u{202e}rst".to_string(), "sec\u{1b}ond".to_string()],
+    );
+
+    let output = String::from_utf8(buf).unwrap();
+    assert!(
+        !output.contains('\u{1b}') && !output.contains('\u{202e}'),
+        "no detail row may carry a raw control or bidi character: {output:?}"
+    );
+    assert_eq!(
+        output.matches("\\u{1b}").count(),
+        4,
+        "every label and value in the family is escaped: {output:?}"
+    );
+    assert_eq!(
+        output.matches("\\u{202e}").count(),
+        3,
+        "every label and value in the family is escaped: {output:?}"
+    );
+}
+
+#[test]
+fn write_status_field_escapes_the_status_and_still_colours_it() {
+    let mut buf = Vec::new();
+    write_status_field(&mut buf, "Sta\u{1b}tus", "NEW\u{202e}");
+
+    let output = String::from_utf8(buf).unwrap();
+    assert!(
+        !output.contains('\u{1b}') && !output.contains('\u{202e}'),
+        "the server's own controls must not survive: {output:?}"
+    );
+    assert!(
+        output.contains("\\u{1b}") && output.contains("\\u{202e}"),
+        "both must survive in escaped form: {output:?}"
+    );
+    // Colour is asserted on the `ColoredString` rather than on emitted ANSI:
+    // `colored::control::set_override` is process-global and flakes parallel
+    // tests that assert on colourless output. A real status carries no control
+    // character, so escaping is the identity on it and the colour match holds.
+    assert_eq!(escape_terminal_controls("NEW"), "NEW");
+    assert_eq!(
+        colorize_status(&escape_terminal_controls("NEW")).fgcolor,
+        Some(Color::Green),
+        "escaping must not defeat the status-colour match"
+    );
+}
+
+#[test]
+fn escape_terminal_controls_escapes_cc_and_bidi_only() {
+    let escaped = escape_terminal_controls(
+        "a\u{1b}b\tc\u{202a}\u{202b}\u{202c}\u{202d}\u{202e}d\u{2066}\u{2067}\u{2068}\u{2069}\
+         e\u{200e}\u{200f}f\u{61c}g\u{200c}h\u{200d}i\u{200b}j\u{feff}ké\\",
+    );
+
+    assert_eq!(
+        escaped,
+        "a\\u{1b}b\\tc\\u{202a}\\u{202b}\\u{202c}\\u{202d}\\u{202e}\
+         d\\u{2066}\\u{2067}\\u{2068}\\u{2069}e\\u{200e}\\u{200f}f\\u{61c}\
+         g\u{200c}h\u{200d}i\u{200b}j\u{feff}ké\\",
+        "must escape Cc and the Trojan-Source bidi set and nothing else"
+    );
+}
+
 fn table(headers: &[&str], rows: &[&[&str]]) -> tabled::Table {
     let mut builder = tabled::builder::Builder::default();
     builder.push_record(headers.iter().copied());
@@ -236,13 +334,41 @@ fn display_width(line: &str) -> usize {
         .sum()
 }
 
+fn records(rows: &[&[&str]]) -> Vec<Vec<String>> {
+    rows.iter()
+        .map(|row| row.iter().map(|cell| (*cell).to_string()).collect())
+        .collect()
+}
+
 #[test]
-fn write_table_unbounded_preserves_existing_table_bytes() {
+fn write_table_records_escapes_cells_and_headers() {
+    let mut buf = Vec::new();
+    write_table_records(
+        &["N\u{202e}AME"],
+        records(&[&["ev\u{1b}[2Jil\u{202e}"]]),
+        None,
+        &mut buf,
+    );
+
+    let output = String::from_utf8(buf).unwrap();
+    assert!(
+        !output.contains('\u{1b}') && !output.contains('\u{202e}'),
+        "no raw control or bidi character may reach the terminal: {output:?}"
+    );
+    assert!(
+        output.contains("\\u{1b}") && output.contains("\\u{202e}"),
+        "both must survive in escaped form: {output:?}"
+    );
+}
+
+#[test]
+fn write_table_records_unbounded_preserves_existing_table_bytes() {
     let expected = format!("{}\n", table(&["Name", "State"], &[&["long enough", "OK"]]));
     let mut buf = Vec::new();
 
-    write_table(
-        table(&["Name", "State"], &[&["long enough", "OK"]]),
+    write_table_records(
+        &["Name", "State"],
+        records(&[&["long enough", "OK"]]),
         None,
         &mut buf,
     );
@@ -251,13 +377,11 @@ fn write_table_unbounded_preserves_existing_table_bytes() {
 }
 
 #[test]
-fn write_table_wraps_ascii_lines_to_injected_width() {
+fn write_table_records_wraps_ascii_lines_to_injected_width() {
     let mut buf = Vec::new();
-    write_table(
-        table(
-            &["Description", "State"],
-            &[&["a long sequence of words that must wrap", "OK"]],
-        ),
+    write_table_records(
+        &["Description", "State"],
+        records(&[&["a long sequence of words that must wrap", "OK"]]),
         Some(24),
         &mut buf,
     );
@@ -268,10 +392,11 @@ fn write_table_wraps_ascii_lines_to_injected_width() {
 }
 
 #[test]
-fn write_table_wraps_unicode_lines_to_injected_display_width() {
+fn write_table_records_wraps_unicode_lines_to_injected_display_width() {
     let mut buf = Vec::new();
-    write_table(
-        table(&["City", "State"], &[&["東京市場東京市場", "OK"]]),
+    write_table_records(
+        &["City", "State"],
+        records(&[&["東京市場東京市場", "OK"]]),
         Some(20),
         &mut buf,
     );
@@ -282,16 +407,14 @@ fn write_table_wraps_unicode_lines_to_injected_display_width() {
 }
 
 #[test]
-fn write_table_clamps_to_structural_floor_without_replacing_width_two_scalar() {
+fn write_table_records_clamps_to_structural_floor_without_replacing_width_two_scalar() {
     let mut buf = Vec::new();
-    write_table(
-        table(
-            &["Description", "State"],
-            &[&[
-                "a very long ASCII value that should surrender width first",
-                "東",
-            ]],
-        ),
+    write_table_records(
+        &["Description", "State"],
+        records(&[&[
+            "a very long ASCII value that should surrender width first",
+            "東",
+        ]]),
         Some(1),
         &mut buf,
     );

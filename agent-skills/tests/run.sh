@@ -31,7 +31,8 @@ sh "$HERE/../../content/skills/bzr-weekly-status/tests/run.sh" || rc=1
 sh "$HERE/../../content/skills/bzr-release-readiness/tests/run.sh" || rc=1
 sh "$HERE/../../content/skills/bzr-project-manager-reporting/tests/run.sh" || rc=1
 bash "$HERE/../../content/skills/bzr-dependency-analysis/tests/skill-contract.sh" || rc=1
-python3 "$HERE/../../content/skills/bzr-dependency-analysis/tests/test_presentation.py" || rc=1
+python3 -m unittest discover \
+  -s "$HERE/../../content/skills/bzr-dependency-analysis/tests" -p 'test_*.py' || rc=1
 bash "$HERE/release-readiness-recorder-test.sh" || rc=1
 
 # Self-tests

@@ -2,7 +2,9 @@ use std::io::Write;
 
 use colored::Colorize;
 
-use crate::output::formatting::{escape_table_control, write_divider, write_formatted_projected};
+use crate::output::formatting::{
+    escape_terminal_controls, write_divider, write_formatted_projected,
+};
 use crate::types::comment::Comment;
 use crate::types::output::OutputFormat;
 use crate::validation::fields::FieldProjection;
@@ -27,8 +29,8 @@ pub fn write_comments<W: Write + ?Sized>(
                 "{} #{} by {} ({})",
                 "Comment".bold(),
                 count,
-                c.creator.as_deref().unwrap_or("unknown").cyan(),
-                c.creation_time.as_deref().unwrap_or(""),
+                escape_terminal_controls(c.creator.as_deref().unwrap_or("unknown")).cyan(),
+                escape_terminal_controls(c.creation_time.as_deref().unwrap_or("")),
             );
             if c.is_private.unwrap_or(false) {
                 let _ = writeln!(out, "  {}", "[PRIVATE]".red());
@@ -37,14 +39,18 @@ pub fn write_comments<W: Write + ?Sized>(
                 let tags = c
                     .tags
                     .iter()
-                    .map(|tag| escape_table_control(tag))
+                    .map(|tag| escape_terminal_controls(tag))
                     .collect::<Vec<_>>()
                     .join(", ");
                 let _ = writeln!(out, "  {} {tags}", "Tags:".bold());
             }
             let _ = writeln!(out);
+            // Split first, escape second: `lines()` consumes the real newlines,
+            // so the seam never sees one and a pasted log keeps its shape. A tab
+            // inside a body does render as `\t` — one predicate serves prose and
+            // cells alike, and a raw tab breaks a table frame (ADR 0065).
             for line in c.text.as_deref().unwrap_or("").lines() {
-                let _ = writeln!(out, "  {line}");
+                let _ = writeln!(out, "  {}", escape_terminal_controls(line));
             }
             let _ = writeln!(out);
             write_divider(out);

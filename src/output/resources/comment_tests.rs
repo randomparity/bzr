@@ -229,3 +229,19 @@ fn bug_header_names_the_bug() {
         "header should name the bug: {text}"
     );
 }
+
+// ── terminal-control escaping (ADR 0065) ─────────────────────────
+
+use crate::test_helpers::{
+    assert_terminal_controls_escaped as assert_escaped, TERMINAL_CONTROL_PROBE as PROBE,
+};
+
+#[test]
+fn comment_writer_table_escapes_terminal_controls() {
+    let mut comment = make_comment(1, &format!("first {PROBE}\nsecond {PROBE}"));
+    comment.creator = Some(PROBE.into());
+    comment.creation_time = Some(PROBE.into());
+    comment.tags = vec![PROBE.into()];
+
+    assert_escaped(&capture(OutputFormat::Table, &[comment]), "write_comments");
+}

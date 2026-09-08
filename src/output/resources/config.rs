@@ -3,7 +3,9 @@ use std::io::Write;
 use serde::Serialize;
 
 use crate::config::{CredentialSource, KeyringAccount};
-use crate::output::formatting::{mask_api_key, write_field, write_formatted, write_optional_field};
+use crate::output::formatting::{
+    escape_terminal_controls, mask_api_key, write_field, write_formatted, write_optional_field,
+};
 use crate::types::output::OutputFormat;
 use crate::types::transport::AuthMethod;
 
@@ -129,7 +131,7 @@ fn write_api_key(out: &mut (impl Write + ?Sized), s: &ServerDisplayInfo) {
 }
 
 fn write_server(out: &mut (impl Write + ?Sized), name: &str, s: &ServerDisplayInfo) {
-    let _ = writeln!(out, "\n[{name}]");
+    let _ = writeln!(out, "\n[{}]", escape_terminal_controls(name));
     write_field(out, "URL", &s.url);
     write_optional_field(out, "Email", s.email.as_deref());
     write_api_key(out, s);
@@ -148,9 +150,13 @@ fn write_server(out: &mut (impl Write + ?Sized), name: &str, s: &ServerDisplayIn
 
 pub fn write_config<W: Write + ?Sized>(view: &ConfigView, format: OutputFormat, out: &mut W) {
     write_formatted(view, format, out, |v, out| {
-        let _ = writeln!(out, "Config file: {}\n", v.config_file);
+        let _ = writeln!(
+            out,
+            "Config file: {}\n",
+            escape_terminal_controls(&v.config_file)
+        );
         if let Some(ref def) = v.default_server {
-            let _ = writeln!(out, "Default server: {def}");
+            let _ = writeln!(out, "Default server: {}", escape_terminal_controls(def));
         }
         if v.servers.is_empty() {
             let _ = writeln!(out, "No servers configured.");

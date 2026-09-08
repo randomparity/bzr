@@ -3,12 +3,11 @@ use std::io::Write;
 
 use colored::Colorize;
 use serde_json::Value;
-use tabled::builder::Builder;
 
 use crate::output::formatting::{
-    colorize_status, disable_color_for_tests, render_flags_inline, shorten_email, truncate,
-    write_divider, write_field, write_formatted, write_json_family, write_table,
-    SUMMARY_TRUNCATE_WIDTH,
+    disable_color_for_tests, escape_terminal_controls, render_flags_inline, shorten_email,
+    truncate, write_divider, write_field, write_formatted, write_json_family, write_status_field,
+    write_table_records, SUMMARY_TRUNCATE_WIDTH,
 };
 use crate::types::bug::{
     apply_exclude, canonical_excludes, canonical_field_list, default_selected_fields,
@@ -167,16 +166,19 @@ pub fn write_bugs<W: Write + ?Sized, E: Write + ?Sized>(
                 return;
             }
             let columns = resolve_columns(spec, err);
-            let mut builder = Builder::default();
-            builder.push_record(columns.iter().map(|field| (*field).header()));
-            for bug in bugs {
-                builder.push_record(
+            let headers: Vec<String> = columns.iter().map(|field| (*field).header()).collect();
+            let header_refs: Vec<&str> = headers.iter().map(String::as_str).collect();
+            write_table_records(
+                &header_refs,
+                bugs.iter().map(|bug| {
                     columns
                         .iter()
-                        .map(|field| render_selected_field(*field, bug)),
-                );
-            }
-            write_table(builder.build(), width, out);
+                        .map(|field| render_selected_field(*field, bug))
+                        .collect()
+                }),
+                width,
+                out,
+            );
         }
     }
 }
@@ -321,10 +323,9 @@ const BUILTIN_DETAIL_FIELDS: &[BuiltinDetailField] = &[
 
 fn render_builtin_detail_field(field: BuiltinDetailField, bug: &Bug) -> Option<DetailRow> {
     let value = match field.value {
-        DetailValue::Status => bug.status.as_deref().map_or_else(
-            || "-".to_string(),
-            |status| colorize_status(status).to_string(),
-        ),
+        // Raw: `write_bug_detail_table` routes this one row through
+        // `write_status_field`, which escapes before it colours.
+        DetailValue::Status => bug.status.as_deref().unwrap_or("-").to_string(),
         DetailValue::OptionalText(accessor) => accessor(bug).unwrap_or("-").to_string(),
         DetailValue::OptionalId(accessor) => accessor(bug)?.to_string(),
         DetailValue::OptionalHours(accessor) => accessor(bug)?.to_string(),
@@ -376,7 +377,7 @@ fn write_bug_detail_table(bug: &Bug, spec: ColumnSpec<'_>, out: &mut (impl Write
             "{} #{}\n{}\n",
             "Bug".bold(),
             bug.id.to_string().bold(),
-            bug.summary.as_deref().unwrap_or("unknown").bold()
+            escape_terminal_controls(bug.summary.as_deref().unwrap_or("unknown")).bold()
         );
     } else {
         let _ = writeln!(out, "{} #{}\n", "Bug".bold(), bug.id.to_string().bold());
@@ -386,7 +387,11 @@ fn write_bug_detail_table(bug: &Bug, spec: ColumnSpec<'_>, out: &mut (impl Write
             continue;
         }
         if let Some(row) = render_builtin_detail_field(*detail, bug) {
-            write_field(out, row.label, &row.value);
+            if detail.field == BugField::Status {
+                write_status_field(out, row.label, &row.value);
+            } else {
+                write_field(out, row.label, &row.value);
+            }
         }
     }
     for name in selected_custom_detail_fields(spec) {
@@ -404,20 +409,24 @@ pub fn write_history_table<W: Write + ?Sized>(history: &[HistoryEntry], out: &mu
             out,
             "{} by {} ({})",
             "Change".bold(),
-            entry.who.cyan(),
-            entry.when,
+            escape_terminal_controls(&entry.who).cyan(),
+            escape_terminal_controls(&entry.when),
         );
         for change in &entry.changes {
             let attachment_suffix = change
                 .attachment_id
                 .map(|id| format!(" [attachment #{id}]"))
                 .unwrap_or_default();
-            let _ = writeln!(out, "  {}{attachment_suffix}:", change.field_name.bold());
+            let _ = writeln!(
+                out,
+                "  {}{attachment_suffix}:",
+                escape_terminal_controls(&change.field_name).bold()
+            );
             if let Some(removed) = change.removed.as_deref().filter(|value| !value.is_empty()) {
-                let _ = writeln!(out, "    - {}", removed.red());
+                let _ = writeln!(out, "    - {}", escape_terminal_controls(removed).red());
             }
             if let Some(added) = change.added.as_deref().filter(|value| !value.is_empty()) {
-                let _ = writeln!(out, "    + {}", added.green());
+                let _ = writeln!(out, "    + {}", escape_terminal_controls(added).green());
             }
         }
         write_divider(out);
@@ -450,22 +459,24 @@ pub fn write_bug_links<W: Write + ?Sized>(
         if links.is_empty() {
             return;
         }
-        let mut builder = Builder::default();
-        builder.push_record(["ID", "RELATION", "DIR", "DEPTH", "STATUS", "SUMMARY"]);
-        for link in links {
-            builder.push_record([
-                link.id.to_string(),
-                link.relation.as_str().to_string(),
-                link.direction.as_str().to_string(),
-                link.depth.to_string(),
-                link.status.clone().unwrap_or_default(),
-                link.summary
-                    .as_deref()
-                    .map(|s| truncate(s, SUMMARY_TRUNCATE_WIDTH))
-                    .unwrap_or_default(),
-            ]);
-        }
-        write_table(builder.build(), width, out);
+        write_table_records(
+            &["ID", "RELATION", "DIR", "DEPTH", "STATUS", "SUMMARY"],
+            links.iter().map(|link| {
+                vec![
+                    link.id.to_string(),
+                    link.relation.as_str().to_string(),
+                    link.direction.as_str().to_string(),
+                    link.depth.to_string(),
+                    link.status.clone().unwrap_or_default(),
+                    link.summary
+                        .as_deref()
+                        .map(|s| truncate(s, SUMMARY_TRUNCATE_WIDTH))
+                        .unwrap_or_default(),
+                ]
+            }),
+            width,
+            out,
+        );
     });
 }
 
@@ -499,50 +510,56 @@ fn write_bug_adjacency_table(
     out: &mut (impl Write + ?Sized),
 ) {
     let _ = writeln!(out, "Requests");
-    let mut requests = Builder::default();
-    requests.push_record(["REQUESTED", "RESULT"]);
-    for request in &result.requests {
-        let (requested, outcome) = match request {
-            BugAdjacencyRequest::Success { requested, bug_id } => (requested, bug_id.to_string()),
-            BugAdjacencyRequest::Failure { requested, error } => {
-                (requested, format_adjacency_error(*error))
-            }
-        };
-        requests.push_record([requested.clone(), outcome]);
-    }
-    write_table(requests.build(), width, out);
+    write_table_records(
+        &["REQUESTED", "RESULT"],
+        result.requests.iter().map(|request| {
+            let (requested, outcome) = match request {
+                BugAdjacencyRequest::Success { requested, bug_id } => {
+                    (requested, bug_id.to_string())
+                }
+                BugAdjacencyRequest::Failure { requested, error } => {
+                    (requested, format_adjacency_error(*error))
+                }
+            };
+            vec![requested.clone(), outcome]
+        }),
+        width,
+        out,
+    );
 
     let _ = writeln!(out, "\nCanonical bugs");
-    let mut bugs = Builder::default();
-    bugs.push_record([
-        "ID",
-        "SUMMARY",
-        "STATUS",
-        "RESOLUTION",
-        "PRODUCT",
-        "VERSION",
-        "ASSIGNEE",
-        "LAST CHANGE TIME",
-        "TARGET MILESTONE",
-        "BLOCKS",
-        "DEPENDS ON",
-    ]);
-    for bug in &result.bugs {
-        bugs.push_record([
-            bug.id.to_string(),
-            bug.summary.clone().unwrap_or_default(),
-            bug.status.clone().unwrap_or_default(),
-            bug.resolution.clone().unwrap_or_default(),
-            bug.product.clone().unwrap_or_default(),
-            join_strings(bug.version.as_deref()),
-            bug.assigned_to.clone().unwrap_or_default(),
-            bug.last_change_time.clone().unwrap_or_default(),
-            bug.target_milestone.clone().unwrap_or_default(),
-            join_ids(&bug.blocks),
-            join_ids(&bug.depends_on),
-        ]);
-    }
-    write_table(bugs.build(), width, out);
+    write_table_records(
+        &[
+            "ID",
+            "SUMMARY",
+            "STATUS",
+            "RESOLUTION",
+            "PRODUCT",
+            "VERSION",
+            "ASSIGNEE",
+            "LAST CHANGE TIME",
+            "TARGET MILESTONE",
+            "BLOCKS",
+            "DEPENDS ON",
+        ],
+        result.bugs.iter().map(|bug| {
+            vec![
+                bug.id.to_string(),
+                bug.summary.clone().unwrap_or_default(),
+                bug.status.clone().unwrap_or_default(),
+                bug.resolution.clone().unwrap_or_default(),
+                bug.product.clone().unwrap_or_default(),
+                join_strings(bug.version.as_deref()),
+                bug.assigned_to.clone().unwrap_or_default(),
+                bug.last_change_time.clone().unwrap_or_default(),
+                bug.target_milestone.clone().unwrap_or_default(),
+                join_ids(&bug.blocks),
+                join_ids(&bug.depends_on),
+            ]
+        }),
+        width,
+        out,
+    );
 }
 
 fn format_adjacency_error(error: BugAdjacencyError) -> String {
@@ -594,10 +611,10 @@ fn write_unavailable_block(id: &str, error: &str, out: &mut (impl Write + ?Sized
         out,
         "{} #{} — {}",
         "Bug".bold(),
-        id.bold(),
+        escape_terminal_controls(id).bold(),
         "UNAVAILABLE".red().bold()
     );
-    let _ = writeln!(out, "  Error: {error}");
+    let _ = writeln!(out, "  Error: {}", escape_terminal_controls(error));
 }
 
 #[cfg(test)]

@@ -3,8 +3,7 @@ use std::io::Write;
 use serde::Serialize;
 
 use crate::output::formatting::{
-    escape_table_control, opt_yes_no, write_formatted, write_formatted_projected,
-    write_table_records,
+    opt_yes_no, write_formatted, write_formatted_projected, write_table_records,
 };
 use crate::types::{FieldName, FieldValue, OutputFormat};
 use crate::validation::fields::FieldProjection;
@@ -64,14 +63,12 @@ pub fn write_field_names<W: Write + ?Sized>(
     write_formatted_projected(names, format, projection, out, |names, out| {
         write_table_records(
             FIELD_NAME_HEADERS,
-            names.iter().map(|row| {
-                // The server chooses these names; `source` is a closed set
-                // of three literals and needs no escaping.
-                vec![
-                    escape_table_control(&row.name),
-                    row.source.as_str().to_string(),
-                ]
-            }),
+            // The server chooses these names, so they need escaping; the table
+            // seam escapes every cell, so neither is wrapped here. Escaping
+            // twice would double the backslash in an already-escaped name.
+            names
+                .iter()
+                .map(|row| vec![row.name.clone(), row.source.as_str().to_string()]),
             table_width,
             out,
         );
