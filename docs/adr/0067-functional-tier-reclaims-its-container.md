@@ -54,9 +54,19 @@ dependency-refusal detector; it makes the exit status honest for any refused rem
 
 - The second and later `make functional-test` in a checkout pays a container start again unless
   `BZR_FUNC_KEEP=1` is exported, and a failing run no longer leaves its container for post-mortem
-  inspection — `CONTRIBUTING.md` already directs a diagnostic run to start from `reset`, so that
-  was never the documented path. ADR 0058's consequence that `make functional-compare` destroys a
-  container held for `make functional-test` now applies only under `BZR_FUNC_KEEP`.
+  inspection. `tests/functional/README.md` does document that inspection, so it gains the
+  `BZR_FUNC_KEEP=1` caveat rather than being left wrong; `CONTRIBUTING.md`'s diagnostic recipe
+  already starts from `reset` and is unaffected. ADR 0058's consequence that
+  `make functional-compare` destroys a container held for `make functional-test` now applies only
+  under `BZR_FUNC_KEEP`.
+- Anything that consumes the container *after* the run must now ask for it: `tools/record-demo.sh`
+  and the three demo-recording documents it serves say `BZR_FUNC_KEEP=1 make functional-test`.
+- The reclaim force-removes whatever `BZR_FUNC_CONTAINER` names, so that override now decides what
+  gets destroyed rather than only what gets addressed; its README row says so. `BZR_FUNC_PORT` is
+  not part of that resolution — with it set, the run tests whatever answers on that port while the
+  trap still reclaims the checkout-scoped name. No prefix confinement is added: the override exists
+  so a developer can point the tier at a container of their choosing, and confining it would
+  silently withdraw that.
 - Two runs sharing a checkout id — which `CLAUDE.md` documents as unsupported, and which covers
   `make functional-test` beside `make functional-compare` in one checkout — now destroy each other's
   container instead of merely interfering with its data. `BZR_FUNC_KEEP=1` or a second checkout is

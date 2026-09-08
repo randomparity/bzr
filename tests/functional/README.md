@@ -55,7 +55,7 @@ tests/functional/setup-bugzilla.sh stop
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BZR_FUNC_PORT` | `(runtime-assigned)` | Host port mapped to container port 80 (overrides the runtime-assigned default when set) |
-| `BZR_FUNC_CONTAINER` | `bzr-func-test-<version>-<checkout-id>` | Container name |
+| `BZR_FUNC_CONTAINER` | `bzr-func-test-<version>-<checkout-id>` | Container name. The runner force-removes this container when it exits, unless `BZR_FUNC_KEEP` is set |
 | `BZR_FUNC_IMAGE` | `localhost/bzr-func-<version>:latest` | Image name |
 | `BZR_FUNC_TIMEOUT` | `90` (`240` for bz52/bz53) | Health check timeout in seconds |
 | `BZR_FUNC_KEEP` | `(unset)` | Any non-empty value keeps the container after `run-tests.sh` exits instead of reclaiming it |
@@ -171,4 +171,10 @@ so this applies to containers left by runs predating that change, by runs with
 reclaim its container.
 
 **Tests fail after image rebuild:**
-The container starts fresh each time. If tests fail, check `tests/functional/setup-bugzilla.sh logs` for Bugzilla errors.
+The container starts fresh each time. If tests fail, check `tests/functional/setup-bugzilla.sh logs` for Bugzilla errors — the run reclaims its container on exit, so re-run it as `BZR_FUNC_KEEP=1 make functional-test` first to keep the container available for that inspection.
+
+**`setup-bugzilla.sh stop` (or `make functional-stop`) exits non-zero:**
+`stop` reports whether the container is really gone. It fails when something is
+holding the container, and also when the container runtime is not answering at
+all — a stopped Docker Desktop, say — because removal cannot be confirmed then.
+Start the runtime and retry.

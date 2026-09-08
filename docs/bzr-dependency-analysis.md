@@ -134,7 +134,7 @@ never creates or updates a Bugzilla resource.
 
 ```sh
 cargo build --release
-make functional-test
+BZR_FUNC_KEEP=1 make functional-test
 tools/record-demo.sh dependency-analysis
 ```
 

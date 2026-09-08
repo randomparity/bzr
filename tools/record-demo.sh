@@ -243,7 +243,7 @@ if [[ "${1:-}" == "project-manager-reporting" ]]; then
     exit 1
   }
   curl -fsS "$BZ_URL/rest/version" >/dev/null || {
-    echo "ERROR: no Bugzilla at $BZ_URL — run: make functional-test" >&2
+    echo "ERROR: no Bugzilla at $BZ_URL — run: BZR_FUNC_KEEP=1 make functional-test" >&2
     exit 1
   }
   pm_workdir=$(mktemp -d)
@@ -366,7 +366,7 @@ if [[ "${1:-}" == "release-readiness" ]]; then
     max
   ' <<<"$release_matches") || {
     echo "ERROR: release-readiness demo fixture not found." >&2
-    echo "  Run: make functional-test" >&2
+    echo "  Run: BZR_FUNC_KEEP=1 make functional-test" >&2
     echo "  Then rerun: tools/record-demo.sh release-readiness" >&2
     exit 1
   }
@@ -492,7 +492,7 @@ if [[ "${1:-}" == "dependency-analysis" ]]; then
     <<<"$dependency_matches")
   if [[ -z "$dependency_root" ]]; then
     echo "ERROR: dependency-analysis demo fixture not found." >&2
-    echo "  Run: make functional-test" >&2
+    echo "  Run: BZR_FUNC_KEEP=1 make functional-test" >&2
     echo "  Then rerun: tools/record-demo.sh dependency-analysis" >&2
     exit 1
   fi
