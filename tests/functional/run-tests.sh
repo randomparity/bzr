@@ -60,6 +60,7 @@ CURRENT_TEST_GROUP=""
 
 # ── Config isolation ─────────────────────────────────────────────────
 FUNC_CONFIG_DIR=$(mktemp -d /tmp/bzr-func-config.XXXXXX)
+FUNC_XDG_ORIG="${XDG_CONFIG_HOME:-}"
 export XDG_CONFIG_HOME="$FUNC_CONFIG_DIR"
 FUNC_ATTACH_FILE="$FUNC_CONFIG_DIR/attach.txt"
 FUNC_DOWNLOAD_FILE="$FUNC_CONFIG_DIR/downloaded.txt"
@@ -69,6 +70,16 @@ FUNC_PRIVATE_XMLRPC_FILE="$FUNC_CONFIG_DIR/private-xmlrpc.txt"
 cleanup() {
     rm -rf "$FUNC_CONFIG_DIR"
     _cleanup_tmpfiles
+    # Reclaim the container this run used (ADR 0067). Guarded: the script runs
+    # under `set -e` and an EXIT trap must not change the run's exit status.
+    # XDG_CONFIG_HOME is restored because the line above deleted the directory
+    # the isolation redirect points at, and the runtime reads its config there.
+    if [[ -z "${BZR_FUNC_KEEP:-}" ]]; then
+        XDG_CONFIG_HOME="$FUNC_XDG_ORIG" BZR_BZ_VERSION="$BZ_VERSION" \
+            "$SCRIPT_DIR/setup-bugzilla.sh" stop ||
+            echo "WARNING: could not reclaim the Bugzilla container (see above);" \
+                "set BZR_FUNC_KEEP=1 to keep it deliberately." >&2
+    fi
     return 0
 }
 trap cleanup EXIT

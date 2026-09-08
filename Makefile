@@ -194,13 +194,16 @@ functional-build: ## Build the Bugzilla container image
 functional-start: ## Start the Bugzilla container
 	tests/functional/setup-bugzilla.sh start
 
+# The runner reclaims its container on exit (ADR 0067). Export BZR_FUNC_KEEP=1 to
+# keep it warm across runs; `functional-start` then reuses it as before.
 functional-test: functional-start ## Run functional tests against real Bugzilla
 	tests/functional/run-tests.sh
 
 # The comparison tier is meant to compare against a server the run set up, and
-# `functional-start` silently reuses a container an earlier `make functional-test`
-# left running. The precise coupling is uncharacterised (see ADR 0058); `reset`
-# removes the variable for the price of a container rebuild.
+# `functional-start` reuses a container an earlier `make functional-test` left
+# running -- which, since ADR 0067, happens only when that run set BZR_FUNC_KEEP
+# or the container was started by hand. The precise coupling is uncharacterised
+# (see ADR 0058); `reset` removes the variable for the price of a rebuild.
 functional-compare: release ## Compare bzr and python-bugzilla (recreates the container)
 	tests/functional/setup-bugzilla.sh reset
 	BZR_COMPARE_BIN="$(BZR_COMPARE_BIN)" tests/functional/run-compare.sh

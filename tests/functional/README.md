@@ -57,6 +57,7 @@ tests/functional/setup-bugzilla.sh stop
 | `BZR_FUNC_CONTAINER` | `bzr-func-test-<version>-<checkout-id>` | Container name |
 | `BZR_FUNC_IMAGE` | `localhost/bzr-func-<version>:latest` | Image name |
 | `BZR_FUNC_TIMEOUT` | `90` (`240` for bz52/bz53) | Health check timeout in seconds |
+| `BZR_FUNC_KEEP` | `(unset)` | Any non-empty value keeps the container after `run-tests.sh` exits instead of reclaiming it |
 | `BZR_BIN` | `target/release/bzr` | Path to pre-built bzr binary (skips cargo build) |
 | `BZR_FUNC_TLS_PORT` | `(resolved backend port) + 1000` | Host port the TLS proxy listens on for the ad-hoc TLS phase |
 | `BZR_FUNC_REDHAT_PORT` | `(resolved backend port) + 2000` | Host port for the Red Hat response-shape profile |
@@ -163,7 +164,9 @@ Container names are checkout-scoped, so a container started from a worktree
 or clone that no longer exists is not discoverable by any make target or
 `setup-bugzilla.sh` invocation. Find them with `podman ps -a --filter
 name=bzr-func-test-` (or `docker`) and remove with `podman rm -f <name>`
-(or `docker`).
+(or `docker`). Since ADR 0067 the runner reclaims its own container on exit,
+so this applies to containers left by runs predating that change, or by runs
+with `BZR_FUNC_KEEP` set.
 
 **Tests fail after image rebuild:**
 The container starts fresh each time. If tests fail, check `tests/functional/setup-bugzilla.sh logs` for Bugzilla errors.
