@@ -14,7 +14,7 @@ from urllib.parse import parse_qsl, urlparse
 
 
 SCHEMA = "bzr-dependency-collection/v1"
-BZR_SCHEMA_VERSION = "3.0.6"
+BZR_SCHEMA_VERSION = "3.0.7"
 MAX_NODES = 9_999
 MAX_RELATIONSHIPS = 9_999
 TIMESTAMP_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\Z")
@@ -67,6 +67,9 @@ ERROR_STRING_KEYS = {
     "server",
     "expected",
     "actual",
+    "capability",
+    "capability_status",
+    "operation",
 }
 ERROR_INTEGER_KEYS = {
     "exit_code",
@@ -75,6 +78,7 @@ ERROR_INTEGER_KEYS = {
     "api_code",
     "succeeded",
     "failed",
+    "limit_bytes",
 }
 ERROR_KEYS = ERROR_STRING_KEYS | ERROR_INTEGER_KEYS
 FATAL_LIMITATIONS = {
@@ -441,7 +445,7 @@ def validate_error_envelope(value, returncode):
             raise FatalCollection("collection-malformed-output", "malformed-output")
         if key in ERROR_INTEGER_KEYS and type(item) is not int:
             raise FatalCollection("collection-malformed-output", "malformed-output")
-    if not 1 <= value["exit_code"] <= 14 or value["exit_code"] != returncode:
+    if not 1 <= value["exit_code"] <= 16 or value["exit_code"] != returncode:
         raise FatalCollection("collection-malformed-output", "malformed-output")
     return value
 

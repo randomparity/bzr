@@ -76,9 +76,14 @@ impl XmlRpcClient {
         if (require_success && !status.is_success())
             || (!require_success && (status.is_client_error() || status.is_server_error()))
         {
-            let body = match resp.text().await {
+            let body = match crate::http::read_body_bounded(resp, "XML-RPC error response").await {
                 Ok(body) => body,
-                Err(e) => format!("<failed to read response body: {e}>"),
+                Err(crate::http::BodyReadError::TooLarge { limit_bytes, .. }) => {
+                    format!("<response body exceeds the {limit_bytes}-byte limit>")
+                }
+                Err(crate::http::BodyReadError::Transport(e)) => {
+                    format!("<failed to read response body: {e}>")
+                }
             };
             trace_http_error(status, &body);
             return Err(BzrError::HttpStatus {
@@ -87,7 +92,7 @@ impl XmlRpcClient {
             });
         }
 
-        let body_text = resp.text().await?;
+        let body_text = crate::http::read_body_bounded(resp, &format!("XML-RPC {method}")).await?;
         tracing::trace!(body_len = body_text.len(), "XML-RPC response received");
 
         parse_response(&body_text)

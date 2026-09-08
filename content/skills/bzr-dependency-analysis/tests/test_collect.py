@@ -17,7 +17,7 @@ ANALYZE = SKILL_ROOT / "scripts" / "analyze.py"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 RUNNER = FIXTURES / "recording_runner.py"
 TIMESTAMP = "2026-08-28T12:00:00Z"
-SCHEMA_VERSION = "3.0.6"
+SCHEMA_VERSION = "3.0.7"
 DETAIL_FIELDS = (
     "id,summary,status,resolution,assigned_to,last_change_time,blocks,depends_on"
 )
@@ -483,7 +483,7 @@ class CollectorTestCase(unittest.TestCase):
                 "preserved = os.environ.get('DEPENDENCY_TEST_PRESERVED') == 'yes'\n"
                 "error_type = 'http' if preserved else 'api'\n"
                 "exit_code = 5 if preserved else 4\n"
-                "json.dump({'schema_version': '3.0.6', 'error': {\n"
+                "json.dump({'schema_version': '3.0.7', 'error': {\n"
                 "    'type': error_type, 'message': 'private',\n"
                 "    'exit_code': exit_code}}, sys.stderr)\n"
                 "sys.stderr.write('\\n')\n"
@@ -507,7 +507,7 @@ class CollectorTestCase(unittest.TestCase):
             script = Path(directory) / "utf8_output.py"
             script.write_text(
                 "import json\n"
-                "json.dump({'schema_version': '3.0.6', 'data': "
+                "json.dump({'schema_version': '3.0.7', 'data': "
                 "{'summary': 'Résumé'}}, open(1, 'w', encoding='utf-8'), "
                 "ensure_ascii=False)\n",
                 encoding="utf-8",
@@ -524,7 +524,7 @@ class CollectorTestCase(unittest.TestCase):
         self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
 
     def test_validate_envelope_version_accepts_same_major_minor_patch_drift(self):
-        for candidate in ("3.0.6", "3.1.0", "3.9.9"):
+        for candidate in ("3.0.7", "3.1.0", "3.9.9"):
             with self.subTest(candidate=candidate):
                 COLLECTOR.validate_envelope_version({"schema_version": candidate})
 
@@ -885,13 +885,17 @@ class CollectorTestCase(unittest.TestCase):
                 self.assertEqual(log, [argv])
 
     def test_structured_error_exit_code_must_be_in_contract_range(self):
+        # 17 is one past the published maximum in schemas/error.json. This case
+        # used to pin 15, which stopped being out of range when
+        # unsupported_server_capability shipped; the validator lagged the
+        # contract and this test held the lag in place (#740).
         argv = view_argv("primary", 1)
         response = {
             "argv": argv,
-            "exit_code": 15,
+            "exit_code": 17,
             "stderr": {
                 "schema_version": SCHEMA_VERSION,
-                "error": {"type": "api", "message": "private", "exit_code": 15},
+                "error": {"type": "api", "message": "private", "exit_code": 17},
             },
         }
         result, output, log = self.run_collector(
@@ -1405,6 +1409,42 @@ class CollectorTestCase(unittest.TestCase):
             result.stderr,
             b"policy error: policy must be readable valid JSON\n",
         )
+
+
+class ErrorEnvelopeTests(unittest.TestCase):
+    """The validator mirrors bzr's error contract; it must not lag it."""
+
+    def test_response_too_large_envelope_is_accepted(self):
+        envelope = {
+            "type": "response_too_large",
+            "message": "response body: server response exceeds the limit",
+            "exit_code": 16,
+            "operation": "response body",
+            "limit_bytes": 67108864,
+        }
+        self.assertEqual(
+            COLLECTOR.validate_error_envelope(envelope, 16),
+            envelope,
+        )
+
+    def test_unsupported_server_capability_envelope_is_accepted(self):
+        envelope = {
+            "type": "unsupported_server_capability",
+            "message": "bug links: the server does not advertise the extension",
+            "exit_code": 15,
+            "capability": "RedHat",
+            "capability_status": "absent",
+        }
+        self.assertEqual(
+            COLLECTOR.validate_error_envelope(envelope, 15),
+            envelope,
+        )
+
+    def test_exit_code_above_the_published_maximum_is_rejected(self):
+        with self.assertRaises(COLLECTOR.FatalCollection):
+            COLLECTOR.validate_error_envelope(
+                {"type": "api", "message": "x", "exit_code": 17}, 17
+            )
 
 
 if __name__ == "__main__":

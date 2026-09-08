@@ -1,3 +1,5 @@
+#![expect(clippy::disallowed_methods, clippy::unwrap_used, clippy::panic)]
+
 use super::*;
 
 // ── Timeout + retry helpers (#311) ──────────────────────────────────
@@ -101,4 +103,154 @@ fn utf8_prefix_backs_off_without_exceeding_max() {
     assert_eq!(utf8_prefix("abcdef", 3), "abc");
     // A cap at or beyond the length returns the whole string.
     assert_eq!(utf8_prefix(s, 100), s);
+}
+
+// ── Bounded response-body reads (#740) ──────────────────────────────
+
+/// Serve `body` once over wiremock and read it back under `limit`.
+async fn read_served_body(
+    body: &str,
+    limit: u64,
+) -> std::result::Result<String, super::BodyReadError> {
+    let server = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_string(body))
+        .mount(&server)
+        .await;
+    let response = reqwest::Client::new()
+        .get(server.uri())
+        .send()
+        .await
+        .unwrap();
+    read_body_within(response, "test read", limit).await
+}
+
+#[tokio::test]
+async fn read_body_within_refuses_a_body_over_the_limit() {
+    let error = read_served_body(&"a".repeat(17), 16).await.unwrap_err();
+
+    let BodyReadError::TooLarge {
+        operation,
+        limit_bytes,
+    } = error
+    else {
+        panic!("expected TooLarge, got {error:?}");
+    };
+    assert_eq!(operation, "test read");
+    assert_eq!(limit_bytes, 16);
+}
+
+#[tokio::test]
+async fn read_body_within_returns_a_body_at_the_limit() {
+    let body = "a".repeat(16);
+    assert_eq!(read_served_body(&body, 16).await.unwrap(), body);
+}
+
+#[tokio::test]
+async fn read_body_within_returns_a_short_body() {
+    assert_eq!(read_served_body("hi", 16).await.unwrap(), "hi");
+}
+
+#[tokio::test]
+async fn read_body_within_reports_a_transport_failure() {
+    // wiremock cannot express a truncated body, so serve one from a raw socket:
+    // declare 32 bytes, write four, then drop the connection mid-body.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let handle = std::thread::spawn(move || {
+        let Ok((mut stream, _addr)) = listener.accept() else {
+            return;
+        };
+        let _ = std::io::Read::read(&mut stream, &mut [0_u8; 1024]);
+        let _ = std::io::Write::write_all(
+            &mut stream,
+            b"HTTP/1.1 200 OK\r\nContent-Length: 32\r\n\r\noops",
+        );
+    });
+
+    let response = reqwest::Client::new()
+        .get(format!("http://127.0.0.1:{port}"))
+        .send()
+        .await
+        .unwrap();
+    let error = read_body_within(response, "test read", 1024)
+        .await
+        .unwrap_err();
+    handle.join().unwrap();
+
+    assert!(
+        matches!(error, BodyReadError::Transport(_)),
+        "expected Transport, got {error:?}",
+    );
+}
+
+#[tokio::test]
+async fn read_body_bounded_returns_a_normal_body() {
+    let server = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_string("{\"ok\":true}"))
+        .mount(&server)
+        .await;
+    let response = reqwest::Client::new()
+        .get(server.uri())
+        .send()
+        .await
+        .unwrap();
+
+    let body = read_body_bounded(response, "test read").await.unwrap();
+
+    assert_eq!(body, "{\"ok\":true}");
+}
+
+#[test]
+fn max_response_body_bytes_is_64_mib() {
+    assert_eq!(MAX_RESPONSE_BODY_BYTES, 64 * 1024 * 1024);
+}
+
+#[test]
+fn body_read_error_maps_too_large_to_response_too_large() {
+    let error = crate::error::BzrError::from(BodyReadError::TooLarge {
+        operation: "response body".to_owned(),
+        limit_bytes: MAX_RESPONSE_BODY_BYTES,
+    });
+
+    assert_eq!(error.exit_code(), 16);
+    assert_eq!(error.error_type(), "response_too_large");
+}
+
+/// The bound exists at thirteen call sites with no single chokepoint to place
+/// it at, so nothing but this test stops a fourteenth unbounded read appearing.
+#[test]
+fn no_response_text_calls_outside_tests() {
+    fn walk(dir: &std::path::Path, offenders: &mut Vec<String>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(&path, offenders);
+                continue;
+            }
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            if path.extension() != Some(std::ffi::OsStr::new("rs")) || name.ends_with("_tests.rs") {
+                continue;
+            }
+            let source = std::fs::read_to_string(&path).unwrap();
+            for (index, line) in source.lines().enumerate() {
+                if line.contains(".text().await") {
+                    offenders.push(format!("{}:{}", path.display(), index + 1));
+                }
+            }
+        }
+    }
+
+    let mut offenders = Vec::new();
+    walk(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+        &mut offenders,
+    );
+
+    assert!(
+        offenders.is_empty(),
+        "response bodies must be read through crate::http::read_body_bounded, \
+         which bounds them; these read unbounded: {offenders:?}",
+    );
 }

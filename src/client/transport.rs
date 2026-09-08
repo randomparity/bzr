@@ -193,12 +193,23 @@ impl BugzillaClient {
         // Reading the body is the only way to tell the two apart, and it
         // consumes the response — so a refusal is returned as the error it will
         // be reported as rather than as a response.
-        let Ok(body) = retried.text().await else {
+        let body = match crate::http::read_body_bounded(retried, "auth fallback").await {
+            Ok(body) => body,
+            Err(crate::http::BodyReadError::TooLarge { limit_bytes, .. }) => {
+                tracing::warn!(
+                    limit_bytes,
+                    "auth fallback response body exceeds the response-body limit, \
+                     returning original 401"
+                );
+                return Ok(AlternateAuth::Original);
+            }
             // The transport error's `Display` carries the request URL, which on
             // the query-parameter path holds the API key, so nothing derived
             // from it is logged. Nothing was learned; the original stands.
-            tracing::debug!("auth fallback response body unreadable, returning original 401");
-            return Ok(AlternateAuth::Original);
+            Err(crate::http::BodyReadError::Transport(_)) => {
+                tracing::debug!("auth fallback response body unreadable, returning original 401");
+                return Ok(AlternateAuth::Original);
+            }
         };
         match Self::bugzilla_error_code(&body) {
             Some(code) if code_proves_auth_failure(code) => {

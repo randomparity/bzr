@@ -1,4 +1,4 @@
-#![expect(clippy::disallowed_methods, clippy::unwrap_used)]
+#![expect(clippy::disallowed_methods, clippy::unwrap_used, clippy::panic)]
 
 use std::io::{Read as _, Write as _};
 use std::net::TcpListener;
@@ -62,8 +62,37 @@ async fn whoami_response_body_read_error_is_network_error() {
     let (url, handle) = spawn_truncated_http_response_server();
     let client = reqwest::Client::new();
 
-    let outcome = super::probe_whoami(client.get(url), AuthMethod::Header).await;
+    let outcome = super::probe_whoami(
+        client.get(url),
+        AuthMethod::Header,
+        crate::http::MAX_RESPONSE_BODY_BYTES,
+    )
+    .await;
     handle.join().unwrap();
 
     assert!(matches!(outcome, WhoamiOutcome::NetworkError(_)));
+}
+
+/// An over-limit probe body must abort detection rather than degrade to
+/// `AuthRejected`, which would fall through to the query-parameter leg and
+/// resend the API key in a URL (ADR 0068).
+#[tokio::test]
+async fn whoami_probe_refuses_an_over_limit_body() {
+    let server = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_string("x".repeat(64)))
+        .mount(&server)
+        .await;
+    let client = reqwest::Client::new();
+
+    let outcome = super::probe_whoami(client.get(server.uri()), AuthMethod::Header, 16).await;
+
+    let WhoamiOutcome::ProbeRefused(error) = outcome else {
+        panic!("expected ProbeRefused, got a different outcome");
+    };
+    assert_eq!(error.exit_code(), 16);
+    assert!(
+        error.to_string().contains("whoami probe"),
+        "message must name the operation: {error}",
+    );
 }

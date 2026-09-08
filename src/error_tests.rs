@@ -588,3 +588,64 @@ fn unsupported_capability_detail_redacts_an_interpolated_api_key() {
         "capability detail leaked an API key: {rendered}"
     );
 }
+
+// ── ResponseTooLarge (#740) ─────────────────────────────────────────
+
+#[test]
+fn response_too_large_reports_exit_code_and_type() {
+    let error = BzrError::ResponseTooLarge {
+        operation: "response body".to_owned(),
+        limit_bytes: 67_108_864,
+        status: None,
+    };
+
+    assert_eq!(error.exit_code(), 16);
+    assert_eq!(error.error_type(), "response_too_large");
+    let message = error.to_string();
+    assert!(
+        message.contains("response body"),
+        "names the operation: {message}"
+    );
+    assert!(message.contains("67108864"), "names the limit: {message}");
+}
+
+#[test]
+fn response_too_large_publishes_operation_limit_and_status() {
+    let detail = BzrError::ResponseTooLarge {
+        operation: "error response".to_owned(),
+        limit_bytes: 67_108_864,
+        status: Some(503),
+    }
+    .structured_detail();
+
+    assert_eq!(detail["operation"], "error response");
+    assert_eq!(detail["limit_bytes"], 67_108_864_u64);
+    assert_eq!(detail["status"], 503);
+}
+
+#[test]
+fn response_too_large_omits_absent_status() {
+    let detail = BzrError::ResponseTooLarge {
+        operation: "response body".to_owned(),
+        limit_bytes: 16,
+        status: None,
+    }
+    .structured_detail();
+
+    assert!(
+        !detail.contains_key("status"),
+        "absent status must not be published"
+    );
+}
+
+/// Classifying the refusal as transport would make Hybrid mode answer an
+/// oversized body by re-fetching it over the other protocol (ADR 0068).
+#[test]
+fn response_too_large_is_not_a_transport_failure() {
+    assert!(!BzrError::ResponseTooLarge {
+        operation: "response body".to_owned(),
+        limit_bytes: 16,
+        status: None,
+    }
+    .is_transport_failure());
+}

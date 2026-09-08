@@ -314,6 +314,11 @@ fn format_dispatch_error_universal_keys_present_and_correct_across_variants() {
             operation: "saved search 'triage'".into(),
             detail: "server does not implement it".into(),
         },
+        BzrError::ResponseTooLarge {
+            operation: "response body".into(),
+            limit_bytes: 67_108_864,
+            status: Some(503),
+        },
         BzrError::HttpStatus {
             status: 404,
             body: "nf".into(),
@@ -450,6 +455,11 @@ async fn format_dispatch_error_json_family_matches_published_schema() {
             status: bzr::error::CAPABILITY_ABSENT,
             operation: "saved search 'triage'".into(),
             detail: "server does not implement it".into(),
+        },
+        BzrError::ResponseTooLarge {
+            operation: "response body".into(),
+            limit_bytes: 67_108_864,
+            status: Some(503),
         },
         BzrError::HttpStatus {
             status: 404,

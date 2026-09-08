@@ -90,9 +90,18 @@ async fn detect_version_and_mode_inner(
         return Ok((None, ApiMode::XmlRpc));
     }
 
-    let Ok(body) = resp.text().await else {
-        tracing::warn!("version response body unreadable, falling back to xmlrpc");
-        return Ok((None, ApiMode::XmlRpc));
+    let body = match crate::http::read_body_bounded(resp, "version probe").await {
+        Ok(body) => body,
+        // Falling back here would let the server pick the wire protocol by
+        // choosing a body size, so the refusal propagates — the same treatment
+        // a TLS-certificate failure already gets above.
+        Err(error @ crate::http::BodyReadError::TooLarge { .. }) => {
+            return Err(BzrError::from(error));
+        }
+        Err(crate::http::BodyReadError::Transport(_)) => {
+            tracing::warn!("version response body unreadable, falling back to xmlrpc");
+            return Ok((None, ApiMode::XmlRpc));
+        }
     };
 
     let Ok(parsed) = serde_json::from_str::<VersionResponse>(&body) else {

@@ -8,6 +8,78 @@ pub(crate) const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// Shared byte cap for short diagnostic response-body previews.
 pub(crate) const DIAGNOSTIC_BODY_PREVIEW_MAX_BYTES: usize = 512;
 
+/// Ceiling on any response body buffered into memory. A base64 `data` field
+/// costs 4/3, so 64 MiB admits an attachment of roughly 48 MiB — well above
+/// Bugzilla's documented 1000 KB `maxattachmentsize` default. ADR 0068 records
+/// why this number rather than a smaller one, and why no knob raises it.
+pub(crate) const MAX_RESPONSE_BODY_BYTES: u64 = 64 * 1024 * 1024;
+
+/// Why a bounded body read did not produce a body.
+///
+/// Kept distinct from [`crate::error::BzrError`] so each call site can tell a
+/// refusal from a transport failure and keep the disposition it already had
+/// for the latter.
+#[derive(Debug)]
+pub(crate) enum BodyReadError {
+    /// The server sent more than the limit; the read stopped there.
+    TooLarge { operation: String, limit_bytes: u64 },
+    /// The body could not be read at all.
+    Transport(reqwest::Error),
+}
+
+impl From<BodyReadError> for crate::error::BzrError {
+    fn from(error: BodyReadError) -> Self {
+        match error {
+            BodyReadError::TooLarge {
+                operation,
+                limit_bytes,
+            } => crate::error::BzrError::ResponseTooLarge {
+                operation,
+                limit_bytes,
+                status: None,
+            },
+            BodyReadError::Transport(error) => crate::error::BzrError::Http(error),
+        }
+    }
+}
+
+/// Read a response body into a `String` under [`MAX_RESPONSE_BODY_BYTES`].
+///
+/// `operation` names what was being done, for the refusal message. Replaces
+/// `reqwest::Response::text()`, which has no ceiling.
+pub(crate) async fn read_body_bounded(
+    response: reqwest::Response,
+    operation: &str,
+) -> std::result::Result<String, BodyReadError> {
+    read_body_within(response, operation, MAX_RESPONSE_BODY_BYTES).await
+}
+
+/// [`read_body_bounded`] with an explicit limit, so the bound is provable
+/// without a 64 MiB fixture and the auth probes can be driven at a test limit.
+pub(crate) async fn read_body_within(
+    mut response: reqwest::Response,
+    operation: &str,
+    limit_bytes: u64,
+) -> std::result::Result<String, BodyReadError> {
+    let mut body: Vec<u8> = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(BodyReadError::Transport)? {
+        // Sum in u64: `usize` addition could wrap on a 32-bit target.
+        if body.len() as u64 + chunk.len() as u64 > limit_bytes {
+            return Err(BodyReadError::TooLarge {
+                operation: operation.to_owned(),
+                limit_bytes,
+            });
+        }
+        body.extend_from_slice(&chunk);
+    }
+    // `from_utf8` reuses the buffer when the body is valid UTF-8 and falls back
+    // to the same lossy decode `Response::text()` performs, so the output is
+    // byte-identical to the call this replaces at half the peak allocation.
+    // The Vec is never pre-sized from Content-Length: the server writes it.
+    Ok(String::from_utf8(body)
+        .unwrap_or_else(|error| String::from_utf8_lossy(error.as_bytes()).into_owned()))
+}
+
 /// Base unit for exponential backoff between transient retries.
 const RETRY_BACKOFF_BASE: Duration = Duration::from_millis(500);
 /// Upper bound on any single backoff sleep, including a server `Retry-After`.

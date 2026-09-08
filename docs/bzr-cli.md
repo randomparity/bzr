@@ -94,6 +94,7 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 | 13 | TLS error (certificate pin mismatch or issuer changed; use `--tls-pin-now` to re-pin, `--tls-pin-clear` to remove a named-server pin, or `--server-tls-pin-now` for session-only ad-hoc trust) |
 | 14 | Mid-air collision (`bug update`/convenience verb `--expect-unchanged-since`: the bug changed since the given time; re-read and retry) |
 | 15 | Unsupported server capability (the server does not implement a Bugzilla extension the command requires, or bzr could not determine whether it does; the request is refused before dispatch) |
+| 16 | Response too large (the server's response body exceeds bzr's 64 MiB response-body limit; the read stops at the limit and the response is discarded unparsed) |
 
 *Exit code 2 is produced by clap for argument errors before bzr's error handling runs, in addition to resource-not-found errors from bzr itself.
 
@@ -450,7 +451,7 @@ bzr bug list --version 9.4 --version 9.5 --op-sys Linux
 ```
 
 `platform` is the canonical Bugzilla hardware-field name for search, bug
-objects, create, update, and clone. Schema 3.0.6 publishes and accepts only the
+objects, create, update, and clone. Schema 3.0.7 publishes and accepts only the
 canonical `platform` spelling.
 
 ### `bzr bug view`
@@ -676,11 +677,11 @@ table always includes the fixed fields `ID`, `SUMMARY`, `STATUS`, `RESOLUTION`,
 `BLOCKS`, and `DEPENDS ON`; the two adjacency columns are complete,
 comma-separated ID lists.
 
-Under `--json`, the usual `3.0.6` envelope contains a closed result object:
+Under `--json`, the usual `3.0.7` envelope contains a closed result object:
 
 ```json
 {
-  "schema_version": "3.0.6",
+  "schema_version": "3.0.7",
   "data": {
     "requests": [
       {"requested": "00123", "bug_id": 123},
@@ -1360,6 +1361,10 @@ bzr --json attachment view 9876 | jq '.data.summary, .data.size'
 ### `bzr attachment download`
 
 Download one or more attachments to disk, or stream one attachment's bytes to stdout.
+
+An attachment arrives base64-encoded inside the REST JSON response, and base64
+costs 4/3, so an attachment larger than about 48 MiB exceeds bzr's 64 MiB
+response-body limit and cannot be downloaded: the command exits 16.
 
 **Synopsis:**
 
@@ -2647,7 +2652,7 @@ Every pretty `--json` response is wrapped in a stable envelope:
 
 ```json
 {
-  "schema_version": "3.0.6",
+  "schema_version": "3.0.7",
   "data": <the command's payload>
 }
 ```
@@ -2662,7 +2667,7 @@ bzr --json schema | jq -r '.schema_version'   # the contract version itself
 ```
 
 `--json` error output carries the version too, beside an `error` object:
-`{"schema_version":"3.0.6","error":{"type":...,"message":...,"exit_code":...}}`.
+`{"schema_version":"3.0.7","error":{"type":...,"message":...,"exit_code":...}}`.
 
 Two outputs are deliberately **not** enveloped:
 
@@ -2693,8 +2698,10 @@ then read the keys relevant to that type:
 | `if_match_token` | string | `collision` | The now-stale token the client sent. |
 | `resource` | string | `not_found` | The resource kind (e.g. `bug`). |
 | `identifier` | string | `not_found` | The identifier that was not found. |
-| `status` | integer | `http` | The HTTP status code. |
+| `status` | integer | `http`, `response_too_large` | The HTTP status code. Present on `response_too_large` only when the refused response carried an error status. |
 | `api_code` | integer | `api` | The Bugzilla fault code. |
+| `operation` | string | `response_too_large` | The operation whose response was refused. |
+| `limit_bytes` | integer | `response_too_large` | The response-body byte limit that was exceeded. |
 | `succeeded` / `failed` | integer | `batch_partial_failure` | Counts of elements that succeeded / failed. |
 | `server` / `expected` / `actual` | string | `tls` | The server whose TLS trust changed and the expected vs. presented pin/issuer. |
 | `capability` | string | `unsupported_server_capability` | The server capability (Bugzilla extension) the command required. |
