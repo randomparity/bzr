@@ -100,7 +100,8 @@ report on something other than your fault:
   for this checkout and version, so users, groups, and bugs from earlier runs persist. Residue
   can satisfy the assertion under test in the faulted state, or fail it in the restored state.
   Since ADR 0067 the runner reclaims its container on exit, so residue survives only under
-  `BZR_FUNC_KEEP` or a container started by hand — the `reset` below still guarantees a clean one.
+  `BZR_FUNC_KEEP`, a container started by hand, or one `make functional-compare` left behind —
+  the `reset` below still guarantees a clean one.
 
 So run the functional arm as one gated chain, before and after removing the fault:
 

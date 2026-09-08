@@ -74,6 +74,8 @@ cleanup() {
     # under `set -e` and an EXIT trap must not change the run's exit status.
     # XDG_CONFIG_HOME is restored because the line above deleted the directory
     # the isolation redirect points at, and the runtime reads its config there.
+    # A caller that had none gets the empty string, which the XDG spec defines
+    # as equivalent to unset.
     if [[ -z "${BZR_FUNC_KEEP:-}" ]]; then
         XDG_CONFIG_HOME="$FUNC_XDG_ORIG" BZR_BZ_VERSION="$BZ_VERSION" \
             "$SCRIPT_DIR/setup-bugzilla.sh" stop ||

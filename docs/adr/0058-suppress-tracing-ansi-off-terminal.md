@@ -4,6 +4,10 @@
 
 Accepted
 
+> **Amended by [0067](0067-functional-tier-reclaims-its-container.md)** (2026-09-07) — `stop` now
+> verifies its own removal and no longer keeps its permissive behaviour. See the amendment section
+> at the end of this record.
+
 ## Context
 
 ADR 0045 derives each comparison operation's transport from bzr's request-boundary debug events,

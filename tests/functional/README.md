@@ -36,7 +36,8 @@ tests/functional/setup-bugzilla.sh build
 # Start the container (waits for Bugzilla to be ready)
 tests/functional/setup-bugzilla.sh start
 
-# Run the tests
+# Run the tests (reclaims the container on exit; set BZR_FUNC_KEEP=1 to keep
+# it, which the status and logs steps below need)
 tests/functional/run-tests.sh
 
 # Check container status
@@ -165,8 +166,9 @@ or clone that no longer exists is not discoverable by any make target or
 `setup-bugzilla.sh` invocation. Find them with `podman ps -a --filter
 name=bzr-func-test-` (or `docker`) and remove with `podman rm -f <name>`
 (or `docker`). Since ADR 0067 the runner reclaims its own container on exit,
-so this applies to containers left by runs predating that change, or by runs
-with `BZR_FUNC_KEEP` set.
+so this applies to containers left by runs predating that change, by runs with
+`BZR_FUNC_KEEP` set, or by `make functional-compare`, whose runner does not
+reclaim its container.
 
 **Tests fail after image rebuild:**
 The container starts fresh each time. If tests fail, check `tests/functional/setup-bugzilla.sh logs` for Bugzilla errors.
