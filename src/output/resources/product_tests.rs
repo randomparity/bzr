@@ -147,3 +147,38 @@ fn format_product_detail_renders_sections_and_inactive_flags() {
     assert!(output.contains("M1"));
     assert!(output.contains("M2 [inactive]"));
 }
+
+// ── terminal-control escaping (ADR 0065) ─────────────────────────
+
+use crate::test_helpers::{
+    assert_terminal_controls_escaped as assert_escaped, TERMINAL_CONTROL_PROBE as PROBE,
+};
+
+#[test]
+fn product_writers_table_escape_terminal_controls() {
+    let mut product = make_product(1, PROBE);
+    product.description = Some(PROBE.into());
+    product.components[0].name = Some(PROBE.into());
+    product.components[0].default_assignee = Some(PROBE.into());
+    product.versions[0].name = Some(PROBE.into());
+    product.milestones[0].name = Some(PROBE.into());
+
+    let mut buf = Vec::new();
+    write_products(
+        std::slice::from_ref(&product),
+        OutputFormat::Table,
+        &FieldProjection::none(),
+        None,
+        &mut buf,
+    );
+    assert_escaped(&String::from_utf8(buf).unwrap(), "write_products");
+
+    let mut buf = Vec::new();
+    write_product_detail(
+        &product,
+        OutputFormat::Table,
+        &FieldProjection::none(),
+        &mut buf,
+    );
+    assert_escaped(&String::from_utf8(buf).unwrap(), "write_product_detail");
+}

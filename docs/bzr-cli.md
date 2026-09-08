@@ -2727,6 +2727,33 @@ Agents should branch on `schema_version` and either adapt or warn. For pinned
 line-oriented automation, prefer `--output ndjson` (its record shapes are the
 `data` payloads and are unaffected by the envelope).
 
+### Terminal-control escaping in table output
+
+Table output goes straight to a terminal, so bzr escapes the characters a
+server-supplied value could use to manipulate what you see. Two sets are
+escaped, rendered as `\u{…}`:
+
+- **C0/C1 control characters** (Unicode `Cc`), including ESC — an unescaped ESC
+  lets a hostile or compromised Bugzilla clear the screen, move the cursor, or
+  forge table rows.
+- **The Trojan-Source bidirectional controls** (`U+202A`–`U+202E`,
+  `U+2066`–`U+2069`, `U+200E`, `U+200F`, `U+061C`), which reorder rendered text
+  invisibly. This is the same set rustc's `text_direction_codepoint_in_literal`
+  lint covers for CVE-2021-42574.
+
+Consequences worth knowing:
+
+- A tab inside a comment body renders as `\t`. Comment bodies frequently carry
+  pasted logs, and a raw tab breaks a table frame.
+- Other invisible format characters are **not** escaped: `U+200C`/`U+200D`
+  (ZWNJ, ZWJ) are load-bearing for Persian and Hindi orthography and for emoji
+  sequences, and `U+200B`/`U+FEFF` are invisible but do not reorder.
+- A script matching on a value that contains one of these characters sees the
+  escaped spelling. Match against `--json` output instead.
+
+`--json` and `--output ndjson` are unchanged: they are a published schema
+surface, and their encoding stays standard JSON.
+
 ### Auto-detection
 
 When stdout is not a TTY (i.e. piped to another program or redirected to a file), bzr automatically outputs JSON. At a TTY, it defaults to table format. Override with `--json`, `--output`, or the `BZR_OUTPUT` env var.

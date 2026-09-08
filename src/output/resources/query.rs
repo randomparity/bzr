@@ -5,7 +5,7 @@ use crate::types::output::OutputFormat;
 use crate::types::query::{QueryKind, SavedQuery};
 
 use crate::output::formatting::{
-    write_field, write_formatted, write_list_field, write_optional_field,
+    escape_terminal_controls, write_field, write_formatted, write_list_field, write_optional_field,
 };
 
 fn kind_label(kind: QueryKind) -> &'static str {
@@ -74,7 +74,12 @@ pub fn write_query_list<W: Write + ?Sized, S: ::std::hash::BuildHasher>(
         let mut names: Vec<&str> = queries.keys().map(String::as_str).collect();
         names.sort_unstable();
         for name in names {
-            let _ = writeln!(out, "{}", query_summary_line(name, &queries[name]));
+            // One line by construction; see `write_template_list`.
+            let _ = writeln!(
+                out,
+                "{}",
+                escape_terminal_controls(&query_summary_line(name, &queries[name]))
+            );
         }
     });
 }

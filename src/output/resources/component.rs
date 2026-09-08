@@ -3,8 +3,8 @@ use std::io::Write;
 use colored::Colorize;
 
 use crate::output::formatting::{
-    opt_yes_no, truncate, write_field, write_formatted_projected, write_optional_field,
-    write_records_or_empty, TableSpec, DESCRIPTION_TRUNCATE_WIDTH,
+    escape_terminal_controls, opt_yes_no, truncate, write_field, write_formatted_projected,
+    write_optional_field, write_records_or_empty, TableSpec, DESCRIPTION_TRUNCATE_WIDTH,
 };
 use crate::types::component::Component;
 use crate::types::output::OutputFormat;
@@ -62,7 +62,7 @@ pub fn write_component<W: Write + ?Sized>(
             out,
             "{} {}",
             "Component".bold(),
-            c.name.as_deref().unwrap_or("unknown").bold()
+            escape_terminal_controls(c.name.as_deref().unwrap_or("unknown")).bold()
         );
         write_field(out, "ID", &c.id.to_string());
         if let Some(description) = c.description.as_deref().filter(|value| !value.is_empty()) {

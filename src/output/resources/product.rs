@@ -2,8 +2,8 @@ use std::fmt::Write as _;
 use std::io::Write;
 
 use crate::output::formatting::{
-    truncate, write_formatted_projected, write_records_or_empty, TableSpec,
-    DESCRIPTION_TRUNCATE_WIDTH,
+    escape_terminal_controls, truncate, write_formatted_projected, write_records_or_empty,
+    TableSpec, DESCRIPTION_TRUNCATE_WIDTH,
 };
 use crate::types::output::OutputFormat;
 use crate::types::product::Product;
@@ -22,22 +22,29 @@ fn format_named_list(heading: &str, items: &[(impl AsRef<str>, Option<bool>)]) -
         } else {
             ""
         };
-        let _ = writeln!(output, "  {}{active}", name.as_ref());
+        let _ = writeln!(
+            output,
+            "  {}{active}",
+            escape_terminal_controls(name.as_ref())
+        );
     }
     output.push('\n');
     output
 }
 
 fn format_product_detail(product: &Product) -> String {
+    // Each interpolation is escaped rather than the composed block: the block's
+    // own newlines are layout, and one escape pass over it would render them
+    // as literal `\n`.
     let mut output = format!(
         "Product {}\n{}\n\n",
-        product.name.as_deref().unwrap_or("unknown"),
-        product.description.as_deref().unwrap_or("-"),
+        escape_terminal_controls(product.name.as_deref().unwrap_or("unknown")),
+        escape_terminal_controls(product.description.as_deref().unwrap_or("-")),
     );
     if !product.components.is_empty() {
         output.push_str("Components:\n");
         for c in &product.components {
-            let assignee = c.default_assignee.as_deref().unwrap_or("-");
+            let assignee = escape_terminal_controls(c.default_assignee.as_deref().unwrap_or("-"));
             let active = if c.is_active == Some(false) {
                 " [inactive]"
             } else {
@@ -46,7 +53,7 @@ fn format_product_detail(product: &Product) -> String {
             let _ = writeln!(
                 output,
                 "  {}{active}  (assignee: {assignee})",
-                c.name.as_deref().unwrap_or("unknown")
+                escape_terminal_controls(c.name.as_deref().unwrap_or("unknown"))
             );
         }
         output.push('\n');

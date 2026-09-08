@@ -128,3 +128,35 @@ fn write_component_table_omits_empty_description() {
         "empty description must be omitted: {out}"
     );
 }
+
+// ── terminal-control escaping (ADR 0065) ─────────────────────────
+
+use crate::test_helpers::{
+    assert_terminal_controls_escaped as assert_escaped, TERMINAL_CONTROL_PROBE as PROBE,
+};
+
+#[test]
+fn component_writers_table_escape_terminal_controls() {
+    let mut component = make_component(1, PROBE, true);
+    component.description = Some(PROBE.into());
+    component.default_assignee = Some(PROBE.into());
+
+    let mut buf: Vec<u8> = Vec::new();
+    write_components(
+        std::slice::from_ref(&component),
+        OutputFormat::Table,
+        &FieldProjection::none(),
+        None,
+        &mut buf,
+    );
+    assert_escaped(&String::from_utf8(buf).unwrap(), "write_components");
+
+    let mut buf: Vec<u8> = Vec::new();
+    write_component(
+        &component,
+        OutputFormat::Table,
+        &FieldProjection::none(),
+        &mut buf,
+    );
+    assert_escaped(&String::from_utf8(buf).unwrap(), "write_component");
+}

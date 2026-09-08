@@ -3,7 +3,7 @@ use std::io::Write;
 use colored::Colorize;
 use serde::Serialize;
 
-use crate::output::formatting::{write_formatted, yes_no};
+use crate::output::formatting::{escape_terminal_controls, write_formatted, yes_no};
 use crate::types::capabilities::ServerCapabilities;
 use crate::types::output::OutputFormat;
 use crate::types::server_info::{ExtensionInfo, ServerInfoResponse};
@@ -32,13 +32,19 @@ pub fn write_server_info<W: Write + ?Sized>(
 ) {
     let info = ServerInfo::from(response);
     write_formatted(&info, format, out, |info, out| {
-        let _ = writeln!(out, "{} {}", "Bugzilla version:".bold(), info.version);
+        let _ = writeln!(
+            out,
+            "{} {}",
+            "Bugzilla version:".bold(),
+            escape_terminal_controls(info.version)
+        );
         if info.extensions.is_empty() {
             let _ = writeln!(out, "\nNo extensions installed.");
         } else {
             let _ = writeln!(out, "\n{}:", "Extensions".bold());
             for (name, ext) in info.extensions {
-                let ver = ext.version.as_deref().unwrap_or("unknown");
+                let name = escape_terminal_controls(name);
+                let ver = escape_terminal_controls(ext.version.as_deref().unwrap_or("unknown"));
                 let _ = writeln!(out, "  {name} ({ver})");
             }
         }
@@ -56,13 +62,23 @@ pub fn write_server_capabilities<W: Write + ?Sized>(
 }
 
 fn write_capabilities_table<W: Write + ?Sized>(caps: &ServerCapabilities, out: &mut W) {
-    let _ = writeln!(out, "{} {}", "Bugzilla version:".bold(), caps.version);
-    let _ = writeln!(out, "{} {}", "API modes:".bold(), caps.api_modes.join(", "));
+    let _ = writeln!(
+        out,
+        "{} {}",
+        "Bugzilla version:".bold(),
+        escape_terminal_controls(&caps.version)
+    );
+    let _ = writeln!(
+        out,
+        "{} {}",
+        "API modes:".bold(),
+        escape_terminal_controls(&caps.api_modes.join(", "))
+    );
     let _ = writeln!(
         out,
         "{} {}",
         "Auth modes:".bold(),
-        caps.auth_modes.join(", ")
+        escape_terminal_controls(&caps.auth_modes.join(", "))
     );
     let size = caps
         .max_attachment_size
@@ -91,8 +107,8 @@ fn write_capabilities_table<W: Write + ?Sized>(caps: &ServerCapabilities, out: &
             let _ = writeln!(
                 out,
                 "  {} → {}",
-                transition.from,
-                transition.can_change_to.join(", ")
+                escape_terminal_controls(&transition.from),
+                escape_terminal_controls(&transition.can_change_to.join(", "))
             );
         }
     }
@@ -102,8 +118,13 @@ fn write_capabilities_table<W: Write + ?Sized>(caps: &ServerCapabilities, out: &
         let _ = writeln!(out, "  (none)");
     } else {
         for field in &caps.custom_fields {
-            let values = field.values.join(", ");
-            let _ = writeln!(out, "  {} ({}): {values}", field.name, field.field_type);
+            let values = escape_terminal_controls(&field.values.join(", "));
+            let _ = writeln!(
+                out,
+                "  {} ({}): {values}",
+                escape_terminal_controls(&field.name),
+                escape_terminal_controls(&field.field_type)
+            );
         }
     }
 
