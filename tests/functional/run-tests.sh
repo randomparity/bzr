@@ -83,6 +83,7 @@ for _phase in \
     08c-bugs-create-fields 08d-bug-update-from-json 08e-bugs-restricted-access \
     08f-bug-saved-search \
     08g-bug-arbitrary-fields \
+    08h-terminal-escaping \
     09-bug-relationships 09b-bug-collision 09c-bug-links \
     10-bug-clone 11-batch-update 11b-bug-verbs 12-my-bugs 13-templates 14-queries \
     15-comments 15b-comments-private 16-attachments 16b-attachments-private \

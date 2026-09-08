@@ -513,3 +513,43 @@ fn batch_summary_from_results_aggregates_correctly() {
     assert_eq!(summary.failed, 2);
     assert_eq!(summary.total_bytes, 350);
 }
+
+// ── terminal-control escaping (ADR 0065) ─────────────────────────
+
+use crate::test_helpers::{
+    assert_terminal_controls_escaped as assert_escaped, TERMINAL_CONTROL_PROBE as PROBE,
+};
+
+#[test]
+fn attachment_writers_table_escape_terminal_controls() {
+    let mut attachment = output_attachment(1, PROBE);
+    attachment.file_name = Some(PROBE.into());
+    attachment.content_type = Some(PROBE.into());
+    attachment.creator = Some(PROBE.into());
+    attachment.creation_time = Some(PROBE.into());
+    assert_escaped(
+        &capture(OutputFormat::Table, &[attachment]),
+        "write_attachments",
+    );
+
+    let mut result = sample_batch_result();
+    result.bug_results[0].files[0].path = PROBE.into();
+    let (out, _err) = capture_batch(OutputFormat::Table, &result);
+    assert_escaped(&out, "write_attachment_batch_table successes");
+
+    result.bug_results[0].status = TargetStatus::Error;
+    result.bug_results[0].error = Some(PROBE.into());
+    let (_out, err) = capture_batch(OutputFormat::Table, &result);
+    assert_escaped(&err, "write_attachment_batch_table bug failures");
+
+    result.attachment_results.push(AttachmentDownloadResult {
+        attachment_id: 1,
+        status: TargetStatus::Error,
+        bug_id: None,
+        path: None,
+        bytes: None,
+        error: Some(PROBE.into()),
+    });
+    let (_out, err) = capture_batch(OutputFormat::Table, &result);
+    assert_escaped(&err, "write_attachment_batch_table attachment failures");
+}

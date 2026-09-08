@@ -131,3 +131,21 @@ fn json_preserves_canonical_paths_and_destination_and_skill_order() {
         serde_json::json!(["bzr-bulk-triage", "bzr-file-bug"])
     );
 }
+
+// ── terminal-control escaping (ADR 0065) ─────────────────────────
+
+use crate::test_helpers::{
+    assert_terminal_controls_escaped as assert_escaped, TERMINAL_CONTROL_PROBE as PROBE,
+};
+
+#[test]
+fn skills_writer_table_escapes_terminal_controls() {
+    let mut result = install_result(Some(PROBE));
+    result.destinations[0].path = PROBE.into();
+    result.destinations[0].installed = vec![PROBE.into()];
+
+    assert_escaped(
+        &render(&result, OutputFormat::Table),
+        "write_skills_install",
+    );
+}

@@ -4,8 +4,8 @@ use colored::Colorize;
 use serde::Serialize;
 
 use crate::output::formatting::{
-    disable_color_for_tests, render_flags_inline, write_field, write_formatted,
-    write_formatted_projected, write_optional_field,
+    disable_color_for_tests, escape_terminal_controls, render_flags_inline, write_field,
+    write_formatted, write_formatted_projected, write_optional_field,
 };
 use crate::types::attachment::Attachment;
 use crate::types::output::OutputFormat;
@@ -33,7 +33,7 @@ fn write_attachment_header<W: Write + ?Sized>(a: &Attachment, out: &mut W) {
         "{} #{} - {}{}{}{}",
         "Attachment".bold(),
         a.id,
-        a.summary.as_deref().unwrap_or("unknown").bold(),
+        escape_terminal_controls(a.summary.as_deref().unwrap_or("unknown")).bold(),
         patch.cyan(),
         obsolete.red(),
         private.red(),
@@ -257,7 +257,12 @@ pub(super) fn write_attachment_batch_table<O: Write + ?Sized, E: Write + ?Sized>
                     bug.files.len(),
                 );
                 for file in &bug.files {
-                    let _ = writeln!(out, "  → {} ({} bytes)", file.path, file.bytes);
+                    let _ = writeln!(
+                        out,
+                        "  → {} ({} bytes)",
+                        escape_terminal_controls(&file.path),
+                        file.bytes
+                    );
                 }
             }
             TargetStatus::Error => {
@@ -265,10 +270,15 @@ pub(super) fn write_attachment_batch_table<O: Write + ?Sized, E: Write + ?Sized>
                     err,
                     "Bug #{}: {}",
                     bug.bug_id,
-                    bug.error.as_deref().unwrap_or("error"),
+                    escape_terminal_controls(bug.error.as_deref().unwrap_or("error")),
                 );
                 for file in &bug.files {
-                    let _ = writeln!(out, "  → {} ({} bytes) [partial]", file.path, file.bytes);
+                    let _ = writeln!(
+                        out,
+                        "  → {} ({} bytes) [partial]",
+                        escape_terminal_controls(&file.path),
+                        file.bytes
+                    );
                 }
             }
         }
@@ -281,7 +291,7 @@ pub(super) fn write_attachment_batch_table<O: Write + ?Sized, E: Write + ?Sized>
                     "{} #{}: {} ({} bytes)",
                     "Attachment".bold(),
                     att.attachment_id,
-                    att.path.as_deref().unwrap_or("?"),
+                    escape_terminal_controls(att.path.as_deref().unwrap_or("?")),
                     att.bytes.unwrap_or(0),
                 );
             }
@@ -290,7 +300,7 @@ pub(super) fn write_attachment_batch_table<O: Write + ?Sized, E: Write + ?Sized>
                     err,
                     "Attachment #{}: {}",
                     att.attachment_id,
-                    att.error.as_deref().unwrap_or("error"),
+                    escape_terminal_controls(att.error.as_deref().unwrap_or("error")),
                 );
             }
         }

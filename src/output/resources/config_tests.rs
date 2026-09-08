@@ -395,3 +395,26 @@ fn server_display_info_keyring_source_default_account() {
     // up in ConfigView).
     assert!(info.api_key.contains("<server-name>"));
 }
+
+// ── terminal-control escaping (ADR 0065) ─────────────────────────
+
+use crate::test_helpers::{
+    assert_terminal_controls_escaped as assert_escaped, TERMINAL_CONTROL_PROBE as PROBE,
+};
+
+#[test]
+fn config_writer_table_escapes_terminal_controls() {
+    let mut info = make_display_info(PROBE, PROBE, DisplayCredentialSource::Inline, false);
+    info.email = Some(PROBE.into());
+    info.tls_ca_cert = Some(PROBE.into());
+    info.tls_pin = Some(PROBE.into());
+    let mut servers = std::collections::BTreeMap::new();
+    servers.insert(PROBE.to_string(), info);
+
+    let view = ConfigView {
+        config_file: PROBE.into(),
+        default_server: Some(PROBE.into()),
+        servers,
+    };
+    assert_escaped(&capture_write_config(&view), "write_config");
+}

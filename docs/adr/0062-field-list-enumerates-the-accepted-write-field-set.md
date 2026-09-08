@@ -120,6 +120,10 @@ Adding a result type is additive under ADR 0007, so `SCHEMA_VERSION` goes 3.0.2 
   one this change introduces, and closing it belongs to every table writer at once rather
   than to this one; it is recorded as follow-up. The JSON and NDJSON paths need nothing —
   serde escapes control characters when it serializes.
+  **Amended by [ADR 0065](0065-escape-terminal-controls-in-every-writer.md) (2026-09-07):**
+  that residual is now closed across every writer, and the sentence above is wrong for
+  anything outside `Cc` — `serde_json` escapes only `"`, `\`, and code points below
+  `0x20`, so bidi controls pass through the JSON family verbatim.
 - One subcommand emits two shapes, selected by whether the positional is present:
   `FieldValue[]` with a name, `FieldName[]` without. `bzr schema` already does exactly
   this, so the pattern is not new to the CLI, but an agent that hard-codes `field list`'s

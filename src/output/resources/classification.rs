@@ -3,8 +3,8 @@ use std::io::Write;
 use colored::Colorize;
 
 use crate::output::formatting::{
-    truncate, write_formatted_projected, write_records_or_empty, TableSpec,
-    DESCRIPTION_TRUNCATE_WIDTH,
+    escape_terminal_controls, truncate, write_formatted_projected, write_records_or_empty,
+    TableSpec, DESCRIPTION_TRUNCATE_WIDTH,
 };
 use crate::types::classification::Classification;
 use crate::types::output::OutputFormat;
@@ -63,8 +63,9 @@ pub fn write_classification<W: Write + ?Sized>(
                 out,
                 "{} {}\n{}\n",
                 "Classification".bold(),
-                classification.name.as_deref().unwrap_or("unknown").bold(),
-                classification.description.as_deref().unwrap_or("-"),
+                escape_terminal_controls(classification.name.as_deref().unwrap_or("unknown"))
+                    .bold(),
+                escape_terminal_controls(classification.description.as_deref().unwrap_or("-")),
             );
             if !classification.products.is_empty() {
                 let _ = writeln!(out, "{}:", "Products".bold());
@@ -72,11 +73,11 @@ pub fn write_classification<W: Write + ?Sized>(
                     let _ = writeln!(
                         out,
                         "  {} - {}",
-                        p.name.as_deref().unwrap_or("unknown"),
-                        truncate(
+                        escape_terminal_controls(p.name.as_deref().unwrap_or("unknown")),
+                        escape_terminal_controls(&truncate(
                             p.description.as_deref().unwrap_or(""),
                             DESCRIPTION_TRUNCATE_WIDTH
-                        )
+                        ))
                     );
                 }
             }

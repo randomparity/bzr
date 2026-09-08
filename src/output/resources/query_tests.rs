@@ -321,3 +321,34 @@ fn query_summary_line_does_not_widen_for_158_fields() {
     );
     assert!(!line.contains("url"), "summary mentions url: {line}");
 }
+
+// ── terminal-control escaping (ADR 0065) ─────────────────────────
+
+use crate::test_helpers::{
+    assert_terminal_controls_escaped as assert_escaped, TERMINAL_CONTROL_PROBE as PROBE,
+};
+
+fn hostile_query() -> SavedQuery {
+    SavedQuery {
+        product: vec![PROBE.into()],
+        status: vec![PROBE.into()],
+        quicksearch: Some(PROBE.into()),
+        server: Some(PROBE.into()),
+        limit: Some(5),
+        ..SavedQuery::default()
+    }
+}
+
+#[test]
+fn query_writers_table_escape_terminal_controls() {
+    let mut queries = HashMap::new();
+    queries.insert(PROBE.to_string(), hostile_query());
+    let mut buf = Vec::new();
+    write_query_list(&queries, OutputFormat::Table, &mut buf);
+    assert_escaped(&String::from_utf8(buf).unwrap(), "write_query_list");
+
+    assert_escaped(
+        &capture_detail(PROBE, &hostile_query(), OutputFormat::Table),
+        "write_query_detail",
+    );
+}

@@ -293,3 +293,36 @@ fn write_whoami_table_renders_dashes_for_missing_fields() {
         "expected anonymous Auth line, got: {output}"
     );
 }
+
+// ── terminal-control escaping (ADR 0065) ─────────────────────────
+
+use crate::test_helpers::{
+    assert_terminal_controls_escaped as assert_escaped, TERMINAL_CONTROL_PROBE as PROBE,
+};
+
+#[test]
+fn user_writers_table_escape_terminal_controls() {
+    let mut user = make_user(1, "alice", Some(true), vec!["team"]);
+    user.name = Some(PROBE.into());
+    user.real_name = Some(PROBE.into());
+    user.email = Some(PROBE.into());
+    user.groups[0].name = Some(PROBE.into());
+
+    assert_escaped(
+        &capture_users(OutputFormat::Table, std::slice::from_ref(&user)),
+        "write_users",
+    );
+    assert_escaped(
+        &capture_users_detailed(OutputFormat::Table, std::slice::from_ref(&user)),
+        "write_users_detailed",
+    );
+
+    let mut whoami = make_whoami();
+    whoami.identity.name = Some(PROBE.into());
+    whoami.identity.real_name = Some(PROBE.into());
+    whoami.identity.login = Some(PROBE.into());
+    assert_escaped(
+        &capture_whoami(OutputFormat::Table, &whoami),
+        "write_whoami",
+    );
+}

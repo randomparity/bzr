@@ -3,7 +3,8 @@ use std::io::Write;
 use colored::Colorize;
 
 use crate::output::formatting::{
-    opt_yes_no, write_field, write_formatted_projected, write_optional_field,
+    escape_terminal_controls, opt_yes_no, write_field, write_formatted_projected,
+    write_optional_field,
 };
 use crate::types::group::GroupInfo;
 use crate::types::output::OutputFormat;
@@ -20,7 +21,7 @@ pub fn write_group_info<W: Write + ?Sized>(
             out,
             "{} {}",
             "Group".bold(),
-            group.name.as_deref().unwrap_or("unknown").bold()
+            escape_terminal_controls(group.name.as_deref().unwrap_or("unknown")).bold()
         );
         write_optional_field(out, "Description", group.description.as_deref());
         write_field(out, "Active", opt_yes_no(group.is_active));
@@ -28,8 +29,12 @@ pub fn write_group_info<W: Write + ?Sized>(
         if !group.membership.is_empty() {
             let _ = writeln!(out, "\n{}:", "Members".bold());
             for m in &group.membership {
-                let real = m.real_name.as_deref().unwrap_or("");
-                let _ = writeln!(out, "  {} ({real})", m.name.as_deref().unwrap_or("unknown"));
+                let real = escape_terminal_controls(m.real_name.as_deref().unwrap_or(""));
+                let _ = writeln!(
+                    out,
+                    "  {} ({real})",
+                    escape_terminal_controls(m.name.as_deref().unwrap_or("unknown"))
+                );
             }
         }
     });

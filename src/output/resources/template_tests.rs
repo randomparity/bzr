@@ -240,3 +240,32 @@ fn write_template_list_table_announces_empty() {
     let output = capture_list(&templates, OutputFormat::Table);
     assert!(output.contains("No templates configured."));
 }
+
+// ── terminal-control escaping (ADR 0065) ─────────────────────────
+
+use crate::test_helpers::{
+    assert_terminal_controls_escaped as assert_escaped, TERMINAL_CONTROL_PROBE as PROBE,
+};
+
+fn hostile_template() -> BugTemplate {
+    let mut template = make_template();
+    template.product = Some(PROBE.into());
+    template.component = Some(PROBE.into());
+    template.description = Some(PROBE.into());
+    template.cc = vec![PROBE.into()];
+    template
+}
+
+#[test]
+fn template_writers_table_escape_terminal_controls() {
+    let mut templates = HashMap::new();
+    templates.insert(PROBE.to_string(), hostile_template());
+    assert_escaped(
+        &capture_list(&templates, OutputFormat::Table),
+        "write_template_list",
+    );
+    assert_escaped(
+        &capture_detail(PROBE, &hostile_template(), OutputFormat::Table),
+        "write_template_detail",
+    );
+}

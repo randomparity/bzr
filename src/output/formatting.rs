@@ -135,14 +135,18 @@ pub(super) fn write_formatted_projected<T, W>(
     }
 }
 
-pub(super) fn write_table<W: Write + ?Sized>(mut table: Table, width: Option<usize>, out: &mut W) {
-    if let Some(width) = width {
-        let minimum_width = 5 * table.count_columns() + 1;
-        table.with(Width::wrap(width.max(minimum_width)).priority(PriorityMax::right()));
-    }
-    let _ = writeln!(out, "{table}");
-}
-
+/// The single table entry point: build, escape, optionally wrap, write.
+///
+/// Every header and cell passes through [`escape_terminal_controls`], so a
+/// writer that renders server data through this function inherits the escaping
+/// rather than rediscovering it. This is deliberately the *only* way to emit a
+/// table — an entry point taking an already-built [`Table`] could not reach the
+/// cells as strings, and leaving one reachable is how the pre-ADR-0065 gap
+/// arose.
+///
+/// Escaping runs after each caller's record closure, so `truncate` still counts
+/// the original characters and an escaped cell is pure ASCII whose display width
+/// equals its character count — the only form `Width::wrap` measures correctly.
 pub(super) fn write_table_records<W: Write + ?Sized>(
     headers: &[&str],
     rows: impl IntoIterator<Item = Vec<String>>,
@@ -150,11 +154,20 @@ pub(super) fn write_table_records<W: Write + ?Sized>(
     out: &mut W,
 ) {
     let mut builder = Builder::default();
-    builder.push_record(headers.iter().copied());
+    builder.push_record(
+        headers
+            .iter()
+            .map(|header| escape_terminal_controls(header)),
+    );
     for row in rows {
-        builder.push_record(row);
+        builder.push_record(row.iter().map(|cell| escape_terminal_controls(cell)));
     }
-    write_table(builder.build(), width, out);
+    let mut table: Table = builder.build();
+    if let Some(width) = width {
+        let minimum_width = 5 * table.count_columns() + 1;
+        table.with(Width::wrap(width.max(minimum_width)).priority(PriorityMax::right()));
+    }
+    let _ = writeln!(out, "{table}");
 }
 
 #[derive(Clone, Copy)]
@@ -186,8 +199,12 @@ pub(super) fn write_records_or_empty<T, W>(
 // Shared formatting for bug/resource detail views. All use consistent
 // 12-char label alignment and render absent values as "-".
 
+/// The single detail-row seam. Both the label and the value are escaped: a
+/// custom field's label is chosen by the server too. The other two helpers in
+/// this family delegate here, so exactly one place escapes.
 pub(super) fn write_field<W: Write + ?Sized>(out: &mut W, label: &str, value: &str) {
-    let _ = writeln!(out, "  {label:<12}  {value}");
+    let label = escape_terminal_controls(label);
+    let _ = writeln!(out, "  {label:<12}  {}", escape_terminal_controls(value));
 }
 
 pub(super) fn write_optional_field<W: Write + ?Sized>(
@@ -195,13 +212,27 @@ pub(super) fn write_optional_field<W: Write + ?Sized>(
     label: &str,
     value: Option<&str>,
 ) {
-    let _ = writeln!(out, "  {label:<12}  {}", value.unwrap_or("-"));
+    write_field(out, label, value.unwrap_or("-"));
 }
 
 pub(super) fn write_list_field<W: Write + ?Sized>(out: &mut W, label: &str, items: &[String]) {
     if !items.is_empty() {
-        let _ = writeln!(out, "  {label:<12}  {}", items.join(", "));
+        write_field(out, label, &items.join(", "));
     }
+}
+
+/// The one detail row whose value carries colour. Escaping and colouring cannot
+/// both go through [`write_field`]: escaping a coloured string would escape
+/// bzr's own ANSI, and colouring an unescaped one would emit the server's. So
+/// escape the server's status first, then colour the result — the only ESC bytes
+/// on the line are the ones bzr chose. See ADR 0065.
+pub(super) fn write_status_field<W: Write + ?Sized>(out: &mut W, label: &str, status: &str) {
+    let label = escape_terminal_controls(label);
+    let _ = writeln!(
+        out,
+        "  {label:<12}  {}",
+        colorize_status(&escape_terminal_controls(status))
+    );
 }
 
 // ── Section divider ─────────────────────────────────────────────────
@@ -225,26 +256,39 @@ pub(super) fn yes_no(value: bool) -> &'static str {
     }
 }
 
-/// Escape control characters before a server-controlled string enters a table
-/// cell.
+/// The Trojan-Source bidirectional formatting characters (CVE-2021-42574): the
+/// embedding and override pair, the isolates, and the three implicit marks.
+/// Same set as rustc's `text_direction_codepoint_in_literal` lint.
+const BIDI_CONTROLS: [char; 12] = [
+    '\u{202a}', '\u{202b}', '\u{202c}', '\u{202d}', '\u{202e}', '\u{2066}', '\u{2067}', '\u{2068}',
+    '\u{2069}', '\u{200e}', '\u{200f}', '\u{61c}',
+];
+
+/// Escape terminal-controlling characters before a server-controlled string is
+/// rendered to the terminal.
 ///
-/// Table output goes straight to a terminal, so an ESC in a value the server
-/// chose would let a hostile or compromised Bugzilla manipulate the screen or
-/// forge rows. The JSON family needs no equivalent: serde escapes control
-/// characters when it serializes. Introduced for comment tags (`8afa1c7a`) and
-/// shared from here so a new table writer inherits the treatment rather than
-/// rediscovering it.
+/// Table and detail output go straight to a terminal, so a value the server
+/// chose could otherwise let a hostile or compromised Bugzilla manipulate the
+/// screen, forge rows, or reorder what a reader sees. Two categories are
+/// escaped, via `char::escape_default`:
 ///
-/// Scope, stated because the predicate is narrower than "cannot influence a
-/// terminal": `char::is_control` is Unicode category Cc only, so bidirectional
-/// overrides and other format characters (U+202E, U+2066..U+2069, U+200B/E/F)
-/// pass through. That matches what the repository already decided for comment
-/// tags rather than adding a second standard; widening it is a separate change
-/// across every table writer.
-pub(super) fn escape_table_control(value: &str) -> String {
+/// - Unicode `Cc` (`char::is_control`), which covers ESC and the C0/C1 ranges.
+/// - [`BIDI_CONTROLS`], which reorder rendered text invisibly.
+///
+/// The rest of `Cf` deliberately passes through: `U+200C`/`U+200D` (ZWNJ, ZWJ)
+/// are load-bearing for Persian and Hindi orthography and for emoji sequences,
+/// and `U+200B`/`U+FEFF` are invisible but do not reorder. See ADR 0065.
+///
+/// Applied at three seams — [`write_table_records`], the [`write_field`] family,
+/// and [`write_status_field`] — plus an explicit call at each writer that
+/// composes its own line. It does **not** cover `--json`/`--output ndjson`:
+/// `serde_json` escapes only `"`, `\`, and code points below `0x20`, so bidi
+/// passes through the JSON family verbatim. That is a published-schema surface
+/// and a deliberate exclusion, not an oversight.
+pub(super) fn escape_terminal_controls(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for character in value.chars() {
-        if character.is_control() {
+        if character.is_control() || BIDI_CONTROLS.contains(&character) {
             escaped.extend(character.escape_default());
         } else {
             escaped.push(character);
