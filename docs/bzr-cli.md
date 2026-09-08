@@ -94,7 +94,7 @@ Agent note: at an interactive TTY, `bzr` defaults to table output. For agent wor
 | 13 | TLS error (certificate pin mismatch or issuer changed; use `--tls-pin-now` to re-pin, `--tls-pin-clear` to remove a named-server pin, or `--server-tls-pin-now` for session-only ad-hoc trust) |
 | 14 | Mid-air collision (`bug update`/convenience verb `--expect-unchanged-since`: the bug changed since the given time; re-read and retry) |
 | 15 | Unsupported server capability (the server does not implement a Bugzilla extension the command requires, or bzr could not determine whether it does; the request is refused before dispatch) |
-| 16 | Response too large (the server's response body exceeds bzr's 64 MiB response-body limit; the read stops at the limit and the response is discarded unparsed) |
+| 16 | Response too large (the server's response body exceeds bzr's 64 MiB response-body limit; the read stops at the limit and the response is discarded unparsed). Two seams report a refused body differently: an XML-RPC response carrying an HTTP error status reports exit 5 with the status, and `server info --json` extension probing in Hybrid mode reports exit 4 when both the REST and XML-RPC legs are oversized. |
 
 *Exit code 2 is produced by clap for argument errors before bzr's error handling runs, in addition to resource-not-found errors from bzr itself.
 

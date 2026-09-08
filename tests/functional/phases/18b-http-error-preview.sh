@@ -2,6 +2,9 @@
 # Sourced by run-tests.sh in order; assumes lib.sh helpers and the
 # orchestrator preamble (constants, shared globals, cleanup trap).
 # Reads: none. Creates: two loopback HTTP fixture processes.
+# Both cases use a local fixture rather than the Bugzilla container: no real
+# server emits a 512-byte-plus error page or a 96 MiB body on demand. They still
+# run the real bzr binary over a real socket inside the container-based tier.
 # shellcheck shell=bash
 
 # ═════════════════════════════════════════════════════════════

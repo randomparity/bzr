@@ -229,7 +229,14 @@ const UNBOUNDED_BODY_READERS: &[&str] = &[
     ".bytes_stream()",
     ".json().await",
     ".json::<",
+    // `read_body_within` is built on `chunk()`; anywhere else it is a hand-rolled
+    // accumulation that reimplements the bound without it.
+    ".chunk().await",
 ];
+
+/// The one file allowed to read a response body without the helper, because it
+/// *is* the helper.
+const BOUND_IMPLEMENTATION: &str = "http.rs";
 
 /// The bound exists at thirteen call sites with no single chokepoint to place
 /// it at, so nothing but this test stops a fourteenth unbounded read appearing.
@@ -247,7 +254,10 @@ fn no_unbounded_response_body_reads_outside_tests() {
                 continue;
             }
             let name = path.file_name().unwrap().to_string_lossy().into_owned();
-            if path.extension() != Some(std::ffi::OsStr::new("rs")) || name.ends_with("_tests.rs") {
+            if path.extension() != Some(std::ffi::OsStr::new("rs"))
+                || name.ends_with("_tests.rs")
+                || name == BOUND_IMPLEMENTATION
+            {
                 continue;
             }
             let source: String = std::fs::read_to_string(&path)

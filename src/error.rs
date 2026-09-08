@@ -46,13 +46,10 @@ pub enum BzrError {
     /// that classification; if both its legs oversize, the refusal is remapped
     /// to [`Self::XmlRpc`] and only the message survives.
     ///
-    /// The message names the limit and the operation and carries no body bytes
-    /// and no URL, so nothing the server sent can ride out with it.
-    #[error(
-        "{operation}: server response exceeds the {limit_bytes}-byte \
-         response-body limit; the read was stopped at the limit and the \
-         response discarded"
-    )]
+    /// The message names the limit, the operation, and the HTTP status when one
+    /// is known, and carries no body bytes and no URL, so nothing the server
+    /// sent can ride out with it.
+    #[error("{}", format_response_too_large(.operation, *.limit_bytes, *.status))]
     ResponseTooLarge {
         operation: String,
         limit_bytes: u64,
@@ -139,6 +136,24 @@ pub type Result<T> = std::result::Result<T, BzrError>;
 #[doc(hidden)]
 pub fn clear_error_redaction_context() {
     crate::bugzilla_auth::clear_active_api_key();
+}
+
+/// Render a [`BzrError::ResponseTooLarge`] message.
+///
+/// The status is interpolated rather than published only as a structured key,
+/// so a `--format table` user sees the 4xx or 5xx the refused body arrived
+/// with; without this it would reach `--json` consumers alone.
+fn format_response_too_large(operation: &str, limit_bytes: u64, status: Option<u16>) -> String {
+    let mut message = format!(
+        "{operation}: server response exceeds the {limit_bytes}-byte \
+         response-body limit; the read was stopped at the limit and the \
+         response discarded"
+    );
+    if let Some(status) = status {
+        use std::fmt::Write as _;
+        let _ = write!(message, " (HTTP {status})");
+    }
+    message
 }
 
 pub(crate) fn io_with_context(context: impl fmt::Display, error: &std::io::Error) -> BzrError {

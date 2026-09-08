@@ -72,10 +72,23 @@ exit code 16.**
   today it would. That second edge is accepted: re-fetching a body a server
   chose to oversize is the cost the refusal avoids. `server_extensions`
   (`src/client/resources/server.rs:59-88`) is the exception, and reads no
-  classification at all: ADR-0052 has it fall back on a bare `Err`, so it still
-  retries, and when both legs oversize its `map_err` reports `XmlRpc` — exit 4,
-  with `operation` and `limit_bytes` surviving only inside the message. Left
-  alone; changing it would reopen ADR-0052.
+  classification at all: it falls back on a bare `Err`, so it still retries, and
+  when both legs oversize its `map_err` reports `XmlRpc` — exit 4, with
+  `operation` and `limit_bytes` surviving only inside the message. It is left
+  alone because it sits outside this change's authorized surface, not because
+  ADR-0052 settles it: that record decides *whether* the arm falls back, on the
+  ground of a 404-with-error-envelope shape, and says nothing about how a
+  combined failure is named. Making the refusal survive that `map_err` is a
+  one-line guard and a good follow-up.
+- **The XML-RPC error-status seam reports exit 5, not 16.** A refused body
+  arriving with an HTTP error status keeps `HttpStatus`, because the status is
+  the more useful fact there; the success-path read reports 16. Both exceptions
+  are documented in `docs/bzr-cli.md`'s exit-16 row.
+- **Criterion (6)'s "real container" is met by a loopback fixture.** No
+  Bugzilla container emits a 96 MiB response on demand, so the bound cannot be
+  exercised against one. Phase 18b runs the real `bzr` binary over a real
+  socket, inside the container-based functional tier, against a local fixture —
+  the shape that phase already uses for #512, and the strongest proof available.
 - **Peak allocation is stated per path, not flat.** A refused read holds about
   twice the limit — roughly 96 MiB — while the `Vec` doubles. An accepted body
   of valid UTF-8 holds the limit once, because `String::from_utf8` reuses the

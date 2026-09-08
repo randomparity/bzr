@@ -710,3 +710,18 @@ async fn valid_login_probe_refuses_an_over_limit_body() {
         "message must name the operation: {error}",
     );
 }
+
+/// A verification leg was already inconclusive when its body was unreadable;
+/// an over-limit body must reach the same `None`, not a different disposition.
+#[tokio::test]
+async fn a_refused_verification_leg_stays_inconclusive() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("x".repeat(64)))
+        .mount(&server)
+        .await;
+
+    let leg = super::read_probe_leg(reqwest::Client::new().get(server.uri()), "header", 16).await;
+
+    assert!(leg.is_none(), "an over-limit leg must be inconclusive");
+}

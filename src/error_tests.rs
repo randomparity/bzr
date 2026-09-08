@@ -609,6 +609,33 @@ fn response_too_large_reports_exit_code_and_type() {
     assert!(message.contains("67108864"), "names the limit: {message}");
 }
 
+/// A `--format table` user reads the Display, not the structured keys, so the
+/// status must reach it there too.
+#[test]
+fn response_too_large_message_carries_the_status_when_known() {
+    let with_status = BzrError::ResponseTooLarge {
+        operation: "error response".to_owned(),
+        limit_bytes: 67_108_864,
+        status: Some(503),
+    }
+    .to_string();
+    assert!(
+        with_status.contains("HTTP 503"),
+        "message must name the status: {with_status}",
+    );
+
+    let without = BzrError::ResponseTooLarge {
+        operation: "response body".to_owned(),
+        limit_bytes: 67_108_864,
+        status: None,
+    }
+    .to_string();
+    assert!(
+        !without.contains("HTTP "),
+        "no status means no status clause: {without}",
+    );
+}
+
 #[test]
 fn response_too_large_publishes_operation_limit_and_status() {
     let detail = BzrError::ResponseTooLarge {

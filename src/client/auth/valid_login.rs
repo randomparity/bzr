@@ -332,6 +332,7 @@ pub(super) async fn verify_header_auth_via_rest(
             .query(&[("names", login)])
             .header(AUTH_HEADER_NAME, key_header.clone()),
         "header",
+        crate::http::MAX_RESPONSE_BODY_BYTES,
     )
     .await
     else {
@@ -342,7 +343,13 @@ pub(super) async fn verify_header_auth_via_rest(
         return false;
     }
 
-    let Some(anonymous_leg) = read_probe_leg(anonymous_request(), "anonymous").await else {
+    let Some(anonymous_leg) = read_probe_leg(
+        anonymous_request(),
+        "anonymous",
+        crate::http::MAX_RESPONSE_BODY_BYTES,
+    )
+    .await
+    else {
         return false;
     };
     if anonymous_leg.body == header_leg.body {
@@ -357,6 +364,7 @@ pub(super) async fn verify_header_auth_via_rest(
         http.get(&url)
             .query(&[("names", login), (AUTH_QUERY_PARAM, api_key)]),
         "query-param",
+        crate::http::MAX_RESPONSE_BODY_BYTES,
     )
     .await
     else {
@@ -385,7 +393,13 @@ pub(super) async fn verify_header_auth_via_rest(
     // confirm header auth. Re-observe before confirming; a server that genuinely
     // discriminates answers an anonymous caller the same way twice. One extra
     // request, only on the path that is about to return `true`.
-    let Some(recheck) = read_probe_leg(anonymous_request(), "anonymous re-check").await else {
+    let Some(recheck) = read_probe_leg(
+        anonymous_request(),
+        "anonymous re-check",
+        crate::http::MAX_RESPONSE_BODY_BYTES,
+    )
+    .await
+    else {
         return false;
     };
     if recheck.status.is_success() != anonymous_leg.status.is_success()
@@ -408,7 +422,11 @@ pub(super) async fn verify_header_auth_via_rest(
 /// unreadable body, or an inconclusive status -- which every caller treats as
 /// "not confirmed". Whether a leg's *content* is trustworthy is the caller's
 /// question, and it differs by leg: see [`ProbeLeg::credential_accepted`].
-async fn read_probe_leg(request: reqwest::RequestBuilder, leg: &'static str) -> Option<ProbeLeg> {
+async fn read_probe_leg(
+    request: reqwest::RequestBuilder,
+    leg: &'static str,
+    limit_bytes: u64,
+) -> Option<ProbeLeg> {
     let response = match request.send().await {
         Ok(response) => response,
         Err(error) => {
@@ -426,7 +444,8 @@ async fn read_probe_leg(request: reqwest::RequestBuilder, leg: &'static str) -> 
         tracing::debug!(%status, %leg, "header auth probe leg returned an inconclusive status");
         return None;
     }
-    let body = match crate::http::read_body_bounded(response, "header auth probe").await {
+    let body = match crate::http::read_body_within(response, "header auth probe", limit_bytes).await
+    {
         Ok(body) => parse_probe_body(&body),
         Err(crate::http::BodyReadError::TooLarge { limit_bytes, .. }) => {
             tracing::debug!(

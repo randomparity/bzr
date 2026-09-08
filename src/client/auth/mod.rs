@@ -316,7 +316,14 @@ async fn detect_auth_method(
     // Try whoami first (Bugzilla 5.3+/BMO-derived). A TLS-certificate failure is
     // propagated so the connection layer can offer TOFU / pin-rotation; other
     // transport errors fall back to header auth (see network_error_outcome).
-    let whoami = detect_whoami_auth(http, base, api_key, &key_header).await;
+    let whoami = detect_whoami_auth(
+        http,
+        base,
+        api_key,
+        &key_header,
+        crate::http::MAX_RESPONSE_BODY_BYTES,
+    )
+    .await;
     let whoami_not_found = match whoami {
         WhoamiOutcome::Authenticated(method) => return Ok(method),
         WhoamiOutcome::NetworkError(e) => return network_error_outcome(e),

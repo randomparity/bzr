@@ -56,6 +56,11 @@ pub(crate) async fn read_body_bounded(
 
 /// [`read_body_bounded`] with an explicit limit, so the bound is provable
 /// without a 64 MiB fixture and the auth probes can be driven at a test limit.
+///
+/// The decode matches `Response::text()` only while reqwest's `charset` feature
+/// is off, which `Cargo.toml` pins via `default-features = false`. Enabling it
+/// would give `text()` BOM stripping and `Content-Type` charset decoding that
+/// this does not have, silently changing every bounded read.
 pub(crate) async fn read_body_within(
     mut response: reqwest::Response,
     operation: &str,

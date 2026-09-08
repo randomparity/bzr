@@ -47,18 +47,14 @@ pub(super) async fn detect_whoami_auth(
     base: &str,
     api_key: &str,
     key_header: &HeaderValue,
+    limit_bytes: u64,
 ) -> WhoamiOutcome {
     let url = format!("{base}/rest/whoami");
     let mut malformed_response = None;
 
     // Probe: header-based auth
     let header_req = http.get(&url).header(AUTH_HEADER_NAME, key_header.clone());
-    let outcome = probe_whoami(
-        header_req,
-        AuthMethod::Header,
-        crate::http::MAX_RESPONSE_BODY_BYTES,
-    )
-    .await;
+    let outcome = probe_whoami(header_req, AuthMethod::Header, limit_bytes).await;
     match outcome {
         WhoamiOutcome::AuthRejected => {} // try query-param next
         WhoamiOutcome::MalformedResponse(error) => {
@@ -69,13 +65,7 @@ pub(super) async fn detect_whoami_auth(
 
     // Probe: query-param auth
     let query_req = http.get(&url).query(&[(AUTH_QUERY_PARAM, api_key)]);
-    match probe_whoami(
-        query_req,
-        AuthMethod::QueryParam,
-        crate::http::MAX_RESPONSE_BODY_BYTES,
-    )
-    .await
-    {
+    match probe_whoami(query_req, AuthMethod::QueryParam, limit_bytes).await {
         WhoamiOutcome::AuthRejected => malformed_response.map_or(
             WhoamiOutcome::AuthRejected,
             WhoamiOutcome::MalformedResponse,
