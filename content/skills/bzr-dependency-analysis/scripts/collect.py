@@ -418,7 +418,13 @@ def parse_json_object(text, limitation):
 
 
 def validate_envelope_version(envelope):
-    if envelope["schema_version"] != BZR_SCHEMA_VERSION:
+    # ADR 0007 governs the envelope's schema_version by semver: patch = additive,
+    # minor = rename-with-one-release-alias, major = breaking. A same-major
+    # difference is therefore compatible (it is what lets the binary and an
+    # unreinstalled on-disk skill disagree by a patch and still work); only a
+    # major mismatch is a genuine break.
+    live_version = envelope["schema_version"]
+    if live_version.split(".", 1)[0] != BZR_SCHEMA_VERSION.split(".", 1)[0]:
         raise FatalCollection("collection-schema-version", "schema-version")
 
 
