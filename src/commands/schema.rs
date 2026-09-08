@@ -28,6 +28,7 @@ macro_rules! schema_registry {
 pub(crate) const SCHEMAS: &[(&str, &str)] = schema_registry![
     "action-result",
     "attachment",
+    "attachment-download-batch-result",
     "attachment-upload-batch-result",
     "batch-create-result",
     "batch-result",
