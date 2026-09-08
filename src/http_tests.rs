@@ -218,10 +218,27 @@ fn body_read_error_maps_too_large_to_response_too_large() {
     assert_eq!(error.error_type(), "response_too_large");
 }
 
+/// Every unbounded `reqwest::Response` body reader. `.json(` is deliberately
+/// absent: `RequestBuilder::json` shares the name and is a request body, which
+/// this bound does not cover. `.bytes()` is matched only with its `.await`,
+/// because `str::bytes` is common and synchronous.
+const UNBOUNDED_BODY_READERS: &[&str] = &[
+    ".text().await",
+    ".text_with_charset(",
+    ".bytes().await",
+    ".bytes_stream()",
+    ".json().await",
+    ".json::<",
+];
+
 /// The bound exists at thirteen call sites with no single chokepoint to place
 /// it at, so nothing but this test stops a fourteenth unbounded read appearing.
+///
+/// Whitespace is collapsed before matching, so a rustfmt-wrapped `.text()`
+/// and `.await` on separate lines is still caught; that costs the line number,
+/// so offenders are reported by file.
 #[test]
-fn no_response_text_calls_outside_tests() {
+fn no_unbounded_response_body_reads_outside_tests() {
     fn walk(dir: &std::path::Path, offenders: &mut Vec<String>) {
         for entry in std::fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
@@ -233,10 +250,13 @@ fn no_response_text_calls_outside_tests() {
             if path.extension() != Some(std::ffi::OsStr::new("rs")) || name.ends_with("_tests.rs") {
                 continue;
             }
-            let source = std::fs::read_to_string(&path).unwrap();
-            for (index, line) in source.lines().enumerate() {
-                if line.contains(".text().await") {
-                    offenders.push(format!("{}:{}", path.display(), index + 1));
+            let source: String = std::fs::read_to_string(&path)
+                .unwrap()
+                .split_whitespace()
+                .collect();
+            for reader in UNBOUNDED_BODY_READERS {
+                if source.contains(reader) {
+                    offenders.push(format!("{} ({reader})", path.display()));
                 }
             }
         }

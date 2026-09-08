@@ -65,12 +65,17 @@ exit code 16.**
   record was written; it needs an issue. A deployment setting Bugzilla's
   `maxlocalattachment` — the parameter whose purpose is to permit attachments
   above `maxattachmentsize` — can exceed the ceiling, and nothing raises it.
-- **Both Hybrid fallbacks lose one edge.** A refusal is not a transport
-  failure, so a REST-first read no longer answers an over-limit body by
-  re-fetching it over XML-RPC — the intent — and `dispatch_xmlrpc_first`
-  (`src/client/mod.rs:273-289`) likewise stops falling back from an over-limit
-  XML-RPC body to REST, where today it would. That second edge is accepted:
-  re-fetching a body a server chose to oversize is the cost the refusal avoids.
+- **The Hybrid fallbacks gated on `is_transport_failure` lose one edge each.**
+  A REST-first read no longer answers an over-limit body by re-fetching it over
+  XML-RPC — the intent — and `dispatch_xmlrpc_first` (`src/client/mod.rs:273-289`)
+  likewise stops falling back from an over-limit XML-RPC body to REST, where
+  today it would. That second edge is accepted: re-fetching a body a server
+  chose to oversize is the cost the refusal avoids. `server_extensions`
+  (`src/client/resources/server.rs:59-88`) is the exception, and reads no
+  classification at all: ADR-0052 has it fall back on a bare `Err`, so it still
+  retries, and when both legs oversize its `map_err` reports `XmlRpc` — exit 4,
+  with `operation` and `limit_bytes` surviving only inside the message. Left
+  alone; changing it would reopen ADR-0052.
 - **Cost per refused read is about twice the limit** — the `Vec` doubles as it
   grows, so a body refused near the limit holds roughly 96 MiB across the old
   and new buffers. The probe abort stops at the first refusal rather than

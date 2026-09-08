@@ -39,8 +39,13 @@ pub enum BzrError {
 
     /// A server response exceeded [`crate::http::MAX_RESPONSE_BODY_BYTES`].
     ///
-    /// Deliberately **not** a transport failure: Hybrid mode must not answer a
-    /// refusal by re-fetching the same oversized body over the other protocol.
+    /// Deliberately **not** a transport failure, so the four Hybrid arms gated
+    /// on [`Self::is_transport_failure`] do not answer a refusal by re-fetching
+    /// the same oversized body over the other protocol. `server_extensions`
+    /// falls back on a bare `Err` by ADR-0052's design and is unaffected by
+    /// that classification; if both its legs oversize, the refusal is remapped
+    /// to [`Self::XmlRpc`] and only the message survives.
+    ///
     /// The message names the limit and the operation and carries no body bytes
     /// and no URL, so nothing the server sent can ride out with it.
     #[error(

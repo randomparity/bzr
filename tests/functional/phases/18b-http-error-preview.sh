@@ -115,7 +115,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, _format, *args):
         pass
 
-server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+class Server(http.server.ThreadingHTTPServer):
+    # bzr resetting the connection the moment it refuses the body is the
+    # expected outcome here, not an error worth a traceback in the phase log.
+    def handle_error(self, request, client_address):
+        pass
+
+server = Server(("127.0.0.1", 0), Handler)
 with open(sys.argv[1], "w", encoding="utf-8") as port_file:
     port_file.write(str(server.server_address[1]))
 server.serve_forever()

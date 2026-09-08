@@ -455,35 +455,43 @@ impl BugzillaClient {
             let status = response.status();
             let body = match crate::http::read_body_bounded(response, "error response").await {
                 Ok(body) => body,
-                // The refusal outranks the status here: an ordinary 4xx or 5xx
-                // is already reported by the normal path, and what the operator
-                // needs to know is that this one arrived with a body bzr would
-                // not buffer. The status rides along on the variant.
-                Err(crate::http::BodyReadError::TooLarge {
-                    operation,
-                    limit_bytes,
-                }) => {
-                    return Err(BzrError::ResponseTooLarge {
-                        operation,
-                        limit_bytes,
-                        status: Some(status.as_u16()),
-                    });
-                }
-                // The body is unreadable, but the HTTP status is still
-                // meaningful. Surface the read failure as the body text so the
-                // error is reported with a real diagnostic rather than being
-                // silently swallowed into an empty string.
-                Err(crate::http::BodyReadError::Transport(e)) => {
-                    let body = format!("<failed to read response body: {e}>");
-                    return Err(BzrError::HttpStatus {
-                        status: status.as_u16(),
-                        body: crate::http::diagnostic_body_preview(&body),
-                    });
-                }
+                Err(error) => return Err(Self::error_from_body_read_failure(status, error)),
             };
             return Err(Self::error_from_status_body(status, &body));
         }
         Ok(response)
+    }
+
+    /// Classify a failed body read on a response that already carried an error
+    /// status.
+    ///
+    /// A refusal outranks the status: an ordinary 4xx or 5xx is already
+    /// reported by the normal path, and what the operator needs to know is that
+    /// this one arrived with a body bzr would not buffer. The status rides
+    /// along on the variant so nothing is lost. A transport failure keeps its
+    /// existing shape — the status is still meaningful, and surfacing the read
+    /// error as the body text beats swallowing it into an empty string.
+    pub(super) fn error_from_body_read_failure(
+        status: reqwest::StatusCode,
+        error: crate::http::BodyReadError,
+    ) -> BzrError {
+        match error {
+            crate::http::BodyReadError::TooLarge {
+                operation,
+                limit_bytes,
+            } => BzrError::ResponseTooLarge {
+                operation,
+                limit_bytes,
+                status: Some(status.as_u16()),
+            },
+            crate::http::BodyReadError::Transport(e) => {
+                let body = format!("<failed to read response body: {e}>");
+                BzrError::HttpStatus {
+                    status: status.as_u16(),
+                    body: crate::http::diagnostic_body_preview(&body),
+                }
+            }
+        }
     }
 
     /// Classify an HTTP error status and its already-read body into the error
