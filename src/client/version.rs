@@ -99,8 +99,7 @@ async fn detect_version_and_mode_inner(
     let body = match crate::http::read_body_within(resp, "version probe", limit_bytes).await {
         Ok(body) => body,
         // Falling back here would let the server pick the wire protocol by
-        // choosing a body size, so the refusal propagates — the same treatment
-        // a TLS-certificate failure already gets above.
+        // choosing a body size.
         Err(error @ crate::http::BodyReadError::TooLarge { .. }) => {
             return Err(BzrError::from(error));
         }
