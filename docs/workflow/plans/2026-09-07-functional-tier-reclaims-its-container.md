@@ -43,10 +43,10 @@ on that status.
   ```
 
   Red on the base commit: `Container removed.` and `exit=0`. Green after: the survived-removal
-  diagnostic and `exit=1`. Then make the stub report the container gone — last line
-  `[ "$1" = container ] && exit 1; exit 0` — and re-run for `Container removed.` and `exit=0` on
-  both commits. Remove `$d` afterwards.
-- Contract: `check-shell` covers `setup-bugzilla.sh` and `run-all-versions.sh`. Mode:
+  diagnostic and `exit=1`. Then rewrite the stub body — replacing its `exit 0` line, not appending
+  after it — as `[ "$1" = container ] && exit 1; exit 0`, so it reports the container gone, and
+  re-run for `Container removed.` and `exit=0` on both commits. Remove `$d` afterwards.
+- Contract: `check-shell` covers `setup-bugzilla.sh`. Mode:
   `focused-test`. Red on the base commit: appending `echo $UNDEFINED_UNQUOTED` to
   `setup-bugzilla.sh` leaves `make check-shell` exiting 0. Green after: the same edit makes it exit
   non-zero naming `setup-bugzilla.sh` (SC2086 on shellcheck 0.11.0 — assert the status and the
@@ -99,9 +99,9 @@ on that status.
    	done; exit $$status
    ```
 
-4. Add `tests/functional/run-all-versions.sh tests/functional/setup-bugzilla.sh` after
-   `tests/functional/run-compare-all.sh` on both the `shellcheck -s bash` list (`Makefile:149`) and
-   the `bash -n` list (`:150`).
+4. Add `tests/functional/setup-bugzilla.sh` after `tests/functional/run-compare-all.sh` on both the
+   `shellcheck -s bash` list (`Makefile:149`) and the `bash -n` list (`:150`). Leave
+   `run-all-versions.sh` alone: it is equally unlinted, but this change does not edit it.
 
 5. Run `make check-shell`; expect exit 0 and no shellcheck output. Perform both red/green
    observations and keep every output for the pull-request body.
@@ -110,7 +110,7 @@ on that status.
 
 **Acceptance.** `Container removed.` prints only when the container is gone; `cmd_reset` contains no
 `container_exists` call; `make functional-stop-all` attempts all three versions; `make check-shell`
-is green and names both new files.
+is green and names `setup-bugzilla.sh` on both lists.
 
 ## Task 2 — the runner reclaims its container, with a documented opt-out
 

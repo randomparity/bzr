@@ -64,12 +64,17 @@ dependency-refusal detector; it makes the exit status honest for any refused rem
   unsupported.
 - `make functional-stop` now exits non-zero when removal is refused instead of reporting success,
   and `functional-stop-all` becomes a loop so one refused version still leaves the others attempted.
+  The runner's own reclaim deliberately does not propagate that status — a refused reclaim is a
+  stderr warning no gate reads, which diverges from `run-compare.sh`'s convention. A cleanup failure
+  reddening a green tier, or greening a red one, would cost more than the leak it reports, and the
+  leak now announces itself on the stream the developer is watching.
 - `cleanup_all` becomes belt-and-braces; its `2>/dev/null || true` hides the new diagnostic, which
   the runner already printed where the developer was watching. Already-orphaned containers are not
   reclaimed here — `tests/functional/README.md`'s orphan procedure clears them, now once rather
   than recurrently.
-- `setup-bugzilla.sh` and `run-all-versions.sh` join `make check-shell`'s lists; they were in
-  neither, so this change would otherwise land unlinted.
+- `setup-bugzilla.sh` joins `make check-shell`'s lists; it was in neither, so this change would
+  otherwise land unlinted. `run-all-versions.sh` is equally unlinted but untouched here, so it stays
+  out of this change.
 
 ## Considered & rejected
 

@@ -20,7 +20,7 @@ Four changed contracts, mechanism in the ADR and the plan rather than repeated h
    run's `BZR_BZ_VERSION` restored for the child.
 2. **Verified stop** — `cmd_stop` returns 1 when the container survives instead of reporting
    success; `cmd_reset` reads that, and `functional-stop-all` still attempts every version.
-3. **Guardrail coverage** — `setup-bugzilla.sh` and `run-all-versions.sh` join `check-shell`.
+3. **Guardrail coverage** — `setup-bugzilla.sh`, the file this change edits, joins `check-shell`.
 4. **Documentation** — five sites, listed in plan Task 2 steps 3-5, including the
    `functional-compare` comment at `Makefile:200-203` whose premise this change falsifies.
 

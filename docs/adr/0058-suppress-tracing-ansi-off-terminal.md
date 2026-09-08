@@ -117,3 +117,20 @@ contract is to compare against a server the run set up.
   than `reset`. judgment: it costs a second Bugzilla instance per host and a second image
   lifecycle to reason about, which is more than an uncharacterised precondition is worth. It is
   the right answer if the destructive consequence above proves painful.
+
+## Amendment (2026-09-07): `cmd_stop` verifies its own removal
+
+Issue #739, decided in [ADR 0067](0067-functional-tier-reclaims-its-container.md). The decision
+above is unchanged; this amends the last clause of the `cmd_reset` consequence.
+
+**`stop` no longer keeps its permissive behaviour.** That clause held while no caller depended on
+`stop` having worked. ADR 0067 makes `run-tests.sh`'s EXIT trap one such caller: a trap-driven stop
+that reports "Container removed." regardless would leak the container while claiming otherwise. The
+removal check therefore moves out of `cmd_reset` and into `cmd_stop`, which suppresses that line and
+returns non-zero when the container survives; `cmd_reset` reads the status rather than repeating the
+inspect. Callers wanting permissiveness discard it, as `run-all-versions.sh:14` and
+`run-compare-all.sh:15` already do.
+
+**The refusal this guards against is podman-only.** verified: under docker 29.7.2, `docker rm -f`
+removes a base container with a live dependent attached and exits 0. The check is not a
+dependency-refusal detector; it makes `stop`'s exit status honest for any refused removal.
