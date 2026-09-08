@@ -225,7 +225,8 @@ if [[ -z "${BZ_URL:-}" ]]; then
   }
   _port=$(bugzilla_container_port "$_rt" "$_name") || {
     echo "ERROR: could not determine Bugzilla container port for" \
-      "'$_name'; run: make functional-start" >&2
+      "'$_name'; run: BZR_FUNC_KEEP=1 make functional-test for the fixture" \
+      "demos, or make functional-start for the main demo" >&2
     exit 1
   }
   BZ_URL="http://127.0.0.1:${_port}"
@@ -345,7 +346,7 @@ if [[ "${1:-}" == "release-readiness" ]]; then
     exit 1
   }
   curl -fsS "$BZ_URL/rest/version" >/dev/null || {
-    echo "ERROR: no Bugzilla at $BZ_URL — run: make functional-start" >&2
+    echo "ERROR: no Bugzilla at $BZ_URL — run: BZR_FUNC_KEEP=1 make functional-test" >&2
     exit 1
   }
 
@@ -440,7 +441,7 @@ if [[ "${1:-}" == "dependency-analysis" ]]; then
     exit 1
   }
   curl -fsS "$BZ_URL/rest/version" >/dev/null || {
-    echo "ERROR: no Bugzilla at $BZ_URL — run: make functional-start" >&2
+    echo "ERROR: no Bugzilla at $BZ_URL — run: BZR_FUNC_KEEP=1 make functional-test" >&2
     exit 1
   }
 

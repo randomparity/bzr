@@ -17,13 +17,15 @@ End-to-end tests that exercise `bzr` CLI commands against real Bugzilla containe
 # Build the Bugzilla container image (one-time, ~5 min)
 make functional-build
 
-# Start the default Bugzilla 5.0 container and run the standard test suite
+# Start the default Bugzilla 5.0 container and run the standard test suite.
+# The run reclaims its container on exit; BZR_FUNC_KEEP=1 keeps it warm.
 make functional-test
 
 # Run the same suite across all supported Bugzilla versions
 make functional-test-all
 
-# Stop the container when done
+# Reclaim a container the runner did not: one started by hand, one kept with
+# BZR_FUNC_KEEP, or one left by make functional-compare
 make functional-stop
 ```
 

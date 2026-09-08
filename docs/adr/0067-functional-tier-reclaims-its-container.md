@@ -59,8 +59,11 @@ dependency-refusal detector; it makes the exit status honest for any refused rem
   already starts from `reset` and is unaffected. ADR 0058's consequence that
   `make functional-compare` destroys a container held for `make functional-test` now applies only
   under `BZR_FUNC_KEEP`.
-- Anything that consumes the container *after* the run must now ask for it: `tools/record-demo.sh`
-  and the three demo-recording documents it serves say `BZR_FUNC_KEEP=1 make functional-test`.
+- Anything that consumes the container *after* the run must now ask for it and give it back:
+  `tools/record-demo.sh`'s three fixture-dependent arms and the demo documents that drive them say
+  `BZR_FUNC_KEEP=1 make functional-test`, and each document's block closes with
+  `make functional-stop`. The main demo arm is unaffected — it seeds its own data and wants a fresh
+  `make functional-start` container, which it still names.
 - The reclaim force-removes whatever `BZR_FUNC_CONTAINER` names, so that override now decides what
   gets destroyed rather than only what gets addressed; its README row says so. `BZR_FUNC_PORT` is
   not part of that resolution — with it set, the run tests whatever answers on that port while the

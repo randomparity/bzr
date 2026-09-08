@@ -23,6 +23,7 @@ server still running, and the functional runner reclaims its container on exit u
 ```sh
 BZR_FUNC_KEEP=1 make functional-test
 BZR_BIN="$PWD/target/release/bzr" tools/record-demo.sh project-manager-reporting
+make functional-stop
 ```
 
 Status Whiteboard is a standard Bugzilla field that an installation may disable. It represents a
