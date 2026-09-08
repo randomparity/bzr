@@ -106,8 +106,8 @@ bounds duration but not size.
 
 **Out of scope.** Request and upload bodies (`bzr` produces them). Total memory
 across concurrent requests — `bzr` issues one request at a time per command, so
-the ceiling is one bounded read, at roughly twice the limit while the buffer
-doubles. A pathological JSON document under the bound: `serde_json`'s recursion
+the ceiling is one bounded read, whose peak ADR 0068 states per path (it is not
+a flat multiple, and the worst case is well above 1x). A pathological JSON document under the bound: `serde_json`'s recursion
 limit answers that. A server that streams just under the bound repeatedly: the
 request timeout covers it, a size bound cannot.
 

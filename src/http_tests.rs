@@ -235,7 +235,8 @@ const UNBOUNDED_BODY_READERS: &[&str] = &[
 ];
 
 /// The one file allowed to read a response body without the helper, because it
-/// *is* the helper.
+/// *is* the helper. Matched by its path under `src/`, not by base name: a
+/// future `src/client/http.rs` must not inherit the exemption.
 const BOUND_IMPLEMENTATION: &str = "http.rs";
 
 /// The bound exists at thirteen call sites with no single chokepoint to place
@@ -246,17 +247,17 @@ const BOUND_IMPLEMENTATION: &str = "http.rs";
 /// so offenders are reported by file.
 #[test]
 fn no_unbounded_response_body_reads_outside_tests() {
-    fn walk(dir: &std::path::Path, offenders: &mut Vec<String>) {
+    fn walk(dir: &std::path::Path, root: &std::path::Path, offenders: &mut Vec<String>) {
         for entry in std::fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
             if path.is_dir() {
-                walk(&path, offenders);
+                walk(&path, root, offenders);
                 continue;
             }
             let name = path.file_name().unwrap().to_string_lossy().into_owned();
             if path.extension() != Some(std::ffi::OsStr::new("rs"))
                 || name.ends_with("_tests.rs")
-                || name == BOUND_IMPLEMENTATION
+                || path == root.join(BOUND_IMPLEMENTATION)
             {
                 continue;
             }
@@ -273,10 +274,8 @@ fn no_unbounded_response_body_reads_outside_tests() {
     }
 
     let mut offenders = Vec::new();
-    walk(
-        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
-        &mut offenders,
-    );
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    walk(&root, &root, &mut offenders);
 
     assert!(
         offenders.is_empty(),

@@ -78,8 +78,19 @@ impl XmlRpcClient {
         {
             let body = match crate::http::read_body_bounded(resp, "XML-RPC error response").await {
                 Ok(body) => body,
-                Err(crate::http::BodyReadError::TooLarge { limit_bytes, .. }) => {
-                    format!("<response body exceeds the {limit_bytes}-byte limit>")
+                // Reporting a refusal as HttpStatus would classify it as a
+                // transport failure, and `dispatch_xmlrpc_first` would answer it
+                // by re-fetching over REST — the second bounded read the bound
+                // exists to prevent. Keep the status on the variant instead.
+                Err(crate::http::BodyReadError::TooLarge {
+                    operation,
+                    limit_bytes,
+                }) => {
+                    return Err(BzrError::ResponseTooLarge {
+                        operation,
+                        limit_bytes,
+                        status: Some(status.as_u16()),
+                    });
                 }
                 Err(crate::http::BodyReadError::Transport(e)) => {
                     format!("<failed to read response body: {e}>")

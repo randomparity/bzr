@@ -80,17 +80,15 @@ exit code 16.**
   ground of a 404-with-error-envelope shape, and says nothing about how a
   combined failure is named. Making the refusal survive that `map_err` is a
   one-line guard and a good follow-up.
-- **The XML-RPC error-status seam reports exit 5, not 16.** A refused body
-  arriving with an HTTP error status keeps `HttpStatus`, because the status is
-  the more useful fact there; the success-path read reports 16. Both exceptions
-  are documented in `docs/bzr-cli.md`'s exit-16 row.
+  That exception is documented in `docs/bzr-cli.md`'s exit-16 row.
 - **Criterion (6)'s "real container" is met by a loopback fixture.** No
   Bugzilla container emits a 96 MiB response on demand, so the bound cannot be
   exercised against one. Phase 18b runs the real `bzr` binary over a real
   socket, inside the container-based functional tier, against a local fixture —
   the shape that phase already uses for #512, and the strongest proof available.
 - **Peak allocation is stated per path, not flat.** A refused read holds about
-  twice the limit — roughly 96 MiB — while the `Vec` doubles. An accepted body
+  1.5x the limit — roughly 96 MiB, the old 32 MiB buffer beside the new 64 MiB
+  one — while the `Vec` doubles. An accepted body
   of valid UTF-8 holds the limit once, because `String::from_utf8` reuses the
   buffer. An accepted body that is *not* valid UTF-8 costs what
   `Response::text()` costs today: the failed `String` keeps the buffer alive
