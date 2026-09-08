@@ -254,13 +254,41 @@ fn display_width(line: &str) -> usize {
         .sum()
 }
 
+fn records(rows: &[&[&str]]) -> Vec<Vec<String>> {
+    rows.iter()
+        .map(|row| row.iter().map(|cell| (*cell).to_string()).collect())
+        .collect()
+}
+
 #[test]
-fn write_table_unbounded_preserves_existing_table_bytes() {
+fn write_table_records_escapes_cells_and_headers() {
+    let mut buf = Vec::new();
+    write_table_records(
+        &["N\u{202e}AME"],
+        records(&[&["ev\u{1b}[2Jil\u{202e}"]]),
+        None,
+        &mut buf,
+    );
+
+    let output = String::from_utf8(buf).unwrap();
+    assert!(
+        !output.contains('\u{1b}') && !output.contains('\u{202e}'),
+        "no raw control or bidi character may reach the terminal: {output:?}"
+    );
+    assert!(
+        output.contains("\\u{1b}") && output.contains("\\u{202e}"),
+        "both must survive in escaped form: {output:?}"
+    );
+}
+
+#[test]
+fn write_table_records_unbounded_preserves_existing_table_bytes() {
     let expected = format!("{}\n", table(&["Name", "State"], &[&["long enough", "OK"]]));
     let mut buf = Vec::new();
 
-    write_table(
-        table(&["Name", "State"], &[&["long enough", "OK"]]),
+    write_table_records(
+        &["Name", "State"],
+        records(&[&["long enough", "OK"]]),
         None,
         &mut buf,
     );
@@ -269,13 +297,11 @@ fn write_table_unbounded_preserves_existing_table_bytes() {
 }
 
 #[test]
-fn write_table_wraps_ascii_lines_to_injected_width() {
+fn write_table_records_wraps_ascii_lines_to_injected_width() {
     let mut buf = Vec::new();
-    write_table(
-        table(
-            &["Description", "State"],
-            &[&["a long sequence of words that must wrap", "OK"]],
-        ),
+    write_table_records(
+        &["Description", "State"],
+        records(&[&["a long sequence of words that must wrap", "OK"]]),
         Some(24),
         &mut buf,
     );
@@ -286,10 +312,11 @@ fn write_table_wraps_ascii_lines_to_injected_width() {
 }
 
 #[test]
-fn write_table_wraps_unicode_lines_to_injected_display_width() {
+fn write_table_records_wraps_unicode_lines_to_injected_display_width() {
     let mut buf = Vec::new();
-    write_table(
-        table(&["City", "State"], &[&["東京市場東京市場", "OK"]]),
+    write_table_records(
+        &["City", "State"],
+        records(&[&["東京市場東京市場", "OK"]]),
         Some(20),
         &mut buf,
     );
@@ -300,16 +327,14 @@ fn write_table_wraps_unicode_lines_to_injected_display_width() {
 }
 
 #[test]
-fn write_table_clamps_to_structural_floor_without_replacing_width_two_scalar() {
+fn write_table_records_clamps_to_structural_floor_without_replacing_width_two_scalar() {
     let mut buf = Vec::new();
-    write_table(
-        table(
-            &["Description", "State"],
-            &[&[
-                "a very long ASCII value that should surrender width first",
-                "東",
-            ]],
-        ),
+    write_table_records(
+        &["Description", "State"],
+        records(&[&[
+            "a very long ASCII value that should surrender width first",
+            "東",
+        ]]),
         Some(1),
         &mut buf,
     );

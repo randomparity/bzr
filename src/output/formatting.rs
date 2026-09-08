@@ -135,14 +135,18 @@ pub(super) fn write_formatted_projected<T, W>(
     }
 }
 
-pub(super) fn write_table<W: Write + ?Sized>(mut table: Table, width: Option<usize>, out: &mut W) {
-    if let Some(width) = width {
-        let minimum_width = 5 * table.count_columns() + 1;
-        table.with(Width::wrap(width.max(minimum_width)).priority(PriorityMax::right()));
-    }
-    let _ = writeln!(out, "{table}");
-}
-
+/// The single table entry point: build, escape, optionally wrap, write.
+///
+/// Every header and cell passes through [`escape_terminal_controls`], so a
+/// writer that renders server data through this function inherits the escaping
+/// rather than rediscovering it. This is deliberately the *only* way to emit a
+/// table — an entry point taking an already-built [`Table`] could not reach the
+/// cells as strings, and leaving one reachable is how the pre-ADR-0065 gap
+/// arose.
+///
+/// Escaping runs after each caller's record closure, so `truncate` still counts
+/// the original characters and an escaped cell is pure ASCII whose display width
+/// equals its character count — the only form `Width::wrap` measures correctly.
 pub(super) fn write_table_records<W: Write + ?Sized>(
     headers: &[&str],
     rows: impl IntoIterator<Item = Vec<String>>,
@@ -150,11 +154,20 @@ pub(super) fn write_table_records<W: Write + ?Sized>(
     out: &mut W,
 ) {
     let mut builder = Builder::default();
-    builder.push_record(headers.iter().copied());
+    builder.push_record(
+        headers
+            .iter()
+            .map(|header| escape_terminal_controls(header)),
+    );
     for row in rows {
-        builder.push_record(row);
+        builder.push_record(row.iter().map(|cell| escape_terminal_controls(cell)));
     }
-    write_table(builder.build(), width, out);
+    let mut table: Table = builder.build();
+    if let Some(width) = width {
+        let minimum_width = 5 * table.count_columns() + 1;
+        table.with(Width::wrap(width.max(minimum_width)).priority(PriorityMax::right()));
+    }
+    let _ = writeln!(out, "{table}");
 }
 
 #[derive(Clone, Copy)]

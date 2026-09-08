@@ -3,11 +3,10 @@ use std::io::Write;
 
 use colored::Colorize;
 use serde_json::Value;
-use tabled::builder::Builder;
 
 use crate::output::formatting::{
     colorize_status, disable_color_for_tests, render_flags_inline, shorten_email, truncate,
-    write_divider, write_field, write_formatted, write_json_family, write_table,
+    write_divider, write_field, write_formatted, write_json_family, write_table_records,
     SUMMARY_TRUNCATE_WIDTH,
 };
 use crate::types::bug::{
@@ -167,16 +166,19 @@ pub fn write_bugs<W: Write + ?Sized, E: Write + ?Sized>(
                 return;
             }
             let columns = resolve_columns(spec, err);
-            let mut builder = Builder::default();
-            builder.push_record(columns.iter().map(|field| (*field).header()));
-            for bug in bugs {
-                builder.push_record(
+            let headers: Vec<String> = columns.iter().map(|field| (*field).header()).collect();
+            let header_refs: Vec<&str> = headers.iter().map(String::as_str).collect();
+            write_table_records(
+                &header_refs,
+                bugs.iter().map(|bug| {
                     columns
                         .iter()
-                        .map(|field| render_selected_field(*field, bug)),
-                );
-            }
-            write_table(builder.build(), width, out);
+                        .map(|field| render_selected_field(*field, bug))
+                        .collect()
+                }),
+                width,
+                out,
+            );
         }
     }
 }
@@ -450,22 +452,24 @@ pub fn write_bug_links<W: Write + ?Sized>(
         if links.is_empty() {
             return;
         }
-        let mut builder = Builder::default();
-        builder.push_record(["ID", "RELATION", "DIR", "DEPTH", "STATUS", "SUMMARY"]);
-        for link in links {
-            builder.push_record([
-                link.id.to_string(),
-                link.relation.as_str().to_string(),
-                link.direction.as_str().to_string(),
-                link.depth.to_string(),
-                link.status.clone().unwrap_or_default(),
-                link.summary
-                    .as_deref()
-                    .map(|s| truncate(s, SUMMARY_TRUNCATE_WIDTH))
-                    .unwrap_or_default(),
-            ]);
-        }
-        write_table(builder.build(), width, out);
+        write_table_records(
+            &["ID", "RELATION", "DIR", "DEPTH", "STATUS", "SUMMARY"],
+            links.iter().map(|link| {
+                vec![
+                    link.id.to_string(),
+                    link.relation.as_str().to_string(),
+                    link.direction.as_str().to_string(),
+                    link.depth.to_string(),
+                    link.status.clone().unwrap_or_default(),
+                    link.summary
+                        .as_deref()
+                        .map(|s| truncate(s, SUMMARY_TRUNCATE_WIDTH))
+                        .unwrap_or_default(),
+                ]
+            }),
+            width,
+            out,
+        );
     });
 }
 
@@ -499,50 +503,56 @@ fn write_bug_adjacency_table(
     out: &mut (impl Write + ?Sized),
 ) {
     let _ = writeln!(out, "Requests");
-    let mut requests = Builder::default();
-    requests.push_record(["REQUESTED", "RESULT"]);
-    for request in &result.requests {
-        let (requested, outcome) = match request {
-            BugAdjacencyRequest::Success { requested, bug_id } => (requested, bug_id.to_string()),
-            BugAdjacencyRequest::Failure { requested, error } => {
-                (requested, format_adjacency_error(*error))
-            }
-        };
-        requests.push_record([requested.clone(), outcome]);
-    }
-    write_table(requests.build(), width, out);
+    write_table_records(
+        &["REQUESTED", "RESULT"],
+        result.requests.iter().map(|request| {
+            let (requested, outcome) = match request {
+                BugAdjacencyRequest::Success { requested, bug_id } => {
+                    (requested, bug_id.to_string())
+                }
+                BugAdjacencyRequest::Failure { requested, error } => {
+                    (requested, format_adjacency_error(*error))
+                }
+            };
+            vec![requested.clone(), outcome]
+        }),
+        width,
+        out,
+    );
 
     let _ = writeln!(out, "\nCanonical bugs");
-    let mut bugs = Builder::default();
-    bugs.push_record([
-        "ID",
-        "SUMMARY",
-        "STATUS",
-        "RESOLUTION",
-        "PRODUCT",
-        "VERSION",
-        "ASSIGNEE",
-        "LAST CHANGE TIME",
-        "TARGET MILESTONE",
-        "BLOCKS",
-        "DEPENDS ON",
-    ]);
-    for bug in &result.bugs {
-        bugs.push_record([
-            bug.id.to_string(),
-            bug.summary.clone().unwrap_or_default(),
-            bug.status.clone().unwrap_or_default(),
-            bug.resolution.clone().unwrap_or_default(),
-            bug.product.clone().unwrap_or_default(),
-            join_strings(bug.version.as_deref()),
-            bug.assigned_to.clone().unwrap_or_default(),
-            bug.last_change_time.clone().unwrap_or_default(),
-            bug.target_milestone.clone().unwrap_or_default(),
-            join_ids(&bug.blocks),
-            join_ids(&bug.depends_on),
-        ]);
-    }
-    write_table(bugs.build(), width, out);
+    write_table_records(
+        &[
+            "ID",
+            "SUMMARY",
+            "STATUS",
+            "RESOLUTION",
+            "PRODUCT",
+            "VERSION",
+            "ASSIGNEE",
+            "LAST CHANGE TIME",
+            "TARGET MILESTONE",
+            "BLOCKS",
+            "DEPENDS ON",
+        ],
+        result.bugs.iter().map(|bug| {
+            vec![
+                bug.id.to_string(),
+                bug.summary.clone().unwrap_or_default(),
+                bug.status.clone().unwrap_or_default(),
+                bug.resolution.clone().unwrap_or_default(),
+                bug.product.clone().unwrap_or_default(),
+                join_strings(bug.version.as_deref()),
+                bug.assigned_to.clone().unwrap_or_default(),
+                bug.last_change_time.clone().unwrap_or_default(),
+                bug.target_milestone.clone().unwrap_or_default(),
+                join_ids(&bug.blocks),
+                join_ids(&bug.depends_on),
+            ]
+        }),
+        width,
+        out,
+    );
 }
 
 fn format_adjacency_error(error: BugAdjacencyError) -> String {
