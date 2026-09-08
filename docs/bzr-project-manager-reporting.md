@@ -16,10 +16,14 @@ of the intended interaction: a program manager asks an agent for an analysis, an
 the complete report they can use. Before recording, the workflow installs the skill and verifies the
 saved Custom Search query against a real local Bugzilla server.
 
-Regenerate it against a populated local functional Bugzilla server:
+Regenerate it against a populated local functional Bugzilla server. The recorder needs that
+server still running, and the functional runner reclaims its container on exit unless
+`BZR_FUNC_KEEP` is set (ADR 0067):
 
 ```sh
+BZR_FUNC_KEEP=1 make functional-test
 BZR_BIN="$PWD/target/release/bzr" tools/record-demo.sh project-manager-reporting
+make functional-stop
 ```
 
 Status Whiteboard is a standard Bugzilla field that an installation may disable. It represents a

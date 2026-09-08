@@ -151,6 +151,26 @@ cmd_start() {
 cmd_stop() {
     log "Stopping and removing container ${CONTAINER_NAME}..."
     $CONTAINER_RT rm -f "$CONTAINER_NAME" 2>/dev/null || true
+    # `rm -f` failure is discarded because "no such container" is routine, so the
+    # container itself is the check, and it makes this exit status honest for any
+    # refused removal. podman refuses to remove one a running container depends
+    # on through `--network container:<name>` — a leftover python-bugzilla
+    # sidecar; docker removes it anyway (ADR 0067, amending ADR 0058).
+    if container_exists; then
+        err "Container ${CONTAINER_NAME} survived removal. A dependent container" \
+            "is probably holding it -- most likely a leftover python-bugzilla" \
+            "sidecar from a comparison run whose cleanup did not fire. Remove it" \
+            "(\`${CONTAINER_RT} rm -f <sidecar>\`) and retry."
+        return 1
+    fi
+    # `container_exists` reports "gone" for an unreachable runtime too, so probe
+    # before concluding success -- otherwise a dead daemon reproduces exactly the
+    # false success this check exists to remove.
+    if ! $CONTAINER_RT version >/dev/null 2>&1; then
+        err "Could not confirm ${CONTAINER_NAME} was removed: ${CONTAINER_RT} is" \
+            "not answering. Start it and retry."
+        return 1
+    fi
     log "Container removed."
     return 0
 }
@@ -184,18 +204,7 @@ cmd_status() {
 }
 
 cmd_reset() {
-    cmd_stop
-    # cmd_stop discards `rm -f` failure and logs "Container removed." regardless,
-    # so verify here: podman refuses to remove a container a running one depends
-    # on through `--network container:<name>`, which is what a leftover
-    # python-bugzilla sidecar is. Unchecked, `reset` would silently be `start`.
-    if container_exists; then
-        err "Container ${CONTAINER_NAME} survived removal. A dependent container" \
-            "is probably holding it -- most likely a leftover python-bugzilla" \
-            "sidecar from a comparison run whose cleanup did not fire. Remove it" \
-            "(\`${CONTAINER_RT} rm -f <sidecar>\`) and retry."
-        return 1
-    fi
+    cmd_stop || return 1
     cmd_start
     return 0
 }

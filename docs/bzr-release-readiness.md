@@ -54,8 +54,9 @@ Install `asciinema` 3 or newer, `jq`, and `curl`, then run:
 
 ```sh
 cargo build --release
-make functional-test
+BZR_FUNC_KEEP=1 make functional-test
 BZR_BIN="$PWD/target/release/bzr" tools/record-demo.sh release-readiness
+make functional-stop
 ```
 
 This regenerates `docs/assets/bzr-release-readiness-demo.cast`. If the fixture is absent, the

@@ -134,8 +134,9 @@ never creates or updates a Bugzilla resource.
 
 ```sh
 cargo build --release
-make functional-test
+BZR_FUNC_KEEP=1 make functional-test
 tools/record-demo.sh dependency-analysis
+make functional-stop
 ```
 
 If the marked fixture is absent, the recorder stops and asks for the functional setup instead of
