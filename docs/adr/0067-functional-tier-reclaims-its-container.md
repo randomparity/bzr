@@ -38,27 +38,36 @@ targets, and a direct invocation. `BZR_FUNC_KEEP=1` is the opt-out that keeps th
 
 ADR 0058 gave `cmd_reset` a removal check and left "`stop` … permissive behaviour for its other
 callers" (`0058:60-65`). That held while no caller depended on `stop` having worked; this decision
-creates one. A trap-driven stop that reports "Container removed." regardless leaks exactly as
-before while claiming otherwise, and it fails in the case that produces leaks: a leftover
-python-bugzilla sidecar holding the container through `--network container:<name>`
-(`tests/functional/lib.sh:406`). The check moves from `cmd_reset` into `cmd_stop`, which suppresses
-"Container removed." and returns non-zero when the container survives; `cmd_reset` reads that
-status. A caller wanting permissiveness discards it, as `run-all-versions.sh:14` and
-`run-compare-all.sh:15` already do.
+creates one, and a trap-driven stop that reports "Container removed." regardless leaks exactly as
+before while claiming otherwise. The check moves from `cmd_reset` into `cmd_stop`, which suppresses
+that line and returns non-zero when the container survives; `cmd_reset` reads the status, and a
+caller wanting permissiveness discards it as `run-all-versions.sh:14` and `run-compare-all.sh:15`
+already do.
+
+ADR 0058's motivating case — podman refusing to remove a container a running one depends on through
+`--network container:<name>`, which is what a leftover python-bugzilla sidecar is
+(`tests/functional/lib.sh:406`) — is runtime-specific. verified: under docker 29.7.2, `docker rm -f`
+removes the base container with a live dependent attached and exits 0. So the check is not a podman
+dependency-refusal detector; it makes the exit status honest for any refused removal.
 
 ## Consequences
 
-- The second and later `make functional-test` in a checkout pays a container start again unless the
-  developer exports `BZR_FUNC_KEEP=1`, and a failing run no longer leaves its container for
-  post-mortem inspection. `CONTRIBUTING.md` already directs a diagnostic run to start from
-  `setup-bugzilla.sh reset`, so that inspection was never the documented path.
-- ADR 0058's consequence that `make functional-compare` destroys a container held for
-  `make functional-test` now applies only under `BZR_FUNC_KEEP`.
+- The second and later `make functional-test` in a checkout pays a container start again unless
+  `BZR_FUNC_KEEP=1` is exported, and a failing run no longer leaves its container for post-mortem
+  inspection — `CONTRIBUTING.md` already directs a diagnostic run to start from `reset`, so that
+  was never the documented path. ADR 0058's consequence that `make functional-compare` destroys a
+  container held for `make functional-test` now applies only under `BZR_FUNC_KEEP`.
+- Two runs sharing a checkout id — which `CLAUDE.md` documents as unsupported, and which covers
+  `make functional-test` beside `make functional-compare` in one checkout — now destroy each other's
+  container instead of merely interfering with its data. `BZR_FUNC_KEEP=1` or a second checkout is
+  the way to run them together; no coordination machinery is added for a case already documented as
+  unsupported.
+- `make functional-stop` now exits non-zero when removal is refused instead of reporting success,
+  and `functional-stop-all` becomes a loop so one refused version still leaves the others attempted.
 - `cleanup_all` becomes belt-and-braces; its `2>/dev/null || true` hides the new diagnostic, which
-  the runner already printed on the stream the developer was watching.
-- `make functional-stop` now exits non-zero when removal is refused instead of reporting success.
-- Already-orphaned containers are not reclaimed here. `tests/functional/README.md`'s orphan
-  procedure clears them, now as a one-time task rather than a recurring one.
+  the runner already printed where the developer was watching. Already-orphaned containers are not
+  reclaimed here — `tests/functional/README.md`'s orphan procedure clears them, now once rather
+  than recurrently.
 - `setup-bugzilla.sh` and `run-all-versions.sh` join `make check-shell`'s lists; they were in
   neither, so this change would otherwise land unlinted.
 
@@ -74,6 +83,9 @@ status. A caller wanting permissiveness discards it, as `run-all-versions.sh:14`
 - **Record the container name inside the checkout.** verified: the trace lives in the thing that
   gets deleted — `git worktree remove` takes it with the name — so the unrecoverable case, 14 of the
   17 observed, is the one it does not cover.
+- **Record it in a host-global registry outside every checkout**, the repair for the bullet above.
+  judgment: it survives deletion, but it is new lifecycle state to write, prune, and keep honest
+  against containers removed behind its back.
 - **Label the container with its checkout path at `run` time.** judgment: permanently reclaimable
   by inspection, but only for containers created afterwards, and a tier that stops leaking leaves
   the label nothing to reclaim. Revisit if `BZR_FUNC_KEEP` becomes the common setting.
