@@ -523,6 +523,46 @@ class CollectorTestCase(unittest.TestCase):
         self.assertEqual(data, {"summary": "Résumé"})
         self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
 
+    def test_validate_envelope_version_accepts_same_major_minor_patch_drift(self):
+        for candidate in ("3.0.6", "3.1.0", "3.9.9"):
+            with self.subTest(candidate=candidate):
+                COLLECTOR.validate_envelope_version({"schema_version": candidate})
+
+    def test_validate_envelope_version_rejects_major_mismatch(self):
+        with self.assertRaises(COLLECTOR.FatalCollection) as raised:
+            COLLECTOR.validate_envelope_version({"schema_version": "4.0.0"})
+        self.assertEqual(raised.exception.limitation, "collection-schema-version")
+        self.assertEqual(raised.exception.error_type, "schema-version")
+
+    def test_child_runner_accepts_compatible_minor_schema_version_drift(self):
+        with tempfile.TemporaryDirectory() as directory:
+            script = Path(directory) / "minor_drift.py"
+            script.write_text(
+                "import json\n"
+                "json.dump({'schema_version': '3.1.0', 'data': {'ok': True}}, "
+                "open(1, 'w', encoding='utf-8'))\n",
+                encoding="utf-8",
+            )
+            runner = COLLECTOR.CommandRunner(sys.executable)
+            data, error = runner.run_json([str(script)])
+        self.assertIsNone(error)
+        self.assertEqual(data, {"ok": True})
+
+    def test_child_runner_rejects_major_schema_version_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            script = Path(directory) / "major_mismatch.py"
+            script.write_text(
+                "import json\n"
+                "json.dump({'schema_version': '4.0.0', 'data': {'ok': True}}, "
+                "open(1, 'w', encoding='utf-8'))\n",
+                encoding="utf-8",
+            )
+            runner = COLLECTOR.CommandRunner(sys.executable)
+            with self.assertRaises(COLLECTOR.FatalCollection) as raised:
+                runner.run_json([str(script)])
+        self.assertEqual(raised.exception.limitation, "collection-schema-version")
+        self.assertEqual(raised.exception.error_type, "schema-version")
+
     def test_failed_preflight_and_ambiguous_api_102_are_command_fatal(self):
         input_policy = policy([bug_scope("primary", 1)])
         response = failed(
