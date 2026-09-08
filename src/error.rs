@@ -140,21 +140,32 @@ pub fn clear_error_redaction_context() {
 
 /// Render a [`BzrError::ResponseTooLarge`] message.
 ///
-/// The status is interpolated rather than published only as a structured key,
-/// so a `--format table` user sees the 4xx or 5xx the refused body arrived
-/// with; without this it would reach `--json` consumers alone.
+/// Someone who hits this has to be able to tell a fixed cap from a bug without
+/// reading source, so the message carries the operation, the limit it exceeded,
+/// the status when one is known, and what to do — which is not "retry". The
+/// status is interpolated rather than published only as a structured key,
+/// because a `--format table` user never sees the structured keys.
 fn format_response_too_large(operation: &str, limit_bytes: u64, status: Option<u16>) -> String {
-    let mut message = format!(
-        "{operation}: server response exceeds the {limit_bytes}-byte \
-         response-body limit; the read was stopped at the limit and the \
-         response discarded"
-    );
-    if let Some(status) = status {
-        use std::fmt::Write as _;
-        let _ = write!(message, " (HTTP {status})");
+    use std::fmt::Write as _;
+
+    let mut message =
+        format!("{operation}: the server's response exceeds bzr's response-body limit of {limit_bytes} bytes");
+    if limit_bytes >= MIB {
+        let _ = write!(message, " ({} MiB)", limit_bytes / MIB);
     }
+    if let Some(status) = status {
+        let _ = write!(message, ", sent with HTTP {status}");
+    }
+    message.push_str(
+        "; the read stopped at the limit and the response was discarded. \
+         The limit is a fixed cap, not a transient failure, so retrying will not \
+         help: an attachment whose base64 payload is over the limit cannot be \
+         downloaded.",
+    );
     message
 }
+
+const MIB: u64 = 1024 * 1024;
 
 pub(crate) fn io_with_context(context: impl fmt::Display, error: &std::io::Error) -> BzrError {
     BzrError::Io(std::io::Error::new(

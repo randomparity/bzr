@@ -676,3 +676,58 @@ fn response_too_large_is_not_a_transport_failure() {
     }
     .is_transport_failure());
 }
+
+/// The message has to let someone tell a fixed cap from a bug without reading
+/// source: it names the operation, the limit in both units, and what to do.
+#[test]
+fn response_too_large_message_is_actionable() {
+    let message = BzrError::ResponseTooLarge {
+        operation: "response body".to_owned(),
+        limit_bytes: 67_108_864,
+        status: None,
+    }
+    .to_string();
+
+    assert!(
+        message.contains("response body"),
+        "names the operation: {message}"
+    );
+    assert!(
+        message.contains("67108864 bytes"),
+        "names the limit: {message}"
+    );
+    assert!(
+        message.contains("64 MiB"),
+        "names the limit in MiB: {message}"
+    );
+    assert!(
+        message.contains("fixed cap"),
+        "says it is a cap, not a fault: {message}"
+    );
+    assert!(
+        message.contains("retrying will not"),
+        "says what not to do: {message}"
+    );
+    assert!(
+        message.contains("attachment"),
+        "names the case a user will hit: {message}"
+    );
+}
+
+/// A test-sized limit has no whole-MiB form, so the clause is omitted rather
+/// than rendered as "0 MiB".
+#[test]
+fn response_too_large_message_omits_a_sub_mib_limit_clause() {
+    let message = BzrError::ResponseTooLarge {
+        operation: "test read".to_owned(),
+        limit_bytes: 16,
+        status: None,
+    }
+    .to_string();
+
+    assert!(message.contains("16 bytes"), "{message}");
+    assert!(
+        !message.contains("MiB"),
+        "no MiB clause under 1 MiB: {message}"
+    );
+}

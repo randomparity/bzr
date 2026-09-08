@@ -56,13 +56,17 @@ exit code 16.**
   ADR 0007's additive rule, across its twelve live pins. Two bundled readers
   must move with it: `bzr-dependency-analysis`'s envelope validator, whose
   ceiling and key set are already stale at exit 15, and `bzr-reference`'s error
-  table, which asserts its own exhaustiveness. The second is outside this
-  change's authorized surface and is deferred to the caller.
-- **A single attachment larger than ~48 MiB can no longer be downloaded.**
-  `download_attachment` reads base64 `data` out of a REST JSON body, and 4/3
-  expansion puts the ceiling there. Streaming that path via `attachment.cgi` is
-  operator-approved as a follow-up on #740 and had not been filed when this
-  record was written; it needs an issue. A deployment setting Bugzilla's
+  table, which asserts its own exhaustiveness. No gate scans that table, so its
+  row is verified by hand against `src/error.rs` and `schemas/error.json`.
+- **A REST-delivered attachment larger than about 48 MiB can no longer be
+  downloaded; `bzr attachment download` exits 16 on it.** `download_attachment`
+  reads base64 `data` out of a REST JSON body, and 4/3 expansion puts the
+  ceiling at roughly three quarters of the limit. The refusal message says the
+  limit is a fixed cap rather than a transient failure and names the attachment
+  case, so an operator can tell it from a bug without reading source. Streaming
+  that path via `attachment.cgi` is operator-approved as a follow-up on #740
+  and is not filed: issue creation in this campaign needs an operator
+  confirmation collected at its enqueue gate. A deployment setting Bugzilla's
   `maxlocalattachment` — the parameter whose purpose is to permit attachments
   above `maxattachmentsize` — can exceed the ceiling, and nothing raises it.
 - **The Hybrid fallbacks gated on `is_transport_failure` lose one edge each.**
@@ -81,11 +85,17 @@ exit code 16.**
   combined failure is named. Making the refusal survive that `map_err` is a
   one-line guard and a good follow-up.
   That exception is documented in `docs/bzr-cli.md`'s exit-16 row.
-- **Criterion (6)'s "real container" is met by a loopback fixture.** No
-  Bugzilla container emits a 96 MiB response on demand, so the bound cannot be
-  exercised against one. Phase 18b runs the real `bzr` binary over a real
-  socket, inside the container-based functional tier, against a local fixture —
-  the shape that phase already uses for #512, and the strongest proof available.
+- **Criterion (6)'s "real container" is met by a loopback fixture, by ruling.**
+  No Bugzilla container emits a 96 MiB response on demand, so a literal reading
+  of that criterion is unsatisfiable. Phase 18b runs the real `bzr` binary over
+  a real socket through the same production path a user takes
+  (`server info --api rest`, into `parse_json` and the shared bounded read),
+  inside the container-based functional tier, against a local fixture — the
+  shape that phase already uses for #512. The campaign orchestrator ratified
+  the substitution explicitly on 2026-09-08, conditioned on the fixture
+  exercising the bound through the production path rather than a helper in
+  isolation, which it does. Recorded here so the substitution is auditable
+  rather than looking like a gap.
 - **Peak allocation is stated per path, not flat.** A refused read holds about
   1.5x the limit — roughly 96 MiB, the old 32 MiB buffer beside the new 64 MiB
   one — while the `Vec` doubles. An accepted body

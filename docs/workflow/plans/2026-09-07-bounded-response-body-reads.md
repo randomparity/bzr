@@ -371,11 +371,14 @@ bundled readers, and the twelve `SCHEMA_VERSION` pins.
    (this validator is a hand-maintained mirror of the error contract and lags
    it), and a validator accepting 16 while rejecting 15 would be indefensible.
    Report the pre-existing gap.
-5. Do **not** edit `content/skills/bzr-reference/SKILL.md`. Its error-type
-   table (`:145-162`) asserts "That is the whole set" and this change falsifies
-   it, but the file carries no `SCHEMA_VERSION` pin and is outside the frozen
-   surface; it is deferred to the caller along with `AGENTS.md`'s variant count
-   (`CLAUDE.md` is a symlink to it). Report both.
+5. `content/skills/bzr-reference/SKILL.md`: add a `response_too_large | 16 |
+   operation, limit_bytes, and status when the refused response carried an
+   error status` row to the error-type table (`:145-162`), whose next line
+   asserts "That is the whole set". The drift checks do not scan `SKILL.md` and
+   `make skills-test` does not read the table, so verify every cell by hand
+   against `src/error.rs` and `schemas/error.json`; nothing else will. Leave
+   `AGENTS.md`'s variant count alone (`CLAUDE.md` is a symlink to it) — the
+   orchestrator owns it.
 6. `docs/bzr-cli.md`: add the exit-code table row after the row for 15 —
    `| 16 | Response too large (the server's response body exceeds bzr's 64 MiB
    response-body limit; the read stops at the limit and the response is

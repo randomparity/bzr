@@ -60,9 +60,11 @@ XML-RPC HTTP-error preview string.
   (`status` reuses the key `schemas/error.json` already declares). **Not** a
   transport failure.
 - `schemas/error.json` (`exit_code` maximum 15 → 16 plus two optional keys),
-  `SCHEMA_VERSION` 3.0.6 → 3.0.7 across its twelve live pins, and the bundled
-  reader that would otherwise reject exit 16 outright,
-  `bzr-dependency-analysis`'s `collect.py` validator.
+  `SCHEMA_VERSION` 3.0.6 → 3.0.7 across its twelve live pins, and the two
+  bundled readers that would otherwise be wrong about exit 16 —
+  `bzr-dependency-analysis`'s `collect.py` validator, which would reject it
+  outright, and `bzr-reference`'s error-type table, which asserts its own
+  exhaustiveness. No gate scans the latter, so its row is verified by hand.
 - `docs/bzr-cli.md` — exit-code row, structured-key rows, attachment ceiling,
   version pin — and a second fixture case in
   `tests/functional/phases/18b-http-error-preview.sh`.
@@ -121,12 +123,14 @@ request timeout covers it, a size bound cannot.
    the HTTP status where one is known; `is_transport_failure` is `false` for it.
 3. An over-limit body on an auth or version probe aborts detection with that
    error rather than continuing the probe chain or selecting a protocol.
-4. `bzr schema error` publishes an `exit_code` maximum of 16, and
-   `collect.py`'s envelope validator accepts an exit-16 envelope. The
-   `bzr-reference` error table is deliberately **not** covered — it is deferred
-   below — so an agent reading that bundled table sees fifteen exit codes until
-   the caller lands the row.
+4. `bzr schema error` publishes an `exit_code` maximum of 16, `collect.py`'s
+   envelope validator accepts an exit-16 envelope, and `bzr-reference`'s
+   error-type table carries the row.
 5. Bodies under the limit are returned byte-identically to `.text()` today.
+6. The refusal message names the operation, the limit in bytes and in MiB, and
+   the status when known, and says the limit is a fixed cap rather than a
+   transient failure — so an operator can tell it from a bug without reading
+   source.
 
 ## Validation
 
@@ -140,14 +144,25 @@ request timeout covers it, a size bound cannot.
 | Probe refusal aborts rather than continues | `focused-test` | `src/client/auth/whoami_tests.rs` and `valid_login_tests.rs`: a wiremock probe answering over a test limit yields `ProbeRefused`, not `AuthRejected` |
 | Published schema admits exit 16 | `focused-test` | `src/main_tests.rs::format_dispatch_error_json_family_matches_published_schema`, extended with a `ResponseTooLarge` case |
 | The bundled reader accepts exit 16 | `focused-test` | `content/skills/bzr-dependency-analysis/tests/test_collect.py`: an exit-16 envelope with both new keys validates; plus phase 18b's `bzr schema error` assertion |
+| The bundled error table carries the row | `task-test-not-applicable` | No gate scans `content/skills/bzr-reference/SKILL.md` — the drift checks read verbs and flags, not the error table, and `make skills-test` validates packaging rather than content. Verified by hand against `src/error.rs` and `schemas/error.json` |
+| The refusal message is actionable | `focused-test` | `src/error_tests.rs`: `response_too_large_message_is_actionable` asserts the operation, both limit units, the fixed-cap wording, and the attachment clause; `response_too_large_message_omits_a_sub_mib_limit_clause` pins the sub-MiB case |
 | End-to-end refusal on a real socket | `focused-test` | `tests/functional/phases/18b-http-error-preview.sh`: a local fixture streams past the limit; `bzr` exits 16 with `.error.type == "response_too_large"` |
 | The three remaining degraded arms | `task-test-not-applicable` | Each returns the same value that site's existing unreadable-body arm returns — `AlternateAuth::Original`, `None`, or a substituted preview — so no observation distinguishes them beyond the `tracing` line, and asserting log wording tests prose. The two arms whose values differed were reclassified above rather than waived |
 
-## Deferred — owner: the caller
+## Deferred — owner: the campaign orchestrator
 
-Two documents this change falsifies sit outside its frozen surface and are not
-edited here: `content/skills/bzr-reference/SKILL.md:145-162`, whose error-type
-table asserts "That is the whole set", and `AGENTS.md`'s "19 variants"
-description of `BzrError` (`CLAUDE.md` is a symlink to it). Separately, the `attachment.cgi` streaming follow-up
-that owns exclusion (a) — and so the ~48 MiB download ceiling introduced here —
-had not been filed when this design was written and needs an issue.
+Two items sit outside this change's surface and are not touched here.
+`AGENTS.md`'s "19 variants" description of `BzrError` becomes 20 (`CLAUDE.md`
+is a symlink to it); the orchestrator declined to extend a worker's surface
+into the project instruction file and will correct it after this merges. And
+the `attachment.cgi` streaming follow-up that owns exclusion (a) — and so the
+~48 MiB download ceiling introduced here — is not filed: issue creation in this
+campaign needs an operator confirmation collected at its enqueue gate, so
+neither this run nor the orchestrator may file it yet. Until then the in-tree
+record carries the weight — ADR 0068's Consequences, the `bzr attachment
+download` note in `docs/bzr-cli.md`, and the refusal message itself.
+
+The `bzr-reference` error table was deferred at design time and is **no longer**
+deferred: the orchestrator extended the surface to that row on 2026-09-08, on
+the ground that shipping exit 16 while the table asserts "That is the whole set"
+publishes a false statement to every agent consuming the skill.
