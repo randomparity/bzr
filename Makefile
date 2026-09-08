@@ -146,8 +146,8 @@ check-shell: ## Lint shell scripts (shellcheck + shfmt, POSIX and bash)
 	@command -v shfmt >/dev/null || { echo "ERROR: shfmt is required for this guard"; echo "  Install: brew install shfmt  |  https://github.com/mvdan/sh/releases"; exit 1; }
 	shellcheck -s sh install.sh tests/installer/smoke.sh
 	shellcheck -s bash tools/*.sh
-	shellcheck -s bash tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/run-compare.sh tests/functional/run-compare-all.sh tests/functional/container-env.sh tests/functional/phases/*.sh tests/functional/compare/*.sh tests/functional/pybz/*.sh
-	bash -n tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/run-compare.sh tests/functional/run-compare-all.sh tests/functional/phases/*.sh tests/functional/compare/*.sh tests/functional/pybz/*.sh
+	shellcheck -s bash tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/run-compare.sh tests/functional/run-compare-all.sh tests/functional/setup-bugzilla.sh tests/functional/container-env.sh tests/functional/phases/*.sh tests/functional/compare/*.sh tests/functional/pybz/*.sh
+	bash -n tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/run-compare.sh tests/functional/run-compare-all.sh tests/functional/setup-bugzilla.sh tests/functional/phases/*.sh tests/functional/compare/*.sh tests/functional/pybz/*.sh
 	shfmt -d -ln posix -i 2 install.sh tests/installer/smoke.sh
 	shfmt -d -ln bash -i 2 tools/*.sh
 
@@ -231,10 +231,13 @@ functional-compare-all: release ## Compare bzr and python-bugzilla on all versio
 	bash tests/functional/pybz/container-tests.sh
 	BZR_COMPARE_BIN="$(BZR_COMPARE_BIN)" tests/functional/run-compare-all.sh
 
+# `stop` now fails when a container survives removal (ADR 0067), so run the three
+# as one shell: every version is still attempted, and the target fails if any did
+# not come down.
 functional-stop-all: ## Stop all Bugzilla test containers
-	BZR_BZ_VERSION=bz50 tests/functional/setup-bugzilla.sh stop
-	BZR_BZ_VERSION=bz52 tests/functional/setup-bugzilla.sh stop
-	BZR_BZ_VERSION=bz53 tests/functional/setup-bugzilla.sh stop
+	@status=0; for v in bz50 bz52 bz53; do \
+	  BZR_BZ_VERSION=$$v tests/functional/setup-bugzilla.sh stop || status=1; \
+	done; exit $$status
 
 functional-test-keyring: ## Run keyring functional test against real OS keychain
 	tests/functional/keyring-test.sh
