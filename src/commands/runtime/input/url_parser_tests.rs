@@ -13,6 +13,7 @@ fn make_server_config(server_url: &str) -> ServerConfig {
         api_key_keyring: None,
         email: None,
         auth_method: None,
+        auth_method_source: None,
         api_mode: None,
         server_version: None,
         server_extensions: None,

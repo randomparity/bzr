@@ -2894,6 +2894,11 @@ api_key_env = "MOZILLA_BZ_API_KEY"
 url = "https://bugzilla.example.com"
 api_key = "old-server-key"
 email = "you@example.com"
+auth_method = "query_param"               # auto-detected: header or query_param
+auth_method_source = "differential-probe" # provenance of auth_method: "differential-probe"
+                                          # when bzr detected it, "pinned" when --auth-method
+                                          # set it. Absent or unrecognised means bzr re-probes
+                                          # auth_method once on the next credentialed connect.
 api_mode = "hybrid"        # auto-detected: rest, xmlrpc, or hybrid
 server_version = "5.0.4"   # auto-detected (absent if version endpoint unavailable)
 
@@ -2951,6 +2956,8 @@ If auto-detection picks the wrong method (e.g. on servers with custom extensions
 ```bash
 bzr config set-server myserver --url https://bugzilla.example.com --api-key-env BZR_API_KEY --auth-method header
 ```
+
+`bzr` records which of the two wrote the cached value. A value it detected itself is re-probed once after an upgrade that changed how detection works, so a server cached by an older `bzr` is corrected on its next credentialed use rather than staying wrong; when the re-probe changes the method, `bzr` warns and names the `--auth-method` command that pins the old value back. A value you set with `--auth-method` is a deliberate pin and is never re-probed. A value cached before `bzr` began recording this is re-probed once, which will overwrite a pin set that long ago — re-run the `--auth-method` line above to restore it.
 
 To generate an API key:
 
