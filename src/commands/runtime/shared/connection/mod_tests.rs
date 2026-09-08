@@ -9,7 +9,7 @@ use crate::error::BzrError;
 use crate::test_helpers::{setup_isolated_env, write_config_to};
 use crate::ENV_LOCK;
 
-use super::test_helpers::{load_config, mount_detection_mocks, write_config};
+use super::test_helpers::{load_config, mount_detection_mocks, write_config, CACHED_SERVER};
 
 /// A JSON-format command context pointed at an explicit config path, so connect
 /// resolves config without `XDG_CONFIG_HOME` and the test needs no `ENV_LOCK`.
@@ -389,22 +389,16 @@ async fn connect_client_with_tls_insecure_warns_and_succeeds() {
     assert!(result.is_ok(), "tls_insecure should still build a client");
 }
 
-/// The partial-cache branch must preserve the cached `auth_method` even
-/// when re-detection would have picked a different method. Re-detection
-/// runs to fill in the missing `api_mode` only.
-#[tokio::test]
-async fn connect_client_partial_cache_preserves_cached_auth_method() {
-    let mock = MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    // Cache says "header"; live detection will reject header (401) and
-    // accept query_param (200). The cached "header" must survive.
-    let config_path = write_config(&tmp, &mock.uri(), "auth_method = \"header\"");
-
+/// Mount a server whose live auth detection disagrees with a cached `header`:
+/// header auth is rejected (401) and query-param auth accepted (200), which is
+/// the stock Bugzilla 5.0/5.2 shape the differential probe of ADR-0056 started
+/// resolving to `query_param`.
+async fn mount_header_rejecting_mocks(mock: &MockServer) {
     Mock::given(method("GET"))
         .and(path("/rest/whoami"))
         .and(wiremock::matchers::header("X-BUGZILLA-API-KEY", "test-key"))
         .respond_with(ResponseTemplate::new(401))
-        .mount(&mock)
+        .mount(mock)
         .await;
     Mock::given(method("GET"))
         .and(path("/rest/whoami"))
@@ -413,15 +407,34 @@ async fn connect_client_partial_cache_preserves_cached_auth_method() {
             "test-key",
         ))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
-        .mount(&mock)
+        .mount(mock)
         .await;
     Mock::given(method("GET"))
         .and(path("/rest/version"))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.1.2"})),
         )
-        .mount(&mock)
+        .mount(mock)
         .await;
+}
+
+/// The partial-cache branch must preserve a *trusted* cached `auth_method` even
+/// when re-detection would have picked a different method. Re-detection runs to
+/// fill in the missing `api_mode` only. The stamp is what makes it trusted
+/// (ADR-0066); without one this same fixture re-detects instead, which is the
+/// companion test below.
+#[tokio::test]
+async fn connect_client_partial_cache_preserves_stamped_auth_method() {
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    // Cache says "header" and is stamped; live detection will reject header
+    // (401) and accept query_param (200). The cached "header" must survive.
+    let config_path = write_config(
+        &tmp,
+        &mock.uri(),
+        "auth_method = \"header\"\nauth_method_source = \"differential-probe\"",
+    );
+    mount_header_rejecting_mocks(&mock).await;
 
     let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
     assert!(
@@ -435,9 +448,161 @@ async fn connect_client_partial_cache_preserves_cached_auth_method() {
     assert_eq!(
         srv.auth_method,
         Some(crate::types::AuthMethod::Header),
-        "cached auth_method must not be overwritten by re-detection"
+        "a stamped auth_method must not be overwritten by re-detection"
     );
     assert_eq!(srv.api_mode, Some(crate::types::ApiMode::Rest));
+    assert_eq!(
+        srv.auth_method_source.as_deref(),
+        Some(crate::config::AUTH_METHOD_SOURCE_DETECTED),
+        "the stamp must survive a partial-cache re-detection that skips auth"
+    );
+}
+
+/// Success criterion 1 (ADR-0066): the population this issue exists for. An
+/// entry carrying `auth_method = "header"` with no stamp was written before the
+/// differential probe, so the next credentialed connect must re-detect it,
+/// persist the corrected method, and stamp the result — without the user
+/// knowing to re-run anything.
+#[tokio::test]
+async fn connect_client_redetects_unstamped_auth_method_and_stamps_it() {
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    // Identical fixture to the stamped case, minus the stamp. Both `auth_method`
+    // and `api_mode` are cached, so before ADR-0066 this took the full-cache arm
+    // and never contacted detection at all.
+    let config_path = write_config(
+        &tmp,
+        &mock.uri(),
+        "auth_method = \"header\"\napi_mode = \"rest\"",
+    );
+    mount_header_rejecting_mocks(&mock).await;
+
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
+    assert!(
+        result.is_ok(),
+        "an unstamped entry should re-detect and succeed: {:?}",
+        result.err()
+    );
+
+    let reloaded = load_config(&config_path);
+    let srv = &reloaded.servers["test"];
+    assert_eq!(
+        srv.auth_method,
+        Some(crate::types::AuthMethod::QueryParam),
+        "an unstamped auth_method must be re-detected, not trusted"
+    );
+    assert_eq!(
+        srv.auth_method_source.as_deref(),
+        Some(crate::config::AUTH_METHOD_SOURCE_DETECTED),
+        "re-detection must stamp the value so the next connect is cached"
+    );
+}
+
+/// Make `dir` non-writable and report whether that actually took effect, so a
+/// test running as root (where mode bits are advisory) skips rather than fails.
+#[cfg(unix)]
+fn deny_writes(dir: &std::path::Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let probe = dir.join(".write-probe");
+    let denied = std::fs::write(&probe, b"x").is_err();
+    let _ = std::fs::remove_file(&probe);
+    denied
+}
+
+#[cfg(unix)]
+fn allow_writes(dir: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+}
+
+/// A server that was fully cached before ADR-0066 connected without ever
+/// writing to the config file. Routing it into re-detection must not make a
+/// read-only config directory — an immutable image, a read-only mount — a hard
+/// failure: the detected settings are usable in memory, and the only cost of
+/// not recording them is detecting again next run.
+#[cfg(unix)]
+#[tokio::test]
+async fn unwritable_config_does_not_break_a_previously_cached_server() {
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = write_config(
+        &tmp,
+        &mock.uri(),
+        "auth_method = \"header\"\napi_mode = \"rest\"",
+    );
+    mount_detection_mocks(&mock).await;
+
+    let config_dir = config_path.parent().unwrap().to_path_buf();
+    if !deny_writes(&config_dir) {
+        allow_writes(&config_dir);
+        return; // running as root: mode bits do not deny the write
+    }
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
+    allow_writes(&config_dir);
+
+    assert!(
+        result.is_ok(),
+        "a stamp that cannot be written must not fail the connect: {:?}",
+        result.err()
+    );
+}
+
+/// The complement: a genuinely uncached server still fails on an unwritable
+/// config, because there the write is how the detected setting survives at all.
+/// Without this, the tolerance above would silently widen to every connect.
+#[cfg(unix)]
+#[tokio::test]
+async fn unwritable_config_still_fails_an_uncached_server() {
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = write_config(&tmp, &mock.uri(), "");
+    mount_detection_mocks(&mock).await;
+
+    let config_dir = config_path.parent().unwrap().to_path_buf();
+    if !deny_writes(&config_dir) {
+        allow_writes(&config_dir);
+        return;
+    }
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
+    allow_writes(&config_dir);
+
+    assert!(
+        result.is_err(),
+        "an uncached server must still report that it could not persist detection"
+    );
+}
+
+/// Success criterion 4 (ADR-0066): a deliberate `--auth-method` pin is stamped
+/// `"pinned"`, so a connect against a server that disagrees neither re-detects
+/// nor overwrites it. This is the case a value-triggered invalidation rule
+/// could not distinguish from a stale detected value.
+#[tokio::test]
+async fn connect_client_never_overwrites_a_pinned_auth_method() {
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = write_config(
+        &tmp,
+        &mock.uri(),
+        "auth_method = \"header\"\napi_mode = \"rest\"\nauth_method_source = \"pinned\"",
+    );
+    mount_header_rejecting_mocks(&mock).await;
+
+    let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
+    assert!(result.is_ok(), "a pinned entry should take the cached path");
+
+    let reloaded = load_config(&config_path);
+    let srv = &reloaded.servers["test"];
+    assert_eq!(
+        srv.auth_method,
+        Some(crate::types::AuthMethod::Header),
+        "a pinned auth_method must never be re-detected"
+    );
+    assert_eq!(
+        srv.auth_method_source.as_deref(),
+        Some(crate::config::AUTH_METHOD_SOURCE_PINNED),
+        "the pin marker must not be rewritten to the detection marker"
+    );
 }
 
 /// Kill `ctx.api_key.is_none() → true` mutant (mod.rs:72): when a
@@ -523,11 +688,7 @@ async fn connect_client_partial_cache_redetects_api_mode() {
 async fn cached_path_probes_tls_when_default_trust() {
     let mock = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    let config_path = write_config(
-        &tmp,
-        &mock.uri(),
-        "auth_method = \"header\"\napi_mode = \"rest\"",
-    );
+    let config_path = write_config(&tmp, &mock.uri(), CACHED_SERVER);
 
     // The probe sends a HEAD to the server URL. Wiremock returns 404 for
     // unmounted paths; the probe treats any non-transport error response
@@ -560,8 +721,9 @@ async fn cached_path_probes_tls_when_pinned() {
     let config_path = write_config(
         &tmp,
         &mock.uri(),
-        "auth_method = \"header\"\napi_mode = \"rest\"\n\
-         tls_pin_sha256 = \"sha256//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\"",
+        &format!(
+            "{CACHED_SERVER}\ntls_pin_sha256 = \"sha256//AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\""
+        ),
     );
 
     Mock::given(method("HEAD"))
@@ -586,11 +748,7 @@ async fn cached_path_probe_does_not_follow_redirects() {
     let primary = MockServer::start().await;
     let secondary = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    let config_path = write_config(
-        &tmp,
-        &primary.uri(),
-        "auth_method = \"header\"\napi_mode = \"rest\"",
-    );
+    let config_path = write_config(&tmp, &primary.uri(), CACHED_SERVER);
 
     // Primary: 301 -> secondary URI. Secondary: any HEAD must NOT be
     // received (probe should treat the 301 as a completed handshake and
@@ -627,11 +785,7 @@ async fn cached_path_proceeds_when_probe_fails_on_non_tls_error() {
     // _tls_failure should return Ok(None) for that, and the cached
     // path should fall through to building the client with cached
     // settings.
-    let config_path = write_config(
-        &tmp,
-        "http://127.0.0.1:1",
-        "auth_method = \"header\"\napi_mode = \"rest\"",
-    );
+    let config_path = write_config(&tmp, "http://127.0.0.1:1", CACHED_SERVER);
 
     let result = super::connect_and_configure(&ctx_at(&config_path, None)).await;
     assert!(
@@ -649,7 +803,7 @@ async fn cached_path_skips_probe_when_insecure() {
     let config_path = write_config(
         &tmp,
         &mock.uri(),
-        "auth_method = \"header\"\napi_mode = \"rest\"\ntls_insecure = true",
+        &format!("{CACHED_SERVER}\ntls_insecure = true"),
     );
 
     // Assert HEAD never reaches the server when verification is off.

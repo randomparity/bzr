@@ -36,6 +36,7 @@ pub async fn connect_and_configure(command: &CommandContext) -> Result<BugzillaC
         cached_auth,
         cached_mode,
         pin_current_cert,
+        auth_stamp_refresh,
     } = resolve_connect_target(command)?;
 
     if let Some(command_name) = command.credential_requirement() {
@@ -88,7 +89,7 @@ pub async fn connect_and_configure(command: &CommandContext) -> Result<BugzillaC
         _ => match detect_with_tofu_fallback(&ctx, &tls_config).await? {
             DetectOrClient::Client(client) => return Ok(client),
             DetectOrClient::Settings(settings) => {
-                ctx.persist_settings(&settings, true)?;
+                persist_detected(&ctx, &settings, auth_stamp_refresh)?;
                 (settings.auth_method, settings.api_mode)
             }
         },
@@ -97,6 +98,35 @@ pub async fn connect_and_configure(command: &CommandContext) -> Result<BugzillaC
     let api_mode = command.api().unwrap_or(resolved_mode);
     let client = ctx.build_client(auth, api_mode, &tls_config)?;
     Ok(client)
+}
+
+/// Persist freshly detected settings, tolerating a write failure when the only
+/// reason detection ran was a missing provenance stamp.
+///
+/// Such a server reached this arm with a usable cached `auth_method` and, before
+/// ADR-0066, connected without touching the config file at all. A config
+/// directory that cannot be written (an immutable image, a read-only mount) must
+/// therefore not turn into a hard failure on the first post-upgrade connect: the
+/// detected settings are usable in memory, and the only cost of not recording
+/// them is that the next invocation detects again. A genuinely uncached server
+/// still fails, because there the write is how the setting survives at all.
+fn persist_detected(
+    ctx: &ConnectContext,
+    settings: &crate::client::DetectedServerSettings,
+    auth_stamp_refresh: bool,
+) -> Result<()> {
+    match ctx.persist_settings(settings, true) {
+        Ok(()) => Ok(()),
+        Err(e) if auth_stamp_refresh => {
+            tracing::warn!(
+                "could not record re-detected auth settings for server '{}': {e}; \
+                 continuing with the detected values, which will be detected again next run",
+                ctx.server_name
+            );
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
 }
 
 fn require_credentials_for_connection(ctx: &ConnectContext, command_name: &str) -> Result<()> {
