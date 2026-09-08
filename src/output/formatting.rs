@@ -199,8 +199,12 @@ pub(super) fn write_records_or_empty<T, W>(
 // Shared formatting for bug/resource detail views. All use consistent
 // 12-char label alignment and render absent values as "-".
 
+/// The single detail-row seam. Both the label and the value are escaped: a
+/// custom field's label is chosen by the server too. The other two helpers in
+/// this family delegate here, so exactly one place escapes.
 pub(super) fn write_field<W: Write + ?Sized>(out: &mut W, label: &str, value: &str) {
-    let _ = writeln!(out, "  {label:<12}  {value}");
+    let label = escape_terminal_controls(label);
+    let _ = writeln!(out, "  {label:<12}  {}", escape_terminal_controls(value));
 }
 
 pub(super) fn write_optional_field<W: Write + ?Sized>(
@@ -208,13 +212,27 @@ pub(super) fn write_optional_field<W: Write + ?Sized>(
     label: &str,
     value: Option<&str>,
 ) {
-    let _ = writeln!(out, "  {label:<12}  {}", value.unwrap_or("-"));
+    write_field(out, label, value.unwrap_or("-"));
 }
 
 pub(super) fn write_list_field<W: Write + ?Sized>(out: &mut W, label: &str, items: &[String]) {
     if !items.is_empty() {
-        let _ = writeln!(out, "  {label:<12}  {}", items.join(", "));
+        write_field(out, label, &items.join(", "));
     }
+}
+
+/// The one detail row whose value carries colour. Escaping and colouring cannot
+/// both go through [`write_field`]: escaping a coloured string would escape
+/// bzr's own ANSI, and colouring an unescaped one would emit the server's. So
+/// escape the server's status first, then colour the result — the only ESC bytes
+/// on the line are the ones bzr chose. See ADR 0065.
+pub(super) fn write_status_field<W: Write + ?Sized>(out: &mut W, label: &str, status: &str) {
+    let label = escape_terminal_controls(label);
+    let _ = writeln!(
+        out,
+        "  {label:<12}  {}",
+        colorize_status(&escape_terminal_controls(status))
+    );
 }
 
 // ── Section divider ─────────────────────────────────────────────────
@@ -262,7 +280,7 @@ const BIDI_CONTROLS: [char; 12] = [
 /// and `U+200B`/`U+FEFF` are invisible but do not reorder. See ADR 0065.
 ///
 /// Applied at three seams — [`write_table_records`], the [`write_field`] family,
-/// and `write_status_field` — plus an explicit call at each writer that
+/// and [`write_status_field`] — plus an explicit call at each writer that
 /// composes its own line. It does **not** cover `--json`/`--ndjson`:
 /// `serde_json` escapes only `"`, `\`, and code points below `0x20`, so bidi
 /// passes through the JSON family verbatim. That is a published-schema surface

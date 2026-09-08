@@ -1735,3 +1735,117 @@ fn write_bug_links_json_override_preserves_structured_values() {
         serde_json::from_slice::<serde_json::Value>(&ndjson_bounded).unwrap(),
     );
 }
+
+// ── terminal-control escaping (ADR 0065) ─────────────────────────
+
+/// Every string a hostile server controls in a bug fixture, so one assertion
+/// over the rendered output covers whichever column or row the writer emits.
+const HOSTILE: &str = "ev\u{1b}[2Jil\u{202e}";
+
+fn assert_escaped(output: &str, what: &str) {
+    assert!(
+        !output.contains('\u{1b}') && !output.contains('\u{202e}'),
+        "{what} leaked a raw control or bidi character: {output:?}"
+    );
+    assert!(
+        output.contains("\\u{1b}") && output.contains("\\u{202e}"),
+        "{what} dropped the payload instead of escaping it: {output:?}"
+    );
+}
+
+fn hostile_bug(id: u64) -> Bug {
+    let mut bug = make_bug(id, HOSTILE, HOSTILE);
+    bug.resolution = Some(HOSTILE.into());
+    bug.product = Some(HOSTILE.into());
+    bug.component = Some(vec![HOSTILE.into()]);
+    bug.version = Some(vec![HOSTILE.into()]);
+    bug.assigned_to = Some(HOSTILE.into());
+    bug.priority = Some(HOSTILE.into());
+    bug.severity = Some(HOSTILE.into());
+    bug.creator = Some(HOSTILE.into());
+    bug.creation_time = Some(HOSTILE.into());
+    bug.last_change_time = Some(HOSTILE.into());
+    bug.target_milestone = Some(HOSTILE.into());
+    bug.keywords = vec![HOSTILE.into()];
+    bug.groups = vec![HOSTILE.into()];
+    bug.custom_fields
+        .insert(format!("cf_{HOSTILE}"), serde_json::json!(HOSTILE));
+    bug
+}
+
+#[test]
+fn bug_detail_status_escapes_but_keeps_colour() {
+    let mut bug = make_bug(1, "plain summary", "NEW\u{1b}[2J\u{202e}");
+    bug.custom_fields.clear();
+    let output = capture_bug_detail(OutputFormat::Table, &bug);
+
+    assert_escaped(&output, "the bug-detail Status row");
+    // Colour is inspected on the `ColoredString`, never by forcing
+    // `colored::control::set_override` — that override is process-global and
+    // flakes every parallel test asserting colourless output. A real status
+    // carries no control character, so escaping is the identity on it.
+    assert_eq!(
+        crate::output::formatting::colorize_status("NEW").fgcolor,
+        Some(colored::Color::Green),
+        "the Status row must still resolve a colour after the seam change"
+    );
+}
+
+#[test]
+fn bug_writers_table_escapes_terminal_controls() {
+    assert_escaped(
+        &capture_bugs(OutputFormat::Table, &[hostile_bug(1)]),
+        "write_bugs",
+    );
+    assert_escaped(
+        &capture_bug_detail(OutputFormat::Table, &hostile_bug(1)),
+        "write_bug_detail",
+    );
+
+    let links = vec![BugLink {
+        id: 2,
+        relation: LinkRelation::DependsOn,
+        direction: LinkRelation::DependsOn.direction(),
+        depth: 1,
+        summary: Some(HOSTILE.into()),
+        status: Some(HOSTILE.into()),
+    }];
+    let mut buf = Vec::new();
+    write_bug_links(&links, OutputFormat::Table, None, &mut buf);
+    assert_escaped(&String::from_utf8(buf).unwrap(), "write_bug_links");
+
+    let mut adjacency = sample_adjacency();
+    adjacency.requests = vec![BugAdjacencyRequest::Success {
+        requested: HOSTILE.into(),
+        bug_id: 1,
+    }];
+    for bug in &mut adjacency.bugs {
+        bug.summary = Some(HOSTILE.into());
+        bug.status = Some(HOSTILE.into());
+    }
+    assert_escaped(
+        &capture_bug_adjacency(OutputFormat::Table, adjacency),
+        "write_bug_adjacency",
+    );
+
+    let mut history = make_history_entry();
+    history.who = HOSTILE.into();
+    history.when = HOSTILE.into();
+    for change in &mut history.changes {
+        change.field_name = HOSTILE.into();
+        change.removed = Some(HOSTILE.into());
+        change.added = Some(HOSTILE.into());
+    }
+    assert_escaped(&capture_history_table(&[history]), "write_history_table");
+
+    let rows = vec![
+        MultiBugRow::Ok(Box::new(hostile_bug(3))),
+        MultiBugRow::Failed {
+            id: HOSTILE.into(),
+            error: HOSTILE.into(),
+        },
+    ];
+    let mut buf = Vec::new();
+    write_multi_bug_view(&rows, ColumnSpec::default(), &mut buf);
+    assert_escaped(&String::from_utf8(buf).unwrap(), "write_multi_bug_view");
+}

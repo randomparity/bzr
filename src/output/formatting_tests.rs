@@ -214,6 +214,60 @@ fn write_records_or_empty_populated_table_remains_unbounded_by_default() {
 // ── escape_terminal_controls ─────────────────────────────────────
 
 #[test]
+fn write_field_family_escapes_labels_and_values() {
+    let mut buf = Vec::new();
+    write_field(&mut buf, "la\u{1b}bel", "va\u{202e}lue");
+    write_optional_field(&mut buf, "op\u{202e}t", Some("so\u{1b}me"));
+    write_list_field(
+        &mut buf,
+        "li\u{1b}st",
+        &["fi\u{202e}rst".to_string(), "sec\u{1b}ond".to_string()],
+    );
+
+    let output = String::from_utf8(buf).unwrap();
+    assert!(
+        !output.contains('\u{1b}') && !output.contains('\u{202e}'),
+        "no detail row may carry a raw control or bidi character: {output:?}"
+    );
+    assert_eq!(
+        output.matches("\\u{1b}").count(),
+        4,
+        "every label and value in the family is escaped: {output:?}"
+    );
+    assert_eq!(
+        output.matches("\\u{202e}").count(),
+        3,
+        "every label and value in the family is escaped: {output:?}"
+    );
+}
+
+#[test]
+fn write_status_field_escapes_the_status_and_still_colours_it() {
+    let mut buf = Vec::new();
+    write_status_field(&mut buf, "Sta\u{1b}tus", "NEW\u{202e}");
+
+    let output = String::from_utf8(buf).unwrap();
+    assert!(
+        !output.contains('\u{1b}') && !output.contains('\u{202e}'),
+        "the server's own controls must not survive: {output:?}"
+    );
+    assert!(
+        output.contains("\\u{1b}") && output.contains("\\u{202e}"),
+        "both must survive in escaped form: {output:?}"
+    );
+    // Colour is asserted on the `ColoredString` rather than on emitted ANSI:
+    // `colored::control::set_override` is process-global and flakes parallel
+    // tests that assert on colourless output. A real status carries no control
+    // character, so escaping is the identity on it and the colour match holds.
+    assert_eq!(escape_terminal_controls("NEW"), "NEW");
+    assert_eq!(
+        colorize_status(&escape_terminal_controls("NEW")).fgcolor,
+        Some(Color::Green),
+        "escaping must not defeat the status-colour match"
+    );
+}
+
+#[test]
 fn escape_terminal_controls_escapes_cc_and_bidi_only() {
     let escaped = escape_terminal_controls(
         "a\u{1b}b\tc\u{202a}\u{202b}\u{202c}\u{202d}\u{202e}d\u{2066}\u{2067}\u{2068}\u{2069}\
