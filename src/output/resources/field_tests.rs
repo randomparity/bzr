@@ -40,7 +40,10 @@ fn write_field_names_table() {
 
 /// Mirrors the comment-tag guard added by `8afa1c7a`: field names come from
 /// the server, table output goes to a terminal, so a control character must
-/// not reach it verbatim. JSON is unaffected — serde escapes it there.
+/// not reach it verbatim. The JSON family is deliberately not covered: it is a
+/// published schema surface, and `serde_json` escapes only `"`, `\`, and code
+/// points below `0x20` — so a bidi override passes through it verbatim. See
+/// ADR 0065.
 #[test]
 fn write_field_names_table_escapes_control_characters() {
     let rows = vec![FieldName {
@@ -312,4 +315,37 @@ fn write_field_aliases_json_via_write() {
     let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["alias"], "status");
     assert_eq!(parsed[0]["api_name"], "bug_status");
+}
+
+// ── terminal-control escaping (ADR 0065) ─────────────────────────
+
+use crate::test_helpers::{
+    assert_terminal_controls_escaped as assert_escaped, TERMINAL_CONTROL_PROBE as PROBE,
+};
+
+#[test]
+fn field_writers_table_escape_terminal_controls() {
+    let names = vec![FieldName {
+        name: PROBE.into(),
+        source: FieldNameSource::Server,
+    }];
+    assert_escaped(
+        &capture_names(
+            OutputFormat::Table,
+            &crate::validation::fields::FieldProjection::none(),
+            &names,
+        ),
+        "write_field_names",
+    );
+
+    let values = vec![FieldValue {
+        name: Some(PROBE.into()),
+        sort_key: Some(0),
+        is_active: Some(true),
+        can_change_to: Some(vec![StatusTransition { name: PROBE.into() }]),
+    }];
+    assert_escaped(
+        &capture_values(OutputFormat::Table, &values),
+        "write_field_values",
+    );
 }

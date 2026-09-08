@@ -281,7 +281,7 @@ const BIDI_CONTROLS: [char; 12] = [
 ///
 /// Applied at three seams — [`write_table_records`], the [`write_field`] family,
 /// and [`write_status_field`] — plus an explicit call at each writer that
-/// composes its own line. It does **not** cover `--json`/`--ndjson`:
+/// composes its own line. It does **not** cover `--json`/`--output ndjson`:
 /// `serde_json` escapes only `"`, `\`, and code points below `0x20`, so bidi
 /// passes through the JSON family verbatim. That is a published-schema surface
 /// and a deliberate exclusion, not an oversight.

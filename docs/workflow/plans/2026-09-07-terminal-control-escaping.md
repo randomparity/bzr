@@ -268,7 +268,7 @@ defines no `$PRODUCT`/`$COMPONENT` global.
    — all clean, ids unique.
 4. In `docs/bzr-cli.md`, add a paragraph to the output-format section: table output
    escapes C0/C1 controls and Trojan-Source bidi controls in server-supplied values as
-   `\u{…}`; `--json`/`--ndjson` are unchanged; a tab inside a comment body now renders
+   `\u{…}`; `--json`/`--output ndjson` are unchanged; a tab inside a comment body now renders
    as `\t`.
 5. `make lint`, `make test`, then `make functional-test`; report the Bugzilla version
    that ran.

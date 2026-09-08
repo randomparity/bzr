@@ -338,6 +338,34 @@ pub fn json_envelope_data(raw: &str) -> serde_json::Value {
     parsed.get("data").cloned().unwrap()
 }
 
+/// A server-controlled string carrying both categories ADR 0065 escapes: a C0
+/// ESC introducing a real ANSI clear-screen sequence, and a right-to-left
+/// override. Feed it through a writer's server-controlled fields, then assert
+/// with [`assert_terminal_controls_escaped`].
+pub const TERMINAL_CONTROL_PROBE: &str = "ev\u{1b}[2Jil\u{202e}";
+
+/// Assert that a writer rendered [`TERMINAL_CONTROL_PROBE`] escaped rather than
+/// raw. `what` names the writer so a failure says which one leaked.
+///
+/// Both halves matter: the first catches a writer that never escapes, the
+/// second catches one that strips or replaces the payload instead — stripping
+/// makes a forged row and an honest one look identical.
+///
+/// # Panics
+///
+/// Panics if `output` still carries a raw `U+001B` or `U+202E`, or if it
+/// carries neither of their escaped spellings.
+pub fn assert_terminal_controls_escaped(output: &str, what: &str) {
+    assert!(
+        !output.contains('\u{1b}') && !output.contains('\u{202e}'),
+        "{what} leaked a raw control or bidi character to the terminal: {output:?}"
+    );
+    assert!(
+        output.contains("\\u{1b}") && output.contains("\\u{202e}"),
+        "{what} dropped the payload instead of escaping it: {output:?}"
+    );
+}
+
 /// Build a full-shaped attachment fixture with common test defaults.
 pub fn make_attachment(
     id: u64,

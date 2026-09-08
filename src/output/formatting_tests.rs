@@ -213,6 +213,32 @@ fn write_records_or_empty_populated_table_remains_unbounded_by_default() {
 
 // ── escape_terminal_controls ─────────────────────────────────────
 
+/// Pins the exclusion ADR 0065 records rather than a behaviour it adds: the
+/// JSON family is a published schema surface, so the escaping must not migrate
+/// into it. `serde_json` escapes only `"`, `\`, and code points below `0x20`,
+/// which is why the bidi override survives there and the ESC does not.
+#[test]
+fn json_family_output_is_not_escaped_for_bidi() {
+    let value = serde_json::json!({ "summary": "ev\u{1b}[2Jil\u{202e}" });
+
+    let mut json = Vec::new();
+    write_json(&value, &mut json);
+    let mut ndjson = Vec::new();
+    write_ndjson(&value, &mut ndjson);
+
+    for (rendered, what) in [(json, "write_json"), (ndjson, "write_ndjson")] {
+        let rendered = String::from_utf8(rendered).unwrap();
+        assert!(
+            rendered.contains('\u{202e}'),
+            "{what} must leave the bidi override to the JSON contract: {rendered:?}"
+        );
+        assert!(
+            !rendered.contains("\\u{202e}"),
+            "{what} must not carry bzr's non-JSON escape spelling: {rendered:?}"
+        );
+    }
+}
+
 #[test]
 fn write_field_family_escapes_labels_and_values() {
     let mut buf = Vec::new();

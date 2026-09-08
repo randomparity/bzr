@@ -135,3 +135,20 @@ fn write_group_info_json_via_write() {
     assert_eq!(parsed["name"], "core-team");
     assert_eq!(parsed["membership"][0]["name"], "alice");
 }
+
+// ── terminal-control escaping (ADR 0065) ─────────────────────────
+
+use crate::test_helpers::{
+    assert_terminal_controls_escaped as assert_escaped, TERMINAL_CONTROL_PROBE as PROBE,
+};
+
+#[test]
+fn group_writer_table_escapes_terminal_controls() {
+    let mut group = make_group_info();
+    group.name = Some(PROBE.into());
+    group.description = Some(PROBE.into());
+    group.membership[0].name = Some(PROBE.into());
+    group.membership[0].real_name = Some(PROBE.into());
+
+    assert_escaped(&capture(OutputFormat::Table, &group), "write_group_info");
+}

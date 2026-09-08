@@ -141,3 +141,41 @@ fn write_classification_table_omits_products_header_when_empty() {
     assert!(populated.contains("Widget"));
     assert!(!bare.contains("Products"));
 }
+
+// ── terminal-control escaping (ADR 0065) ─────────────────────────
+
+use crate::test_helpers::{
+    assert_terminal_controls_escaped as assert_escaped, TERMINAL_CONTROL_PROBE as PROBE,
+};
+
+fn hostile_classification() -> Classification {
+    Classification {
+        id: 1,
+        name: Some(PROBE.into()),
+        description: Some(PROBE.into()),
+        sort_key: Some(0),
+        products: vec![ClassificationProduct {
+            id: 10,
+            name: Some(PROBE.into()),
+            description: Some(PROBE.into()),
+        }],
+    }
+}
+
+#[test]
+fn classification_writers_table_escape_terminal_controls() {
+    assert_escaped(
+        &capture(OutputFormat::Table, &hostile_classification()),
+        "write_classification",
+    );
+
+    let mut buf = Vec::new();
+    super::write_classifications(
+        &[hostile_classification()],
+        OutputFormat::Table,
+        &crate::validation::fields::FieldProjection::none(),
+        None,
+        &mut buf,
+    );
+    assert_escaped(&String::from_utf8(buf).unwrap(), "write_classifications");
+}

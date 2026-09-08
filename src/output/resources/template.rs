@@ -5,7 +5,7 @@ use crate::types::output::OutputFormat;
 use crate::types::template::BugTemplate;
 
 use crate::output::formatting::{
-    write_field, write_formatted, write_list_field, write_optional_field,
+    escape_terminal_controls, write_field, write_formatted, write_list_field, write_optional_field,
 };
 
 fn template_saved_message(name: &str, verb: &str) -> String {
@@ -61,7 +61,14 @@ pub fn write_template_list<W: Write + ?Sized, S: ::std::hash::BuildHasher>(
         let mut names: Vec<&str> = templates.keys().map(String::as_str).collect();
         names.sort_unstable();
         for name in names {
-            let _ = writeln!(out, "{}", template_summary_line(name, &templates[name]));
+            // The summary line is one line by construction, so escaping the
+            // composed string cannot swallow layout. These are local config
+            // values, not server ones — one seam, no second standard.
+            let _ = writeln!(
+                out,
+                "{}",
+                escape_terminal_controls(&template_summary_line(name, &templates[name]))
+            );
         }
     });
 }

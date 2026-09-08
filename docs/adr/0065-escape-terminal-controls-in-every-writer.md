@@ -25,7 +25,7 @@ character to escape `Cc` widens to the bidi set by changing one predicate.
 ADR 0062 also states, in its consequences and in the doc comment on
 `escape_table_control`, that "serde escapes control characters when it serializes".
 That holds for `Cc` only: `serde_json` escapes `"`, `\`, and code points below
-`0x20`. Bidi overrides pass through `--json` and `--ndjson` verbatim.
+`0x20`. Bidi overrides pass through `--json` and `--output ndjson` verbatim.
 
 ## Decision
 
@@ -74,7 +74,7 @@ value reaching `write_field` already carrying bzr's own ANSI. It moves to a dedi
 result, so the only ESC bytes emitted are the ones bzr chose.
 
 **The JSON family is unchanged, and the false claim is removed.** `--json` and
-`--ndjson` are a published schema surface; escaping bidi there is a contract change,
+`--output ndjson` are a published schema surface; escaping bidi there is a contract change,
 not a rendering fix. The doc comment and this record state what serde actually
 escapes; the JSON-family bidi gap is recorded as follow-up.
 
@@ -137,7 +137,7 @@ escapes; the JSON-family bidi gap is recorded as follow-up.
   `available_names().join("\n")` as the human message. judgment: the seam's contract
   is "print this composed string", its inputs are built outside `src/output/`, and a
   caller depends on embedded newlines.
-- **Escape bidi in `--json`/`--ndjson`.** verified: the envelope is published
+- **Escape bidi in `--json`/`--output ndjson`.** verified: the envelope is published
   (`schemas/*.json`; `SCHEMA_VERSION` is `3.0.5` at `src/output/mod.rs:10`) and
   `serde_json` escapes only `"`, `\`, and code points below `0x20`, so any bidi
   escape would be a non-standard JSON string encoding. judgment: a contract change

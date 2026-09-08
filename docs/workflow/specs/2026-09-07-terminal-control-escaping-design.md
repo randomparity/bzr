@@ -40,7 +40,7 @@ one functional phase script.
 
 Out, each with an owner:
 
-- `--json`/`--ndjson` **encoding** — published schema surface; follow-up issue.
+- `--json`/`--output ndjson` **encoding** — published schema surface; follow-up issue.
 - `Cf` outside the Trojan-Source set (`U+200B`, `U+200C`, `U+200D`, `U+FEFF`) —
   follow-up issue.
 - Width and wrapping beyond keeping columns correct — ADR 0047.
@@ -86,7 +86,7 @@ terminal output. Response-body size bounding is issue #740.
 3. `write_table` no longer exists as a separate escape-free entry point.
 4. `bug view`'s Status row keeps its colour.
 5. Truncation and `--width` wrapping are unchanged for values containing no escaped
-   character; `--json` and `--ndjson` output is byte-identical to before.
+   character; `--json` and `--output ndjson` output is byte-identical to before.
 6. `docs/bzr-cli.md` records the rendering change, and the false "serde escapes
    control characters" claim is corrected in `src/output/formatting.rs` and in the
    `field_tests.rs` doc comment repeating it.

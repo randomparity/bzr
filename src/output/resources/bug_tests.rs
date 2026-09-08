@@ -1738,20 +1738,9 @@ fn write_bug_links_json_override_preserves_structured_values() {
 
 // ── terminal-control escaping (ADR 0065) ─────────────────────────
 
-/// Every string a hostile server controls in a bug fixture, so one assertion
-/// over the rendered output covers whichever column or row the writer emits.
-const HOSTILE: &str = "ev\u{1b}[2Jil\u{202e}";
-
-fn assert_escaped(output: &str, what: &str) {
-    assert!(
-        !output.contains('\u{1b}') && !output.contains('\u{202e}'),
-        "{what} leaked a raw control or bidi character: {output:?}"
-    );
-    assert!(
-        output.contains("\\u{1b}") && output.contains("\\u{202e}"),
-        "{what} dropped the payload instead of escaping it: {output:?}"
-    );
-}
+use crate::test_helpers::{
+    assert_terminal_controls_escaped as assert_escaped, TERMINAL_CONTROL_PROBE as HOSTILE,
+};
 
 fn hostile_bug(id: u64) -> Bug {
     let mut bug = make_bug(id, HOSTILE, HOSTILE);
