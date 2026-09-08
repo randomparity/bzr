@@ -69,3 +69,7 @@ rejected.
 | [0062](0062-field-list-enumerates-the-accepted-write-field-set.md) | `field list` enumerates the accepted write-field set | Accepted |
 | [0063](0063-multi-bug-attachment-upload-publishes-a-batch-result.md) | Multi-bug attachment upload publishes a batch result | Accepted |
 | [0064](0064-ignore-obsolete-filters-bulk-bug-targets-only.md) | `--ignore-obsolete` filters bulk bug targets only | Accepted |
+| [0065](0065-escape-terminal-controls-in-every-writer.md) | One terminal-escaping policy for every table and detail writer | Accepted |
+| [0066](0066-stamp-and-redetect-stale-auth-method.md) | A provenance stamp decides when a persisted `auth_method` is re-detected | Accepted |
+| [0067](0067-functional-tier-reclaims-its-container.md) | The single-version functional tier reclaims its container | Accepted |
+| [0068](0068-response-bodies-are-read-under-one-shared-bound.md) | Response bodies are read under one shared bound | Accepted |
