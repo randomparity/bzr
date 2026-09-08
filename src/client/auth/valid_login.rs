@@ -43,6 +43,11 @@ pub(super) enum ValidLoginOutcome {
     AuthRejected,
     /// Server returned 200 but the response body was unparseable or anomalous.
     MalformedResponse(MalformedProbeResponse),
+    /// The server answered, but its body exceeded the response-body limit and
+    /// was refused. The probe learned nothing, and continuing the chain would
+    /// resend the API key in a URL query parameter on a server that has already
+    /// behaved anomalously — so this aborts detection instead (ADR 0068).
+    ProbeRefused(crate::error::BzrError),
     /// Could not complete the probe due to a transport failure. Carries the
     /// underlying error so the caller can classify TLS/network failures
     /// instead of masking them as a successful header-auth fallback.
@@ -71,7 +76,11 @@ pub(super) async fn detect_valid_login_auth(
 
     let mut malformed_response = None;
     for (query, header, method) in &probes {
-        match probe_valid_login(http, &url, query, *header, *method).await {
+        let mut req = http.get(&url).query(query);
+        if let Some(hdr) = *header {
+            req = req.header(AUTH_HEADER_NAME, hdr.clone());
+        }
+        match probe_valid_login(req, *method, crate::http::MAX_RESPONSE_BODY_BYTES).await {
             ValidLoginOutcome::AuthRejected => {} // try next probe
             ValidLoginOutcome::MalformedResponse(error) => {
                 malformed_response.get_or_insert(error);
@@ -112,7 +121,7 @@ pub(in crate::client) async fn prove_valid_login_current_method(
         )));
     }
 
-    let body = response.text().await?;
+    let body = crate::http::read_body_bounded(response, "rest/valid_login").await?;
     let value: serde_json::Value = serde_json::from_str(&body).map_err(|error| {
         BzrError::Auth(format!(
             "current credentials received invalid response from rest/valid_login: {error}"
@@ -139,17 +148,11 @@ pub(in crate::client) async fn prove_valid_login_current_method(
 }
 
 async fn probe_valid_login(
-    http: &reqwest::Client,
-    url: &str,
-    query: &[(&str, &str)],
-    key_header: Option<&HeaderValue>,
+    request: reqwest::RequestBuilder,
     method: AuthMethod,
+    limit_bytes: u64,
 ) -> ValidLoginOutcome {
-    let mut req = http.get(url).query(query);
-    if let Some(hdr) = key_header {
-        req = req.header(AUTH_HEADER_NAME, hdr.clone());
-    }
-    let resp = match req.send().await {
+    let resp = match request.send().await {
         Ok(r) => r,
         Err(e) => {
             super::log_probe_send_error("valid_login", method, &e);
@@ -161,16 +164,24 @@ async fn probe_valid_login(
         tracing::debug!(%status, %method, "valid_login probe failed");
         return ValidLoginOutcome::AuthRejected;
     }
-    let body_text = match resp.text().await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::warn!(
-                error = super::redacted_probe_error(&e),
-                "valid_login response read error"
-            );
-            return ValidLoginOutcome::NetworkError(e);
-        }
-    };
+    let body_text =
+        match crate::http::read_body_within(resp, "valid_login probe", limit_bytes).await {
+            Ok(t) => t,
+            Err(error @ crate::http::BodyReadError::TooLarge { .. }) => {
+                tracing::warn!(
+                    limit_bytes,
+                    "valid_login response body exceeds the response-body limit"
+                );
+                return ValidLoginOutcome::ProbeRefused(crate::error::BzrError::from(error));
+            }
+            Err(crate::http::BodyReadError::Transport(e)) => {
+                tracing::warn!(
+                    error = super::redacted_probe_error(&e),
+                    "valid_login response read error"
+                );
+                return ValidLoginOutcome::NetworkError(e);
+            }
+        };
     tracing::trace!(
         probe = "valid_login",
         %method,
@@ -321,6 +332,7 @@ pub(super) async fn verify_header_auth_via_rest(
             .query(&[("names", login)])
             .header(AUTH_HEADER_NAME, key_header.clone()),
         "header",
+        crate::http::MAX_RESPONSE_BODY_BYTES,
     )
     .await
     else {
@@ -331,7 +343,13 @@ pub(super) async fn verify_header_auth_via_rest(
         return false;
     }
 
-    let Some(anonymous_leg) = read_probe_leg(anonymous_request(), "anonymous").await else {
+    let Some(anonymous_leg) = read_probe_leg(
+        anonymous_request(),
+        "anonymous",
+        crate::http::MAX_RESPONSE_BODY_BYTES,
+    )
+    .await
+    else {
         return false;
     };
     if anonymous_leg.body == header_leg.body {
@@ -346,6 +364,7 @@ pub(super) async fn verify_header_auth_via_rest(
         http.get(&url)
             .query(&[("names", login), (AUTH_QUERY_PARAM, api_key)]),
         "query-param",
+        crate::http::MAX_RESPONSE_BODY_BYTES,
     )
     .await
     else {
@@ -374,7 +393,13 @@ pub(super) async fn verify_header_auth_via_rest(
     // confirm header auth. Re-observe before confirming; a server that genuinely
     // discriminates answers an anonymous caller the same way twice. One extra
     // request, only on the path that is about to return `true`.
-    let Some(recheck) = read_probe_leg(anonymous_request(), "anonymous re-check").await else {
+    let Some(recheck) = read_probe_leg(
+        anonymous_request(),
+        "anonymous re-check",
+        crate::http::MAX_RESPONSE_BODY_BYTES,
+    )
+    .await
+    else {
         return false;
     };
     if recheck.status.is_success() != anonymous_leg.status.is_success()
@@ -397,7 +422,11 @@ pub(super) async fn verify_header_auth_via_rest(
 /// unreadable body, or an inconclusive status -- which every caller treats as
 /// "not confirmed". Whether a leg's *content* is trustworthy is the caller's
 /// question, and it differs by leg: see [`ProbeLeg::credential_accepted`].
-async fn read_probe_leg(request: reqwest::RequestBuilder, leg: &'static str) -> Option<ProbeLeg> {
+async fn read_probe_leg(
+    request: reqwest::RequestBuilder,
+    leg: &'static str,
+    limit_bytes: u64,
+) -> Option<ProbeLeg> {
     let response = match request.send().await {
         Ok(response) => response,
         Err(error) => {
@@ -415,9 +444,17 @@ async fn read_probe_leg(request: reqwest::RequestBuilder, leg: &'static str) -> 
         tracing::debug!(%status, %leg, "header auth probe leg returned an inconclusive status");
         return None;
     }
-    let body = match response.text().await {
+    let body = match crate::http::read_body_within(response, "header auth probe", limit_bytes).await
+    {
         Ok(body) => parse_probe_body(&body),
-        Err(error) => {
+        Err(crate::http::BodyReadError::TooLarge { limit_bytes, .. }) => {
+            tracing::debug!(
+                limit_bytes,
+                "header auth {leg} probe response exceeds the response-body limit"
+            );
+            return None;
+        }
+        Err(crate::http::BodyReadError::Transport(error)) => {
             tracing::debug!(
                 "header auth {leg} probe response read failed: {}",
                 super::redacted_probe_error(&error)

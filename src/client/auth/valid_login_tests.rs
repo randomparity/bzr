@@ -1,4 +1,4 @@
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used, clippy::panic)]
 
 use super::*;
 use crate::client::PreparedAuth;
@@ -685,4 +685,43 @@ async fn transport_failure_on_a_leg_is_not_confirmed() {
     .await;
 
     assert!(!confirmed);
+}
+
+/// An over-limit probe body must abort detection rather than degrade to
+/// `AuthRejected`, which would fall through to the query-parameter leg and
+/// resend the API key in a URL (ADR 0068).
+#[tokio::test]
+async fn valid_login_probe_refuses_an_over_limit_body() {
+    let server = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_string("x".repeat(64)))
+        .mount(&server)
+        .await;
+    let client = reqwest::Client::new();
+
+    let outcome = super::probe_valid_login(client.get(server.uri()), AuthMethod::Header, 16).await;
+
+    let ValidLoginOutcome::ProbeRefused(error) = outcome else {
+        panic!("expected ProbeRefused, got a different outcome");
+    };
+    assert_eq!(error.exit_code(), 16);
+    assert!(
+        error.to_string().contains("valid_login probe"),
+        "message must name the operation: {error}",
+    );
+}
+
+/// A verification leg was already inconclusive when its body was unreadable;
+/// an over-limit body must reach the same `None`, not a different disposition.
+#[tokio::test]
+async fn a_refused_verification_leg_stays_inconclusive() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("x".repeat(64)))
+        .mount(&server)
+        .await;
+
+    let leg = super::read_probe_leg(reqwest::Client::new().get(server.uri()), "header", 16).await;
+
+    assert!(leg.is_none(), "an over-limit leg must be inconclusive");
 }

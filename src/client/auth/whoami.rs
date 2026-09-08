@@ -30,6 +30,11 @@ pub(super) enum WhoamiOutcome {
     AuthRejected,
     /// Server returned 200 but the response body was unparseable or anomalous.
     MalformedResponse(MalformedProbeResponse),
+    /// The server answered, but its body exceeded the response-body limit and
+    /// was refused. The probe learned nothing, and continuing the chain would
+    /// resend the API key in a URL query parameter on a server that has already
+    /// behaved anomalously — so this aborts detection instead (ADR 0068).
+    ProbeRefused(crate::error::BzrError),
     /// Could not reach the server at all (network/TLS/timeout). Carries the
     /// underlying transport error so the caller can classify it (TLS cert
     /// failure, pin mismatch, plain transport error) rather than masking it
@@ -42,13 +47,14 @@ pub(super) async fn detect_whoami_auth(
     base: &str,
     api_key: &str,
     key_header: &HeaderValue,
+    limit_bytes: u64,
 ) -> WhoamiOutcome {
     let url = format!("{base}/rest/whoami");
     let mut malformed_response = None;
 
     // Probe: header-based auth
     let header_req = http.get(&url).header(AUTH_HEADER_NAME, key_header.clone());
-    let outcome = probe_whoami(header_req, AuthMethod::Header).await;
+    let outcome = probe_whoami(header_req, AuthMethod::Header, limit_bytes).await;
     match outcome {
         WhoamiOutcome::AuthRejected => {} // try query-param next
         WhoamiOutcome::MalformedResponse(error) => {
@@ -59,7 +65,7 @@ pub(super) async fn detect_whoami_auth(
 
     // Probe: query-param auth
     let query_req = http.get(&url).query(&[(AUTH_QUERY_PARAM, api_key)]);
-    match probe_whoami(query_req, AuthMethod::QueryParam).await {
+    match probe_whoami(query_req, AuthMethod::QueryParam, limit_bytes).await {
         WhoamiOutcome::AuthRejected => malformed_response.map_or(
             WhoamiOutcome::AuthRejected,
             WhoamiOutcome::MalformedResponse,
@@ -71,7 +77,11 @@ pub(super) async fn detect_whoami_auth(
     }
 }
 
-async fn probe_whoami(request: reqwest::RequestBuilder, method: AuthMethod) -> WhoamiOutcome {
+async fn probe_whoami(
+    request: reqwest::RequestBuilder,
+    method: AuthMethod,
+    limit_bytes: u64,
+) -> WhoamiOutcome {
     let resp = match request.send().await {
         Ok(r) => r,
         Err(e) => {
@@ -81,9 +91,16 @@ async fn probe_whoami(request: reqwest::RequestBuilder, method: AuthMethod) -> W
     };
 
     let status = resp.status();
-    let body = match resp.text().await {
+    let body = match crate::http::read_body_within(resp, "whoami probe", limit_bytes).await {
         Ok(body) => body,
-        Err(e) => {
+        Err(error @ crate::http::BodyReadError::TooLarge { .. }) => {
+            tracing::warn!(
+                limit_bytes,
+                "whoami response body exceeds the response-body limit"
+            );
+            return WhoamiOutcome::ProbeRefused(crate::error::BzrError::from(error));
+        }
+        Err(crate::http::BodyReadError::Transport(e)) => {
             tracing::warn!(
                 error = super::redacted_probe_error(&e),
                 "whoami response read error"

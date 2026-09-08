@@ -178,7 +178,7 @@ pub async fn detect_server_settings(
     let http = crate::tls::build_tls_client(tls_config, request_timeout)?;
 
     let method = detect_auth_method(&http, url, api_key, email).await?;
-    let (version, api_mode) = detect_version_and_mode(&http, url, api_key, method).await;
+    let (version, api_mode) = detect_version_and_mode(&http, url, api_key, method).await?;
 
     tracing::info!(
         %method,
@@ -316,10 +316,18 @@ async fn detect_auth_method(
     // Try whoami first (Bugzilla 5.3+/BMO-derived). A TLS-certificate failure is
     // propagated so the connection layer can offer TOFU / pin-rotation; other
     // transport errors fall back to header auth (see network_error_outcome).
-    let whoami = detect_whoami_auth(http, base, api_key, &key_header).await;
+    let whoami = detect_whoami_auth(
+        http,
+        base,
+        api_key,
+        &key_header,
+        crate::http::MAX_RESPONSE_BODY_BYTES,
+    )
+    .await;
     let whoami_not_found = match whoami {
         WhoamiOutcome::Authenticated(method) => return Ok(method),
         WhoamiOutcome::NetworkError(e) => return network_error_outcome(e),
+        WhoamiOutcome::ProbeRefused(error) => return Err(error),
         WhoamiOutcome::NotFound => {
             tracing::info!("falling back to rest/valid_login for older Bugzilla");
             true
@@ -351,6 +359,7 @@ async fn detect_auth_method(
                 return Ok(method);
             }
             ValidLoginOutcome::NetworkError(e) => return network_error_outcome(e),
+            ValidLoginOutcome::ProbeRefused(error) => return Err(error),
             ValidLoginOutcome::AuthRejected => {}
             ValidLoginOutcome::MalformedResponse(error) => {
                 malformed_response.get_or_insert(error);

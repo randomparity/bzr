@@ -1,4 +1,4 @@
-#![expect(clippy::disallowed_methods, clippy::unwrap_used)]
+#![expect(clippy::disallowed_methods, clippy::unwrap_used, clippy::panic)]
 
 use std::io::{Read as _, Write as _};
 use std::net::TcpListener;
@@ -62,8 +62,74 @@ async fn whoami_response_body_read_error_is_network_error() {
     let (url, handle) = spawn_truncated_http_response_server();
     let client = reqwest::Client::new();
 
-    let outcome = super::probe_whoami(client.get(url), AuthMethod::Header).await;
+    let outcome = super::probe_whoami(
+        client.get(url),
+        AuthMethod::Header,
+        crate::http::MAX_RESPONSE_BODY_BYTES,
+    )
+    .await;
     handle.join().unwrap();
 
     assert!(matches!(outcome, WhoamiOutcome::NetworkError(_)));
+}
+
+/// An over-limit probe body must abort detection rather than degrade to
+/// `AuthRejected`, which would fall through to the query-parameter leg and
+/// resend the API key in a URL (ADR 0068).
+#[tokio::test]
+async fn whoami_probe_refuses_an_over_limit_body() {
+    let server = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_string("x".repeat(64)))
+        .mount(&server)
+        .await;
+    let client = reqwest::Client::new();
+
+    let outcome = super::probe_whoami(client.get(server.uri()), AuthMethod::Header, 16).await;
+
+    let WhoamiOutcome::ProbeRefused(error) = outcome else {
+        panic!("expected ProbeRefused, got a different outcome");
+    };
+    assert_eq!(error.exit_code(), 16);
+    assert!(
+        error.to_string().contains("whoami probe"),
+        "message must name the operation: {error}",
+    );
+}
+
+/// ADR 0068's headline security invariant, at the chain level: a header-leg
+/// refusal must abort detection, never fall through to the query-parameter leg,
+/// which puts the API key in a URL. A wildcard arm or a reordering would keep
+/// the probe-level test green while resending the credential.
+#[tokio::test]
+async fn a_refused_header_leg_never_reaches_the_query_param_leg() {
+    let server = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .and(wiremock::matchers::query_param(
+            crate::bugzilla_auth::AUTH_QUERY_PARAM,
+            "secret",
+        ))
+        .respond_with(wiremock::ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_string("x".repeat(64)))
+        .mount(&server)
+        .await;
+
+    let outcome = super::detect_whoami_auth(
+        &reqwest::Client::new(),
+        &server.uri(),
+        "secret",
+        &reqwest::header::HeaderValue::from_static("secret"),
+        16,
+    )
+    .await;
+
+    assert!(
+        matches!(outcome, WhoamiOutcome::ProbeRefused(_)),
+        "a refused probe must abort detection",
+    );
+    // MockServer asserts the expect(0) on drop.
 }

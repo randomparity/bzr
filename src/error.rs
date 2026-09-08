@@ -37,6 +37,27 @@ pub enum BzrError {
     #[error("HTTP {status}: {}", crate::bugzilla_auth::redact_api_key(.body))]
     HttpStatus { status: u16, body: String },
 
+    /// A server response exceeded [`crate::http::MAX_RESPONSE_BODY_BYTES`].
+    ///
+    /// Deliberately **not** a transport failure, so the four Hybrid arms gated
+    /// on [`Self::is_transport_failure`] do not answer a refusal by re-fetching
+    /// the same oversized body over the other protocol. `server_extensions`
+    /// falls back on a bare `Err` by ADR-0052's design and is unaffected by
+    /// that classification; if both its legs oversize, the refusal is remapped
+    /// to [`Self::XmlRpc`] and only the message survives.
+    ///
+    /// The message names the limit, the operation, and the HTTP status when one
+    /// is known, and carries no body bytes and no URL, so nothing the server
+    /// sent can ride out with it.
+    #[error("{}", format_response_too_large(.operation, *.limit_bytes, *.status))]
+    ResponseTooLarge {
+        operation: String,
+        limit_bytes: u64,
+        /// The HTTP status, when the refusal happened on a response whose
+        /// status was already known to be an error.
+        status: Option<u16>,
+    },
+
     #[error("{message}")]
     InputValidation {
         message: String,
@@ -117,6 +138,35 @@ pub fn clear_error_redaction_context() {
     crate::bugzilla_auth::clear_active_api_key();
 }
 
+/// Render a [`BzrError::ResponseTooLarge`] message.
+///
+/// Someone who hits this has to be able to tell a fixed cap from a bug without
+/// reading source, so the message carries the operation, the limit it exceeded,
+/// the status when one is known, and what to do — which is not "retry". The
+/// status is interpolated rather than published only as a structured key,
+/// because a `--format table` user never sees the structured keys.
+fn format_response_too_large(operation: &str, limit_bytes: u64, status: Option<u16>) -> String {
+    use std::fmt::Write as _;
+
+    let mut message =
+        format!("{operation}: the server's response exceeds bzr's response-body limit of {limit_bytes} bytes");
+    if limit_bytes >= MIB {
+        let _ = write!(message, " ({} MiB)", limit_bytes / MIB);
+    }
+    if let Some(status) = status {
+        let _ = write!(message, ", sent with HTTP {status}");
+    }
+    message.push_str(
+        "; the read stopped at the limit and the response was discarded. \
+         The limit is a fixed cap, not a transient failure, so retrying will not \
+         help: an attachment whose base64 payload is over the limit cannot be \
+         downloaded.",
+    );
+    message
+}
+
+const MIB: u64 = 1024 * 1024;
+
 pub(crate) fn io_with_context(context: impl fmt::Display, error: &std::io::Error) -> BzrError {
     BzrError::Io(std::io::Error::new(
         error.kind(),
@@ -139,6 +189,7 @@ const ERROR_TYPE_KEYRING: &str = "keyring";
 const ERROR_TYPE_TLS: &str = "tls";
 const ERROR_TYPE_COLLISION: &str = "collision";
 const ERROR_TYPE_UNSUPPORTED_CAPABILITY: &str = "unsupported_server_capability";
+const ERROR_TYPE_RESPONSE_TOO_LARGE: &str = "response_too_large";
 
 // Exit code constants
 const EXIT_CODE_NOT_FOUND: i32 = 2;
@@ -155,6 +206,7 @@ const EXIT_CODE_KEYRING: i32 = 12;
 const EXIT_CODE_TLS: i32 = 13;
 const EXIT_CODE_COLLISION: i32 = 14;
 const EXIT_CODE_UNSUPPORTED_CAPABILITY: i32 = 15;
+const EXIT_CODE_RESPONSE_TOO_LARGE: i32 = 16;
 
 /// `status` for an [`BzrError::UnsupportedServerCapability`] the server answered.
 pub const CAPABILITY_ABSENT: &str = "absent";
@@ -267,6 +319,7 @@ impl BzrError {
             BzrError::PinMismatch { .. } | BzrError::IssuerChanged { .. } => EXIT_CODE_TLS,
             BzrError::MidAirCollision { .. } => EXIT_CODE_COLLISION,
             BzrError::UnsupportedServerCapability { .. } => EXIT_CODE_UNSUPPORTED_CAPABILITY,
+            BzrError::ResponseTooLarge { .. } => EXIT_CODE_RESPONSE_TOO_LARGE,
         }
     }
 
@@ -288,6 +341,7 @@ impl BzrError {
             BzrError::PinMismatch { .. } | BzrError::IssuerChanged { .. } => ERROR_TYPE_TLS,
             BzrError::MidAirCollision { .. } => ERROR_TYPE_COLLISION,
             BzrError::UnsupportedServerCapability { .. } => ERROR_TYPE_UNSUPPORTED_CAPABILITY,
+            BzrError::ResponseTooLarge { .. } => ERROR_TYPE_RESPONSE_TOO_LARGE,
         }
     }
 
@@ -320,6 +374,17 @@ impl BzrError {
             }
             BzrError::HttpStatus { status, .. } => {
                 map.insert("status".into(), Value::from(*status));
+            }
+            BzrError::ResponseTooLarge {
+                operation,
+                limit_bytes,
+                status,
+            } => {
+                map.insert("operation".into(), Value::from(operation.clone()));
+                map.insert("limit_bytes".into(), Value::from(*limit_bytes));
+                if let Some(status) = status {
+                    map.insert("status".into(), Value::from(*status));
+                }
             }
             BzrError::Api { code, .. } => {
                 map.insert("api_code".into(), Value::from(*code));

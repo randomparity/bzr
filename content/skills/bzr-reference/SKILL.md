@@ -158,6 +158,7 @@ message: it is server-supplied and changes between deployments.
 | `tls` | 13 | `server`, `expected`, `actual` (pin mismatch or issuer change) |
 | `collision` | 14 | `bug_id`, `last_change_time`, `if_match_token` |
 | `unsupported_server_capability` | 15 | `capability`, `capability_status` (`absent` = the server answered and lacks it; `undetermined` = the probe failed, retryable) |
+| `response_too_large` | 16 | `operation`, `limit_bytes`, and `status` when the refused response carried an error status |
 
 That is the whole set. `config` (3) is the one a fresh agent hits first — no
 server configured — so handle it before assuming a network or permission
