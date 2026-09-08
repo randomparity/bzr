@@ -56,11 +56,13 @@ exit code 16.**
   ADR 0007's additive rule, across its twelve live pins. Two bundled readers
   must move with it: `bzr-dependency-analysis`'s envelope validator, whose
   ceiling and key set are already stale at exit 15, and `bzr-reference`'s error
-  table, which asserts its own exhaustiveness.
+  table, which asserts its own exhaustiveness. The second is outside this
+  change's authorized surface and is deferred to the caller.
 - **A single attachment larger than ~48 MiB can no longer be downloaded.**
   `download_attachment` reads base64 `data` out of a REST JSON body, and 4/3
-  expansion puts the ceiling there; streaming that path via `attachment.cgi` is
-  the operator-approved follow-up on #740. A deployment setting Bugzilla's
+  expansion puts the ceiling there. Streaming that path via `attachment.cgi` is
+  operator-approved as a follow-up on #740 and had not been filed when this
+  record was written; it needs an issue. A deployment setting Bugzilla's
   `maxlocalattachment` — the parameter whose purpose is to permit attachments
   above `maxattachmentsize` — can exceed the ceiling, and nothing raises it.
 - **Both Hybrid fallbacks lose one edge.** A refusal is not a transport

@@ -28,14 +28,14 @@ scope, and no completion criterion was added.
 - **No inline `mod tests` in `src/`** — unit tests live in a sibling
   `<name>_tests.rs`, and `make check-test-layout` enforces it.
 - **`clippy.toml` disallows every thread and task spawn**, and
-  `tools/check-no-spawn.sh` — wired into `make lint` — fails the build if an
-  entry is removed. Its regex scan skips `*_tests.rs`, but `make clippy` runs
+  `tools/check-no-spawn.sh` — wired into `make lint` — fails if an entry is
+  removed. Its regex scan skips `*_tests.rs`, but `make clippy` runs
   `--all-targets` and still sees them, so a spawning test needs a file-level
   `#![expect(...)]` naming **exactly** the lints it triggers — an `expect` for
   a lint the file never raises is `unfulfilled_lint_expectation`, fatal under
-  `-D warnings`. `src/http_tests.rs` carries no such attribute today and gains
+  `-D warnings`. `src/http_tests.rs` gains
   `#![expect(clippy::disallowed_methods, clippy::unwrap_used)]` in Task 1, the
-  same line `src/client/response_tests.rs:1` already carries.
+  same line `src/client/response_tests.rs:1` carries.
 - **Clippy pedantic, warnings are errors**, `unwrap_used` denied in `src/`; no
   `println!`/`eprintln!` there — diagnostics go through `tracing`.
 - **At least one commit must reach the release notes.** `cliff.toml` excludes
@@ -367,24 +367,23 @@ bundled readers, and the twelve `SCHEMA_VERSION` pins.
    `validate_error_envelope` ceiling from `1 <= value["exit_code"] <= 14` to
    `<= 16`, and add `operation` to `ERROR_STRING_KEYS` and `limit_bytes` to
    `ERROR_INTEGER_KEYS`. **Also add `capability` and `capability_status`**,
-   which shipped with exit 15 and were never added here — same verified root
-   cause (this validator is a hand-maintained mirror of the error contract and
-   lags it), two set entries in the same edit, and a validator that accepted 16
-   while still rejecting 15 would be indefensible. Report the pre-existing gap.
-5. `content/skills/bzr-reference/SKILL.md`: add the row
-   `| response_too_large | 16 | operation, limit_bytes, status |` to the
-   error-type table, which the following sentence asserts is "the whole set".
-   Match the neighbouring rows' backtick style.
+   which shipped with exit 15 and were never added — same verified root cause
+   (this validator is a hand-maintained mirror of the error contract and lags
+   it), and a validator accepting 16 while rejecting 15 would be indefensible.
+   Report the pre-existing gap.
+5. Do **not** edit `content/skills/bzr-reference/SKILL.md`. Its error-type
+   table (`:145-162`) asserts "That is the whole set" and this change falsifies
+   it, but the file carries no `SCHEMA_VERSION` pin and is outside the frozen
+   surface; it is deferred to the caller along with `CLAUDE.md`. Report both.
 6. `docs/bzr-cli.md`: add the exit-code table row after the row for 15 —
    `| 16 | Response too large (the server's response body exceeds bzr's 64 MiB
    response-body limit; the read stops at the limit and the response is
    discarded unparsed) |` — and add `operation` and `limit_bytes` rows to the
    structured-error key table that documents `field`, `value`, `status`, and
    `api_code`, attributed to `response_too_large`.
-7. `docs/bzr-cli.md`, the `bzr attachment download` section: add one sentence
-   recording that an attachment whose base64 payload exceeds the 64 MiB
-   response-body limit cannot be downloaded and exits 16. This is the one
-   user-visible regression the change ships.
+7. `docs/bzr-cli.md`, the `bzr attachment download` section: one sentence
+   recording that an attachment whose base64 payload exceeds the 64 MiB limit
+   cannot be downloaded and exits 16 — the one user-visible regression here.
 8. Bump `SCHEMA_VERSION` from `3.0.6` to `3.0.7` in exactly these twelve files
    — one atomic change; a partial sweep fails the suite. `src/output/mod.rs`
    (the const, line 10); `README.md`; `docs/bzr-cli.md`; under
@@ -403,8 +402,8 @@ bundled readers, and the twelve `SCHEMA_VERSION` pins.
    `git diff --name-only main...HEAD -- docs/adr/` must name only `0068-*`.
 10. `make test`, `make skills-test`, `make lint` — all exit 0.
 
-**Acceptance.** No `3.0.6` remains in the pin set; both bundled readers accept
-an exit-16 envelope; the three guardrails exit 0; no Accepted ADR was edited.
+**Acceptance.** No `3.0.6` remains in the pin set; `collect.py` accepts an
+exit-16 envelope; the three guardrails exit 0; no Accepted ADR was edited.
 
 ## Task 4 — prove the bound against a real socket
 
@@ -429,8 +428,8 @@ Both `focused-test`; both green under `make functional-test`.
 
 ### Steps
 
-1. Update the phase header comment — it says "Creates: one loopback HTTP
-   fixture process"; make it two — and add `#740` beside `#512` in the banner.
+1. Update the phase header comment — "Creates: one loopback HTTP fixture
+   process" becomes two — and add `#740` beside `#512` in the banner.
 2. After the existing case and its teardown, add a second python3 fixture,
    copying the existing case's `mktemp` port file, readiness loop, `127.0.0.1:0`
    bind, and `kill`/`rm -f` teardown verbatim rather than sharing them, so the

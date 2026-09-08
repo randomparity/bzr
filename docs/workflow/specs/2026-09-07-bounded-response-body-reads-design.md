@@ -60,10 +60,9 @@ XML-RPC HTTP-error preview string.
   (`status` reuses the key `schemas/error.json` already declares). **Not** a
   transport failure.
 - `schemas/error.json` (`exit_code` maximum 15 → 16 plus two optional keys),
-  `SCHEMA_VERSION` 3.0.6 → 3.0.7 across its twelve live pins, and the two
-  bundled readers that would otherwise reject exit 16 —
-  `bzr-dependency-analysis`'s `collect.py` validator and `bzr-reference`'s
-  error-type table.
+  `SCHEMA_VERSION` 3.0.6 → 3.0.7 across its twelve live pins, and the bundled
+  reader that would otherwise reject exit 16 outright,
+  `bzr-dependency-analysis`'s `collect.py` validator.
 - `docs/bzr-cli.md` — exit-code row, structured-key rows, attachment ceiling,
   version pin — and a second fixture case in
   `tests/functional/phases/18b-http-error-preview.sh`.
@@ -81,10 +80,10 @@ ADR 0068 declines as an addition too.
 
 ## Threat model
 
-**Boundary.** One, widened by no part of this change and narrowed by all of it:
-the HTTP response body crossing from a Bugzilla server into `bzr`'s address
-space. The thirteen sites are its whole surface. No new entry point, parser, or
-permission.
+**Boundary.** One, widened by no part of this change and narrowed by all of
+it: the HTTP response body crossing from a Bugzilla server into `bzr`'s address
+space. The thirteen sites are its whole surface — no new entry point, parser,
+or permission.
 
 **Actors.** The untrusted party is the configured Bugzilla server and anyone
 who can answer for it — a hostile host at a URL the operator typed or imported,
@@ -137,6 +136,15 @@ request timeout covers it, a size bound cannot.
 | Error contract of the new variant | `focused-test` | `src/error_tests.rs`: exit code 16, type `response_too_large`, the three structured keys, `is_transport_failure() == false` |
 | Probe refusal aborts rather than continues | `focused-test` | `src/client/auth/whoami_tests.rs` and `valid_login_tests.rs`: a wiremock probe answering over a test limit yields `ProbeRefused`, not `AuthRejected` |
 | Published schema admits exit 16 | `focused-test` | `src/main_tests.rs::format_dispatch_error_json_family_matches_published_schema`, extended with a `ResponseTooLarge` case |
-| Bundled readers accept exit 16 | `focused-test` | `content/skills/bzr-dependency-analysis/tests/test_collect.py`: an exit-16 envelope with both new keys validates; plus phase 18b's `bzr schema error` assertion |
+| The bundled reader accepts exit 16 | `focused-test` | `content/skills/bzr-dependency-analysis/tests/test_collect.py`: an exit-16 envelope with both new keys validates; plus phase 18b's `bzr schema error` assertion |
 | End-to-end refusal on a real socket | `focused-test` | `tests/functional/phases/18b-http-error-preview.sh`: a local fixture streams past the limit; `bzr` exits 16 with `.error.type == "response_too_large"` |
 | The three remaining degraded arms | `task-test-not-applicable` | Each returns the same value that site's existing unreadable-body arm returns — `AlternateAuth::Original`, `None`, or a substituted preview — so no observation distinguishes them beyond the `tracing` line, and asserting log wording tests prose. The two arms whose values differed were reclassified above rather than waived |
+
+## Deferred — owner: the caller
+
+Two documents this change falsifies sit outside its frozen surface and are not
+edited here: `content/skills/bzr-reference/SKILL.md:145-162`, whose error-type
+table asserts "That is the whole set", and `CLAUDE.md`'s "19 variants"
+description of `BzrError`. Separately, the `attachment.cgi` streaming follow-up
+that owns exclusion (a) — and so the ~48 MiB download ceiling introduced here —
+had not been filed when this design was written and needs an issue.
