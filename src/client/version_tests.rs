@@ -54,7 +54,8 @@ async fn detect_version_returns_rest_for_5_1() {
         "test-key",
         AuthMethod::Header,
     )
-    .await;
+    .await
+    .unwrap();
     assert_eq!(version.as_deref(), Some("5.1.2"));
     assert_eq!(mode, ApiMode::Rest);
 }
@@ -115,7 +116,8 @@ async fn detect_version_returns_hybrid_for_5_0() {
         "test-key",
         AuthMethod::Header,
     )
-    .await;
+    .await
+    .unwrap();
     assert_eq!(version.as_deref(), Some("5.0.4"));
     assert_eq!(mode, ApiMode::Hybrid);
 }
@@ -136,7 +138,8 @@ async fn detect_version_404_returns_xmlrpc() {
         "test-key",
         AuthMethod::Header,
     )
-    .await;
+    .await
+    .unwrap();
     assert!(version.is_none());
     assert_eq!(mode, ApiMode::XmlRpc);
 }
@@ -149,7 +152,8 @@ async fn detect_version_network_error_returns_xmlrpc() {
         "test-key",
         AuthMethod::Header,
     )
-    .await;
+    .await
+    .unwrap();
     assert!(version.is_none());
     assert_eq!(mode, ApiMode::XmlRpc);
 }
@@ -228,7 +232,8 @@ async fn detect_version_non_json_returns_hybrid() {
         "test-key",
         AuthMethod::Header,
     )
-    .await;
+    .await
+    .unwrap();
     assert!(version.is_none());
     assert_eq!(mode, ApiMode::Hybrid);
 }
@@ -264,4 +269,30 @@ async fn version_probe_failure_message_does_not_leak_the_api_key() {
         message.contains("http://127.0.0.1:1/rest/version"),
         "message should keep origin and path for diagnosis: {message}"
     );
+}
+
+/// A server that answers `/rest/version` with an over-limit body must not get
+/// to pick bzr's wire protocol by doing so: the refusal propagates instead of
+/// resolving to `ApiMode::XmlRpc` (#740, ADR 0068).
+#[tokio::test]
+async fn version_probe_refuses_an_over_limit_body() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/version"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("x".repeat(64)))
+        .mount(&server)
+        .await;
+
+    let error = super::detect_version_and_mode_inner(
+        &test_http_client(),
+        &server.uri(),
+        Some(("k", AuthMethod::Header)),
+        super::SendErrorHandling::FallbackToXmlRpc,
+        16,
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(error.exit_code(), 16);
+    assert_eq!(error.error_type(), "response_too_large");
 }

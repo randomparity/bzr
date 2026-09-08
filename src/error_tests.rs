@@ -588,3 +588,146 @@ fn unsupported_capability_detail_redacts_an_interpolated_api_key() {
         "capability detail leaked an API key: {rendered}"
     );
 }
+
+// ── ResponseTooLarge (#740) ─────────────────────────────────────────
+
+#[test]
+fn response_too_large_reports_exit_code_and_type() {
+    let error = BzrError::ResponseTooLarge {
+        operation: "response body".to_owned(),
+        limit_bytes: 67_108_864,
+        status: None,
+    };
+
+    assert_eq!(error.exit_code(), 16);
+    assert_eq!(error.error_type(), "response_too_large");
+    let message = error.to_string();
+    assert!(
+        message.contains("response body"),
+        "names the operation: {message}"
+    );
+    assert!(message.contains("67108864"), "names the limit: {message}");
+}
+
+/// A `--format table` user reads the Display, not the structured keys, so the
+/// status must reach it there too.
+#[test]
+fn response_too_large_message_carries_the_status_when_known() {
+    let with_status = BzrError::ResponseTooLarge {
+        operation: "error response".to_owned(),
+        limit_bytes: 67_108_864,
+        status: Some(503),
+    }
+    .to_string();
+    assert!(
+        with_status.contains("HTTP 503"),
+        "message must name the status: {with_status}",
+    );
+
+    let without = BzrError::ResponseTooLarge {
+        operation: "response body".to_owned(),
+        limit_bytes: 67_108_864,
+        status: None,
+    }
+    .to_string();
+    assert!(
+        !without.contains("HTTP "),
+        "no status means no status clause: {without}",
+    );
+}
+
+#[test]
+fn response_too_large_publishes_operation_limit_and_status() {
+    let detail = BzrError::ResponseTooLarge {
+        operation: "error response".to_owned(),
+        limit_bytes: 67_108_864,
+        status: Some(503),
+    }
+    .structured_detail();
+
+    assert_eq!(detail["operation"], "error response");
+    assert_eq!(detail["limit_bytes"], 67_108_864_u64);
+    assert_eq!(detail["status"], 503);
+}
+
+#[test]
+fn response_too_large_omits_absent_status() {
+    let detail = BzrError::ResponseTooLarge {
+        operation: "response body".to_owned(),
+        limit_bytes: 16,
+        status: None,
+    }
+    .structured_detail();
+
+    assert!(
+        !detail.contains_key("status"),
+        "absent status must not be published"
+    );
+}
+
+/// Classifying the refusal as transport would make Hybrid mode answer an
+/// oversized body by re-fetching it over the other protocol (ADR 0068).
+#[test]
+fn response_too_large_is_not_a_transport_failure() {
+    assert!(!BzrError::ResponseTooLarge {
+        operation: "response body".to_owned(),
+        limit_bytes: 16,
+        status: None,
+    }
+    .is_transport_failure());
+}
+
+/// The message has to let someone tell a fixed cap from a bug without reading
+/// source: it names the operation, the limit in both units, and what to do.
+#[test]
+fn response_too_large_message_is_actionable() {
+    let message = BzrError::ResponseTooLarge {
+        operation: "response body".to_owned(),
+        limit_bytes: 67_108_864,
+        status: None,
+    }
+    .to_string();
+
+    assert!(
+        message.contains("response body"),
+        "names the operation: {message}"
+    );
+    assert!(
+        message.contains("67108864 bytes"),
+        "names the limit: {message}"
+    );
+    assert!(
+        message.contains("64 MiB"),
+        "names the limit in MiB: {message}"
+    );
+    assert!(
+        message.contains("fixed cap"),
+        "says it is a cap, not a fault: {message}"
+    );
+    assert!(
+        message.contains("retrying will not"),
+        "says what not to do: {message}"
+    );
+    assert!(
+        message.contains("attachment"),
+        "names the case a user will hit: {message}"
+    );
+}
+
+/// A test-sized limit has no whole-MiB form, so the clause is omitted rather
+/// than rendered as "0 MiB".
+#[test]
+fn response_too_large_message_omits_a_sub_mib_limit_clause() {
+    let message = BzrError::ResponseTooLarge {
+        operation: "test read".to_owned(),
+        limit_bytes: 16,
+        status: None,
+    }
+    .to_string();
+
+    assert!(message.contains("16 bytes"), "{message}");
+    assert!(
+        !message.contains("MiB"),
+        "no MiB clause under 1 MiB: {message}"
+    );
+}

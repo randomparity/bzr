@@ -14,6 +14,10 @@
 use serde_json::{json, Value};
 
 use super::SCHEMAS;
+use crate::output::resources::attachment::{
+    AttachmentBatchResult, AttachmentDownloadResult, BatchSummary, BugDownloadResult,
+    DownloadedFile, TargetStatus,
+};
 use crate::output::result_types::{
     ActionKind, ActionResult, BatchCreateResult, BatchFailure, BatchResult, BatchUploadResult,
     BugViewFailure, CompoundCreateResult, ConfigResult, CountResult, CreateFailure, DownloadResult,
@@ -457,6 +461,77 @@ fn download_result_conforms() {
 #[test]
 fn upload_result_conforms() {
     assert_conforms("upload-result", &to_value(&UploadResult::new(9, 1, 2048)));
+}
+
+#[test]
+fn attachment_download_batch_result_conforms() {
+    // Maximal: one successful bug, one failed bug with a partial write, one
+    // successful attachment target, one failed attachment target — so the
+    // nested walk exercises every declared property including both `status`
+    // enum values and the optional `files`/`error`/`bug_id`/`path`/`bytes`
+    // fields.
+    let result = AttachmentBatchResult {
+        out_dir: "/tmp/out".into(),
+        bug_results: vec![
+            BugDownloadResult {
+                bug_id: 1,
+                status: TargetStatus::Ok,
+                files: vec![DownloadedFile {
+                    attachment_id: 11,
+                    path: "/tmp/out/11-a.txt".into(),
+                    bytes: 10,
+                }],
+                error: None,
+            },
+            BugDownloadResult {
+                bug_id: 2,
+                status: TargetStatus::Error,
+                files: vec![DownloadedFile {
+                    attachment_id: 12,
+                    path: "/tmp/out/12-b.txt".into(),
+                    bytes: 5,
+                }],
+                error: Some("boom".into()),
+            },
+        ],
+        attachment_results: vec![
+            AttachmentDownloadResult {
+                attachment_id: 21,
+                status: TargetStatus::Ok,
+                bug_id: Some(3),
+                path: Some("/tmp/out/21-c.txt".into()),
+                bytes: Some(20),
+                error: None,
+            },
+            AttachmentDownloadResult {
+                attachment_id: 22,
+                status: TargetStatus::Error,
+                bug_id: Some(4),
+                path: None,
+                bytes: None,
+                error: Some("404 not found".into()),
+            },
+        ],
+        summary: BatchSummary {
+            succeeded: 2,
+            failed: 2,
+            total_bytes: 35,
+        },
+    };
+    let value = to_value(&result);
+    assert_conforms("attachment-download-batch-result", &value);
+
+    // `assert_conforms` only checks top-level keys; it cannot see the nested
+    // per-bug and per-attachment shapes or the `status` enum. `schema_accepts`
+    // walks nested items and is what binds them.
+    assert!(schema_accepts("attachment-download-batch-result", &value));
+
+    let mut missing_attachment_id = value.clone();
+    missing_attachment_id["attachment_results"] = json!([{"status": "ok"}]);
+    assert!(!schema_accepts(
+        "attachment-download-batch-result",
+        &missing_attachment_id
+    ));
 }
 
 #[test]

@@ -35,14 +35,19 @@ esac
 _DA_BZR_CANONICAL=$(cd "$(dirname "$BZR_BIN")" && pwd -P)/$(basename "$BZR_BIN")
 _DA_CONFIG="$XDG_CONFIG_HOME/bzr/config.toml"
 _DA_REJECTED_KEY="FuncTestRejected0123456789abcdef01234567"
+# These entries stand in for servers that are already fully configured, so the
+# cached `auth_method` carries a provenance stamp (ADR-0066). Without one the
+# value reads as written before the differential probe and the connect
+# re-detects, which for the rejected-credential servers moves the failure from
+# the resource read to auth detection.
 {
   printf '\n[servers.dependency-rest-public]\nurl = "%s"\napi_mode = "rest"\n' \
     "$BZ_URL"
   printf '\n[servers.dependency-xmlrpc-public]\nurl = "%s"\napi_mode = "xmlrpc"\n' \
     "$BZ_URL"
-  printf '\n[servers.dependency-rest-rejected]\nurl = "%s"\napi_key = "%s"\nauth_method = "query_param"\napi_mode = "rest"\n' \
+  printf '\n[servers.dependency-rest-rejected]\nurl = "%s"\napi_key = "%s"\nauth_method = "query_param"\nauth_method_source = "differential-probe"\napi_mode = "rest"\n' \
     "$BZ_URL" "$_DA_REJECTED_KEY"
-  printf '\n[servers.dependency-xmlrpc-rejected]\nurl = "%s"\napi_key = "%s"\nauth_method = "query_param"\napi_mode = "xmlrpc"\n' \
+  printf '\n[servers.dependency-xmlrpc-rejected]\nurl = "%s"\napi_key = "%s"\nauth_method = "query_param"\nauth_method_source = "differential-probe"\napi_mode = "xmlrpc"\n' \
     "$BZ_URL" "$_DA_REJECTED_KEY"
 } >>"$_DA_CONFIG"
 
@@ -586,7 +591,7 @@ for _DA_ADJ_MODE in rest xmlrpc; do
   run_bzr_raw --json --server "$_DA_ADJ_SERVER" \
     bug adjacency "$_DA_ROOT" "$_DA_ALIAS"
   if assert_exit_code 0 &&
-    assert_raw_json '.schema_version' '3.0.5' &&
+    assert_raw_json '.schema_version' '3.0.7' &&
     assert_json '.requests == [
       {requested: "'"$_DA_ROOT"'", bug_id: '"$_DA_ROOT"'},
       {requested: "'"$_DA_ALIAS"'", bug_id: '"$_DA_LEFT"'}

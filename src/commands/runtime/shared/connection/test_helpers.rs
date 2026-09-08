@@ -9,6 +9,17 @@ use crate::test_helpers::write_config_to;
 
 use super::target::ConnectContext;
 
+/// The `[servers.test]` lines that put a connect on the fully-cached path: a
+/// cached auth method carrying a trusted provenance stamp, plus a cached API
+/// mode. The stamp is load-bearing — without it the entry is treated as written
+/// before the differential probe and re-detects instead (ADR-0066), which
+/// changes the request counts a cached-path test asserts on.
+pub(super) const CACHED_SERVER: &str = concat!(
+    "auth_method = \"header\"\n",
+    "auth_method_source = \"differential-probe\"\n",
+    "api_mode = \"rest\"",
+);
+
 pub(super) fn load_config(path: &Path) -> crate::config::Config {
     crate::config::Config::load_at(Some(path)).unwrap()
 }

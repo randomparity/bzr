@@ -2,7 +2,7 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use crate::commands::runtime::invocation::CommandContext;
-use crate::config::{Config, ServerConfig};
+use crate::config::{Config, ServerConfig, AUTH_METHOD_SOURCE_PINNED};
 use crate::error::Result;
 use crate::output::result_types::{write_result, ConfigResult};
 use crate::output::writers::Writers;
@@ -71,6 +71,10 @@ pub(super) async fn handle(
         api_key_env: api_key_env.map(str::to_owned),
         email: email.map(str::to_owned),
         auth_method,
+        // Mark an explicit `--auth-method` as a deliberate pin so a later
+        // connect never re-detects over it (ADR-0066). Without the flag the
+        // stamp stays unset and the first connect detects and stamps.
+        auth_method_source: auth_method.map(|_| AUTH_METHOD_SOURCE_PINNED.to_owned()),
         tls_insecure,
         tls_ca_cert: tls_ca_cert.map(PathBuf::from),
         tls_pin_sha256: tls_pin_sha256.map(str::to_owned),

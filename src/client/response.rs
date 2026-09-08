@@ -228,7 +228,7 @@ impl BugzillaClient {
         requested: &str,
     ) -> Result<std::result::Result<BugAdjacencyBug, BugAdjacencyError>> {
         let status = response.status();
-        let body = response.text().await?;
+        let body = crate::http::read_body_bounded(response, "strict Bug.get").await?;
         if !status.is_success() {
             if status.is_client_error() {
                 return parse_strict_adjacency_resource_error(&body, requested);
@@ -267,7 +267,7 @@ impl BugzillaClient {
     /// read path's strictness.
     pub(super) async fn check_mutation_response(&self, resp: reqwest::Response) -> Result<()> {
         let safe_url = Self::safe_url(resp.url());
-        let body = resp.text().await?;
+        let body = crate::http::read_body_bounded(resp, "mutation response").await?;
         if body.trim().is_empty() {
             return Ok(());
         }
@@ -280,7 +280,7 @@ impl BugzillaClient {
         resp: reqwest::Response,
     ) -> Result<T> {
         let safe_url = Self::safe_url(resp.url());
-        let body = resp.text().await?;
+        let body = crate::http::read_body_bounded(resp, "response body").await?;
         let value = Self::parse_body_to_value(&body, &safe_url)?;
         serde_json::from_value(value).map_err(|e| {
             BzrError::Deserialize(format!(
@@ -302,7 +302,7 @@ impl BugzillaClient {
         resp: reqwest::Response,
     ) -> Result<serde_json::Value> {
         let safe_url = Self::safe_url(resp.url());
-        let body = resp.text().await?;
+        let body = crate::http::read_body_bounded(resp, "response body").await?;
         Self::parse_body_to_value(&body, &safe_url)
     }
 
@@ -453,23 +453,45 @@ impl BugzillaClient {
     ) -> Result<reqwest::Response> {
         if response.status().is_client_error() || response.status().is_server_error() {
             let status = response.status();
-            let body = match response.text().await {
+            let body = match crate::http::read_body_bounded(response, "error response").await {
                 Ok(body) => body,
-                // The body is unreadable, but the HTTP status is still
-                // meaningful. Surface the read failure as the body text so the
-                // error is reported with a real diagnostic rather than being
-                // silently swallowed into an empty string.
-                Err(e) => {
-                    let body = format!("<failed to read response body: {e}>");
-                    return Err(BzrError::HttpStatus {
-                        status: status.as_u16(),
-                        body: crate::http::diagnostic_body_preview(&body),
-                    });
-                }
+                Err(error) => return Err(Self::error_from_body_read_failure(status, error)),
             };
             return Err(Self::error_from_status_body(status, &body));
         }
         Ok(response)
+    }
+
+    /// Classify a failed body read on a response that already carried an error
+    /// status.
+    ///
+    /// A refusal outranks the status: an ordinary 4xx or 5xx is already
+    /// reported by the normal path, and what the operator needs to know is that
+    /// this one arrived with a body bzr would not buffer. The status rides
+    /// along on the variant so nothing is lost. A transport failure keeps its
+    /// existing shape — the status is still meaningful, and surfacing the read
+    /// error as the body text beats swallowing it into an empty string.
+    pub(super) fn error_from_body_read_failure(
+        status: reqwest::StatusCode,
+        error: crate::http::BodyReadError,
+    ) -> BzrError {
+        match error {
+            crate::http::BodyReadError::TooLarge {
+                operation,
+                limit_bytes,
+            } => BzrError::ResponseTooLarge {
+                operation,
+                limit_bytes,
+                status: Some(status.as_u16()),
+            },
+            crate::http::BodyReadError::Transport(e) => {
+                let body = format!("<failed to read response body: {e}>");
+                BzrError::HttpStatus {
+                    status: status.as_u16(),
+                    body: crate::http::diagnostic_body_preview(&body),
+                }
+            }
+        }
     }
 
     /// Classify an HTTP error status and its already-read body into the error

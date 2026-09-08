@@ -310,3 +310,20 @@ async fn strict_xmlrpc_non_success_never_parses_valid_looking_body() {
         .unwrap_err();
     assert!(matches!(error, BzrError::HttpStatus { status: 302, .. }));
 }
+
+/// Folding a refusal into `HttpStatus` would classify it as a transport
+/// failure, and `dispatch_xmlrpc_first` would answer it by re-fetching the
+/// same oversized body over REST (#740, ADR 0068).
+#[tokio::test]
+async fn an_over_limit_error_body_is_refused_not_reclassified() {
+    let error = BzrError::from(crate::http::BodyReadError::TooLarge {
+        operation: "XML-RPC error response".to_owned(),
+        limit_bytes: 67_108_864,
+    });
+
+    assert!(
+        !error.is_transport_failure(),
+        "a refusal must not be answered by a second fetch",
+    );
+    assert_eq!(error.exit_code(), 16);
+}

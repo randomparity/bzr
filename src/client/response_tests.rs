@@ -1230,3 +1230,57 @@ async fn error_body_without_a_code_reports_the_unknown_code_sentinel() {
         other => panic!("expected Api -1, got {other:?}"),
     }
 }
+
+// ── Bounded body reads on an error status (#740) ────────────────────
+
+/// The sole producer of the `status` key that `schemas/error.json` now
+/// publishes for `response_too_large`.
+#[test]
+fn error_status_body_refusal_reports_response_too_large_with_the_status() {
+    let error = BugzillaClient::error_from_body_read_failure(
+        reqwest::StatusCode::SERVICE_UNAVAILABLE,
+        crate::http::BodyReadError::TooLarge {
+            operation: "error response".to_owned(),
+            limit_bytes: 67_108_864,
+        },
+    );
+
+    assert_eq!(error.exit_code(), 16);
+    assert_eq!(error.error_type(), "response_too_large");
+    let detail = error.structured_detail();
+    assert_eq!(detail["status"], 503);
+    assert_eq!(detail["operation"], "error response");
+    assert_eq!(detail["limit_bytes"], 67_108_864_u64);
+}
+
+/// A transport failure on the same seam keeps the shape it had before the
+/// bound existed: the status, and the read error as the body preview.
+#[tokio::test]
+async fn error_status_body_transport_failure_still_reports_http_status() {
+    let (url, handle) = spawn_truncated_http_error_server();
+    let mut response = reqwest::Client::new().get(url).send().await.unwrap();
+    // The declared body outruns what the server wrote, so the error surfaces on
+    // a later chunk, not the first.
+    let transport = loop {
+        match response.chunk().await {
+            Ok(Some(_)) => {}
+            Ok(None) => panic!("server closed cleanly; expected a truncated body"),
+            Err(error) => break error,
+        }
+    };
+    handle.join().unwrap();
+
+    let error = BugzillaClient::error_from_body_read_failure(
+        reqwest::StatusCode::BAD_GATEWAY,
+        crate::http::BodyReadError::Transport(transport),
+    );
+
+    let BzrError::HttpStatus { status, body } = error else {
+        panic!("expected HttpStatus, got {error:?}");
+    };
+    assert_eq!(status, 502);
+    assert!(
+        body.contains("failed to read response body"),
+        "preview must carry the read error: {body}",
+    );
+}

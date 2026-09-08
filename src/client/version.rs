@@ -12,20 +12,24 @@ enum SendErrorHandling {
 ///
 /// Calls `GET /rest/version` to get the Bugzilla version string, then
 /// applies thresholds to determine the best API transport.
+/// Under [`SendErrorHandling::FallbackToXmlRpc`] a send failure resolves to
+/// `(None, ApiMode::XmlRpc)` rather than an error, so the only `Err` this can
+/// return is a refused over-limit body — which must not be swallowed, or a
+/// server picks bzr's wire protocol by choosing a response size (ADR 0068).
 pub(super) async fn detect_version_and_mode(
     http: &reqwest::Client,
     base_url: &str,
     api_key: &str,
     auth_method: AuthMethod,
-) -> (Option<String>, ApiMode) {
+) -> Result<(Option<String>, ApiMode)> {
     detect_version_and_mode_inner(
         http,
         base_url,
         Some((api_key, auth_method)),
         SendErrorHandling::FallbackToXmlRpc,
+        crate::http::MAX_RESPONSE_BODY_BYTES,
     )
     .await
-    .unwrap_or((None, ApiMode::XmlRpc))
 }
 
 pub(super) async fn detect_version_and_mode_without_auth_checked(
@@ -37,6 +41,7 @@ pub(super) async fn detect_version_and_mode_without_auth_checked(
         base_url,
         None,
         SendErrorHandling::PropagateTlsCertificate,
+        crate::http::MAX_RESPONSE_BODY_BYTES,
     )
     .await
 }
@@ -46,6 +51,7 @@ async fn detect_version_and_mode_inner(
     base_url: &str,
     auth: Option<(&str, AuthMethod)>,
     send_error_handling: SendErrorHandling,
+    limit_bytes: u64,
 ) -> Result<(Option<String>, ApiMode)> {
     #[derive(serde::Deserialize)]
     struct VersionResponse {
@@ -90,9 +96,17 @@ async fn detect_version_and_mode_inner(
         return Ok((None, ApiMode::XmlRpc));
     }
 
-    let Ok(body) = resp.text().await else {
-        tracing::warn!("version response body unreadable, falling back to xmlrpc");
-        return Ok((None, ApiMode::XmlRpc));
+    let body = match crate::http::read_body_within(resp, "version probe", limit_bytes).await {
+        Ok(body) => body,
+        // Falling back here would let the server pick the wire protocol by
+        // choosing a body size.
+        Err(error @ crate::http::BodyReadError::TooLarge { .. }) => {
+            return Err(BzrError::from(error));
+        }
+        Err(crate::http::BodyReadError::Transport(_)) => {
+            tracing::warn!("version response body unreadable, falling back to xmlrpc");
+            return Ok((None, ApiMode::XmlRpc));
+        }
     };
 
     let Ok(parsed) = serde_json::from_str::<VersionResponse>(&body) else {
