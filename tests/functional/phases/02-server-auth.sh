@@ -229,4 +229,170 @@ else
 fi
 unset _SERVER_CAPABILITIES_ROUTE _SERVER_CAPABILITIES_SHAPE_OK
 
+# ══════════════════════════════════════════════════════════════════════
+# auth_method provenance stamp (ADR-0066)
+#
+# `auth_method` is detected once per server and cached, and before ADR-0066
+# nothing re-ran detection, so a config written by a bzr predating the
+# differential probe (ADR-0056) kept a method the server ignores. A provenance
+# stamp decides which cached values may be trusted. These cases drive the stamp
+# against a real container; they read and edit `config.toml` directly because
+# `config show` is a curated view that does not carry the stamp.
+# ══════════════════════════════════════════════════════════════════════
+_SA_CONFIG="$XDG_CONFIG_HOME/bzr/config.toml"
+
+# Print one key's value from the `[servers.<name>]` table, or nothing.
+_sa_server_key() {
+    python3 - "$_SA_CONFIG" "$1" "$2" <<'PY'
+import re
+import sys
+
+path, server, key = sys.argv[1:4]
+in_table = False
+for line in open(path):
+    stripped = line.strip()
+    if stripped.startswith("["):
+        in_table = stripped == "[servers.%s]" % server
+        continue
+    if in_table:
+        m = re.match(r"%s\s*=\s*(.*)" % re.escape(key), stripped)
+        if m:
+            print(m.group(1).strip().strip('"'))
+            break
+PY
+}
+
+# Replace `key = value` lines inside the `[servers.<name>]` table. TOML rejects
+# duplicate keys, so each key is deleted from the table before the replacement
+# is inserted under the header; passing a bare key name deletes it outright.
+_sa_server_set() {
+    local server="$1"
+    shift
+    python3 - "$_SA_CONFIG" "$server" "$@" <<'PY'
+import sys
+
+path, server = sys.argv[1:3]
+additions = [a for a in sys.argv[3:] if "=" in a]
+keys = {a.split("=", 1)[0].strip() for a in sys.argv[3:]}
+out = []
+in_table = False
+for line in open(path).read().splitlines():
+    stripped = line.strip()
+    if stripped.startswith("["):
+        in_table = stripped == "[servers.%s]" % server
+        out.append(line)
+        if in_table:
+            out.extend(additions)
+        continue
+    if in_table and stripped.split("=", 1)[0].strip() in keys:
+        continue
+    out.append(line)
+open(path, "w").write("\n".join(out) + "\n")
+PY
+}
+
+test_begin "auth-method-stamp-written-by-detection" "detection stamps the auth_method provenance"
+_SA_STAMP_FAIL=""
+_SA_DETECTED_METHOD=$(_sa_server_key auto auth_method)
+if [[ -z $_SA_DETECTED_METHOD ]]; then
+    _SA_STAMP_FAIL="auto server has no detected auth_method to stamp"
+elif [[ $(_sa_server_key auto auth_method_source) != "differential-probe" ]]; then
+    _SA_STAMP_FAIL="detection did not stamp auth_method_source=differential-probe"
+elif [[ $(_sa_server_key test auth_method_source) != "pinned" ]]; then
+    # Phase 1 configured `test` with `--auth-method query_param`.
+    _SA_STAMP_FAIL="--auth-method did not stamp auth_method_source=pinned"
+fi
+if [[ -z $_SA_STAMP_FAIL ]]; then test_pass; else test_fail "$_SA_STAMP_FAIL"; fi
+unset _SA_STAMP_FAIL
+
+test_begin "auth-method-unstamped-entry-redetects" "an unstamped auth_method is re-detected and re-stamped"
+# The population this exists for: a value cached before the stamp existed. Only
+# the stamp is removed, so what re-detects here is the ADR-0066 gate and not
+# some other difference.
+_SA_REDETECT_FAIL=""
+_sa_server_set auto 'auth_method = "header"' auth_method_source
+RUST_LOG=bzr=debug run_bzr --server auto whoami
+if [[ $BZR_EXIT -ne 0 ]]; then
+    _SA_REDETECT_FAIL="re-detecting connect exited $BZR_EXIT"
+elif [[ $(_sa_server_key auto auth_method_source) != "differential-probe" ]]; then
+    _SA_REDETECT_FAIL="re-detection did not re-stamp the auth_method"
+else
+    case "$BZ_VERSION" in
+    bz50 | bz52)
+        # The versions the differential probe changed the answer for: the
+        # planted `header` must be overturned, and the change announced.
+        if [[ $(_sa_server_key auto auth_method) != "query_param" ]]; then
+            _SA_REDETECT_FAIL="stale header was not corrected to query_param"
+        elif ! grep -q "re-detected auth method" "$BZR_STDERR"; then
+            _SA_REDETECT_FAIL="changed auth method was not announced on stderr"
+        elif ! grep -q -- "--auth-method header" "$BZR_STDERR"; then
+            _SA_REDETECT_FAIL="warning did not name the command that pins header back"
+        fi
+        ;;
+    esac
+fi
+if [[ -z $_SA_REDETECT_FAIL ]]; then test_pass; else test_fail "$_SA_REDETECT_FAIL"; fi
+unset _SA_REDETECT_FAIL
+
+test_begin "auth-method-pin-survives-connect" "a pinned auth_method is neither re-detected nor re-stamped"
+# Pin the method this container actually uses, so the case turns on the stamp
+# rather than on an auth failure. A pin overwritten by detection would show up
+# as the stamp flipping to differential-probe.
+_SA_PIN_FAIL=""
+_SA_PIN_METHOD=$(_sa_server_key auto auth_method)
+run_bzr config set-server pinned --url "$BZ_URL" --api-key "$API_KEY" \
+    --email "$ADMIN_EMAIL" --auth-method "$_SA_PIN_METHOD"
+if [[ $BZR_EXIT -ne 0 ]]; then
+    _SA_PIN_FAIL="config set-server pinned exited $BZR_EXIT"
+else
+    # First connect fills in the missing api_mode; it must not restamp.
+    run_bzr --server pinned whoami
+    if [[ $BZR_EXIT -ne 0 ]]; then
+        _SA_PIN_FAIL="first pinned connect exited $BZR_EXIT"
+    elif [[ $(_sa_server_key pinned auth_method_source) != "pinned" ]]; then
+        _SA_PIN_FAIL="api_mode detection overwrote the pin marker"
+    else
+        # Second connect is fully cached, so no auth probe may be issued.
+        RUST_LOG=bzr=debug run_bzr --server pinned whoami
+        if [[ $BZR_EXIT -ne 0 ]]; then
+            _SA_PIN_FAIL="cached pinned connect exited $BZR_EXIT"
+        elif [[ $(_sa_server_key pinned auth_method) != "$_SA_PIN_METHOD" ]]; then
+            _SA_PIN_FAIL="pinned auth_method was overwritten by re-detection"
+        elif [[ $(_sa_server_key pinned auth_method_source) != "pinned" ]]; then
+            _SA_PIN_FAIL="pin marker was rewritten to the detection marker"
+        elif grep -q "re-detected auth method" "$BZR_STDERR"; then
+            _SA_PIN_FAIL="a pinned server reported a re-detected auth method"
+        else
+            case "$BZ_VERSION" in
+            bz50 | bz52)
+                if grep -q "matched the anonymous response" "$BZR_STDERR"; then
+                    _SA_PIN_FAIL="a fully-cached server still ran the auth probe"
+                fi
+                ;;
+            esac
+        fi
+    fi
+fi
+if [[ -z $_SA_PIN_FAIL ]]; then test_pass; else test_fail "$_SA_PIN_FAIL"; fi
+unset _SA_PIN_FAIL _SA_PIN_METHOD
+
+test_begin "auth-method-stamp-ignored-without-credentials" "an unknown stamp loads and never reaches a credentialless server"
+# Two properties at once: an `auth_method_source` this build does not know must
+# still deserialize (or the config file becomes unreadable to every command),
+# and a server with no credential must never consult or rewrite the stamp.
+_SA_ANON_FAIL=""
+_sa_server_set public 'auth_method = "header"' 'auth_method_source = "from-the-future"'
+run_bzr --server public server info
+if [[ $BZR_EXIT -ne 0 ]]; then
+    _SA_ANON_FAIL="credentialless connect with an unknown stamp exited $BZR_EXIT"
+elif ! jq -e '.version' "$BZR_STDOUT" >/dev/null; then
+    _SA_ANON_FAIL="credentialless server info returned no version"
+elif [[ $(_sa_server_key public auth_method_source) != "from-the-future" ]]; then
+    _SA_ANON_FAIL="a credentialless connect rewrote the stamp"
+fi
+# Leave `public` as later phases expect it.
+_sa_server_set public auth_method auth_method_source
+if [[ -z $_SA_ANON_FAIL ]]; then test_pass; else test_fail "$_SA_ANON_FAIL"; fi
+unset _SA_ANON_FAIL _SA_DETECTED_METHOD
+
 echo ""

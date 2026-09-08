@@ -20,6 +20,15 @@ pub struct Config {
     pub queries: HashMap<String, SavedQuery>,
 }
 
+/// [`ServerConfig::auth_method_source`] marker for a value written by the
+/// differential auth probe (ADR-0056). A future detection change earns a new
+/// marker; the old one stops matching and that population re-detects once.
+pub const AUTH_METHOD_SOURCE_DETECTED: &str = "differential-probe";
+
+/// [`ServerConfig::auth_method_source`] marker for a value a user pinned with
+/// `bzr config set-server --auth-method`. Never re-detected.
+pub const AUTH_METHOD_SOURCE_PINNED: &str = "pinned";
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ServerConfig {
@@ -34,6 +43,21 @@ pub struct ServerConfig {
     pub email: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth_method: Option<AuthMethod>,
+    /// Where the persisted `auth_method` came from, as a generation marker.
+    ///
+    /// `auth_method` is overloaded: detection writes it and `config set-server
+    /// --auth-method` writes it, so no rule keyed on the *value* can invalidate
+    /// a stale detected value without also destroying a deliberate pin. This
+    /// names the producer instead — [`AUTH_METHOD_SOURCE_DETECTED`] or
+    /// [`AUTH_METHOD_SOURCE_PINNED`]. `None` means the value predates the stamp
+    /// (so it may predate the differential probe of ADR-0056), and an
+    /// unrecognised string means a newer bzr wrote it; both are cache misses
+    /// that cost one re-detection. Deliberately `Option<String>` and not an
+    /// enum: an unknown value must still deserialize, since a `ServerConfig`
+    /// deserialize failure makes the whole config file unreadable to every
+    /// command. See ADR-0066.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_method_source: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_mode: Option<ApiMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -160,6 +184,19 @@ impl ServerConfig {
             email,
             ..Self::default()
         }
+    }
+
+    /// Whether the persisted `auth_method` may be used without re-detecting.
+    ///
+    /// True only while `auth_method_source` names a marker this build knows.
+    /// An absent stamp or one written by a newer bzr is a cache miss, not an
+    /// error — the value is re-detected once and re-stamped.
+    #[must_use]
+    pub fn auth_method_is_trusted(&self) -> bool {
+        matches!(
+            self.auth_method_source.as_deref(),
+            Some(AUTH_METHOD_SOURCE_DETECTED | AUTH_METHOD_SOURCE_PINNED)
+        )
     }
 
     pub fn validate(&self, server_name: &str) -> Result<()> {

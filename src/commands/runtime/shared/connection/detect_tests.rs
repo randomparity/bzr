@@ -87,6 +87,112 @@ async fn persist_skips_api_mode_when_version_probe_failed() {
     );
 }
 
+// ── provenance stamp and change warning (ADR-0066) ────────────────
+
+/// Persist `detected` over a `[servers.test]` entry carrying `extra`, and
+/// return the reloaded entry plus everything the run logged at `warn`.
+fn persist_and_capture(
+    extra: &str,
+    detected: Option<crate::types::AuthMethod>,
+    persist_auth: bool,
+) -> (crate::config::ServerConfig, String) {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = write_config(&tmp, "https://example.test", extra);
+    let settings = crate::client::DetectedServerSettings {
+        auth_method: detected,
+        api_mode: crate::types::ApiMode::Rest,
+        server_version: Some("5.2".into()),
+    };
+
+    let (capture, guard) = crate::test_helpers::TracingCapture::install(tracing::Level::WARN);
+    super::persist_detected_settings(Some(&config_path), "test", &settings, persist_auth).unwrap();
+    drop(guard);
+
+    let reloaded = load_config(&config_path);
+    (reloaded.servers["test"].clone(), capture.output())
+}
+
+#[test]
+fn persist_detected_stamps_the_detection_marker() {
+    let (srv, _) = persist_and_capture("", Some(crate::types::AuthMethod::QueryParam), true);
+    assert_eq!(srv.auth_method, Some(crate::types::AuthMethod::QueryParam));
+    assert_eq!(
+        srv.auth_method_source.as_deref(),
+        Some(crate::config::AUTH_METHOD_SOURCE_DETECTED),
+        "a persisted detection must stamp its provenance, or the next connect re-detects again"
+    );
+    assert!(
+        srv.auth_method_is_trusted(),
+        "the stamp it writes must be one it trusts on the next load"
+    );
+}
+
+#[test]
+fn persist_detected_warns_only_when_the_method_changed() {
+    let (srv, changed) = persist_and_capture(
+        "auth_method = \"header\"",
+        Some(crate::types::AuthMethod::QueryParam),
+        true,
+    );
+    assert_eq!(srv.auth_method, Some(crate::types::AuthMethod::QueryParam));
+    assert!(
+        changed.contains("query_param") && changed.contains("header"),
+        "the warn must name both the new and the old method: {changed}"
+    );
+    assert!(
+        changed.contains("--auth-method header"),
+        "the warn must name the command that pins the old method back: {changed}"
+    );
+    assert_eq!(
+        changed.matches("re-detected auth method").count(),
+        1,
+        "exactly one warn per change: {changed}"
+    );
+
+    // Confirming the cached value is the common case and must stay quiet.
+    let (_, unchanged) = persist_and_capture(
+        "auth_method = \"header\"",
+        Some(crate::types::AuthMethod::Header),
+        true,
+    );
+    assert!(
+        !unchanged.contains("re-detected auth method"),
+        "re-detection that confirms the value must not warn: {unchanged}"
+    );
+
+    // Nor must a server's first-ever detection, which overturns nothing.
+    let (_, first) = persist_and_capture("", Some(crate::types::AuthMethod::QueryParam), true);
+    assert!(
+        !first.contains("re-detected auth method"),
+        "a first detection must not warn: {first}"
+    );
+}
+
+#[test]
+fn persist_detected_leaves_the_stamp_alone_when_auth_is_not_persisted() {
+    // The partial-cache arm re-detects only to fill in `api_mode`. It must not
+    // restamp, or a `"pinned"` marker would silently become a detected one.
+    let (srv, _) = persist_and_capture(
+        "auth_method = \"header\"\nauth_method_source = \"pinned\"",
+        Some(crate::types::AuthMethod::QueryParam),
+        false,
+    );
+    assert_eq!(srv.auth_method, Some(crate::types::AuthMethod::Header));
+    assert_eq!(
+        srv.auth_method_source.as_deref(),
+        Some(crate::config::AUTH_METHOD_SOURCE_PINNED)
+    );
+}
+
+#[test]
+fn persist_detected_leaves_the_stamp_alone_for_an_anonymous_detection() {
+    // Credentialless detection yields no auth method; it must not stamp a
+    // provenance for a value it did not produce.
+    let (srv, _) = persist_and_capture("", None, true);
+    assert_eq!(srv.auth_method, None);
+    assert_eq!(srv.auth_method_source, None);
+}
+
 /// `detect_and_build_client` is the shared tail of the TOFU/rotation
 /// flows: detect → persist → construct client. Drive it with a real
 /// wiremock to cover lines 211-231.

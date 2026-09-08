@@ -6,9 +6,10 @@ use std::path::Path;
 
 use crate::client::BugzillaClient;
 use crate::client::DetectedServerSettings;
-use crate::config::Config;
+use crate::config::{Config, AUTH_METHOD_SOURCE_DETECTED};
 use crate::error::Result;
 use crate::tls::TlsConfig;
+use crate::types::transport::AuthMethod;
 
 use super::target::ConnectContext;
 use super::tls_trust::classify_and_handle_tls_failure;
@@ -35,7 +36,11 @@ pub(super) fn persist_detected_settings(
         };
         if persist_auth {
             if let Some(auth_method) = settings.auth_method {
+                warn_on_auth_method_change(server_name, srv.auth_method, auth_method);
                 srv.auth_method = Some(auth_method);
+                // Stamp the provenance alongside the value, so the next connect
+                // takes the cached path instead of re-detecting (ADR-0066).
+                srv.auth_method_source = Some(AUTH_METHOD_SOURCE_DETECTED.to_owned());
             }
         }
         if settings.server_version.is_some() {
@@ -45,6 +50,30 @@ pub(super) fn persist_detected_settings(
         Ok(())
     })?;
     Ok(())
+}
+
+/// Announce a re-detection that overturned a persisted `auth_method`.
+///
+/// This is the only user-visible signal that an upgrade changed how a server is
+/// authenticated: the stale value produced partial results with exit 0 and no
+/// diagnostic (ADR-0059), so the correction must not be silent either. Naming
+/// the pin command keeps a deliberate pin written before the stamp existed
+/// recoverable in one step. Silent when nothing changed, or on the first
+/// detection for a server, so a normal connect stays quiet.
+fn warn_on_auth_method_change(
+    server_name: &str,
+    previous: Option<AuthMethod>,
+    detected: AuthMethod,
+) {
+    let Some(previous) = previous else { return };
+    if previous == detected {
+        return;
+    }
+    tracing::warn!(
+        "server '{server_name}': re-detected auth method {detected} (was {previous}); \
+         if {previous} was deliberate, pin it with \
+         `bzr config set-server {server_name} --url <URL> --auth-method {previous}`"
+    );
 }
 
 /// Detect server settings and build a client, persisting the detected

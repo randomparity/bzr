@@ -78,7 +78,9 @@ pub async fn setup_test_env() -> (
 
 /// The TOML body shared by `setup_config` and `setup_isolated_env`: one
 /// `[servers.test]` server with a literal api key and cached auth/API mode, so
-/// connect takes the cached path without re-detecting.
+/// connect takes the cached path without re-detecting. The `auth_method_source`
+/// stamp is what makes the cached auth trustworthy (ADR-0066); without it every
+/// test connect re-detects and the mock request counts shift.
 fn default_test_config(server_url: &str) -> String {
     format!(
         r#"
@@ -88,8 +90,10 @@ default_server = "test"
 url = "{server_url}"
 api_key = "test-key"
 auth_method = "header"
+auth_method_source = "{source}"
 api_mode = "rest"
 "#,
+        source = crate::config::AUTH_METHOD_SOURCE_DETECTED,
     )
 }
 

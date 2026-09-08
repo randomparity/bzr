@@ -201,6 +201,9 @@ url = "https://bugzilla.example.com"
 api_key = "test-key"
 auth_method = "header"
 api_mode = "rest"
+# Stamped, so this case exercises cached-mode plumbing rather than the
+# ADR-0066 staleness gate, which has its own cases below.
+auth_method_source = "differential-probe"
 "#,
     );
     let ctx_cmd = crate::commands::runtime::invocation::CommandContext::new(
@@ -220,6 +223,98 @@ api_mode = "rest"
     assert_eq!(target.cached_auth, Some(crate::types::AuthMethod::Header));
     assert_eq!(target.cached_mode, Some(crate::types::ApiMode::Rest));
     assert!(!target.pin_current_cert);
+}
+
+// ── cached_auth gating on the provenance stamp (ADR-0066) ────────
+
+/// Resolve a config target whose `[servers.test]` entry carries `extra`.
+fn cached_auth_for(extra: &str) -> Option<crate::types::AuthMethod> {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = crate::test_helpers::write_config_to(
+        &tmp,
+        &format!(
+            r#"
+default_server = "test"
+
+[servers.test]
+url = "https://bugzilla.example.com"
+api_key = "test-key"
+auth_method = "header"
+api_mode = "rest"
+{extra}
+"#
+        ),
+    );
+    let ctx_cmd = crate::commands::runtime::invocation::CommandContext::new(
+        None,
+        crate::types::OutputFormat::Json,
+        None,
+    )
+    .with_config_path_override(Some(config_path));
+
+    super::resolve_connect_target(&ctx_cmd).unwrap().cached_auth
+}
+
+#[test]
+fn resolve_config_target_reports_no_cached_auth_for_an_unstamped_entry() {
+    // The two calls differ only in the stamp, so the assertion isolates it.
+    assert_eq!(
+        cached_auth_for(""),
+        None,
+        "an unstamped auth_method must be reported as a cache miss"
+    );
+    assert_eq!(
+        cached_auth_for("auth_method_source = \"differential-probe\""),
+        Some(crate::types::AuthMethod::Header),
+        "a stamped auth_method must be reported as cached"
+    );
+}
+
+#[test]
+fn resolve_config_target_reports_cached_auth_for_a_pinned_entry() {
+    assert_eq!(
+        cached_auth_for("auth_method_source = \"pinned\""),
+        Some(crate::types::AuthMethod::Header)
+    );
+}
+
+#[test]
+fn resolve_config_target_treats_an_unknown_stamp_as_a_cache_miss() {
+    // A marker written by a newer bzr must load, then be distrusted — not
+    // fail the config load for every command.
+    assert_eq!(
+        cached_auth_for("auth_method_source = \"from-the-future\""),
+        None
+    );
+}
+
+#[test]
+fn resolve_config_target_reports_no_cached_auth_without_a_credential() {
+    // A credentialless entry never reaches the stamp check: `auth_method` is
+    // only read when an API key resolves, so a stamp cannot change its answer.
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = crate::test_helpers::write_config_to(
+        &tmp,
+        r#"
+default_server = "test"
+
+[servers.test]
+url = "https://bugzilla.example.com"
+auth_method = "header"
+api_mode = "rest"
+auth_method_source = "differential-probe"
+"#,
+    );
+    let ctx_cmd = crate::commands::runtime::invocation::CommandContext::new(
+        None,
+        crate::types::OutputFormat::Json,
+        None,
+    )
+    .with_config_path_override(Some(config_path));
+
+    let target = super::resolve_connect_target(&ctx_cmd).unwrap();
+    assert_eq!(target.cached_auth, None);
+    assert_eq!(target.cached_mode, Some(crate::types::ApiMode::Rest));
 }
 
 #[test]

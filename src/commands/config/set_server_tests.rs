@@ -142,7 +142,27 @@ async fn set_server_update_preserves_existing_default() {
     assert_eq!(server.url, "https://updated.example.com");
     assert_eq!(server.email.as_deref(), Some("ops@example.com"));
     assert_eq!(server.auth_method, Some(AuthMethod::QueryParam));
+    // An explicit --auth-method is a deliberate pin, stamped so that no later
+    // connect re-detects over it (ADR-0066).
+    assert_eq!(
+        server.auth_method_source.as_deref(),
+        Some(crate::config::AUTH_METHOD_SOURCE_PINNED)
+    );
+    assert!(server.auth_method_is_trusted());
     assert!(server.tls_insecure);
+}
+
+#[tokio::test]
+async fn set_server_without_auth_method_leaves_the_provenance_stamp_unset() {
+    // Without the flag there is no pin to record, and no detection has run, so
+    // the entry must stay unstamped and let the first connect detect and stamp.
+    let (_lock, _tmp) = setup_empty_config_env().await;
+    seed_inline_server("plain", "https://plain.example.com", "plain-key-1234567890").await;
+
+    let server = &load_config().servers["plain"];
+    assert_eq!(server.auth_method, None);
+    assert_eq!(server.auth_method_source, None);
+    assert!(!server.auth_method_is_trusted());
 }
 
 #[tokio::test]

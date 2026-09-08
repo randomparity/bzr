@@ -186,7 +186,11 @@ fn resolve_config_target(
     let (server_name, srv) = config.resolve_server(command.server())?;
     let tls_config = server_tls_config(srv, server_name);
     let api_key = crate::credentials::resolve_optional_api_key(srv, server_name)?;
-    let cached_auth = if api_key.is_some() {
+    // A cached auth method is trusted only while its provenance stamp names a
+    // marker this build knows (ADR-0066). An unstamped value may predate the
+    // differential probe and be silently wrong for this server, so report no
+    // cached auth and let the caller's detect arm re-probe and re-stamp it.
+    let cached_auth = if api_key.is_some() && srv.auth_method_is_trusted() {
         srv.auth_method
     } else {
         None
