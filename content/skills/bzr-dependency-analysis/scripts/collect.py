@@ -419,10 +419,13 @@ def parse_json_object(text, limitation):
 
 def validate_envelope_version(envelope):
     # ADR 0007 governs the envelope's schema_version by semver: patch = additive,
-    # minor = rename-with-one-release-alias, major = breaking. A same-major
-    # difference is therefore compatible (it is what lets the binary and an
-    # unreinstalled on-disk skill disagree by a patch and still work); only a
-    # major mismatch is a genuine break.
+    # minor = rename-with-one-release-alias, major = breaking. This check accepts
+    # any same-major drift (not just a patch bump) and rejects only a major
+    # mismatch. A minor bump more than one release old could, in principle, carry
+    # a renamed field whose alias window has closed; if that ever surfaces, it
+    # shows up downstream as collection-malformed-output rather than
+    # collection-schema-version, so check the installed skill's pinned version
+    # against a stale BZR_SCHEMA_VERSION first when triaging that limitation.
     live_version = envelope["schema_version"]
     if live_version.split(".", 1)[0] != BZR_SCHEMA_VERSION.split(".", 1)[0]:
         raise FatalCollection("collection-schema-version", "schema-version")
