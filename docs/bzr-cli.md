@@ -2085,9 +2085,9 @@ The first server added is automatically set as the default.
 
 `--tls-pin-clear` only clears the pin; because that call cannot set or change
 any other field, it is rejected at parse time when combined with `--api-key`,
-`--api-key-env`, `--email`, `--auth-method`, `--tls-insecure`, or
-`--tls-ca-cert`. To rotate a credential and drop a pin, run two
-`set-server` calls.
+`--api-key-env`, `--email`, `--auth-method`, `--tls-insecure`,
+`--tls-ca-cert`, `--tls-pin-sha256`, or `--tls-pin-now`. To rotate a
+credential and drop a pin, run two `set-server` calls.
 
 Agent note: prefer `--api-key-env` in local shells, CI, and agent environments. API keys passed on the command line may end up in shell history or process listings, and inline keys are stored in `config.toml`. Verify public connectivity with `bzr server info`; use `bzr whoami` only after adding credentials.
 
