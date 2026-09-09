@@ -257,12 +257,15 @@ if [[ "${1:-}" == "project-manager-reporting" ]]; then
   "$BZR_BIN" config set-server demo --url "$BZ_URL" >/dev/null
   pm_matches=$("$BZR_BIN" --server demo --json bug list --whiteboard bzr-pm-demo-v1 \
     --fields id,whiteboard --paginate)
-  pm_marker=$(jq -er '
-    [.data[] | select(.whiteboard | contains("blocker blocked: owner needed"))] |
-    max_by(.id) | .whiteboard | split(" ")[0]
+  pm_marker=$(jq -r '
+    [.data[] | select((.whiteboard // "") | startswith("bzr-pm-demo-v1-")) |
+     select(.whiteboard | contains("blocker blocked: owner needed"))] |
+    max_by(.id) | .whiteboard // empty | split(" ")[0]
   ' <<<"$pm_matches")
   [[ $pm_marker =~ ^bzr-pm-demo-v1-[0-9]+-[0-9]+$ ]] || {
-    echo "ERROR: project-manager reporting demo fixture not found" >&2
+    echo "ERROR: project-manager reporting demo fixture not found." >&2
+    echo "  Run: BZR_FUNC_KEEP=1 make functional-test" >&2
+    echo "  Then rerun: tools/record-demo.sh project-manager-reporting" >&2
     exit 1
   }
   pm_url="${BZ_URL}/buglist.cgi?f1=status_whiteboard&o1=substring&v1=${pm_marker}&query_format=advanced"

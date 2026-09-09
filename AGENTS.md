@@ -14,8 +14,9 @@ GitHub CLI (`gh`).
 ```bash
 cargo build                 # Debug build
 cargo build --release       # Release build
-cargo test                  # Run all tests
-cargo test <test_name>      # Run a single test
+cargo test --features test-helpers  # CI runs tests with the `test-helpers`
+                                    # feature (auto-active for integration
+                                    # tests via the self dev-dependency)
 make test                   # Run tests (quiet output; failures print details)
 make test-verbose           # Run tests with full output (VERBOSE=1 make test)
 cargo fmt                   # Format code
@@ -29,8 +30,17 @@ cargo install --path .      # Install locally
 Git hooks: `make install-hooks` installs a pre-commit hook
 (`cargo fmt -- --check`,
 `cargo clippy --all-targets --features test-helpers -- -D warnings`,
-and `make check-test-layout`) and a pre-push hook (`make test`, the quiet
-suite). Run `make setup` to install everything, including hooks.
+`make check-test-layout`, and `make check-functional-test-ids`) and a
+pre-push hook (`make test`, the quiet suite). Run `make setup` to install
+everything, including hooks.
+
+Toolchain: `rust-toolchain.toml` pins local cargo to the 1.89.0 MSRV so
+local lint/build match CI — do not bump it without also updating
+`rust-version` in Cargo.toml and the pinned version in CI. `fuzz/` is a
+separate cargo-fuzz package excluded from the workspace (needs nightly).
+The runtime is `#[tokio::main(flavor = "current_thread")]` and the
+`make check-no-spawn` guard enforces that assumption — do not add
+multi-threaded runtime assumptions or thread spawning.
 
 Functional tests start Bugzilla containers on a runtime-assigned host
 port under a name scoped to the checkout's own filesystem path, so
@@ -113,6 +123,10 @@ output.
   unvalidated reads, validation-on-load, atomic persistence, stale temp
   cleanup, and permissions hardening. Multiple named servers share one
   default; per-server auth/API/TLS detection state is persisted here.
+- **`skills/`** — agent-skills payload embedded at build time: `build.rs`
+  generates `embedded_skills.rs` from `content/skills/`, so editing a skill
+  means regenerating (any `cargo build` does it) and `make skills-test` runs
+  the agent-skills package/drift/installer/lint checks.
 - **`error.rs`** — `BzrError` enum (thiserror) with 20 variants: `Http`,
   `Config`, `Api`, `Io`, `TomlParse`, `TomlSerialize`, `XmlRpc`, `NotFound`,
   `HttpStatus`, `ResponseTooLarge`, `InputValidation`, `Deserialize`, `Auth`, `DataIntegrity`,
