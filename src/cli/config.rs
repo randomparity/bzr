@@ -20,7 +20,9 @@ pub(crate) enum ConfigAction {
     /// `--tls-insecure` (accept any cert), `--tls-ca-cert <path>`
     /// (custom CA), `--tls-pin-sha256 <fp>` (pin a fingerprint), and
     /// `--tls-pin-now` (connect once to capture the current cert and
-    /// pin it). `--tls-pin-clear` removes a stored pin.
+    /// pin it). `--tls-pin-clear` removes a stored pin; because that
+    /// call only clears the pin, it cannot be combined with any
+    /// credential, identity, or TLS flag.
     ///
     /// `--auth-method` overrides bzr's auto-detection of header
     /// vs. query-param API-key transport. Most servers don't need
@@ -49,27 +51,34 @@ pub(crate) enum ConfigAction {
         url: String,
         /// API key, stored inline in the config file.
         ///
-        /// Mutually exclusive with `--api-key-env`. Inline keys can leak via
-        /// shell history, process args, or backup copies of `config.toml` --
-        /// prefer `--api-key-env` or the keyring for anything beyond a
-        /// throwaway test setup.
-        #[arg(long, conflicts_with = "api_key_env")]
+        /// Mutually exclusive with `--api-key-env` and `--tls-pin-clear`.
+        /// Inline keys can leak via shell history, process args, or backup
+        /// copies of `config.toml` -- prefer `--api-key-env` or the keyring
+        /// for anything beyond a throwaway test setup.
+        #[arg(
+            long,
+            conflicts_with_all = ["api_key_env", "tls_pin_clear"],
+        )]
         api_key: Option<String>,
         /// Name of an environment variable that holds the API key.
         ///
-        /// Mutually exclusive with `--api-key`. The variable is resolved at
-        /// command time, not at `set-server` time, so rotating the key only
-        /// requires updating the env var (or the secret store backing it).
-        /// Variable names are stored verbatim in the config file; the secret
-        /// itself is not.
-        #[arg(long, conflicts_with = "api_key")]
+        /// Mutually exclusive with `--api-key` and `--tls-pin-clear`. The
+        /// variable is resolved at command time, not at `set-server` time,
+        /// so rotating the key only requires updating the env var (or the
+        /// secret store backing it). Variable names are stored verbatim in
+        /// the config file; the secret itself is not.
+        #[arg(
+            long,
+            conflicts_with_all = ["api_key", "tls_pin_clear"],
+        )]
         api_key_env: Option<String>,
         /// Login email for the Bugzilla 5.0/5.2 whoami fallback.
         ///
         /// Bugzilla 5.3+/BMO-derived servers use native whoami. Bugzilla
         /// 5.0/5.2 needs this email regardless of whether the API key uses
-        /// header or query-parameter transport.
-        #[arg(long)]
+        /// header or query-parameter transport. Mutually exclusive with
+        /// `--tls-pin-clear` (the clear path only clears the pin).
+        #[arg(long, conflicts_with = "tls_pin_clear")]
         email: Option<String>,
         /// Override bzr's auto-detected API-key transport.
         ///
@@ -83,8 +92,9 @@ pub(crate) enum ConfigAction {
         /// Setting this pins the value: bzr records it as a deliberate
         /// override and never re-probes it, while a value bzr detected
         /// itself is re-probed once after an upgrade that changes how
-        /// detection works.
-        #[arg(long)]
+        /// detection works. Mutually exclusive with `--tls-pin-clear`
+        /// (the clear path only clears the pin).
+        #[arg(long, conflicts_with = "tls_pin_clear")]
         auth_method: Option<AuthMethod>,
         /// Accept invalid TLS certificates -- self-signed, expired, wrong host.
         ///
@@ -92,12 +102,17 @@ pub(crate) enum ConfigAction {
         /// Use only against a server you control or in a trusted
         /// development environment; the server's responses cannot
         /// be authenticated. Mutually exclusive with
-        /// `--tls-ca-cert`, `--tls-pin-sha256`, and
-        /// `--tls-pin-now`. Prefer one of those for self-signed or
+        /// `--tls-ca-cert`, `--tls-pin-sha256`, `--tls-pin-now`,
+        /// and `--tls-pin-clear`. Prefer one of those for self-signed or
         /// pinned-cert deployments.
         #[arg(
             long,
-            conflicts_with_all = ["tls_ca_cert", "tls_pin_sha256", "tls_pin_now"],
+            conflicts_with_all = [
+                "tls_ca_cert",
+                "tls_pin_sha256",
+                "tls_pin_now",
+                "tls_pin_clear",
+            ],
         )]
         tls_insecure: bool,
         /// Path to a PEM-encoded CA certificate file for this server.
@@ -106,10 +121,15 @@ pub(crate) enum ConfigAction {
         /// without affecting other servers or the system trust
         /// store. Useful for self-hosted Bugzilla instances behind
         /// a private CA. Mutually exclusive with `--tls-insecure`,
-        /// `--tls-pin-sha256`, and `--tls-pin-now`.
+        /// `--tls-pin-sha256`, `--tls-pin-now`, and `--tls-pin-clear`.
         #[arg(
             long,
-            conflicts_with_all = ["tls_insecure", "tls_pin_sha256", "tls_pin_now"],
+            conflicts_with_all = [
+                "tls_insecure",
+                "tls_pin_sha256",
+                "tls_pin_now",
+                "tls_pin_clear",
+            ],
         )]
         tls_ca_cert: Option<String>,
         /// Pin a certificate fingerprint in `sha256//<base64>` format.
@@ -143,13 +163,25 @@ pub(crate) enum ConfigAction {
         /// Remove a stored certificate pin from this server.
         ///
         /// Reverts the server to default TLS validation against
-        /// the OS trust store. Mutually exclusive with
-        /// `--tls-pin-sha256` and `--tls-pin-now` -- use one of
-        /// those to install a new pin in the same call as clearing
-        /// the old one is not supported.
+        /// the OS trust store. This call only clears the pin -- it
+        /// cannot set or change any other field -- so it is
+        /// mutually exclusive with `--api-key`, `--api-key-env`,
+        /// `--email`, `--auth-method`, `--tls-insecure`,
+        /// `--tls-ca-cert`, `--tls-pin-sha256`, and `--tls-pin-now`.
+        /// To rotate a credential and drop a pin, run two
+        /// `set-server` calls.
         #[arg(
             long,
-            conflicts_with_all = ["tls_pin_sha256", "tls_pin_now"],
+            conflicts_with_all = [
+                "api_key",
+                "api_key_env",
+                "email",
+                "auth_method",
+                "tls_insecure",
+                "tls_ca_cert",
+                "tls_pin_sha256",
+                "tls_pin_now",
+            ],
         )]
         tls_pin_clear: bool,
     },

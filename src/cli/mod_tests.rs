@@ -2067,8 +2067,6 @@ fn parse_set_server_tls_pin_clear() {
         "test",
         "--url",
         "https://example.com",
-        "--api-key",
-        "key",
         "--tls-pin-clear",
     ])
     .unwrap();
@@ -2131,8 +2129,6 @@ fn parse_set_server_tls_pin_clear_conflicts_with_tls_pin_now() {
         "test",
         "--url",
         "https://example.com",
-        "--api-key",
-        "key",
         "--tls-pin-clear",
         "--tls-pin-now",
     ]);
