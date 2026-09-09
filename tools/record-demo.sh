@@ -258,7 +258,8 @@ if [[ "${1:-}" == "project-manager-reporting" ]]; then
   pm_matches=$("$BZR_BIN" --server demo --json bug list --whiteboard bzr-pm-demo-v1 \
     --fields id,whiteboard --paginate)
   pm_marker=$(jq -r '
-    [.data[] | select(.whiteboard | contains("blocker blocked: owner needed"))] |
+    [.data[] | select((.whiteboard // "") | startswith("bzr-pm-demo-v1")) |
+     select(.whiteboard | contains("blocker blocked: owner needed"))] |
     max_by(.id) | .whiteboard // empty | split(" ")[0]
   ' <<<"$pm_matches")
   [[ $pm_marker =~ ^bzr-pm-demo-v1-[0-9]+-[0-9]+$ ]] || {
