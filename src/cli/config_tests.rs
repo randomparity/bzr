@@ -273,6 +273,149 @@ fn parse_config_set_server_rejects_pin_clear_with_pin_now() {
 }
 
 #[test]
+fn parse_config_set_server_rejects_pin_clear_with_api_key() {
+    assert_eq!(
+        parse_error_kind(&[
+            "bzr",
+            "config",
+            "set-server",
+            "prod",
+            "--url",
+            "https://bz",
+            "--tls-pin-clear",
+            "--api-key",
+            "secret",
+        ]),
+        ErrorKind::ArgumentConflict
+    );
+}
+
+#[test]
+fn parse_config_set_server_rejects_pin_clear_with_api_key_env() {
+    assert_eq!(
+        parse_error_kind(&[
+            "bzr",
+            "config",
+            "set-server",
+            "prod",
+            "--url",
+            "https://bz",
+            "--tls-pin-clear",
+            "--api-key-env",
+            "BZR_API_KEY",
+        ]),
+        ErrorKind::ArgumentConflict
+    );
+}
+
+#[test]
+fn parse_config_set_server_rejects_pin_clear_with_email() {
+    assert_eq!(
+        parse_error_kind(&[
+            "bzr",
+            "config",
+            "set-server",
+            "prod",
+            "--url",
+            "https://bz",
+            "--tls-pin-clear",
+            "--email",
+            "me@example.com",
+        ]),
+        ErrorKind::ArgumentConflict
+    );
+}
+
+#[test]
+fn parse_config_set_server_rejects_pin_clear_with_auth_method() {
+    assert_eq!(
+        parse_error_kind(&[
+            "bzr",
+            "config",
+            "set-server",
+            "prod",
+            "--url",
+            "https://bz",
+            "--tls-pin-clear",
+            "--auth-method",
+            "header",
+        ]),
+        ErrorKind::ArgumentConflict
+    );
+}
+
+#[test]
+fn parse_config_set_server_rejects_pin_clear_with_tls_insecure() {
+    assert_eq!(
+        parse_error_kind(&[
+            "bzr",
+            "config",
+            "set-server",
+            "prod",
+            "--url",
+            "https://bz",
+            "--tls-pin-clear",
+            "--tls-insecure",
+        ]),
+        ErrorKind::ArgumentConflict
+    );
+}
+
+#[test]
+fn parse_config_set_server_rejects_pin_clear_with_ca_cert() {
+    assert_eq!(
+        parse_error_kind(&[
+            "bzr",
+            "config",
+            "set-server",
+            "prod",
+            "--url",
+            "https://bz",
+            "--tls-pin-clear",
+            "--tls-ca-cert",
+            "/tmp/none",
+        ]),
+        ErrorKind::ArgumentConflict
+    );
+}
+
+#[test]
+fn set_server_pin_clear_help_names_exclusivity() {
+    let mut cmd = Cli::command();
+    let set_server = cmd
+        .find_subcommand_mut("config")
+        .and_then(|config| config.find_subcommand_mut("set-server"))
+        .unwrap_or_else(|| panic!("bzr config set-server subcommand must exist"));
+    let help = set_server.render_long_help().to_string();
+    let lines: Vec<&str> = help.lines().collect();
+    let start = lines
+        .iter()
+        .position(|line| line.trim_start().starts_with("--tls-pin-clear"))
+        .unwrap_or_else(|| panic!("--tls-pin-clear missing from help:\n{help}"));
+    let section = lines[start + 1..]
+        .iter()
+        .take_while(|line| !line.trim_start().starts_with("--"))
+        .copied()
+        .collect::<Vec<_>>()
+        .join("\n");
+    for flag in [
+        "`--api-key`",
+        "`--api-key-env`",
+        "`--email`",
+        "`--auth-method`",
+        "`--tls-insecure`",
+        "`--tls-ca-cert`",
+        "`--tls-pin-sha256`",
+        "`--tls-pin-now`",
+    ] {
+        assert!(
+            section.contains(flag),
+            "pin-clear help missing {flag}:\n{section}"
+        );
+    }
+}
+
+#[test]
 fn parse_config_set_default_binds_name() {
     match config_action(&["bzr", "config", "set-default", "prod"]) {
         ConfigAction::SetDefault { name } => assert_eq!(name, "prod"),

@@ -59,6 +59,32 @@ run_bzr --server-url "$BZ_URL" --server-tls-insecure \
     --server-tls-pin-now server info
 if assert_exit_code 2 && assert_stderr_contains "cannot be used with"; then test_pass; fi
 
+# `config set-server --tls-pin-clear` only clears the pin (#761); clap
+# rejects every flag the clear path cannot honour.
+test_begin "set-server-pin-clear-api-key-conflict" "set-server --tls-pin-clear + --api-key conflict"
+run_bzr config set-server prod --url https://bz.invalid --tls-pin-clear --api-key secret
+if assert_exit_code 2 && assert_stderr_contains "cannot be used with"; then test_pass; fi
+
+test_begin "set-server-pin-clear-api-key-env-conflict" "set-server --tls-pin-clear + --api-key-env conflict"
+run_bzr config set-server prod --url https://bz.invalid --tls-pin-clear --api-key-env BZR_FUNC_INLINE_KEY
+if assert_exit_code 2 && assert_stderr_contains "cannot be used with"; then test_pass; fi
+
+test_begin "set-server-pin-clear-email-conflict" "set-server --tls-pin-clear + --email conflict"
+run_bzr config set-server prod --url https://bz.invalid --tls-pin-clear --email me@example.com
+if assert_exit_code 2 && assert_stderr_contains "cannot be used with"; then test_pass; fi
+
+test_begin "set-server-pin-clear-auth-method-conflict" "set-server --tls-pin-clear + --auth-method conflict"
+run_bzr config set-server prod --url https://bz.invalid --tls-pin-clear --auth-method header
+if assert_exit_code 2 && assert_stderr_contains "cannot be used with"; then test_pass; fi
+
+test_begin "set-server-pin-clear-tls-insecure-conflict" "set-server --tls-pin-clear + --tls-insecure conflict"
+run_bzr config set-server prod --url https://bz.invalid --tls-pin-clear --tls-insecure
+if assert_exit_code 2 && assert_stderr_contains "cannot be used with"; then test_pass; fi
+
+test_begin "set-server-pin-clear-tls-ca-cert-conflict" "set-server --tls-pin-clear + --tls-ca-cert conflict"
+run_bzr config set-server prod --url https://bz.invalid --tls-pin-clear --tls-ca-cert /tmp/none
+if assert_exit_code 2 && assert_stderr_contains "cannot be used with"; then test_pass; fi
+
 # `whoami show` subcommand removed (#323): bare `whoami` only.
 test_begin "whoami-show-removed-subcommand-exit-2" "whoami show (removed subcommand → exit 2)"
 run_bzr whoami show
