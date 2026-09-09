@@ -146,6 +146,9 @@ check-shell: ## Lint shell scripts (shellcheck + shfmt, POSIX and bash)
 	@command -v shfmt >/dev/null || { echo "ERROR: shfmt is required for this guard"; echo "  Install: brew install shfmt  |  https://github.com/mvdan/sh/releases"; exit 1; }
 	shellcheck -s sh install.sh tests/installer/smoke.sh
 	shellcheck -s bash tools/*.sh
+	# container-env.sh must stay in the shellcheck list below: lib.sh and
+	# setup-bugzilla.sh `source` it, and shellcheck only resolves that
+	# (SC1091) when the sourced file is a listed input.
 	shellcheck -s bash tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/run-compare.sh tests/functional/run-compare-all.sh tests/functional/run-all-versions.sh tests/functional/setup-bugzilla.sh tests/functional/container-env.sh tests/functional/keyring-test.sh tests/functional/phases/*.sh tests/functional/compare/*.sh tests/functional/pybz/*.sh tests/functional/versions/*/entrypoint.sh
 	bash -n tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/run-compare.sh tests/functional/run-compare-all.sh tests/functional/run-all-versions.sh tests/functional/setup-bugzilla.sh tests/functional/container-env.sh tests/functional/keyring-test.sh tests/functional/phases/*.sh tests/functional/compare/*.sh tests/functional/pybz/*.sh tests/functional/versions/*/entrypoint.sh
 	shfmt -d -ln posix -i 2 install.sh tests/installer/smoke.sh
