@@ -224,6 +224,35 @@ fn exit_code_maps_highest_code() {
 }
 
 #[test]
+fn handle_format_error_escapes_and_returns_exit_code() {
+    // A hostile format-resolution error (an invalid --output/BZR_OUTPUT value)
+    // writes the escaped `error: …` line to the sink and returns the error's
+    // exit code. This is the path `main` takes when resolve_format fails.
+    let err = BzrError::Config("bad\u{1b}[2J".into());
+    let mut buf = Vec::new();
+    let code = handle_format_error(&err, &mut buf);
+
+    let rendered = String::from_utf8(buf).expect("sink output must be UTF-8");
+    assert!(
+        rendered.starts_with("error: "),
+        "conventional prefix: {rendered:?}"
+    );
+    assert!(
+        rendered.contains("\\u{1b}"),
+        "the ESC must be escaped in the format-resolution error line: {rendered:?}"
+    );
+    assert!(
+        !rendered.contains('\u{1b}'),
+        "no raw control may reach the sink: {rendered:?}"
+    );
+    let dbg = format!("{code:?}");
+    assert!(
+        dbg.contains(&err.exit_code().to_string()),
+        "must return the error's exit code, got {dbg}"
+    );
+}
+
+#[test]
 fn format_dispatch_error_renders_json() {
     let err = BzrError::Config("bad config".into());
     let out = format_dispatch_error(&err, OutputFormat::Json);

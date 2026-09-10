@@ -47,14 +47,7 @@ async fn main() -> ExitCode {
 
     let format = match resolve_format(&cli) {
         Ok(f) => f,
-        Err(e) => {
-            let _ = writeln!(
-                std::io::stderr(),
-                "error: {}",
-                escape_terminal_controls(&e.to_string())
-            );
-            return exit_code(&e);
-        }
+        Err(e) => return handle_format_error(&e, &mut std::io::stderr()),
     };
 
     if cli.quiet {
@@ -130,10 +123,25 @@ fn format_dispatch_error(err: &BzrError, format: OutputFormat) -> String {
         .unwrap_or_else(|_| fallback()),
         OutputFormat::Ndjson => serde_json::to_string(&serde_json::json!({ "error": error_body }))
             .unwrap_or_else(|_| fallback()),
-        OutputFormat::Table => format!("error: {}", escape_terminal_controls(&err.to_string())),
+        OutputFormat::Table => format_table_error(err),
     };
     bzr::error::clear_error_redaction_context();
     formatted
+}
+
+/// Render a `BzrError` in the conventional table-mode `error: …` line, escaping
+/// any terminal controls the message carries (ADR 0070). Shared by the dispatch
+/// error path and the format-resolution error path so the two cannot drift.
+fn format_table_error(err: &BzrError) -> String {
+    format!("error: {}", escape_terminal_controls(&err.to_string()))
+}
+
+/// Handle a format-resolution failure: write the escaped `error: …` line to the
+/// given sink and return the process exit code. Split from `main` so the path is
+/// unit-testable without spawning the binary.
+fn handle_format_error(e: &BzrError, sink: &mut dyn Write) -> ExitCode {
+    let _ = writeln!(sink, "{}", format_table_error(e));
+    exit_code(e)
 }
 
 /// Select the tracing filter directive based on CLI flags.
