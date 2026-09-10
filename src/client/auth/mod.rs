@@ -27,12 +27,12 @@
 //!
 //! | Server response                       | Outcome              | Effect                                                        |
 //! |---------------------------------------|----------------------|---------------------------------------------------------------|
-//! | `2xx` + valid body (`id>0` / `true`)  | `Authenticated`      | Detection succeeds with that auth method.                     |
+//! | `2xx` + valid body (`id>0` / `true`)  | `Authenticated`      | Succeeds with that method; `auth_method_probed` is `true`.    |
 //! | `2xx` + unparseable/anomalous body    | `MalformedResponse`  | Try the other method; preserved for the error diagnostic.     |
 //! | `whoami` returns `404`                | `NotFound`           | Fall back to `valid_login`.                                   |
 //! | non-`2xx`, or `whoami` `id==0`, or `valid_login` `false` | `AuthRejected` | Try the other method; otherwise detection fails. |
 //! | TLS-certificate transport failure     | `NetworkError`→`Err` | Propagated as [`BzrError::Http`] so TOFU / pin-rotation fires.|
-//! | any other transport failure (DNS, timeout, reset) | `NetworkError`→`Ok` | Defaults to [`AuthMethod::Header`]; detection is not retried. |
+//! | any other transport failure (DNS, timeout, reset) | `NetworkError`→`Ok` | Defaults to [`AuthMethod::Header`]; `auth_method_probed` is `false`; not retried. |
 //!
 //! ## Malformed-diagnostic precedence
 //!
@@ -161,6 +161,12 @@ pub struct DetectedServerSettings {
     /// transient failures. Callers should only persist `api_mode` and
     /// `server_version` when this is `Some`.
     pub server_version: Option<String>,
+    /// Whether `auth_method` was genuinely probed — the auth probe returned a real
+    /// answer — rather than a transport fallback to `AuthMethod::Header`. `false` on
+    /// the credentialless path, where `auth_method` is `None` and the flag carries no
+    /// meaning. The `auth_method_source` stamp is written only when this is `true`
+    /// (ADR 0069).
+    pub auth_method_probed: bool,
 }
 
 /// Detect auth method, API mode, and server version via network probes.
@@ -177,7 +183,8 @@ pub async fn detect_server_settings(
 ) -> Result<DetectedServerSettings> {
     let http = crate::tls::build_tls_client(tls_config, request_timeout)?;
 
-    let method = detect_auth_method(&http, url, api_key, email).await?;
+    let detected = detect_auth_method(&http, url, api_key, email).await?;
+    let method = detected.method;
     let (version, api_mode) = detect_version_and_mode(&http, url, api_key, method).await?;
 
     tracing::info!(
@@ -191,6 +198,7 @@ pub async fn detect_server_settings(
         auth_method: Some(method),
         api_mode,
         server_version: version,
+        auth_method_probed: detected.probed,
     })
 }
 
@@ -216,6 +224,7 @@ pub async fn detect_server_settings_without_auth(
         auth_method: None,
         api_mode,
         server_version: version,
+        auth_method_probed: false,
     })
 }
 
@@ -270,7 +279,7 @@ fn log_probe_send_error(probe: &str, method: AuthMethod, e: &reqwest::Error) {
 /// the safest default — rather than aborting: auth detection is not retried, and
 /// the real request (which has the transient-retry budget) may still succeed, so
 /// a single detection-time blip must not fail the whole invocation.
-fn network_error_outcome(e: reqwest::Error) -> Result<AuthMethod> {
+fn network_error_outcome(e: reqwest::Error) -> Result<DetectedAuthMethod> {
     if crate::tls::is_tls_cert_error(&e) {
         return Err(BzrError::Http(e));
     }
@@ -280,7 +289,10 @@ fn network_error_outcome(e: reqwest::Error) -> Result<AuthMethod> {
         "could not reach server during auth detection ({}); defaulting to header auth",
         redacted_probe_error(&e)
     );
-    Ok(AuthMethod::Header)
+    Ok(DetectedAuthMethod {
+        method: AuthMethod::Header,
+        probed: false,
+    })
 }
 
 fn auth_detection_error(hint: &str, malformed: Option<MalformedProbeResponse>) -> BzrError {
@@ -293,12 +305,21 @@ fn auth_detection_error(hint: &str, malformed: Option<MalformedProbeResponse>) -
     BzrError::Auth(message)
 }
 
+/// The auth probe's answer and whether it was a genuine determination.
+#[derive(Debug)]
+struct DetectedAuthMethod {
+    method: AuthMethod,
+    /// `true` when a probe returned a real answer; `false` when the method is a
+    /// transport fallback to [`AuthMethod::Header`].
+    probed: bool,
+}
+
 async fn detect_auth_method(
     http: &reqwest::Client,
     base_url: &str,
     api_key: &str,
     email: Option<&str>,
-) -> Result<AuthMethod> {
+) -> Result<DetectedAuthMethod> {
     let base = base_url.trim_end_matches('/');
 
     if !base.starts_with("https://") {
@@ -325,7 +346,12 @@ async fn detect_auth_method(
     )
     .await;
     let whoami_not_found = match whoami {
-        WhoamiOutcome::Authenticated(method) => return Ok(method),
+        WhoamiOutcome::Authenticated(method) => {
+            return Ok(DetectedAuthMethod {
+                method,
+                probed: true,
+            });
+        }
         WhoamiOutcome::NetworkError(e) => return network_error_outcome(e),
         WhoamiOutcome::ProbeRefused(error) => return Err(error),
         WhoamiOutcome::NotFound => {
@@ -354,9 +380,15 @@ async fn detect_auth_method(
                         "header auth works on API endpoints despite valid_login \
                          rejecting it; preferring header"
                     );
-                    return Ok(AuthMethod::Header);
+                    return Ok(DetectedAuthMethod {
+                        method: AuthMethod::Header,
+                        probed: true,
+                    });
                 }
-                return Ok(method);
+                return Ok(DetectedAuthMethod {
+                    method,
+                    probed: true,
+                });
             }
             ValidLoginOutcome::NetworkError(e) => return network_error_outcome(e),
             ValidLoginOutcome::ProbeRefused(error) => return Err(error),
