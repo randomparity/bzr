@@ -92,7 +92,7 @@ Steps:
    }
    ```
 3. Change `detect_auth_method`'s signature to `-> Result<DetectedAuthMethod>` and its
-   four probed returns to wrap in `DetectedAuthMethod { method, probed: true }` (the
+   three probed returns to wrap in `DetectedAuthMethod { method, probed: true }` (the
    header-preference return uses `method: AuthMethod::Header`):
    ```rust
    WhoamiOutcome::Authenticated(method) => {
@@ -131,6 +131,9 @@ Steps:
    - `transport_fallback_clears_probed_flag`: whoami against an unreachable host
      (e.g. `http://127.0.0.1:1`) → `auth_method == Some(Header)` and
      `auth_method_probed == false`.
+   - `valid_login_transport_error_clears_probed_flag`: whoami 404 (probe falls to
+     valid_login) + valid_login against an unreachable host → `auth_method_probed == false`
+     (covers the second `network_error_outcome` call site).
    Run `make test-one T=auth_method_probed`; expect the new tests to pass.
 9. Run the guardrails: `cargo clippy --all-targets --features test-helpers -- -D warnings`
    (all existing `DetectedServerSettings` constructors in `detect_tests.rs` will now
@@ -186,7 +189,7 @@ Steps:
    - `fallback_method_with_version_is_not_stamped`: settings with
      `auth_method_probed: false`, `server_version: Some("5.1")` →
      `auth_method_source == None` (the dangerous case, now closed).
-   - Keep the existing `auth_method_fallback_unstamped` (unreachable) case green.
+   - Keep the existing `persist_detected_does_not_stamp_an_unreachable_server` case green.
 5. Run `make test-one T=persist_detected`; expect green. Run
    `cargo clippy --all-targets --features test-helpers -- -D warnings`. Commit.
 
@@ -268,7 +271,23 @@ Steps:
        write_field(out, "Auth Source", source.as_str());
    }
    ```
-5. Bump `SCHEMA_VERSION` in `src/output/mod.rs`: `"3.0.7"` → `"3.0.8"`.
+5. Bump `SCHEMA_VERSION` from `3.0.7` to `3.0.8` in exactly these twelve files — one
+   atomic change; a partial sweep fails the functional and skill tests. This mirrors the
+   3.0.6 → 3.0.7 sweep in the 2026-09-07 bounded-response-body-reads plan:
+   - `src/output/mod.rs` (the const)
+   - `README.md`
+   - `docs/bzr-cli.md`
+   - `content/skills/bzr-reference/reference/commands.md`, `json-recipes.md`
+   - `content/skills/bzr-dependency-analysis/scripts/collect.py`, `tests/test_collect.py`
+     (all four occurrences, including the candidate list), `tests/fixtures/recording_runner.py`
+   - `tests/functional/phases/08e-bugs-restricted-access.sh`, `18a-json-envelope.sh`,
+     `18c-skills-install.sh`, `18d-dependency-analysis.sh`
+   Elsewhere in `src/` and in `tests/integration.rs` the version is referenced via the
+   `SCHEMA_VERSION` constant, not re-literalized, so those need no change. Verify the
+   sweep left no straggler in the pin set: `rg -n '3.0.7' src/output/mod.rs README.md
+   docs/bzr-cli.md content/skills tests/functional` → expect no match. A repository-wide
+   grep does not work: this branch's own ADR/spec/plan narrate the 3.0.7 → 3.0.8
+   transition, and `Cargo.lock` carries unrelated version strings.
 6. Write unit tests in `config_tests.rs`:
    - `auth_source_display_maps_each_state`: pinned marker → `Pinned`; detected marker →
      `Detected`; `None` marker → `Unstamped`; unknown marker (`"from-the-future"`) →

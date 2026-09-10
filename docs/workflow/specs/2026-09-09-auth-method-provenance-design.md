@@ -115,41 +115,13 @@ that separate concern.
 
 Add a display enum and a mapper:
 
-```rust
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum AuthMethodSourceDisplay {
-    Pinned,
-    Detected,
-    Unstamped,
-}
-
-impl AuthMethodSourceDisplay {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Pinned => "pinned",
-            Self::Detected => "detected",
-            Self::Unstamped => "unstamped",
-        }
-    }
-}
-
-/// Map a persisted `(auth_method, auth_method_source)` pair to its provenance
-/// for display. `None` when there is no method to attribute.
-fn auth_source_display(
-    auth_method: Option<AuthMethod>,
-    source: Option<&str>,
-) -> Option<AuthMethodSourceDisplay> {
-    let _ = auth_method?;
-    match source {
-        Some(AUTH_METHOD_SOURCE_PINNED) => Some(AuthMethodSourceDisplay::Pinned),
-        Some(AUTH_METHOD_SOURCE_DETECTED) => Some(AuthMethodSourceDisplay::Detected),
-        // Absent (pre-stamp) or an unrecognised marker: both re-detect, so both
-        // read as unstamped.
-        _ => Some(AuthMethodSourceDisplay::Unstamped),
-    }
-}
-```
+A `AuthMethodSourceDisplay` enum — `Pinned`/`Detected`/`Unstamped`,
+`#[serde(rename_all = "snake_case")]` — with an `as_str` method, and an
+`auth_source_display(auth_method: Option<AuthMethod>, source: Option<&str>) ->`
+`Option<AuthMethodSourceDisplay>` mapper: `None` when there is no method to
+attribute; `Pinned` for `AUTH_METHOD_SOURCE_PINNED`; `Detected` for
+`AUTH_METHOD_SOURCE_DETECTED`; `Unstamped` for an absent or unrecognised marker.
+Complete code in plan Task 3.
 
 - `ServerDisplayInfo` gains
   `#[serde(skip_serializing_if = "Option::is_none")] auth_method_source:
@@ -207,6 +179,10 @@ case the issue and ADR 0066 both name: a method that is a **transport fallback**
 probe-derived, regardless of whether the version probe succeeded. A method the
 auth probe **genuinely determined** is stamped, even if the version probe failed
 — that is the point of keying on the probe outcome instead of the version proxy.
+Note that this is narrower than criterion 2's literal wording: a server that
+genuinely answers the auth probes but not `rest/version` *is* stamped under this
+reading (it answers auth probes, so `auth_method_probed` is true); the criterion
+is applied to the fallback case it exists to catch.
 The spec means: `auth_method_source = "differential-probe"` is written iff
 `auth_method_probed` is `true`.
 
