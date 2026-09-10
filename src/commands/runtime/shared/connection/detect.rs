@@ -17,8 +17,9 @@ use super::tls_trust::classify_and_handle_tls_failure;
 /// Persist detected server settings to config under the lock.
 /// Persists `auth_method` when `persist_auth` is true and detection produced
 /// one. Only persists `api_mode`/`server_version` when version detection
-/// succeeded, and only stamps the `auth_method` provenance when the server was
-/// reachable (see [`detection_reached_the_server`]). Emits one `warn` when a
+/// succeeded, and only stamps the `auth_method` provenance when the method was
+/// genuinely probed (`auth_method_probed`) — a transport fallback stays unstamped
+/// and is retried on the next connect (ADR-0069). Emits one `warn` when a
 /// re-detection overturns a previously persisted method.
 ///
 /// If the server was concurrently removed from disk, this is a no-op (we do
@@ -40,11 +41,15 @@ pub(super) fn persist_detected_settings(
             if let Some(auth_method) = settings.auth_method {
                 warn_on_auth_method_change(server_name, srv.auth_method, auth_method);
                 srv.auth_method = Some(auth_method);
-                if detection_reached_the_server(settings) {
-                    // Stamp the provenance alongside the value, so the next
-                    // connect takes the cached path instead of re-detecting
-                    // (ADR-0066).
+                if settings.auth_method_probed {
+                    // Stamp the provenance only when the probe genuinely determined
+                    // the method; a transport fallback stays unstamped and is
+                    // retried on the next connect (ADR-0069).
                     srv.auth_method_source = Some(AUTH_METHOD_SOURCE_DETECTED.to_owned());
+                } else {
+                    // A transport fallback must never sit under a stale trusted marker:
+                    // clear any pre-existing stamp so the next connect retries detection.
+                    srv.auth_method_source = None;
                 }
             }
         }
@@ -55,27 +60,6 @@ pub(super) fn persist_detected_settings(
         Ok(())
     })?;
     Ok(())
-}
-
-/// Whether detection actually reached the server, so its `auth_method` may be
-/// stamped as probe-derived.
-///
-/// `detect_auth_method` does not fail on an unreachable server: a non-TLS
-/// transport error falls back to `AuthMethod::Header` and returns `Ok`, so a
-/// timeout or reset during the probe is indistinguishable from a real answer at
-/// this layer. Stamping that fallback would mark a guess as probe-derived and
-/// make it permanently trusted — which is exactly the stale-`header` state
-/// ADR-0066 exists to end, re-created by the correction itself.
-///
-/// `server_version` is the local signal for reachability: it is `Some` only when
-/// the version probe got a response, and both probes run against the same host
-/// over the same client, so an unreachable server yields `None` here and the
-/// entry stays unstamped and is retried on the next connect. A server that
-/// answers auth probes but not `version` is stamped on a fallback method — the
-/// residual noted in ADR-0066; distinguishing it needs a probed/fallback flag on
-/// `DetectedServerSettings`, which lives behind the client boundary.
-fn detection_reached_the_server(settings: &DetectedServerSettings) -> bool {
-    settings.server_version.is_some()
 }
 
 /// Announce a re-detection that overturned a persisted `auth_method`.

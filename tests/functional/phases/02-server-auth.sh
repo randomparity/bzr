@@ -236,8 +236,8 @@ unset _SERVER_CAPABILITIES_ROUTE _SERVER_CAPABILITIES_SHAPE_OK
 # nothing re-ran detection, so a config written by a bzr predating the
 # differential probe (ADR-0056) kept a method the server ignores. A provenance
 # stamp decides which cached values may be trusted. These cases drive the stamp
-# against a real container; they read and edit `config.toml` directly because
-# `config show` is a curated view that does not carry the stamp.
+# against a real container; they read and edit `config.toml` directly (the
+# provenance display is covered by the `config show` cases in 01-config.sh, ADR-0069).
 # ══════════════════════════════════════════════════════════════════════
 _SA_CONFIG="$XDG_CONFIG_HOME/bzr/config.toml"
 

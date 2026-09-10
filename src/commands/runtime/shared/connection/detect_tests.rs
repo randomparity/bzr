@@ -44,6 +44,7 @@ async fn persist_detected_settings_skips_unknown_server() {
         auth_method: Some(crate::types::AuthMethod::Header),
         api_mode: crate::types::ApiMode::Rest,
         server_version: Some("5.1".into()),
+        auth_method_probed: true,
     };
     let result =
         super::persist_detected_settings(Some(&config_path), "nonexistent", &settings, true);
@@ -71,6 +72,7 @@ async fn persist_skips_api_mode_when_version_probe_failed() {
         // would clobber the cached Rest mode if persisted.
         api_mode: crate::types::ApiMode::Hybrid,
         server_version: None,
+        auth_method_probed: false,
     };
     super::persist_detected_settings(Some(&config_path), "test", &settings, false).unwrap();
 
@@ -96,7 +98,7 @@ fn persist_and_capture(
     detected: Option<crate::types::AuthMethod>,
     persist_auth: bool,
 ) -> (crate::config::ServerConfig, String) {
-    persist_and_capture_with_version(extra, detected, persist_auth, Some("5.2".into()))
+    persist_and_capture_with_version(extra, detected, persist_auth, Some("5.2".into()), true)
 }
 
 /// As [`persist_and_capture`], with control over `server_version` — the local
@@ -106,6 +108,7 @@ fn persist_and_capture_with_version(
     detected: Option<crate::types::AuthMethod>,
     persist_auth: bool,
     server_version: Option<String>,
+    probed: bool,
 ) -> (crate::config::ServerConfig, String) {
     let tmp = tempfile::TempDir::new().unwrap();
     let config_path = write_config(&tmp, "https://example.test", extra);
@@ -113,6 +116,7 @@ fn persist_and_capture_with_version(
         auth_method: detected,
         api_mode: crate::types::ApiMode::Rest,
         server_version,
+        auth_method_probed: probed,
     };
 
     let (capture, guard) = crate::test_helpers::TracingCapture::install(tracing::Level::WARN);
@@ -206,6 +210,7 @@ fn persist_detected_does_not_stamp_an_unreachable_server() {
         Some(crate::types::AuthMethod::Header),
         true,
         None,
+        false,
     );
     assert_eq!(
         srv.auth_method_source, None,
@@ -215,6 +220,69 @@ fn persist_detected_does_not_stamp_an_unreachable_server() {
         !srv.auth_method_is_trusted(),
         "leaving it unstamped is what makes the next connect retry detection"
     );
+}
+
+/// A genuinely probed method is stamped even when the version probe failed — the
+/// gate is `auth_method_probed`, not `server_version` (ADR-0069).
+#[test]
+fn probed_method_without_version_is_stamped() {
+    let (srv, _) = persist_and_capture_with_version(
+        "",
+        Some(crate::types::AuthMethod::QueryParam),
+        true,
+        None,
+        true,
+    );
+    assert_eq!(
+        srv.auth_method_source.as_deref(),
+        Some(crate::config::AUTH_METHOD_SOURCE_DETECTED),
+        "a genuinely probed method must be stamped even when the version probe failed"
+    );
+}
+
+/// A transport-fallback method is NOT stamped even when a version is present —
+/// the dangerous case ADR-0066 left open, now closed by the probe-outcome gate.
+#[test]
+fn fallback_method_with_version_is_not_stamped() {
+    let (srv, _) = persist_and_capture_with_version(
+        "",
+        Some(crate::types::AuthMethod::Header),
+        true,
+        Some("5.1".into()),
+        false,
+    );
+    assert_eq!(
+        srv.auth_method_source, None,
+        "a fallback method must stay unstamped even when a version is present, or it is permanently trusted"
+    );
+    assert!(
+        !srv.auth_method_is_trusted(),
+        "leaving it unstamped is what makes the next connect retry detection"
+    );
+}
+
+/// A pre-stamped (trusted) entry that re-detects with a transport fallback is
+/// CLEARED of its stamp — a fallback must never sit under a stale trusted marker
+/// (the TOFU/pin-rotation clobber path, ADR-0069).
+#[test]
+fn unprobed_fallback_clears_a_stale_trusted_stamp() {
+    for existing in [
+        crate::config::AUTH_METHOD_SOURCE_DETECTED,
+        crate::config::AUTH_METHOD_SOURCE_PINNED,
+    ] {
+        let (srv, _) = persist_and_capture_with_version(
+            &format!("auth_method_source = \"{existing}\"\n"),
+            Some(crate::types::AuthMethod::Header),
+            true,
+            Some("5.1".into()),
+            false,
+        );
+        assert_eq!(
+            srv.auth_method_source, None,
+            "a transport fallback must clear a stale {existing} stamp, or it is permanently trusted"
+        );
+        assert!(!srv.auth_method_is_trusted());
+    }
 }
 
 #[test]

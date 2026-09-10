@@ -451,7 +451,7 @@ bzr bug list --version 9.4 --version 9.5 --op-sys Linux
 ```
 
 `platform` is the canonical Bugzilla hardware-field name for search, bug
-objects, create, update, and clone. Schema 3.0.7 publishes and accepts only the
+objects, create, update, and clone. Schema 3.0.8 publishes and accepts only the
 canonical `platform` spelling.
 
 ### `bzr bug view`
@@ -677,11 +677,11 @@ table always includes the fixed fields `ID`, `SUMMARY`, `STATUS`, `RESOLUTION`,
 `BLOCKS`, and `DEPENDS ON`; the two adjacency columns are complete,
 comma-separated ID lists.
 
-Under `--json`, the usual `3.0.7` envelope contains a closed result object:
+Under `--json`, the usual `3.0.8` envelope contains a closed result object:
 
 ```json
 {
-  "schema_version": "3.0.7",
+  "schema_version": "3.0.8",
   "data": {
     "requests": [
       {"requested": "00123", "bug_id": 123},
@@ -2136,6 +2136,11 @@ bzr --json config rename-server old-name new-name
 
 Display the current configuration (API keys are masked). Supports `--json` for structured output.
 
+The `Auth Source` field (and `auth_method_source` in JSON) is **display-only**: it reports how
+the persisted `auth_method` was determined (`pinned`, `detected`, or `unstamped`) and must not
+be written back into a config file — the persisted marker is the raw generation string, and a
+copied-back label is treated as unstamped (one extra detection round-trip).
+
 ```bash
 bzr config show
 bzr --json config show
@@ -2658,7 +2663,7 @@ Every pretty `--json` response is wrapped in a stable envelope:
 
 ```json
 {
-  "schema_version": "3.0.7",
+  "schema_version": "3.0.8",
   "data": <the command's payload>
 }
 ```
@@ -2673,7 +2678,7 @@ bzr --json schema | jq -r '.schema_version'   # the contract version itself
 ```
 
 `--json` error output carries the version too, beside an `error` object:
-`{"schema_version":"3.0.7","error":{"type":...,"message":...,"exit_code":...}}`.
+`{"schema_version":"3.0.8","error":{"type":...,"message":...,"exit_code":...}}`.
 
 Two outputs are deliberately **not** enveloped:
 

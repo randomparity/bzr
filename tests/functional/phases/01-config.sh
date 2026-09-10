@@ -101,4 +101,35 @@ if assert_success && assert_json '.default_server' "altsrv" &&
 rm -rf "$_ALT_DIR"
 unset _ALT_DIR
 
+# config show provenance display (ADR-0069): the three auth-method-source states
+# plus the credentialless path. Self-contained (no network) — writes --config files.
+_PROV_DIR=$(mktemp -d /tmp/bzr-func-altcfg.XXXXXX)
+
+test_begin "config-show-auth-source-detected" "config show: detected provenance"
+printf 'default_server = "det"\n[servers.det]\nurl = "http://example.invalid:1"\napi_key = "k"\nauth_method = "header"\nauth_method_source = "differential-probe"\n' >"$_PROV_DIR/det.toml"
+run_bzr --config "$_PROV_DIR/det.toml" config show
+if assert_success && assert_json '.servers.det.auth_method_source' "detected"; then
+    run_bzr_raw --config "$_PROV_DIR/det.toml" config show --output table
+    if assert_success && assert_stdout_contains "Auth Source"; then test_pass; fi
+fi
+
+test_begin "config-show-auth-source-pinned" "config show: pinned provenance"
+printf 'default_server = "pin"\n[servers.pin]\nurl = "http://example.invalid:2"\napi_key = "k"\nauth_method = "header"\nauth_method_source = "pinned"\n' >"$_PROV_DIR/pin.toml"
+run_bzr --config "$_PROV_DIR/pin.toml" config show
+if assert_success && assert_json '.servers.pin.auth_method_source' "pinned"; then test_pass; fi
+
+test_begin "config-show-auth-source-unstamped" "config show: unstamped provenance"
+printf 'default_server = "uns"\n[servers.uns]\nurl = "http://example.invalid:3"\napi_key = "k"\nauth_method = "header"\n' >"$_PROV_DIR/uns.toml"
+run_bzr --config "$_PROV_DIR/uns.toml" config show
+if assert_success && assert_json '.servers.uns.auth_method_source' "unstamped"; then test_pass; fi
+
+test_begin "config-show-auth-source-credentialless-none" "config show: credentialless has no provenance"
+printf 'default_server = "cred"\n[servers.cred]\nurl = "http://example.invalid:4"\n' >"$_PROV_DIR/cred.toml"
+run_bzr --config "$_PROV_DIR/cred.toml" config show
+if assert_success && assert_json '.servers.cred.auth_method' "null" &&
+    assert_json '.servers.cred.auth_method_source' "null"; then test_pass; fi
+
+rm -rf "$_PROV_DIR"
+unset _PROV_DIR
+
 echo ""

@@ -107,7 +107,7 @@ async fn header_auth_succeeds() {
     let result = detect_auth_method(&test_http_client(), &server.uri(), "test-key", None)
         .await
         .unwrap();
-    assert_eq!(result, AuthMethod::Header);
+    assert_eq!(result.method, AuthMethod::Header);
 }
 
 #[tokio::test]
@@ -134,7 +134,7 @@ async fn falls_back_to_query_param() {
     let result = detect_auth_method(&test_http_client(), &server.uri(), "test-key", None)
         .await
         .unwrap();
-    assert_eq!(result, AuthMethod::QueryParam);
+    assert_eq!(result.method, AuthMethod::QueryParam);
 }
 
 #[tokio::test]
@@ -163,7 +163,7 @@ async fn whoami_404_falls_back_to_valid_login_header() {
     )
     .await
     .unwrap();
-    assert_eq!(result, AuthMethod::Header);
+    assert_eq!(result.method, AuthMethod::Header);
 }
 
 #[tokio::test]
@@ -237,7 +237,7 @@ async fn valid_login_query_param_but_header_works_on_api() {
     )
     .await
     .unwrap();
-    assert_eq!(result, AuthMethod::Header);
+    assert_eq!(result.method, AuthMethod::Header);
 }
 
 #[tokio::test]
@@ -313,7 +313,7 @@ async fn valid_login_query_param_and_header_fails_on_api() {
     )
     .await
     .unwrap();
-    assert_eq!(result, AuthMethod::QueryParam);
+    assert_eq!(result.method, AuthMethod::QueryParam);
 }
 
 #[tokio::test]
@@ -368,7 +368,7 @@ async fn valid_login_query_param_survives_anonymously_readable_endpoint() {
     )
     .await
     .unwrap();
-    assert_eq!(result, AuthMethod::QueryParam);
+    assert_eq!(result.method, AuthMethod::QueryParam);
 }
 
 #[tokio::test]
@@ -443,7 +443,13 @@ async fn non_tls_network_error_defaults_to_header() {
     let result =
         detect_auth_method(&test_http_client(), "https://127.0.0.1:1", "test-key", None).await;
     assert!(
-        matches!(result, Ok(AuthMethod::Header)),
+        matches!(
+            result,
+            Ok(DetectedAuthMethod {
+                method: AuthMethod::Header,
+                ..
+            })
+        ),
         "non-TLS transport failure should default to header, got: {result:?}"
     );
 }
@@ -612,7 +618,7 @@ async fn valid_login_accepts_integer_result() {
     )
     .await
     .unwrap();
-    assert_eq!(result, AuthMethod::Header);
+    assert_eq!(result.method, AuthMethod::Header);
 }
 
 #[tokio::test]
@@ -807,4 +813,57 @@ async fn detect_server_settings_keeps_version_none_when_probe_fails() {
     assert_eq!(detected.auth_method, Some(AuthMethod::Header));
     assert_eq!(detected.api_mode, ApiMode::Hybrid);
     assert!(detected.server_version.is_none());
+}
+
+/// A genuinely probed method (whoami 200 with a valid body) sets
+/// `auth_method_probed: true` — the gate the `auth_method_source` stamp keys on.
+#[tokio::test]
+async fn probed_auth_method_sets_probed_flag() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/version"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.1.2"})),
+        )
+        .mount(&server)
+        .await;
+    let detected = detect_server_settings(
+        &server.uri(),
+        "test-key",
+        None,
+        &crate::tls::TlsConfig::default(),
+        crate::http::REQUEST_TIMEOUT,
+    )
+    .await
+    .unwrap();
+    assert_eq!(detected.auth_method, Some(AuthMethod::Header));
+    assert!(
+        detected.auth_method_probed,
+        "a method the auth probe genuinely determined must be marked probed"
+    );
+}
+
+/// A transport fallback (unreachable host) yields `auth_method: Some(Header)` with
+/// `auth_method_probed: false` — never stamped as probe-derived.
+#[tokio::test]
+async fn transport_fallback_clears_probed_flag() {
+    let detected = detect_server_settings(
+        "http://127.0.0.1:1",
+        "test-key",
+        None,
+        &crate::tls::TlsConfig::default(),
+        crate::http::REQUEST_TIMEOUT,
+    )
+    .await
+    .unwrap();
+    assert_eq!(detected.auth_method, Some(AuthMethod::Header));
+    assert!(
+        !detected.auth_method_probed,
+        "a transport fallback must not be marked probed, or it would be stamped and permanently trusted"
+    );
 }

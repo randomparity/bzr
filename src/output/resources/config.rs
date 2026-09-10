@@ -2,7 +2,9 @@ use std::io::Write;
 
 use serde::Serialize;
 
-use crate::config::{CredentialSource, KeyringAccount};
+use crate::config::{
+    CredentialSource, KeyringAccount, AUTH_METHOD_SOURCE_DETECTED, AUTH_METHOD_SOURCE_PINNED,
+};
 use crate::output::formatting::{
     escape_terminal_controls, mask_api_key, write_field, write_formatted, write_optional_field,
 };
@@ -38,6 +40,40 @@ impl DisplayCredentialSource {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum AuthMethodSourceDisplay {
+    Pinned,
+    Detected,
+    Unstamped,
+}
+
+impl AuthMethodSourceDisplay {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Pinned => "pinned",
+            Self::Detected => "detected",
+            Self::Unstamped => "unstamped",
+        }
+    }
+}
+
+/// Map a persisted `(auth_method, auth_method_source)` pair to its provenance for
+/// display. `None` when there is no method to attribute.
+fn auth_source_display(
+    auth_method: Option<AuthMethod>,
+    source: Option<&str>,
+) -> Option<AuthMethodSourceDisplay> {
+    let _ = auth_method?;
+    match source {
+        Some(AUTH_METHOD_SOURCE_PINNED) => Some(AuthMethodSourceDisplay::Pinned),
+        Some(AUTH_METHOD_SOURCE_DETECTED) => Some(AuthMethodSourceDisplay::Detected),
+        // Absent (pre-stamp) or an unrecognised marker: both re-detect, so both
+        // read as unstamped.
+        _ => Some(AuthMethodSourceDisplay::Unstamped),
+    }
+}
+
 #[derive(Serialize)]
 #[non_exhaustive]
 pub struct ServerDisplayInfo {
@@ -47,6 +83,8 @@ pub struct ServerDisplayInfo {
     api_key_source: DisplayCredentialSource,
     #[serde(skip_serializing_if = "Option::is_none")]
     auth_method: Option<AuthMethod>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    auth_method_source: Option<AuthMethodSourceDisplay>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     tls_insecure: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -83,6 +121,10 @@ impl ServerDisplayInfo {
             api_key,
             api_key_source,
             auth_method: srv.auth_method,
+            auth_method_source: auth_source_display(
+                srv.auth_method,
+                srv.auth_method_source.as_deref(),
+            ),
             tls_insecure: srv.tls_insecure,
             tls_ca_cert: srv.tls_ca_cert.as_ref().map(|p| p.display().to_string()),
             tls_pin: srv.tls_pin_sha256.as_ref().map(|pin| {
@@ -137,6 +179,9 @@ fn write_server(out: &mut (impl Write + ?Sized), name: &str, s: &ServerDisplayIn
     write_api_key(out, s);
     write_field(out, "API Key Source", s.api_key_source.as_str());
     write_field(out, "Auth", &auth_display(s.auth_method.as_ref()));
+    if let Some(source) = s.auth_method_source {
+        write_field(out, "Auth Source", source.as_str());
+    }
     if s.tls_insecure {
         write_field(out, "TLS", "insecure (certificate verification disabled)");
     }
