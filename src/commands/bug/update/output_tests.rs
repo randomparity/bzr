@@ -21,6 +21,23 @@ fn write_batch_result_table_prints_successes_and_failures() {
 }
 
 #[test]
+fn write_batch_result_table_escapes_per_item_error() {
+    let batch = BatchResult::new(
+        vec![1],
+        vec![BatchFailure::new(2, "boom\u{1b}\u{202e}tail")],
+    );
+    let mut io = CapturedIo::new();
+
+    write_batch_result(&batch, OutputFormat::Table, false, &mut io.writers());
+
+    assert_eq!(io.out_str(), "Updated bugs: #1\n");
+    assert_eq!(
+        io.err_str(),
+        "Failed to update bug #2: boom\\u{1b}\\u{202e}tail\n"
+    );
+}
+
+#[test]
 fn write_batch_result_json_emits_batch_result_shape() {
     let batch = BatchResult::new(vec![7], vec![BatchFailure::new(8, "nope")]);
     let mut io = CapturedIo::new();
