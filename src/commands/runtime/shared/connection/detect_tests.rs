@@ -261,6 +261,30 @@ fn fallback_method_with_version_is_not_stamped() {
     );
 }
 
+/// A pre-stamped (trusted) entry that re-detects with a transport fallback is
+/// CLEARED of its stamp — a fallback must never sit under a stale trusted marker
+/// (the TOFU/pin-rotation clobber path, ADR-0069).
+#[test]
+fn unprobed_fallback_clears_a_stale_trusted_stamp() {
+    for existing in [
+        crate::config::AUTH_METHOD_SOURCE_DETECTED,
+        crate::config::AUTH_METHOD_SOURCE_PINNED,
+    ] {
+        let (srv, _) = persist_and_capture_with_version(
+            &format!("auth_method_source = \"{existing}\"\n"),
+            Some(crate::types::AuthMethod::Header),
+            true,
+            Some("5.1".into()),
+            false,
+        );
+        assert_eq!(
+            srv.auth_method_source, None,
+            "a transport fallback must clear a stale {existing} stamp, or it is permanently trusted"
+        );
+        assert!(!srv.auth_method_is_trusted());
+    }
+}
+
 #[test]
 fn persist_detected_leaves_the_stamp_alone_for_an_anonymous_detection() {
     // Credentialless detection yields no auth method; it must not stamp a

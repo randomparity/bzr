@@ -46,6 +46,10 @@ pub(super) fn persist_detected_settings(
                     // the method; a transport fallback stays unstamped and is
                     // retried on the next connect (ADR-0069).
                     srv.auth_method_source = Some(AUTH_METHOD_SOURCE_DETECTED.to_owned());
+                } else {
+                    // A transport fallback must never sit under a stale trusted marker:
+                    // clear any pre-existing stamp so the next connect retries detection.
+                    srv.auth_method_source = None;
                 }
             }
         }
