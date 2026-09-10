@@ -607,6 +607,44 @@ fn format_dispatch_error_redacts_echoed_api_key_on_every_format() {
     }
 }
 
+#[test]
+fn format_dispatch_error_table_escapes_server_controls() {
+    let err = BzrError::Api {
+        code: 400,
+        message: "hostile\u{1b}\u{202e}".into(),
+    };
+    let table = format_dispatch_error(&err, OutputFormat::Table);
+    assert!(table.starts_with("error: "), "{table}");
+    assert!(
+        table.contains("\\u{1b}"),
+        "ESC must be escaped in table mode: {table}"
+    );
+    assert!(
+        table.contains("\\u{202e}"),
+        "bidi must be escaped in table mode: {table}"
+    );
+    assert!(
+        !table.contains('\u{1b}'),
+        "no raw ESC in table mode: {table}"
+    );
+    assert!(
+        !table.contains('\u{202e}'),
+        "no raw bidi in table mode: {table}"
+    );
+
+    // The JSON family is a published schema surface: serde_json escapes the ESC as
+    // \u001b (code points below 0x20) but leaves the bidi override raw.
+    let json = format_dispatch_error(&err, OutputFormat::Json);
+    assert!(
+        json.contains("\\u001b"),
+        "serde must escape the ESC: {json}"
+    );
+    assert!(
+        json.contains('\u{202e}'),
+        "serde leaves bidi raw (JSON family unchanged): {json}"
+    );
+}
+
 #[cfg(feature = "test-helpers")]
 #[tokio::test]
 async fn format_dispatch_error_redacts_bare_configured_key_and_clears_context() {

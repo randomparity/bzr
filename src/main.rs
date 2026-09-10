@@ -6,6 +6,7 @@ use tracing_subscriber::EnvFilter;
 
 use bzr::cli::Cli;
 use bzr::error::{self, BzrError};
+use bzr::output::escape_terminal_controls;
 use bzr::output::writers::{detected_stdout_width, resolve_table_width, TableWidth};
 use bzr::types::OutputFormat;
 
@@ -47,7 +48,11 @@ async fn main() -> ExitCode {
     let format = match resolve_format(&cli) {
         Ok(f) => f,
         Err(e) => {
-            let _ = writeln!(std::io::stderr(), "error: {e}");
+            let _ = writeln!(
+                std::io::stderr(),
+                "error: {}",
+                escape_terminal_controls(&e.to_string())
+            );
             return exit_code(&e);
         }
     };
@@ -125,7 +130,7 @@ fn format_dispatch_error(err: &BzrError, format: OutputFormat) -> String {
         .unwrap_or_else(|_| fallback()),
         OutputFormat::Ndjson => serde_json::to_string(&serde_json::json!({ "error": error_body }))
             .unwrap_or_else(|_| fallback()),
-        OutputFormat::Table => format!("error: {err}"),
+        OutputFormat::Table => format!("error: {}", escape_terminal_controls(&err.to_string())),
     };
     bzr::error::clear_error_redaction_context();
     formatted
