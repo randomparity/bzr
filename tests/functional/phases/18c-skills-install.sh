@@ -344,7 +344,7 @@ jq -n '{
       "--sort", "bug_id", "--order", "asc"
     ],
     exit_code: 0,
-    stdout: {schema_version: "3.0.7", data: []}
+    stdout: {schema_version: "3.0.8", data: []}
   }, {
     argv: [
       "--server", "primary", "--json", "bug", "view", "delivery",
@@ -353,7 +353,7 @@ jq -n '{
     ],
     exit_code: 0,
     stdout: {
-      schema_version: "3.0.7",
+      schema_version: "3.0.8",
       data: {
         assigned_to: null,
         blocks: [],

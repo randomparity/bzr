@@ -1,7 +1,7 @@
 #![expect(clippy::unwrap_used)]
 
 use super::*;
-use crate::config::{Config, ServerConfig};
+use crate::config::{Config, ServerConfig, AUTH_METHOD_SOURCE_DETECTED, AUTH_METHOD_SOURCE_PINNED};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -32,6 +32,125 @@ fn config_view_no_default_server() {
 fn auth_display_formats_detected_and_undetected_states() {
     assert_eq!(auth_display(None), "auto (not yet detected)");
     assert_eq!(auth_display(Some(&AuthMethod::Header)), "header");
+}
+
+#[test]
+fn auth_source_display_maps_each_state() {
+    assert_eq!(
+        auth_source_display(Some(AuthMethod::Header), Some(AUTH_METHOD_SOURCE_PINNED)),
+        Some(AuthMethodSourceDisplay::Pinned)
+    );
+    assert_eq!(
+        auth_source_display(Some(AuthMethod::Header), Some(AUTH_METHOD_SOURCE_DETECTED)),
+        Some(AuthMethodSourceDisplay::Detected)
+    );
+    assert_eq!(
+        auth_source_display(Some(AuthMethod::Header), None),
+        Some(AuthMethodSourceDisplay::Unstamped)
+    );
+    assert_eq!(
+        auth_source_display(Some(AuthMethod::Header), Some("from-the-future")),
+        Some(AuthMethodSourceDisplay::Unstamped)
+    );
+    assert_eq!(
+        auth_source_display(None, Some(AUTH_METHOD_SOURCE_PINNED)),
+        None
+    );
+}
+
+#[test]
+fn config_show_json_carries_auth_method_source() {
+    let mut servers = HashMap::new();
+    for (source, expected) in [
+        (Some(AUTH_METHOD_SOURCE_PINNED.to_owned()), "pinned"),
+        (Some(AUTH_METHOD_SOURCE_DETECTED.to_owned()), "detected"),
+        (None, "unstamped"),
+    ] {
+        let srv = ServerConfig {
+            url: "https://bugzilla.example".into(),
+            auth_method: Some(AuthMethod::Header),
+            auth_method_source: source,
+            ..Default::default()
+        };
+        servers.clear();
+        servers.insert("prod".into(), srv);
+        let config = Config {
+            default_server: Some("prod".into()),
+            servers: servers.clone(),
+            queries: HashMap::new(),
+            templates: HashMap::new(),
+        };
+        let view = ConfigView::from_config(&config, Path::new("/tmp/bzr/config.toml"));
+        let json: serde_json::Value = serde_json::to_value(&view.servers["prod"]).unwrap();
+        assert_eq!(
+            json["auth_method_source"], expected,
+            "a {expected} server must carry that provenance in --json"
+        );
+    }
+
+    // A method-less server omits the key entirely.
+    let srv = ServerConfig {
+        url: "https://bugzilla.example".into(),
+        ..Default::default()
+    };
+    servers.clear();
+    servers.insert("prod".into(), srv);
+    let config = Config {
+        default_server: Some("prod".into()),
+        servers,
+        queries: HashMap::new(),
+        templates: HashMap::new(),
+    };
+    let view = ConfigView::from_config(&config, Path::new("/tmp/bzr/config.toml"));
+    let json: serde_json::Value = serde_json::to_value(&view.servers["prod"]).unwrap();
+    assert!(
+        json.get("auth_method_source").is_none(),
+        "a server with no auth method must not carry a provenance key"
+    );
+}
+
+#[test]
+fn write_config_renders_auth_source() {
+    let mut info = make_display_info(
+        "https://bugzilla.example",
+        "12345678...",
+        DisplayCredentialSource::Inline,
+        false,
+    );
+    info.auth_method = Some(AuthMethod::Header);
+    info.auth_method_source = Some(AuthMethodSourceDisplay::Detected);
+    let mut servers = std::collections::BTreeMap::new();
+    servers.insert("prod".into(), info);
+    let view = ConfigView {
+        config_file: "/tmp/config.toml".into(),
+        default_server: Some("prod".into()),
+        servers,
+    };
+    let out = capture_write_config(&view);
+    assert!(
+        out.lines()
+            .any(|l| l.contains("Auth Source") && l.contains("detected")),
+        "the table should show the provenance: {out}"
+    );
+
+    let info = make_display_info(
+        "https://bugzilla.example",
+        "none",
+        DisplayCredentialSource::None,
+        false,
+    );
+    let mut servers = std::collections::BTreeMap::new();
+    servers.insert("prod".into(), info);
+    let view = ConfigView {
+        config_file: "/tmp/config.toml".into(),
+        default_server: Some("prod".into()),
+        servers,
+    };
+    let out = capture_write_config(&view);
+    assert!(
+        !out.contains("Auth Source"),
+        "no provenance line for a method-less server: {out}"
+    );
 }
 
 #[test]
@@ -275,6 +394,7 @@ fn make_display_info(
         api_key: api_key.into(),
         api_key_source: source,
         auth_method: None,
+        auth_method_source: None,
         tls_insecure,
         tls_ca_cert: None,
         tls_pin: None,
