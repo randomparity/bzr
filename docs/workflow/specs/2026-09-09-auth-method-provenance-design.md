@@ -215,7 +215,12 @@ what an untrusted actor can reach.
 - **Unit (wiremock), `src/client/auth/mod_tests.rs` / `mod_tests.rs`:**
   - probed method → `auth_method_probed: true`.
   - whoami transport error → `auth_method_probed: false`, method `Header`.
-  - valid_login transport error (whoami 404 first) → `auth_method_probed: false`.
+  - ~~valid_login transport error (whoami 404 first) → `auth_method_probed: false`.~~
+    Deliberately dropped: whoami and valid_login share one `base_url`, and wiremock 0.6.5
+    cannot simulate a valid_login transport error while whoami is reachable (no
+    latency/connection-drop), so the arm is unreachable in a test. It is the same
+    `network_error_outcome` one-liner as the whoami arm (which is tested), so its
+    `probed: false` behavior is covered by `transport_fallback_clears_probed_flag`.
 - **Unit, `src/commands/runtime/shared/connection/detect_tests.rs`:**
   - probed + version `Some` → stamped `differential-probe`.
   - probed + version `None` → stamped `differential-probe` (no longer skipped).
