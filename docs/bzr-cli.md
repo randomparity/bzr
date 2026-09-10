@@ -2771,6 +2771,10 @@ Consequences worth knowing:
   sequences, and `U+200B`/`U+FEFF` are invisible but do not reorder.
 - A script matching on a value that contains one of these characters sees the
   escaped spelling. Match against `--json` output instead.
+- The per-item error in a batch failure (`Failed to update bug #…: …`,
+  `Failed to create bug (item …): …`) and the `error: …` line printed at
+  process exit are escaped the same way, because they carry server-supplied
+  text straight to the terminal.
 
 `--json` and `--output ndjson` are unchanged: they are a published schema
 surface, and their encoding stays standard JSON.

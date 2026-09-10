@@ -74,3 +74,4 @@ rejected.
 | [0067](0067-functional-tier-reclaims-its-container.md) | The single-version functional tier reclaims its container | Accepted |
 | [0068](0068-response-bodies-are-read-under-one-shared-bound.md) | Response bodies are read under one shared bound | Accepted |
 | [0069](0069-auth-method-stamp-records-probe-outcome.md) | The auth-method stamp records whether the method was probed; `config show` surfaces it | Accepted |
+| [0070](0070-escape-terminal-controls-at-composition-sites.md) | Escape terminal controls at the composition sites outside the writers | Accepted |
