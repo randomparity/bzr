@@ -16,9 +16,9 @@
 # the input reports a named skip rather than a vacuous pass.
 
 # ══════════════════════════════════════════════════════════════════════
-# Phase 8i: Batch-error terminal escaping
+# Phase 8i: Batch terminal-control escaping
 # ══════════════════════════════════════════════════════════════════════
-echo "── Phase 8i: Batch-error terminal escaping ─────────────────"
+echo "── Phase 8i: Batch terminal-control escaping ───────────────────"
 
 # Bash 3.2 (the macOS system bash) has no $'\uXXXX'. PAYLOAD_ESC is the
 # clear-screen ESC sequence; PATTERN_ESC is its BRE-safe form for the
