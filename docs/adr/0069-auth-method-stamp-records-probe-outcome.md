@@ -46,9 +46,11 @@ method, so neither a user nor a bug report can tell which state a server is in.
 
 2. **Gate the stamp on the probe outcome, not `server_version`.**
    `persist_detected_settings` writes `auth_method_source = "differential-probe"`
-   only when `auth_method_probed` is `true`. `server_version` stays the gate for
-   `api_mode`/`server_version` persistence — a separate question this decision
-   does not touch.
+   only when `auth_method_probed` is `true`, and clears any pre-existing stamp
+   when it persists an unprobed value — a transport fallback can never sit under
+   a trusted marker, so the next connect retries detection. `server_version`
+   stays the gate for `api_mode`/`server_version` persistence — a separate
+   question this decision does not touch.
 
 3. **Surface the provenance in `config show`.** `ServerDisplayInfo`
    (`src/output/resources/config.rs`) gains

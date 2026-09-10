@@ -100,6 +100,10 @@ if let Some(auth_method) = settings.auth_method {
         // method; a transport fallback stays unstamped and is retried on the
         // next connect (ADR 0069).
         srv.auth_method_source = Some(AUTH_METHOD_SOURCE_DETECTED.to_owned());
+    } else {
+        // A transport fallback must never sit under a stale trusted marker:
+        // clear any pre-existing stamp so the next connect retries detection.
+        srv.auth_method_source = None;
     }
 }
 ```
@@ -226,6 +230,8 @@ what an untrusted actor can reach.
   - probed + version `None` → stamped `differential-probe` (no longer skipped).
   - fallback + version `Some` → **not** stamped (the dangerous case, closed).
   - fallback + version `None` → not stamped (unchanged).
+  - unprobed persist on a pre-stamped entry → **clears** the stale stamp (the
+    TOFU/pin-rotation clobber path; a fallback never sits under a trusted marker).
 - **Unit, `src/output/resources/config_tests.rs`:**
   - `auth_source_display` maps pinned/detected/unstamped (None and unknown
     marker both → `unstamped`) and `None` method → `None`.
