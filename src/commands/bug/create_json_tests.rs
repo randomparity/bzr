@@ -554,3 +554,23 @@ async fn array_with_bad_attachment_file_creates_nothing() {
     // (the create POST `.expect(0)` mock verifies no bug was filed).
     assert_eq!(err.exit_code(), 6);
 }
+
+#[test]
+fn write_batch_create_table_escapes_per_item_error() {
+    use crate::output::result_types::{BatchCreateResult, CreateFailure};
+    use crate::test_helpers::CapturedIo;
+
+    let result = BatchCreateResult::new(
+        vec![1],
+        vec![CreateFailure::create(0, "boom\u{1b}\u{202e}tail")],
+    );
+    let mut io = CapturedIo::new();
+
+    super::write_batch_create(&result, OutputFormat::Table, &mut io.writers());
+
+    assert_eq!(io.out_str(), "Created bugs: #1\n");
+    assert_eq!(
+        io.err_str(),
+        "Failed to create bug (item 0): boom\\u{1b}\\u{202e}tail\n"
+    );
+}
