@@ -9,8 +9,10 @@ Accepted
 ADR 0065 routed terminal-control escaping through the writers in `src/output/**`: one
 predicate, `escape_terminal_controls`, applied at the shared seams (`write_table_records`,
 the `write_field` family, `write_status_field`) and by an explicit call at each writer that
-composes its own line. That closed the writer surface, but ADR 0065 deliberately left three
-sites unescaped and recorded them as follow-up ("outside this record's surface"):
+composes its own line. That closed the writer surface. ADR 0065 explicitly recorded two
+bypasses as follow-up ("outside this record's surface") — the `write_result` seam and the
+`src/main.rs:50` `error: {e}` line — while the batch command-layer stderr lines sat outside
+its `src/output/**` scope. The three:
 
 - The batch command layer prints a per-item server error straight to stderr —
   `src/commands/bug/update/output.rs` ("Failed to update bug #…: …") and

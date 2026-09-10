@@ -8,9 +8,11 @@ Plan: `../plans/2026-09-10-terminal-escaping-composition-sites.md`.
 ## Problem
 
 ADR 0065 (#743) made every writer under `src/output/**` escape Unicode `Cc` plus the
-Trojan-Source bidi set before server text reaches the terminal. It deliberately left three
-bypasses and recorded them as follow-up, because their inputs are composed outside
-`src/output/**` or their seam cannot escape without breaking a caller:
+Trojan-Source bidi set before server text reaches the terminal. Three bypasses remained
+outside its `src/output/**` scope; ADR 0065 explicitly recorded two of them — the
+`write_result` seam and the `src/main.rs:50` `error: {e}` line — as follow-up. All three are
+bypasses because their inputs are composed outside `src/output/**` or their seam cannot
+escape without breaking a caller:
 
 - The batch command layer writes a per-item server error to stderr directly
   (`src/commands/bug/update/output.rs:37`, `src/commands/bug/create_json.rs:322`). The
