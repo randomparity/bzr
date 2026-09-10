@@ -77,6 +77,13 @@ method, so neither a user nor a bug report can tell which state a server is in.
   the `bzr schema` registry), and the issue asks only that the provenance be
   surfaced "if the schema allows it additively." There is no schema to update,
   so none is added.
+- The `config show` provenance values (`pinned`/`detected`/`unstamped`) are
+  display-only. The trust decision (`auth_method_is_trusted`) matches only the raw
+  generation marker, so a config file edited to a display label (e.g.
+  `auth_method_source = "detected"`) deserializes but is a cache miss — the next
+  connect re-detects and re-stamps. The trust path is fail-closed, so the cost is one
+  extra detection round-trip, never a trust violation; the label is documented as
+  display-only in `docs/bzr-cli.md`.
 - ADR 0066's two deferred residuals (the probed/fallback distinction and the
   `config show` surface) are resolved by this record; its residual bullets are
   amended to point here.

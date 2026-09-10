@@ -2136,6 +2136,11 @@ bzr --json config rename-server old-name new-name
 
 Display the current configuration (API keys are masked). Supports `--json` for structured output.
 
+The `Auth Source` field (and `auth_method_source` in JSON) is **display-only**: it reports how
+the persisted `auth_method` was determined (`pinned`, `detected`, or `unstamped`) and must not
+be written back into a config file — the persisted marker is the raw generation string, and a
+copied-back label is treated as unstamped (one extra detection round-trip).
+
 ```bash
 bzr config show
 bzr --json config show
