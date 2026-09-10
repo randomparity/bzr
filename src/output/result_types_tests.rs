@@ -249,6 +249,18 @@ fn write_result_table_emits_human_message() {
 }
 
 #[test]
+fn write_result_table_prints_newline_message_verbatim() {
+    let result = ActionResult::created(1, ResourceKind::Bug);
+    let mut buf = Vec::new();
+    write_result(&result, "alpha\nbeta\ngamma", OutputFormat::Table, &mut buf);
+    let s = String::from_utf8(buf).unwrap();
+
+    // The table arm prints the composed message verbatim — one line per `\n` — so
+    // `src/commands/schema.rs`'s `names.join("\n")` listing is not collapsed.
+    assert_eq!(s, "alpha\nbeta\ngamma\n");
+}
+
+#[test]
 fn multi_bug_view_result_serializes_with_empty_failed() {
     let result = MultiBugViewResult {
         bugs: vec![],
