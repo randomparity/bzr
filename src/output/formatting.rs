@@ -285,7 +285,14 @@ const BIDI_CONTROLS: [char; 12] = [
 /// `serde_json` escapes only `"`, `\`, and code points below `0x20`, so bidi
 /// passes through the JSON family verbatim. That is a published-schema surface
 /// and a deliberate exclusion, not an oversight.
-pub(super) fn escape_terminal_controls(value: &str) -> String {
+///
+/// ADR 0070 exposes this at `bzr::output::escape_terminal_controls` (re-exported in
+/// `src/output/mod.rs`) so the command layer (`src/commands/**`) and the binary
+/// (`src/main.rs`) can escape the server-controlled interpolations in the messages they
+/// compose outside `src/output/` — the batch stderr failure lines and the `error: {…}`
+/// renderings. Those sites escape per-interpolation; the `write_result`/`write_saved`
+/// table arms stay unescaped at the seam and their callers own their interpolations.
+pub fn escape_terminal_controls(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for character in value.chars() {
         if character.is_control() || BIDI_CONTROLS.contains(&character) {
