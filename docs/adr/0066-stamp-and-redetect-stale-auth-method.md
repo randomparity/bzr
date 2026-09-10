@@ -75,10 +75,10 @@ genuinely uncached server still fails, because there the write is how the settin
   so this adds no new network dependency, only a louder failure on the transition. A
   transport failure does not surface, by design: it leaves the entry unstamped, so the
   correction is retried rather than resolved wrongly.
-- Residual (resolved by ADR 0069): a server that answers the auth probes but not
-  `rest/version` was stamped even though its method may be the transport fallback. The
-  stamp now gates on `DetectedServerSettings.auth_method_probed`, so a transport fallback
-  is never stamped as probe-derived and is retried on the next connect.
+- Residual (resolved by ADR 0069): a server whose auth probes fell back to the transport
+  default while `rest/version` still succeeded was stamped with the fallback method and
+  trusted forever. The stamp now gates on `DetectedServerSettings.auth_method_probed`, so
+  a transport fallback is never stamped as probe-derived and is retried on the next connect.
 - (Amended by ADR 0069.) `bzr config show` now surfaces the provenance: its
   `ServerDisplayInfo` (`src/output/resources/config.rs`) carries an `auth_method_source`
   JSON field and an `Auth Source` table field, mapped to `pinned`/`detected`/`unstamped`.
