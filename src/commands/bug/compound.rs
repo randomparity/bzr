@@ -16,6 +16,7 @@ use crate::client::BugzillaClient;
 use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::mutation::ensure_batch_complete;
 use crate::error::Result;
+use crate::output::escape_terminal_controls;
 use crate::output::result_types::{
     write_result, ActionResult, CompoundCreateResult, DryRunResult, ResourceKind, SubStepFailure,
 };
@@ -94,7 +95,8 @@ pub(super) async fn run_sub_steps(
         if let Err(e) = tag_description_comment(client, bug_id, &plan.comment_tags).await {
             let _ = writeln!(
                 w.err,
-                "warning: created bug #{bug_id} but failed to tag its first comment: {e}"
+                "warning: created bug #{bug_id} but failed to tag its first comment: {}",
+                escape_terminal_controls(&e.to_string())
             );
             failures.push(SubStepFailure::comment_tags(e.to_string()));
         }
@@ -103,7 +105,8 @@ pub(super) async fn run_sub_steps(
         if let Err(e) = client.add_comment(bug_id, &comment).await {
             let _ = writeln!(
                 w.err,
-                "warning: created bug #{bug_id} but failed to add comment: {e}"
+                "warning: created bug #{bug_id} but failed to add comment: {}",
+                escape_terminal_controls(&e.to_string())
             );
             failures.push(SubStepFailure::comment(e.to_string()));
         }
@@ -114,7 +117,8 @@ pub(super) async fn run_sub_steps(
         if let Err(e) = client.upload_attachment(&attachment).await {
             let _ = writeln!(
                 w.err,
-                "warning: created bug #{bug_id} but failed to upload attachment '{file}': {e}"
+                "warning: created bug #{bug_id} but failed to upload attachment '{file}': {}",
+                escape_terminal_controls(&e.to_string())
             );
             failures.push(SubStepFailure::attachment(file, e.to_string()));
         }

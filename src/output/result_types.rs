@@ -8,6 +8,14 @@ use crate::types::output::OutputFormat;
 
 // ── Result output ───────────────────────────────────────────────────
 
+/// Print a mutation result: the typed payload under `--json`/`--output ndjson`, or the
+/// composed `human_message` verbatim in table mode. The table arm is a "print composed
+/// string" seam: it does not escape `human_message`, because its inputs are built by
+/// callers outside `src/output/` and `src/commands/schema.rs` relies on embedded newlines.
+/// A caller that composes server-controlled data into `human_message` must escape its own
+/// interpolations with `escape_terminal_controls` (ADR 0070). The callers that do:
+/// `comment tag` and `comment search-tags` (server-echoed tag text) and
+/// `attachment download` (the server-derived destination name).
 pub fn write_result<W: Write + ?Sized>(
     value: &(impl Serialize + ?Sized),
     human_message: &str,

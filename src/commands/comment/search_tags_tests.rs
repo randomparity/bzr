@@ -91,3 +91,34 @@ async fn comment_search_tags_api_error_returns_error() {
         "expected HTTP 500 error, got: {err}"
     );
 }
+
+#[tokio::test]
+async fn comment_search_tags_table_escapes_server_returned_tags() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    // Same seam as `comment tag`: the listing is composed in the command layer and
+    // printed verbatim by `write_result`'s table arm, so each tag is escaped on its
+    // own row and the row separator stays a real newline (ADR 0070).
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/comment/tags/need"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!(["needinfo", "need\u{1b}[2Jreview"])),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = CommentAction::SearchTags {
+        query: "need".into(),
+    };
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::comment::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &mut __io.writers(),
+    )
+    .await;
+    assert!(result.is_ok(), "search-tags failed: {result:?}");
+    assert_eq!(__io.out_str(), "  needinfo\n  need\\u{1b}[2Jreview\n");
+}

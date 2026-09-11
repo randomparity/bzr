@@ -224,6 +224,35 @@ fn exit_code_maps_highest_code() {
 }
 
 #[test]
+fn handle_format_error_escapes_and_returns_exit_code() {
+    // A hostile format-resolution error (an invalid --output/BZR_OUTPUT value)
+    // writes the escaped `error: …` line to the sink and returns the error's
+    // exit code. This is the path `main` takes when resolve_format fails.
+    let err = BzrError::Config("bad\u{1b}[2J".into());
+    let mut buf = Vec::new();
+    let code = handle_format_error(&err, &mut buf);
+
+    let rendered = String::from_utf8(buf).expect("sink output must be UTF-8");
+    assert!(
+        rendered.starts_with("error: "),
+        "conventional prefix: {rendered:?}"
+    );
+    assert!(
+        rendered.contains("\\u{1b}"),
+        "the ESC must be escaped in the format-resolution error line: {rendered:?}"
+    );
+    assert!(
+        !rendered.contains('\u{1b}'),
+        "no raw control may reach the sink: {rendered:?}"
+    );
+    let dbg = format!("{code:?}");
+    assert!(
+        dbg.contains(&err.exit_code().to_string()),
+        "must return the error's exit code, got {dbg}"
+    );
+}
+
+#[test]
 fn format_dispatch_error_renders_json() {
     let err = BzrError::Config("bad config".into());
     let out = format_dispatch_error(&err, OutputFormat::Json);
@@ -605,6 +634,105 @@ fn format_dispatch_error_redacts_echoed_api_key_on_every_format() {
             );
         }
     }
+}
+
+#[test]
+fn format_dispatch_error_table_escapes_server_controls() {
+    let err = BzrError::Api {
+        code: 400,
+        message: "hostile\u{1b}\u{202e}".into(),
+    };
+    let table = format_dispatch_error(&err, OutputFormat::Table);
+    assert!(table.starts_with("error: "), "{table}");
+    assert!(
+        table.contains("\\u{1b}"),
+        "ESC must be escaped in table mode: {table}"
+    );
+    assert!(
+        table.contains("\\u{202e}"),
+        "bidi must be escaped in table mode: {table}"
+    );
+    assert!(
+        !table.contains('\u{1b}'),
+        "no raw ESC in table mode: {table}"
+    );
+    assert!(
+        !table.contains('\u{202e}'),
+        "no raw bidi in table mode: {table}"
+    );
+
+    // The JSON family is a published schema surface: serde_json escapes the ESC as
+    // \u001b (code points below 0x20) but leaves the bidi override raw.
+    let json = format_dispatch_error(&err, OutputFormat::Json);
+    assert!(
+        json.contains("\\u001b"),
+        "serde must escape the ESC: {json}"
+    );
+    assert!(
+        json.contains('\u{202e}'),
+        "serde leaves bidi raw (JSON family unchanged): {json}"
+    );
+}
+
+#[test]
+fn format_dispatch_error_table_keeps_bzr_authored_hint_lines() {
+    // Several BzrError displays end in a bzr-authored, multi-line remediation hint:
+    // `tls::error::TLS_HINT` (appended to BzrError::Http), the "TLS certificate not
+    // trusted" body in commands::runtime::shared::connection::tls_trust, and the
+    // ISO-8601 rejection in validation::datetime. Escaping the whole display turned
+    // every one of those into a single line of literal `\n`, which is the actionable
+    // remediation text for the most common first-run failure. Escaping is per line,
+    // so the hint keeps its lines and its indentation.
+    let err = BzrError::Config(
+        "TLS certificate not trusted. To connect, use one of:\n  \
+         bzr config set-server <NAME> --tls-insecure\n  \
+         bzr config set-server <NAME> --tls-pin-sha256 <PIN>"
+            .into(),
+    );
+    let table = format_dispatch_error(&err, OutputFormat::Table);
+
+    assert_eq!(
+        table,
+        "error: Config error: TLS certificate not trusted. To connect, use one of:\n  \
+         bzr config set-server <NAME> --tls-insecure\n  \
+         bzr config set-server <NAME> --tls-pin-sha256 <PIN>",
+        "the hint must render as three indented lines, not one line of literal \\n"
+    );
+    assert!(
+        !table.contains("\\n"),
+        "no literal backslash-n may appear: {table:?}"
+    );
+}
+
+#[test]
+fn format_dispatch_error_table_escapes_controls_on_every_line() {
+    // The per-line split is a layout concession, not an escaping hole: a server
+    // message that embeds its own newline renders as an extra line (a free-form error
+    // line has no row structure to forge — ADR 0070), but every Cc and bidi character
+    // on each of those lines is still escaped.
+    let err = BzrError::Api {
+        code: 400,
+        message: "first\u{1b}[2J\nsecond\u{202e}tail".into(),
+    };
+    let table = format_dispatch_error(&err, OutputFormat::Table);
+
+    assert_eq!(
+        table.lines().count(),
+        2,
+        "the server newline splits: {table:?}"
+    );
+    assert!(
+        table.contains("first\\u{1b}[2J"),
+        "the ESC on line 1 must be escaped: {table:?}"
+    );
+    assert!(
+        table.contains("second\\u{202e}tail"),
+        "the bidi override on line 2 must be escaped: {table:?}"
+    );
+    assert!(
+        !table.contains('\u{1b}') && !table.contains('\u{202e}'),
+        "no raw control may survive on any line: {table:?}"
+    );
 }
 
 #[cfg(feature = "test-helpers")]

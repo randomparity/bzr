@@ -1240,3 +1240,97 @@ async fn write_one_attachment_sanitizes_server_filename_with_separators() {
     assert_eq!(std::path::Path::new(&file.path), expected);
     assert!(expected.exists(), "{expected:?} not found");
 }
+
+// Control characters are legal in a POSIX file name but not on Windows, so the
+// on-disk half of this test is Unix-only. The escaping it proves is not.
+#[cfg(unix)]
+#[tokio::test]
+async fn attachment_download_single_table_escapes_destination_in_message() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/9876"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "attachments": {
+                "9876": one_att(9876, 12345, "patch.diff", b"body"),
+            }
+        })))
+        .mount(&mock)
+        .await;
+
+    // Without `--out` the destination is the server's `file_name` reduced by
+    // `safe_basename`, which rejects traversal but not control characters — so this
+    // is the destination string a hostile server produces. `--out` only keeps the
+    // write inside the temp dir instead of the test process's cwd.
+    let out_path = tmp.path().join("boom\u{1b}[2Jpatch.diff");
+    let action = AttachmentAction::Download {
+        ids: vec![9876],
+        bug_ids: vec![],
+        out: Some(out_path.to_string_lossy().into_owned()),
+        out_dir: "./attachments".into(),
+        ignore_obsolete: false,
+    };
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::attachment::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &mut __io.writers(),
+    )
+    .await;
+    assert!(result.is_ok(), "expected ok, got {result:?}");
+
+    let out = __io.out_str();
+    assert!(
+        out.contains("\\u{1b}[2J"),
+        "the destination must be escaped for display: {out:?}"
+    );
+    assert!(
+        !out.contains('\u{1b}'),
+        "no raw ESC may reach the terminal: {out:?}"
+    );
+    assert!(out_path.exists(), "the real path is still written verbatim");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn attachment_download_single_json_keeps_raw_destination() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/9876"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "attachments": {
+                "9876": one_att(9876, 12345, "patch.diff", b"body"),
+            }
+        })))
+        .mount(&mock)
+        .await;
+
+    // The escape is display-only: `DownloadResult.file` is the published `--json`
+    // schema and must name the file that was actually written, byte for byte.
+    let out_path = tmp.path().join("boom\u{1b}[2Jpatch.diff");
+    let action = AttachmentAction::Download {
+        ids: vec![9876],
+        bug_ids: vec![],
+        out: Some(out_path.to_string_lossy().into_owned()),
+        out_dir: "./attachments".into(),
+        ignore_obsolete: false,
+    };
+
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::attachment::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &mut __io.writers(),
+    )
+    .await;
+    assert!(result.is_ok(), "expected ok, got {result:?}");
+
+    let parsed = crate::test_helpers::json_envelope_data(__io.out_str());
+    assert_eq!(
+        parsed["file"].as_str().unwrap(),
+        out_path.to_string_lossy(),
+        "the JSON file must stay the real, unescaped destination"
+    );
+}

@@ -1348,3 +1348,42 @@ fn guess_content_type_case_insensitive() {
     assert_eq!(super::guess_content_type("image.PNG"), "image/png");
     assert_eq!(super::guess_content_type("data.JSON"), "application/json");
 }
+
+#[test]
+fn write_batch_upload_table_escapes_per_item_errors() {
+    use crate::output::result_types::{BatchUploadResult, UploadFailure};
+    use crate::test_helpers::CapturedIo;
+
+    // All three per-item stderr arms carry a `BzrError` display that can embed
+    // server-supplied text, so each escapes its own interpolation (ADR 0070).
+    let result = BatchUploadResult::new(
+        0,
+        vec![],
+        vec![
+            UploadFailure::new(1, "boom\u{1b}[2J"),
+            UploadFailure::comment_private(2, "flip\u{202e}tail"),
+            UploadFailure::not_attempted(3, 2),
+        ],
+    );
+    let mut io = CapturedIo::new();
+
+    super::write_batch_upload(&result, OutputFormat::Table, &mut io.writers());
+
+    let err = io.err_str();
+    assert!(
+        err.contains("Failed to upload to bug #1: boom\\u{1b}[2J"),
+        "plain failure arm: {err:?}"
+    );
+    assert!(
+        err.contains("could not make the comment private: flip\\u{202e}tail"),
+        "comment_private arm: {err:?}"
+    );
+    assert!(
+        err.contains("Not attempted for bug #3:"),
+        "not_attempted arm still renders: {err:?}"
+    );
+    assert!(
+        !err.contains('\u{1b}') && !err.contains('\u{202e}'),
+        "no raw control may reach stderr: {err:?}"
+    );
+}

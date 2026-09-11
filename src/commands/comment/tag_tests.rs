@@ -75,3 +75,39 @@ async fn comment_tag_without_changes_is_rejected_before_put() {
         "error should suggest tag flags: {msg}"
     );
 }
+
+#[tokio::test]
+async fn comment_tag_table_escapes_server_returned_tags() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+
+    // The server echoes the resulting tag set, and `write_result`'s table arm prints
+    // its composed message verbatim, so a hostile tag would otherwise reach the
+    // terminal raw (ADR 0070).
+    Mock::given(method("PUT"))
+        .and(path("/rest/bug/comment/100/tags"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!(["needinfo", "boom\u{1b}[2J\u{202e}tail"])),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let action = CommentAction::Tag {
+        comment_id: 100,
+        add: vec!["needinfo".into()],
+        remove: vec![],
+    };
+    let mut __io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::comment::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &mut __io.writers(),
+    )
+    .await;
+    assert!(result.is_ok(), "comment tag failed: {result:?}");
+    assert_eq!(
+        __io.out_str(),
+        "Tags on comment #100: needinfo, boom\\u{1b}[2J\\u{202e}tail\n"
+    );
+}

@@ -91,6 +91,24 @@ else
     test_fail "config.toml changed after ad-hoc TLS runs"
 fi
 
+test_begin "untrusted-cert-hint-keeps-its-lines" "the TLS trust hint renders multi-line, not escaped \\n"
+# With no trust flag and no interactive answer, the TOFU prompt reaches EOF and
+# bzr fails with the "TLS certificate not trusted" error. Its body is a
+# bzr-authored, indented, multi-line remediation hint that reaches the terminal
+# through main.rs's `error: …` rendering — the one place terminal-control
+# escaping is applied to a whole BzrError display. Escaping it in one call turns
+# every newline into a literal \n and collapses the hint to one line (ADR 0070),
+# so this asserts the line structure a real untrusted cert produces, which no
+# wiremock fixture can reach.
+run_bzr_raw --output table --server-url "$TLS_URL" server info </dev/null
+if assert_failure &&
+    assert_stderr_contains 'TLS certificate not trusted' &&
+    assert_stderr_contains '^  bzr config set-server <NAME> --tls-insecure$' &&
+    assert_stderr_contains '^  bzr config set-server <NAME> --tls-pin-sha256 <PIN>$' &&
+    assert_stderr_not_contains '\\n'; then
+    test_pass
+fi
+
 # Tear down now and restore the runner's plain cleanup trap for later phases.
 _tls_cleanup
 trap cleanup EXIT

@@ -370,7 +370,10 @@ else test_skip "no BUG1"; fi
 
 test_begin "bug-update-comment-tag-and-minor-update" "bug update --comment-tag --minor-update"
 if [[ -n "$BUG1" ]]; then
-    _CT_TAG=$(unique_name comment-tag)
+    # Bugzilla caps a comment tag at 24 characters. `unique_name` appends
+    # "-$$-$RANDOM", which is up to 13 more, so the prefix must stay short:
+    # "comment-tag" overflows the cap on any host with 7-digit PIDs.
+    _CT_TAG=$(unique_name ctag)
     run_bzr bug update "$BUG1" --comment "tagged atomic comment" \
         --comment-tag "$_CT_TAG" --minor-update
     if assert_success; then

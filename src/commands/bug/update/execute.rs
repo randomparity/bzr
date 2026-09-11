@@ -8,6 +8,7 @@ use crate::commands::runtime::interaction::confirm::confirm_batch;
 use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::mutation::ensure_batch_complete;
 use crate::error::{BzrError, Result};
+use crate::output::escape_terminal_controls;
 use crate::output::result_types::{
     write_result, ActionResult, BatchFailure, BatchResult, ResourceKind,
 };
@@ -113,9 +114,10 @@ pub(crate) async fn apply_comment_tags(
 pub(crate) fn warn_comment_tags_failed(w: &mut Writers<'_>, id: u64, e: &BzrError) {
     let _ = writeln!(
         w.err,
-        "warning: updated bug #{id} and posted its comment, but failed to tag it: {e}. \
+        "warning: updated bug #{id} and posted its comment, but failed to tag it: {}. \
          Do not retry with the same --comment text (Bug.update would post a duplicate \
-         comment); use `bzr comment tag` on the existing comment instead."
+         comment); use `bzr comment tag` on the existing comment instead.",
+        escape_terminal_controls(&e.to_string())
     );
 }
 

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::cli::HistoryArgs;
 use crate::client::BugzillaClient;
 use crate::error::Result;
+use crate::output::escape_terminal_controls;
 use crate::output::resources::bug::{write_history_json, write_history_table};
 use crate::output::writers::Writers;
 use crate::types::output::OutputFormat;
@@ -58,7 +59,8 @@ async fn fetch_comments_for_correlation(
             let _ = writeln!(
                 w.err,
                 "warning: could not fetch comments for comment_id correlation \
-                 (comment_id will be null): {e}"
+                 (comment_id will be null): {}",
+                escape_terminal_controls(&e.to_string())
             );
             Vec::new()
         }

@@ -598,3 +598,35 @@ async fn apply_checked_connected_without_extra_fields_never_probes_the_catalogue
         .await
         .expect("plain update should write");
 }
+
+#[test]
+fn warn_comment_tags_failed_escapes_the_server_error() {
+    // The warning interpolates a `BzrError` from the failed `Bug.update` sub-step,
+    // whose `Api` variant embeds server text, and writes it straight to stderr from
+    // the command layer (ADR 0070).
+    let err = crate::error::BzrError::Api {
+        code: 400,
+        message: "hostile\u{1b}[2J\u{202e}".into(),
+    };
+    let mut io = CapturedIo::new();
+
+    super::warn_comment_tags_failed(&mut io.writers(), 42, &err);
+
+    let out = io.err_str();
+    assert!(
+        out.starts_with("warning: updated bug #42 and posted its comment, but failed to tag it: "),
+        "prefix preserved: {out:?}"
+    );
+    assert!(
+        out.contains("hostile\\u{1b}[2J\\u{202e}"),
+        "the server text must be escaped: {out:?}"
+    );
+    assert!(
+        out.contains("bzr comment tag"),
+        "the remediation advice must survive: {out:?}"
+    );
+    assert!(
+        !out.contains('\u{1b}') && !out.contains('\u{202e}'),
+        "no raw control may reach stderr: {out:?}"
+    );
+}

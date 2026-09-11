@@ -6,6 +6,7 @@ use tracing_subscriber::EnvFilter;
 
 use bzr::cli::Cli;
 use bzr::error::{self, BzrError};
+use bzr::output::escape_terminal_controls;
 use bzr::output::writers::{detected_stdout_width, resolve_table_width, TableWidth};
 use bzr::types::OutputFormat;
 
@@ -46,10 +47,7 @@ async fn main() -> ExitCode {
 
     let format = match resolve_format(&cli) {
         Ok(f) => f,
-        Err(e) => {
-            let _ = writeln!(std::io::stderr(), "error: {e}");
-            return exit_code(&e);
-        }
+        Err(e) => return handle_format_error(&e, &mut std::io::stderr()),
     };
 
     if cli.quiet {
@@ -125,10 +123,40 @@ fn format_dispatch_error(err: &BzrError, format: OutputFormat) -> String {
         .unwrap_or_else(|_| fallback()),
         OutputFormat::Ndjson => serde_json::to_string(&serde_json::json!({ "error": error_body }))
             .unwrap_or_else(|_| fallback()),
-        OutputFormat::Table => format!("error: {err}"),
+        OutputFormat::Table => format_table_error(err),
     };
     bzr::error::clear_error_redaction_context();
     formatted
+}
+
+/// Render a `BzrError` in the conventional table-mode `error: …` line, escaping
+/// any terminal controls the message carries (ADR 0070). Shared by the dispatch
+/// error path and the format-resolution error path so the two cannot drift.
+///
+/// Escaping runs **per line**: several `BzrError` displays end in a bzr-authored,
+/// multi-line remediation hint (the TLS trust hint in `tls::error::TLS_HINT`, the
+/// "TLS certificate not trusted" body, the ISO-8601 flag rejection), and escaping the
+/// whole display collapses those into one line of literal `\n`. The line structure is
+/// bzr's own, so it is preserved; every other `Cc`/bidi character on each line is still
+/// escaped. A server message that embeds its own newline therefore renders as an extra
+/// stderr line rather than being flattened — a deliberate consequence recorded in
+/// ADR 0070, since a free-form error line has no row structure to forge.
+fn format_table_error(err: &BzrError) -> String {
+    let body = err
+        .to_string()
+        .split('\n')
+        .map(escape_terminal_controls)
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!("error: {body}")
+}
+
+/// Handle a format-resolution failure: write the escaped `error: …` rendering to
+/// the given sink and return the process exit code. Split from `main` so the path is
+/// unit-testable without spawning the binary.
+fn handle_format_error(e: &BzrError, sink: &mut dyn Write) -> ExitCode {
+    let _ = writeln!(sink, "{}", format_table_error(e));
+    exit_code(e)
 }
 
 /// Select the tracing filter directive based on CLI flags.

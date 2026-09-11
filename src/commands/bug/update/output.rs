@@ -1,6 +1,7 @@
 //! Output and result formatting for `bug update`: human-readable table lines,
 //! the JSON/NDJSON batch envelope, and the dry-run preview.
 
+use crate::output::escape_terminal_controls;
 use crate::output::result_types::{write_result, BatchResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
 use crate::types::bug::UpdateBugParams;
@@ -34,7 +35,12 @@ pub(crate) fn write_batch_result(
                 let _ = writeln!(w.out, "Updated bugs: {}{suffix}", ids_str.join(", "));
             }
             for f in &batch.failed {
-                let _ = writeln!(w.err, "Failed to update bug #{}: {}", f.id, f.error);
+                let _ = writeln!(
+                    w.err,
+                    "Failed to update bug #{}: {}",
+                    f.id,
+                    escape_terminal_controls(&f.error)
+                );
             }
         }
     }

@@ -11,6 +11,7 @@ use crate::commands::runtime::input::from_json::JsonOneOrMany;
 use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::shared::{merge_set, merge_vec};
 use crate::error::Result;
+use crate::output::escape_terminal_controls;
 use crate::output::result_types::{
     write_result, BatchCreateResult, CreateFailure, DryRunResult, ResourceKind,
 };
@@ -322,7 +323,8 @@ fn write_batch_create(result: &BatchCreateResult, format: OutputFormat, w: &mut 
                 let _ = writeln!(
                     w.err,
                     "Failed to create bug (item {}): {}",
-                    f.index, f.error
+                    f.index,
+                    escape_terminal_controls(&f.error)
                 );
             }
         }

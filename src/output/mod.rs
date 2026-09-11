@@ -14,3 +14,7 @@ pub mod progress;
 pub(crate) mod resources;
 pub(crate) mod result_types;
 pub mod writers;
+
+/// Terminal-control escaping, re-exported for the command layer and the binary (ADR
+/// 0070). The `formatting` module is private; this is the public path.
+pub use formatting::escape_terminal_controls;

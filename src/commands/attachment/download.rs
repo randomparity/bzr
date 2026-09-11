@@ -6,6 +6,7 @@ use crate::client::BugzillaClient;
 use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::mutation::ensure_batch_complete;
 use crate::error::{io_with_context, Result};
+use crate::output::escape_terminal_controls;
 use crate::output::resources::attachment::{
     write_attachment_batch, AttachmentBatchResult, AttachmentDownloadResult, BatchSummary,
     BugDownloadResult, DownloadedFile, TargetStatus,
@@ -112,10 +113,16 @@ async fn download_single(
         )
     })?;
     let dest = dest.to_string_lossy().into_owned();
+    // Without `--out` the destination is the server's own `file_name` reduced to a
+    // basename; `safe_basename` rejects traversal but not control characters, so the
+    // name is server-controlled text in a `write_result` table line and is escaped for
+    // display only (ADR 0070). `DownloadResult` keeps the real path: it is the
+    // published `--json` schema and names the file that was actually written.
     write_result(
         &DownloadResult::new(id, dest.as_str(), data.len()),
         &format!(
-            "Downloaded attachment #{id} to {dest} ({} bytes)",
+            "Downloaded attachment #{id} to {} ({} bytes)",
+            escape_terminal_controls(&dest),
             data.len(),
         ),
         format,

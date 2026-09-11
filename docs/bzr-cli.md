@@ -2771,6 +2771,17 @@ Consequences worth knowing:
   sequences, and `U+200B`/`U+FEFF` are invisible but do not reorder.
 - A script matching on a value that contains one of these characters sees the
   escaped spelling. Match against `--json` output instead.
+- The same escaping applies to every message bzr composes from server text and
+  prints outside a table: the per-item error in a batch failure (`Failed to
+  update bug #…: …`, `Failed to create bug (item …): …`, `Failed to upload to
+  bug #…: …`), the `warning: …` lines a partly-applied command prints when a
+  sub-step fails, the tag listings from `comment tag` and `comment search-tags`,
+  the destination in `attachment download`, and the `error: …` line printed at
+  process exit.
+- The `error: …` line is escaped **per line**, so bzr's own multi-line hints —
+  the TLS trust hint, for instance — keep their layout. A server message that
+  contains a newline therefore prints as an extra line; everything else on it is
+  still escaped.
 
 `--json` and `--output ndjson` are unchanged: they are a published schema
 surface, and their encoding stays standard JSON.
