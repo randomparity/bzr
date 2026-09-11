@@ -28,12 +28,21 @@ const ATTACHMENT_LIST_FIELDS: &[&str] = &[
 
 impl XmlRpcClient {
     pub async fn get_attachments(&self, bug_id: u64) -> Result<Vec<Attachment>> {
+        self.get_attachments_fields(bug_id, false).await
+    }
+
+    pub(crate) async fn get_attachments_fields(
+        &self,
+        bug_id: u64,
+        metadata: bool,
+    ) -> Result<Vec<Attachment>> {
         let mut rpc_params = BTreeMap::new();
         let bug_id_value = xmlrpc_id(bug_id, "bug ID")?;
         rpc_params.insert("ids".into(), Value::Array(vec![bug_id_value]));
         let include_fields = ATTACHMENT_LIST_FIELDS
             .iter()
             .copied()
+            .filter(|field| !metadata || *field != "data")
             .map(Value::from)
             .collect();
         rpc_params.insert("include_fields".into(), Value::Array(include_fields));
@@ -42,13 +51,38 @@ impl XmlRpcClient {
         extract_attachments(&result, bug_id)
     }
 
-    pub async fn get_attachment_by_id(&self, attachment_id: u64) -> Result<Attachment> {
+    pub(crate) async fn get_attachment_metadata(&self, attachment_id: u64) -> Result<Attachment> {
         let mut rpc_params = BTreeMap::new();
+        rpc_params.insert(
+            "exclude_fields".into(),
+            Value::Array(vec![Value::from("data")]),
+        );
         let id_value = xmlrpc_id(attachment_id, "attachment ID")?;
         rpc_params.insert("attachment_ids".into(), Value::Array(vec![id_value]));
 
         let result = self.call("Bug.attachments", rpc_params).await?;
         extract_attachment_by_id(&result, attachment_id)
+    }
+    pub(crate) async fn download_attachment(
+        &self,
+        attachment_id: u64,
+    ) -> Result<(Attachment, std::io::Take<std::fs::File>)> {
+        use crate::client::attachment_stream::{extract, Protocol};
+        let params = BTreeMap::from([(
+            "attachment_ids".into(),
+            Value::Array(vec![xmlrpc_id(attachment_id, "attachment ID")?]),
+        )]);
+        let response = self.send_call("Bug.attachments", params, false).await?;
+        let extracted = extract(response, Protocol::Xml).await?;
+        let value = crate::xmlrpc::protocol::parsing::parse_response(&extracted.body)?;
+        let attachment = extract_attachment_by_id(&value, attachment_id)?;
+        if attachment.id != attachment_id {
+            return Err(BzrError::DataIntegrity(
+                "attachment XML key and embedded ID disagree".into(),
+            ));
+        }
+        let stream = extracted.select(attachment.data.as_deref(), attachment_id)?;
+        Ok((attachment, stream))
     }
 }
 

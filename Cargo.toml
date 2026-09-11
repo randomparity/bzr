@@ -39,7 +39,7 @@ keyring = [
 vendored-keyring = ["dbus-secret-service-keyring-store?/vendored"]
 # Exposes test helpers from the library for integration tests.
 # Activated automatically via dev-dependency below.
-test-helpers = ["dep:wiremock", "dep:tempfile"]
+test-helpers = ["dep:wiremock"]
 
 [dependencies]
 base64 = "=0.22.1"
@@ -66,7 +66,7 @@ url = "=2.5.8"
 quick-xml = "=0.42.0"
 # Optional: used only by test-helpers feature
 wiremock = { version = "=0.6.5", optional = true }
-tempfile = { version = "=3.27.0", optional = true }
+tempfile = "=3.27.0"
 keyring-core = { version = "=1.0.0", optional = true }
 rpassword = { version = "=7.5.4", optional = true }
 

@@ -306,7 +306,7 @@ impl BugzillaClient {
         Self::parse_body_to_value(&body, &safe_url)
     }
 
-    fn parse_body_to_value(body: &str, safe_url: &str) -> Result<serde_json::Value> {
+    pub(super) fn parse_body_to_value(body: &str, safe_url: &str) -> Result<serde_json::Value> {
         tracing::trace!(
             url = safe_url,
             body = crate::bugzilla_auth::redact_api_key(crate::http::utf8_prefix(

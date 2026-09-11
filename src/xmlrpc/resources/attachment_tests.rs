@@ -138,7 +138,7 @@ async fn xmlrpc_get_attachments_rejects_bug_id_outside_xmlrpc_integer_range() {
 }
 
 #[tokio::test]
-async fn xmlrpc_get_attachment_by_id_request_body_omits_exclude_fields() {
+async fn xmlrpc_download_request_body_omits_exclude_fields() {
     use wiremock::matchers::body_string_contains;
     let mock = MockServer::start().await;
 
@@ -168,8 +168,10 @@ async fn xmlrpc_get_attachment_by_id_request_body_omits_exclude_fields() {
         .await;
 
     let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
-    let attachment = client.get_attachment_by_id(9).await.unwrap();
-    assert_eq!(attachment.data.as_deref(), Some("YmU="));
+    let (_, mut stream) = client.download_attachment(9).await.unwrap();
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(&mut stream, &mut bytes).unwrap();
+    assert_eq!(bytes, b"be");
 }
 
 #[tokio::test]
@@ -197,7 +199,7 @@ async fn xmlrpc_get_attachment_by_id_parses_response() {
         .await;
 
     let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
-    let attachment = client.get_attachment_by_id(2002).await.unwrap();
+    let attachment = client.get_attachment_metadata(2002).await.unwrap();
     assert_eq!(attachment.id, 2002);
     assert_eq!(attachment.is_private, Some(true));
     assert_eq!(attachment.data.as_deref(), Some("YmVlZg=="));
@@ -208,7 +210,7 @@ async fn xmlrpc_get_attachment_by_id_rejects_id_outside_xmlrpc_integer_range() {
     let client = XmlRpcClient::new(test_http_client(), "http://127.0.0.1:1", None);
 
     let err = client
-        .get_attachment_by_id(u64::try_from(i64::MAX).unwrap() + 1)
+        .get_attachment_metadata(u64::try_from(i64::MAX).unwrap() + 1)
         .await
         .unwrap_err();
 
@@ -231,7 +233,7 @@ async fn xmlrpc_get_attachment_by_id_not_found_returns_error() {
         .await;
 
     let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
-    let err = client.get_attachment_by_id(9999).await.unwrap_err();
+    let err = client.get_attachment_metadata(9999).await.unwrap_err();
     assert!(matches!(
         err,
         BzrError::NotFound {
@@ -260,7 +262,7 @@ async fn xmlrpc_attachment_nonempty_string_data_is_kept() {
         .await;
 
     let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
-    let attachment = client.get_attachment_by_id(7).await.unwrap();
+    let attachment = client.get_attachment_metadata(7).await.unwrap();
     assert_eq!(attachment.data.as_deref(), Some("plain-text-data"));
 }
 
@@ -283,7 +285,7 @@ async fn xmlrpc_attachment_empty_string_data_becomes_none() {
         .await;
 
     let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
-    let attachment = client.get_attachment_by_id(8).await.unwrap();
+    let attachment = client.get_attachment_metadata(8).await.unwrap();
     assert_eq!(attachment.data, None);
 }
 

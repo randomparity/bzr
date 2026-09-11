@@ -1,6 +1,5 @@
 use std::fmt;
 
-use base64::Engine;
 use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
@@ -8,7 +7,6 @@ use crate::client::BugzillaClient;
 use crate::error::{BzrError, Result};
 use crate::types::attachment::{Attachment, UpdateAttachmentParams, UploadAttachmentParams};
 use crate::types::deserialization::u64_from_number_or_string;
-use crate::types::transport::ApiMode;
 
 #[derive(Deserialize)]
 struct AttachmentBugResponse {
@@ -24,7 +22,11 @@ struct FlatAttachmentsResponse {
 
 /// Select an attachment from the by-ID response envelopes returned by
 /// different Bugzilla versions.
-fn select_attachment(value: &serde_json::Value, attachment_id: u64) -> Result<Attachment> {
+fn select_attachment(
+    value: &serde_json::Value,
+    attachment_id: u64,
+    strict: bool,
+) -> Result<Attachment> {
     let attachments = value.get("attachments").ok_or_else(|| {
         BzrError::Deserialize("attachment by-ID response: missing `attachments` member".into())
     })?;
@@ -62,6 +64,11 @@ fn select_attachment(value: &serde_json::Value, attachment_id: u64) -> Result<At
                 .map_err(|error| {
                     BzrError::Deserialize(format!("attachment by-ID `attachments` array: {error}"))
                 })?;
+            if strict && attachments.iter().filter(|a| a.id == attachment_id).count() > 1 {
+                return Err(BzrError::DataIntegrity(
+                    "duplicate requested attachment".into(),
+                ));
+            }
             attachments
                 .into_iter()
                 .find(|attachment| attachment.id == attachment_id)
@@ -177,55 +184,40 @@ impl BugzillaClient {
         )
     }
 
-    /// Like `get_attachments`, dispatches on `api_mode`. Unlike the
-    /// list read, `GET /rest/bug/attachment/<id>` answers `401` rather
-    /// than a filtered `200` when the request is unauthenticated, so
-    /// the transport's auth-method fallback already recovers a private
-    /// attachment from a server that ignores the configured auth
-    /// method (issues #133, #714).
-    ///
-    /// No functional phase exercises that: the harness pins
-    /// `query_param` auth, so no `401` occurs there and the fallback
-    /// never fires. The fallback itself is pinned at the transport
-    /// level by `auth_fallback_header_to_query_param_on_401` and
-    /// `auth_fallback_query_param_to_header_on_401`
-    /// (`src/client/transport_tests.rs`), which assert the recovered
-    /// payload in both directions; ADR-0059 supplies the end-to-end
-    /// measurement against a live server.
-    pub async fn get_attachment(&self, attachment_id: u64) -> Result<Attachment> {
-        self.dispatch_xmlrpc_first(
-            &format!("attachment fetch (id {attachment_id})"),
-            || self.get_attachment_rest(attachment_id),
-            || async {
-                self.xmlrpc_client()
-                    .get_attachment_by_id(attachment_id)
-                    .await
-            },
-        )
-        .await
-    }
-
-    async fn get_attachment_rest(&self, attachment_id: u64) -> Result<Attachment> {
-        let value = self
-            .get_json_value(&format!("bug/attachment/{attachment_id}"))
-            .await?;
-        select_attachment(&value, attachment_id)
-    }
-
-    /// Fetch a single attachment's metadata without its (base64) bytes.
-    ///
-    /// On REST the `data` field is excluded server-side via `exclude_fields`
-    /// so the bytes never cross the wire. XML-RPC has no cheap field
-    /// exclusion, so the full record is fetched. Either way the bytes are
-    /// dropped locally before returning, so the metadata-only guarantee holds
-    /// even if a server ignores `exclude_fields`.
+    /// Fetch attachment metadata without requesting base64 payloads.
     pub async fn get_attachment_metadata(&self, attachment_id: u64) -> Result<Attachment> {
-        let mut attachment = match self.api_mode {
-            ApiMode::Rest => self.get_attachment_metadata_rest(attachment_id).await?,
-            ApiMode::XmlRpc | ApiMode::Hybrid => self.get_attachment(attachment_id).await?,
-        };
+        let mut attachment = self
+            .dispatch_xmlrpc_first(
+                "attachment metadata",
+                || self.get_attachment_metadata_rest(attachment_id),
+                || async {
+                    self.xmlrpc_client()
+                        .get_attachment_metadata(attachment_id)
+                        .await
+                },
+            )
+            .await?;
         attachment.data = None;
         Ok(attachment)
+    }
+
+    /// List metadata for downloads without fetching any attachment payloads.
+    pub async fn get_attachments_metadata(&self, bug_id: u64) -> Result<Vec<Attachment>> {
+        let mut attachments = self
+            .dispatch_xmlrpc_first(
+                "attachment list metadata",
+                || self.get_attachments_rest(bug_id),
+                || async {
+                    self.xmlrpc_client()
+                        .get_attachments_fields(bug_id, true)
+                        .await
+                },
+            )
+            .await?;
+        for attachment in &mut attachments {
+            attachment.data = None;
+        }
+        Ok(attachments)
     }
 
     async fn get_attachment_metadata_rest(&self, attachment_id: u64) -> Result<Attachment> {
@@ -235,21 +227,48 @@ impl BugzillaClient {
                 &[("exclude_fields", "data")],
             )
             .await?;
-        select_attachment(&value, attachment_id)
+        select_attachment(&value, attachment_id, false)
     }
 
-    pub async fn download_attachment(&self, attachment_id: u64) -> Result<(String, Vec<u8>)> {
-        let attachment = self.get_attachment(attachment_id).await?;
-        let file_name = attachment.file_name.ok_or_else(|| {
+    /// Download into private temporary storage, validate the response, and return
+    /// a reader limited to the requested attachment. Closing it releases storage.
+    pub async fn download_attachment(
+        &self,
+        attachment_id: u64,
+    ) -> Result<(String, std::io::Take<std::fs::File>)> {
+        let (attachment, stream) = self
+            .dispatch_xmlrpc_first(
+                "attachment download",
+                || self.download_attachment_rest(attachment_id),
+                || async {
+                    self.xmlrpc_client()
+                        .download_attachment(attachment_id)
+                        .await
+                },
+            )
+            .await?;
+        let filename = attachment.file_name.ok_or_else(|| {
             BzrError::DataIntegrity(format!("attachment #{attachment_id} has no file_name"))
         })?;
-        let data = attachment
-            .data
-            .ok_or_else(|| BzrError::DataIntegrity("attachment has no data".into()))?;
-        let bytes = base64::engine::general_purpose::STANDARD
-            .decode(&data)
-            .map_err(|e| BzrError::DataIntegrity(format!("failed to decode attachment: {e}")))?;
-        Ok((file_name, bytes))
+        Ok((filename, stream))
+    }
+
+    async fn download_attachment_rest(
+        &self,
+        attachment_id: u64,
+    ) -> Result<(Attachment, std::io::Take<std::fs::File>)> {
+        use crate::client::attachment_stream::{extract, Protocol};
+        let request = self.apply_auth(
+            self.http
+                .get(self.url(&format!("bug/attachment/{attachment_id}"))),
+        );
+        let response = self.send(request).await?;
+        let safe_url = Self::safe_url(response.url());
+        let extracted = extract(response, Protocol::Json).await?;
+        let value = Self::parse_body_to_value(&extracted.body, &safe_url)?;
+        let attachment = select_attachment(&value, attachment_id, true)?;
+        let stream = extracted.select(attachment.data.as_deref(), attachment_id)?;
+        Ok((attachment, stream))
     }
 
     pub async fn upload_attachment(&self, params: &UploadAttachmentParams) -> Result<u64> {

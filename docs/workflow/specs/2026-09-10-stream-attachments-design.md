@@ -13,9 +13,9 @@ records the transport and staging decision.
 
 Retain REST/Hybrid/XML-RPC dispatch, authentication, TLS, retries, and existing error
 classification. A payload reader consumes `Response::chunk()` and incrementally decodes
-only the requested attachment's base64 data into a private temporary file. It retains a
-bounded copy of the structured envelope with each payload replaced by a bounded index sentinel. Store decoded candidates as
-sequential ranges in one temporary file; after envelope parsing, select the range
+attachment base64 data into a private temporary file. It retains a bounded copy of
+the structured envelope with each payload replaced by a bounded index sentinel. Store
+decoded candidates as sequential ranges in one temporary file; after envelope parsing, select the range
 associated with the requested record, including flat-array data-before-id ordering.
 The streaming path checks the selected embedded ID and complete outer XML framing;
 existing parsers supply mapping and API error classification. Nonmatching records are
