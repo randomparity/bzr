@@ -3,6 +3,7 @@ use crate::client::BugzillaClient;
 use crate::commands::runtime::input::flags::parse_flags;
 use crate::commands::runtime::invocation::CommandContext;
 use crate::error::Result;
+use crate::output::escape_terminal_controls;
 use crate::output::result_types::{write_result, ActionResult, DryRunResult, ResourceKind};
 use crate::output::writers::Writers;
 use crate::types::bug::CreateBugParams;
@@ -110,8 +111,9 @@ pub(super) async fn handle(
             let _ = writeln!(
                 w.err,
                 "warning: created bug #{new_id} but failed to add the \
-                 \"Cloned from bug #{}\" comment: {e}",
-                source.id
+                 \"Cloned from bug #{}\" comment: {}",
+                source.id,
+                escape_terminal_controls(&e.to_string())
             );
             comment_failed = true;
         }

@@ -1,5 +1,6 @@
 use crate::commands::runtime::invocation::CommandContext;
 use crate::error::{BzrError, Result};
+use crate::output::escape_terminal_controls;
 use crate::output::resources::comment::{write_comment_bug_header, write_comments};
 use crate::output::writers::Writers;
 use crate::types::comment::Comment;
@@ -60,7 +61,11 @@ pub(super) async fn handle(
             Ok(comments) => comments,
             Err(e) if permissive && e.is_permissive_bug_view_error() => {
                 skipped += 1;
-                let _ = writeln!(w.err, "bug {bug_id}: {e}");
+                let _ = writeln!(
+                    w.err,
+                    "bug {bug_id}: {}",
+                    escape_terminal_controls(&e.to_string())
+                );
                 continue;
             }
             Err(e) => return Err(e),

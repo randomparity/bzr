@@ -9,6 +9,7 @@ use crate::commands::runtime::interaction::confirm::confirm_batch;
 use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::mutation::ensure_batch_complete;
 use crate::error::Result;
+use crate::output::escape_terminal_controls;
 use crate::output::result_types::{
     write_result, BatchUploadResult, UploadFailure, UploadResult, UploadTarget,
 };
@@ -160,21 +161,25 @@ fn write_batch_upload(result: &BatchUploadResult, format: OutputFormat, w: &mut 
                     t.attachment_id, t.bug_id, result.size,
                 );
             }
+            // Each per-item `f.error` is a `BzrError` display whose `Api`/`HttpStatus`
+            // variants embed server-supplied text, printed straight to stderr from the
+            // command layer — the same bypass as the `bug update`/`bug create` batch
+            // lines, so it escapes its own interpolation (ADR 0070).
             for f in &result.failed {
+                let error = escape_terminal_controls(&f.error);
                 match f.step.as_deref() {
                     Some("comment_private") => {
                         let _ = writeln!(
                             w.err,
-                            "Uploaded to bug #{} but could not make the comment private: {}",
-                            f.bug_id, f.error,
+                            "Uploaded to bug #{} but could not make the comment private: {error}",
+                            f.bug_id,
                         );
                     }
                     Some("not_attempted") => {
-                        let _ = writeln!(w.err, "Not attempted for bug #{}: {}", f.bug_id, f.error);
+                        let _ = writeln!(w.err, "Not attempted for bug #{}: {error}", f.bug_id);
                     }
                     _ => {
-                        let _ =
-                            writeln!(w.err, "Failed to upload to bug #{}: {}", f.bug_id, f.error);
+                        let _ = writeln!(w.err, "Failed to upload to bug #{}: {error}", f.bug_id);
                     }
                 }
             }
@@ -302,7 +307,8 @@ async fn flip_new_comment_private_quiet(
 fn warn_partial(att_id: u64, err: &crate::error::BzrError, w: &mut Writers<'_>) {
     let _ = writeln!(
         w.err,
-        "warning: attachment #{att_id} uploaded but comment privacy flip failed: {err}",
+        "warning: attachment #{att_id} uploaded but comment privacy flip failed: {}",
+        escape_terminal_controls(&err.to_string()),
     );
     let _ = writeln!(
         w.err,
