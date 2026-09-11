@@ -157,13 +157,7 @@ async fn attachment_stream_rejects_truncated_or_malformed_framing() {
 
 #[tokio::test]
 async fn attachment_stream_ignores_fake_markup_and_decodes_empty_data() {
-    for input in [
-        xml(""),
-        xml("  "),
-        xml("<base64/>"),
-        xml("<string/>"),
-        xml("").replace("<value></value>", "<value/>"),
-    ] {
+    for input in [xml("<base64/>"), xml("<string/>")] {
         let input = input.replace("<params>", "<!-- <base64>AAAA</base64> --><params>");
         let extracted = read(input.as_bytes(), Protocol::Xml, 1, 1024)
             .await
@@ -177,7 +171,7 @@ async fn attachment_stream_ignores_fake_markup_and_decodes_empty_data() {
 async fn attachment_stream_rejects_duplicate_xml_members() {
     let input = xml("<base64>QQ==</base64>").replace(
         "</struct>",
-        "<member><name>data</name><value><base64>Qg==</base64></value></member></struct>",
+        "<member><name> data </name><value><base64>Qg==</base64></value></member></struct>",
     );
     assert!(read(input.as_bytes(), Protocol::Xml, 1, 1024)
         .await

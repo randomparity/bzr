@@ -72,7 +72,7 @@ impl Reader {
                 }
                 Event::End(tag) => {
                     let name: String = tag.name().as_ref().to_owned();
-                    state.end(&name, &self.body[..self.body.len() - token.len()])?;
+                    state.end(&name, &self.body)?;
                 }
                 Event::Empty(tag) => {
                     if state.stack.is_empty() {
@@ -268,24 +268,6 @@ impl XmlState {
 
 fn xml_text(fragment: &[u8]) -> Result<String> {
     let mut parser = quick_xml::Reader::from_reader(fragment);
-    let mut result = String::new();
-    loop {
-        match parser
-            .read_event()
-            .map_err(|_| invalid("invalid XML member name"))?
-        {
-            Event::Text(text) => result.push_str(text.as_ref()),
-            Event::CData(text) => result.push_str(text.as_ref()),
-            Event::GeneralRef(reference) => {
-                let entity = format!("&{};", reference.as_ref());
-                result.push_str(
-                    &quick_xml::escape::unescape(&entity)
-                        .map_err(|_| invalid("invalid XML name entity"))?,
-                );
-            }
-            Event::Comment(_) => {}
-            Event::Eof => return Ok(result),
-            _ => return Err(invalid("unexpected markup in XML member name")),
-        }
-    }
+    parser.config_mut().allow_unmatched_ends = true;
+    crate::xmlrpc::protocol::parsing::read_text_content(&mut parser, "name", None)
 }

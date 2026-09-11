@@ -304,3 +304,59 @@ async fn xmlrpc_get_attachments_returns_empty_when_bug_has_none() {
     let attachments = client.get_attachments(42).await.unwrap();
     assert!(attachments.is_empty());
 }
+
+#[tokio::test]
+async fn xmlrpc_download_canonical_member_names_cannot_select_another_payload() {
+    for name in [" data ", "da<!-- gap --> ta", "da<![CDATA[ta]]>"] {
+        let mock = MockServer::start().await;
+        let response = xmlrpc_attachments_keyed_envelope(&format!(
+            "<member><name>755</name><value><struct>\
+             <member><name>id</name><value><int>755</int></value></member>\
+             <member><name>data</name><value><base64>QQ==</base64></value></member>\
+             </struct></value></member>\
+             <member><name>756</name><value><struct>\
+             <member><name>id</name><value><int>756</int></value></member>\
+             <member><name>file_name</name><value><string>wanted.bin</string></value></member>\
+             <member><name>{name}</name><value><string>YnpyLXBheWxvYWQtMA==</string></value></member>\
+             </struct></value></member>"
+        ));
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(response))
+            .mount(&mock)
+            .await;
+        let client = XmlRpcClient::new(test_http_client(), &mock.uri(), None);
+        let (_, mut stream) = client.download_attachment(756).await.unwrap();
+        let mut bytes = Vec::new();
+        std::io::Read::read_to_end(&mut stream, &mut bytes).unwrap();
+        assert_eq!(bytes, b"bzr-payload-0", "member name {name}");
+    }
+}
+
+#[tokio::test]
+async fn xmlrpc_download_empty_payloads_follow_production_mapping() {
+    for payload in ["<base64/>", "<base64></base64>", "<string/>", "", "  "] {
+        let mock = MockServer::start().await;
+        let response = xmlrpc_attachments_keyed_envelope(&format!(
+            "<member><name>756</name><value><struct>\
+             <member><name>id</name><value><int>756</int></value></member>\
+             <member><name>data</name><value>{payload}</value></member>\
+             </struct></value></member>"
+        ));
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(response))
+            .mount(&mock)
+            .await;
+        let client = XmlRpcClient::new(test_http_client(), &mock.uri(), None);
+        let result = client.download_attachment(756).await;
+        if payload.trim().is_empty() {
+            assert!(matches!(result, Err(BzrError::DataIntegrity(_))));
+        } else {
+            let (_, mut stream) = result.unwrap();
+            let mut bytes = Vec::new();
+            std::io::Read::read_to_end(&mut stream, &mut bytes).unwrap();
+            assert!(bytes.is_empty(), "payload {payload}");
+        }
+    }
+}

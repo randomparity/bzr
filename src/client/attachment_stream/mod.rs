@@ -29,10 +29,6 @@ pub(crate) struct Extracted {
 
 impl Extracted {
     pub(crate) fn select(mut self, marker: Option<&str>, attachment_id: u64) -> Result<Take<File>> {
-        // XML-RPC also represents a zero-byte payload as an empty untyped value.
-        if marker == Some("") {
-            return Ok(self.file.take(0));
-        }
         let index = marker
             .and_then(|s| base64::engine::general_purpose::STANDARD.decode(s).ok())
             .and_then(|v| String::from_utf8(v).ok())
