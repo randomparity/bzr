@@ -110,7 +110,11 @@ impl Reader {
             let byte = self.required(retain).await?;
             token.push(byte);
             if token.len() as u64 > self.limit {
-                return Err(invalid("attachment XML markup exceeds metadata limit"));
+                return Err(crate::error::BzrError::ResponseTooLarge {
+                    operation: "attachment response metadata".into(),
+                    limit_bytes: self.limit,
+                    status: None,
+                });
             }
             if token == b"<![CDATA[" {
                 return Ok(token);

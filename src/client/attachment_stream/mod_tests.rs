@@ -187,3 +187,21 @@ async fn attachment_stream_rejects_xml_value_before_member_name() {
         .await
         .is_err());
 }
+
+#[tokio::test]
+async fn attachment_stream_xml_markup_limit_keeps_size_error() {
+    let mock = wiremock::MockServer::start().await;
+    let input = xml(&format!("<base64><!--{}-->QQ==</base64>", "a".repeat(512)));
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_string(input))
+        .mount(&mock)
+        .await;
+    let response = reqwest::get(mock.uri()).await.unwrap();
+    assert!(matches!(
+        super::extract_with_limit(response, Protocol::Xml, 256).await,
+        Err(crate::error::BzrError::ResponseTooLarge {
+            limit_bytes: 256,
+            ..
+        })
+    ));
+}
