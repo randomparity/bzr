@@ -244,6 +244,7 @@ fn rest_attachment_by_id_value(id: u64, name: &str) -> serde_json::Value {
         "creation_time": "2026-01-01T00:00:00Z",
         "last_change_time": "2026-01-01T00:00:00Z",
         "size": 1,
+        "data": "QQ==",
         "is_obsolete": false,
         "is_private": false
     })
@@ -274,9 +275,11 @@ async fn rest_attachment_by_id_selects_requested_id_from_keyed_and_flat_envelope
         assert_eq!(attachment.id, 200);
         assert_eq!(attachment.file_name.as_deref(), Some("requested.txt"));
 
-        let metadata = client.get_attachment_metadata(200).await.unwrap();
-        assert_eq!(metadata.id, 200);
-        assert_eq!(metadata.file_name.as_deref(), Some("requested.txt"));
+        let (filename, mut stream) = client.download_attachment(200).await.unwrap();
+        assert_eq!(filename, "requested.txt");
+        let mut bytes = Vec::new();
+        std::io::Read::read_to_end(&mut stream, &mut bytes).unwrap();
+        assert_eq!(bytes, b"A");
     }
 }
 
@@ -302,8 +305,8 @@ async fn rest_attachment_by_id_returns_not_found_for_known_missing_envelopes() {
 
         let client = test_client(&mock.uri());
         for result in [
-            client.get_attachment_metadata(200).await,
-            client.get_attachment_metadata(200).await,
+            client.get_attachment_metadata(200).await.map(|_| ()),
+            client.download_attachment(200).await.map(|_| ()),
         ] {
             assert!(
                 matches!(result, Err(BzrError::NotFound { .. })),
@@ -334,8 +337,8 @@ async fn rest_attachment_by_id_rejects_malformed_keyed_sibling_before_selection(
 
         let client = test_client(&mock.uri());
         for result in [
-            client.get_attachment_metadata(200).await,
-            client.get_attachment_metadata(200).await,
+            client.get_attachment_metadata(200).await.map(|_| ()),
+            client.download_attachment(200).await.map(|_| ()),
         ] {
             assert!(
                 matches!(result, Err(BzrError::Deserialize(_))),
@@ -361,8 +364,8 @@ async fn rest_attachment_by_id_rejects_missing_or_scalar_envelope() {
 
         let client = test_client(&mock.uri());
         for result in [
-            client.get_attachment_metadata(200).await,
-            client.get_attachment_metadata(200).await,
+            client.get_attachment_metadata(200).await.map(|_| ()),
+            client.download_attachment(200).await.map(|_| ()),
         ] {
             assert!(
                 matches!(result, Err(BzrError::Deserialize(_))),
@@ -387,8 +390,8 @@ async fn rest_attachment_by_id_rejects_key_with_mismatched_embedded_id() {
 
     let client = test_client(&mock.uri());
     for result in [
-        client.get_attachment_metadata(200).await,
-        client.get_attachment_metadata(200).await,
+        client.get_attachment_metadata(200).await.map(|_| ()),
+        client.download_attachment(200).await.map(|_| ()),
     ] {
         assert!(
             matches!(result, Err(BzrError::Deserialize(_))),
