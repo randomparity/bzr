@@ -205,3 +205,30 @@ async fn attachment_stream_xml_markup_limit_keeps_size_error() {
         })
     ));
 }
+
+#[tokio::test]
+async fn attachment_stream_rejects_xml_mapper_flattening_and_overwrites() {
+    let valid = xml("<base64>QQ==</base64>");
+    for input in [
+        valid
+            .replace("<member>", "<member><member>")
+            .replace("</member>", "</member></member>"),
+        valid
+            .replace("<member>", "<array><data><member>")
+            .replace("</member>", "</member></data></array>"),
+        valid.replace("<name>data</name>", "<name><string>data</string></name>"),
+        valid.replace(
+            "</value></member>",
+            "</value><value><base64>Qg==</base64></value></member>",
+        ),
+        xml("<base64>QQ==</base64><string>Qg==</string>"),
+        xml("<base64>QQ==</base64>Qg=="),
+    ] {
+        assert!(
+            read(input.as_bytes(), Protocol::Xml, 1, 2048)
+                .await
+                .is_err(),
+            "{input}"
+        );
+    }
+}

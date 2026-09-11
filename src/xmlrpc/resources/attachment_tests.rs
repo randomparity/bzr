@@ -360,3 +360,29 @@ async fn xmlrpc_download_empty_payloads_follow_production_mapping() {
         }
     }
 }
+
+#[tokio::test]
+async fn xmlrpc_download_rejects_nested_struct_duplicate_records() {
+    let record = |data| {
+        format!(
+            "<member><name>756</name><value><struct>\
+         <member><name>id</name><value><int>756</int></value></member>\
+         <member><name>file_name</name><value><string>x.bin</string></value></member>\
+         <member><name>data</name><value><base64>{data}</base64></value></member>\
+         </struct></value></member>"
+        )
+    };
+    let mock = MockServer::start().await;
+    let response = xmlrpc_attachments_keyed_envelope(&format!(
+        "{}<struct>{}</struct>",
+        record("QQ=="),
+        record("Qg==")
+    ));
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(response))
+        .mount(&mock)
+        .await;
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), None);
+    assert!(client.download_attachment(756).await.is_err());
+}

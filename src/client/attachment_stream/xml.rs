@@ -9,26 +9,26 @@ impl Reader {
         let mut state = XmlState::default();
         while let Some(byte) = self.peek().await? {
             if byte != b'<' {
+                if !byte.is_ascii_whitespace() {
+                    state.validate_text()?;
+                }
                 if state.in_data_value() && !byte.is_ascii_whitespace() {
                     self.xml_payload("value", false).await?;
                     state.stack.pop();
+                    state.last_children.pop();
                     continue;
-                }
-                if state.stack.is_empty() && !byte.is_ascii_whitespace() {
-                    return Err(invalid("content before attachment XML root"));
                 }
                 self.take().await?;
                 continue;
             }
             let token = self.xml_markup(true).await?;
             if token == b"<![CDATA[" {
-                if state.stack.is_empty() {
-                    return Err(invalid("CDATA outside attachment XML root"));
-                }
+                state.validate_text()?;
                 if state.in_data_value() {
                     self.body.truncate(self.body.len() - token.len());
                     self.xml_payload("value", true).await?;
                     state.stack.pop();
+                    state.last_children.pop();
                 } else {
                     self.xml_cdata(None).await?;
                 }
@@ -43,6 +43,7 @@ impl Reader {
             match event {
                 Event::Start(tag) => {
                     let name: String = tag.name().as_ref().to_owned();
+                    state.validate_child(&name)?;
                     if state.stack.is_empty() {
                         if state.root_seen || name != "methodResponse" {
                             return Err(invalid("invalid XML-RPC root"));
@@ -56,9 +57,6 @@ impl Reader {
                         self.xml_payload(&name, false).await?;
                         continue;
                     }
-                    if name == "value" && state.members.last() == Some(&None) {
-                        return Err(invalid("XML-RPC member value precedes its name"));
-                    }
                     if name == "struct" {
                         state.struct_keys.push(std::collections::HashSet::new());
                     }
@@ -68,7 +66,8 @@ impl Reader {
                     if name == "name" {
                         state.name_start = Some(self.body.len());
                     }
-                    state.stack.push(name.clone());
+                    state.stack.push(name);
+                    state.last_children.push(None);
                 }
                 Event::End(tag) => {
                     let name: String = tag.name().as_ref().to_owned();
@@ -79,6 +78,7 @@ impl Reader {
                         return Err(invalid("empty element outside attachment XML root"));
                     }
                     let name = tag.name().as_ref().to_owned();
+                    state.validate_child(&name)?;
                     if state.members.last() == Some(&Some(true))
                         && ((state.stack.last().is_some_and(|s| s == "value")
                             && matches!(name.as_str(), "base64" | "string"))
@@ -226,6 +226,7 @@ impl Reader {
 #[derive(Default)]
 struct XmlState {
     stack: Vec<String>,
+    last_children: Vec<Option<String>>,
     // None until the member name is validated, then whether it names payload data.
     members: Vec<Option<bool>>,
     struct_keys: Vec<std::collections::HashSet<String>>,
@@ -234,11 +235,77 @@ struct XmlState {
 }
 
 impl XmlState {
+    // The mapping parser skips wrappers, so enforce its intended scopes before mapping.
+    fn validate_child(&mut self, name: &str) -> Result<()> {
+        let Some(parent) = self.stack.last().map(String::as_str) else {
+            return Ok(());
+        };
+        let valid = match parent {
+            "methodResponse" => matches!(name, "params" | "fault"),
+            "params" => name == "param",
+            "param" | "fault" | "member" if name == "value" => true,
+            "member" => name == "name",
+            "value" => matches!(
+                name,
+                "string"
+                    | "int"
+                    | "i4"
+                    | "boolean"
+                    | "double"
+                    | "dateTime.iso8601"
+                    | "base64"
+                    | "array"
+                    | "struct"
+            ),
+            "struct" => name == "member",
+            "array" => name == "data",
+            "data" => name == "value",
+            _ => false,
+        };
+        if !valid {
+            return Err(invalid("invalid XML-RPC element placement"));
+        }
+        if matches!(parent, "struct" | "data") {
+            return Ok(());
+        }
+        if let Some(previous) = self.last_children.last_mut() {
+            let follows_name =
+                parent == "member" && name == "value" && previous.as_deref() == Some("name");
+            if (previous.is_some() || (parent == "member" && name == "value")) && !follows_name {
+                return Err(invalid("duplicate or out-of-order XML-RPC child"));
+            }
+            *previous = Some(name.to_owned());
+        }
+        Ok(())
+    }
+
+    fn validate_text(&mut self) -> Result<()> {
+        match self.stack.last().map(String::as_str) {
+            Some("value") => {
+                if let Some(child) = self.last_children.last_mut() {
+                    if child.as_deref().is_some_and(|name| name != "#text") {
+                        return Err(invalid("mixed XML-RPC value content"));
+                    }
+                    if child.is_none() {
+                        *child = Some("#text".into());
+                    }
+                }
+            }
+            Some(
+                "name" | "string" | "int" | "i4" | "boolean" | "double" | "dateTime.iso8601"
+                | "base64",
+            ) => {}
+            _ => return Err(invalid("text outside XML-RPC scalar value")),
+        }
+        Ok(())
+    }
+
     fn in_data_value(&self) -> bool {
         self.members.last() == Some(&Some(true)) && self.stack.last().is_some_and(|s| s == "value")
     }
 
     fn end(&mut self, name: &str, body: &[u8]) -> Result<()> {
+        self.last_children.pop();
         if self.stack.pop().as_deref() != Some(name) {
             return Err(invalid("mismatched attachment XML tag"));
         }
@@ -254,9 +321,6 @@ impl XmlState {
                 }
             }
             if let Some(member) = self.members.last_mut() {
-                if member.is_some() {
-                    return Err(invalid("duplicate XML-RPC member name"));
-                }
                 *member = Some(field == "data");
             }
         }
