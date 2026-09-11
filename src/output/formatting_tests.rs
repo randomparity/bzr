@@ -213,30 +213,63 @@ fn write_records_or_empty_populated_table_remains_unbounded_by_default() {
 
 // ── escape_terminal_controls ─────────────────────────────────────
 
-/// Pins the exclusion ADR 0065 records rather than a behaviour it adds: the
-/// JSON family is a published schema surface, so the escaping must not migrate
-/// into it. `serde_json` escapes only `"`, `\`, and code points below `0x20`,
-/// which is why the bidi override survives there and the ESC does not.
 #[test]
-fn json_family_output_is_not_escaped_for_bidi() {
-    let value = serde_json::json!({ "summary": "ev\u{1b}[2Jil\u{202e}" });
+fn json_family_bidi_preserves_keys_and_values() {
+    let controls = concat!(
+        "\u{202a}\u{202b}\u{202c}\u{202d}\u{202e}",
+        "\u{2066}\u{2067}\u{2068}\u{2069}\u{200e}\u{200f}\u{61c}",
+    );
+    let ordinary = "é العربية \u{200b}\u{200c}\u{200d}\u{feff} 👩‍💻";
+    for control in controls.chars() {
+        let key = format!("key{control}");
+        let text = format!("{ordinary}\\u202e\\u{{202e}}\\{control}\n\t\"\u{1b}");
+        let value = serde_json::json!({key: {"nested": [text]}});
+        for format in [OutputFormat::Json, OutputFormat::Ndjson] {
+            let mut out = Vec::new();
+            write_json_family(&value, format, &mut out);
+            let rendered = String::from_utf8(out).unwrap();
+            assert!(!rendered.contains(control), "raw bidi in {format:?}");
+            assert!(rendered.contains(&format!("\\u{:04x}", u32::from(control))));
+            assert!(rendered.contains(ordinary));
+            let decoded: serde_json::Value = serde_json::from_str(&rendered).unwrap();
+            if format == OutputFormat::Json {
+                assert_eq!(decoded["schema_version"], crate::output::SCHEMA_VERSION);
+                assert_eq!(decoded["data"], value);
+            } else {
+                assert_eq!(decoded, value);
+                assert_eq!(rendered.lines().count(), 1);
+            }
+        }
+    }
+}
 
-    let mut json = Vec::new();
-    write_json(&value, &mut json);
-    let mut ndjson = Vec::new();
-    write_ndjson(&value, &mut ndjson);
+#[test]
+fn json_family_bidi_preserves_ndjson_records() {
+    let records = serde_json::json!(["\u{202e}", {"\u{61c}": ["\u{2069}"]}, null, 1, true]);
+    let mut out = Vec::new();
+    write_ndjson(&records, &mut out);
+    let rendered = String::from_utf8(out).unwrap();
+    assert!(!rendered.contains(['\u{202e}', '\u{61c}', '\u{2069}']));
+    let decoded: Vec<serde_json::Value> = rendered
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(serde_json::Value::Array(decoded), records);
 
-    for (rendered, what) in [(json, "write_json"), (ndjson, "write_ndjson")] {
-        let rendered = String::from_utf8(rendered).unwrap();
-        assert!(
-            rendered.contains('\u{202e}'),
-            "{what} must leave the bidi override to the JSON contract: {rendered:?}"
-        );
-        assert!(
-            !rendered.contains("\\u{202e}"),
-            "{what} must not carry bzr's non-JSON escape spelling: {rendered:?}"
+    for value in [serde_json::json!("\u{202e}"), serde_json::Value::Null] {
+        let mut out = Vec::new();
+        write_ndjson(&value, &mut out);
+        let rendered = String::from_utf8(out).unwrap();
+        assert_eq!(rendered.lines().count(), 1);
+        assert!(!rendered.contains('\u{202e}'));
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&rendered).unwrap(),
+            value
         );
     }
+    let mut out = Vec::new();
+    write_ndjson(&serde_json::json!([]), &mut out);
+    assert!(out.is_empty());
 }
 
 #[test]

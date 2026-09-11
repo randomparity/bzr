@@ -2786,8 +2786,12 @@ Consequences worth knowing:
   contains a newline therefore prints as an extra line; everything else on it is
   still escaped.
 
-`--json` and `--output ndjson` are unchanged: they are a published schema
-surface, and their encoding stays standard JSON.
+`--json` and `--output ndjson` success and structured-error output escape the
+same twelve bidi controls using standard JSON spellings such as `\u202e` (without
+braces). Decoding restores the original keys and values; envelopes, record shapes,
+and `schema_version` are unchanged. Other Unicode, including non-bidi `Cf`, stays
+unchanged. A consumer displaying decoded strings (for example, `jq -r`) must apply
+its own presentation escaping: the protection applies to bzr's raw JSON text.
 
 ### Auto-detection
 

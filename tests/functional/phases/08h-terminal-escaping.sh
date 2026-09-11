@@ -12,8 +12,8 @@
 # that sanitises input reports a named skip rather than a vacuous pass or a
 # failure for behaviour bzr does not control.
 #
-# The fourth case pins the exclusion this change deliberately does not close:
-# `--json` is a published schema surface, so the bidi override stays raw there.
+# JSON-family output uses standard Unicode escapes (ADR 0072, issue #757).
+# Inspect BZR_STDOUT_RAW: the harness's jq projection decodes the escapes again.
 
 # ══════════════════════════════════════════════════════════════════════
 # Phase 8h: Terminal-control escaping
@@ -54,16 +54,36 @@ else
     fi
 fi
 
-test_begin "escape-json-passthrough" "--json leaves the bidi override to the JSON contract"
+test_begin "escape-json-family-bidi" "JSON and NDJSON escape bidi and preserve decoded values"
 if [[ -z "$TE_BIDI_BUG" ]]; then
     test_fail "no fixture bug: the bidi summary create above returned no bug ID"
 elif [[ $TE_BIDI_STORED -eq 0 ]]; then
     test_skip "the server normalised the bidi override out of the summary"
 else
-    run_bzr bug view "$TE_BIDI_BUG"
-    if assert_success && assert_stdout_contains "$PAYLOAD_RLO"; then
-        test_pass
-    fi
+    TE_JSON_OK=1
+    for TE_FORMAT in json ndjson; do
+        for TE_SERVER in default public; do
+            if [[ "$TE_SERVER" == public ]]; then
+                run_bzr_raw --output "$TE_FORMAT" --server public bug view "$TE_BIDI_BUG"
+            else
+                run_bzr_raw --output "$TE_FORMAT" bug view "$TE_BIDI_BUG"
+            fi
+            if ! assert_success; then
+                TE_JSON_OK=0
+            elif grep -Fq -- "$PAYLOAD_RLO" "$BZR_STDOUT_RAW"; then
+                test_fail "$TE_FORMAT/$TE_SERVER emitted raw bidi"
+                TE_JSON_OK=0
+            elif ! grep -Fq -- '\u202e' "$BZR_STDOUT_RAW"; then
+                test_fail "$TE_FORMAT/$TE_SERVER omitted the standard bidi escape"
+                TE_JSON_OK=0
+            elif ! jq -e --arg expected "escape probe ${PAYLOAD_RLO} tail" \
+                '(.data // .).summary == $expected' "$BZR_STDOUT_RAW"; then
+                test_fail "$TE_FORMAT/$TE_SERVER changed the decoded summary"
+                TE_JSON_OK=0
+            fi
+        done
+    done
+    if [[ $TE_JSON_OK -eq 1 ]]; then test_pass; fi
 fi
 
 test_begin "escape-summary-esc" "bug view escapes a raw ESC in the summary"
@@ -124,6 +144,6 @@ else
     fi
 fi
 
-unset TE_BIDI_BUG TE_BIDI_STORED TE_ESC_BUG TE_BODY_ESC
+unset TE_BIDI_BUG TE_BIDI_STORED TE_ESC_BUG TE_BODY_ESC TE_JSON_OK TE_FORMAT TE_SERVER
 unset PAYLOAD_RLO PAYLOAD_ESC PATTERN_ESC
 unset _TE_ARGS

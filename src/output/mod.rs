@@ -18,3 +18,6 @@ pub mod writers;
 /// Terminal-control escaping, re-exported for the command layer and the binary (ADR
 /// 0070). The `formatting` module is private; this is the public path.
 pub use formatting::escape_terminal_controls;
+
+/// Standard bidi escaping for serialized JSON, shared with the binary (ADR 0072).
+pub use formatting::escape_json_bidi;

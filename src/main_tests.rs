@@ -661,17 +661,14 @@ fn format_dispatch_error_table_escapes_server_controls() {
         "no raw bidi in table mode: {table}"
     );
 
-    // The JSON family is a published schema surface: serde_json escapes the ESC as
-    // \u001b (code points below 0x20) but leaves the bidi override raw.
-    let json = format_dispatch_error(&err, OutputFormat::Json);
-    assert!(
-        json.contains("\\u001b"),
-        "serde must escape the ESC: {json}"
-    );
-    assert!(
-        json.contains('\u{202e}'),
-        "serde leaves bidi raw (JSON family unchanged): {json}"
-    );
+    for format in [OutputFormat::Json, OutputFormat::Ndjson] {
+        let json = format_dispatch_error(&err, format);
+        assert!(json.contains("\\u001b"));
+        assert!(json.contains("\\u202e"));
+        assert!(!json.contains('\u{202e}'));
+        let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+        assert_eq!(parsed["error"]["message"], err.to_string());
+    }
 }
 
 #[test]
@@ -822,4 +819,30 @@ fn tracing_ansi_disabled_by_a_non_empty_no_color_env() {
 #[test]
 fn tracing_ansi_off_a_terminal_ignores_an_empty_no_color_env() {
     assert!(!tracing_ansi_enabled(false, Some(OsStr::new("")), false));
+}
+
+#[test]
+fn format_dispatch_error_bidi_preserves_structured_values() {
+    let controls = concat!(
+        "\u{202a}\u{202b}\u{202c}\u{202d}\u{202e}",
+        "\u{2066}\u{2067}\u{2068}\u{2069}\u{200e}\u{200f}\u{61c}",
+    );
+    for control in controls.chars() {
+        let value = format!("\\u202e\\{control}é\u{200c}\u{200d}\n");
+        let err = BzrError::input_field(value.clone(), &value, Some(value.clone()));
+        for format in [OutputFormat::Json, OutputFormat::Ndjson] {
+            let out = format_dispatch_error(&err, format);
+            assert!(!out.contains(control), "raw bidi in {format:?}");
+            assert!(!out.contains('\n'));
+            let parsed: serde_json::Value = serde_json::from_str(&out).expect("valid JSON");
+            assert_eq!(parsed["error"]["field"], value);
+            assert_eq!(parsed["error"]["value"], value);
+            assert_eq!(parsed["error"]["message"], err.to_string());
+            assert_eq!(parsed["error"]["exit_code"], err.exit_code());
+            assert_eq!(
+                parsed.get("schema_version").is_some(),
+                format == OutputFormat::Json
+            );
+        }
+    }
 }
