@@ -674,6 +674,67 @@ fn format_dispatch_error_table_escapes_server_controls() {
     );
 }
 
+#[test]
+fn format_dispatch_error_table_keeps_bzr_authored_hint_lines() {
+    // Several BzrError displays end in a bzr-authored, multi-line remediation hint:
+    // `tls::error::TLS_HINT` (appended to BzrError::Http), the "TLS certificate not
+    // trusted" body in commands::runtime::shared::connection::tls_trust, and the
+    // ISO-8601 rejection in validation::datetime. Escaping the whole display turned
+    // every one of those into a single line of literal `\n`, which is the actionable
+    // remediation text for the most common first-run failure. Escaping is per line,
+    // so the hint keeps its lines and its indentation.
+    let err = BzrError::Config(
+        "TLS certificate not trusted. To connect, use one of:\n  \
+         bzr config set-server <NAME> --tls-insecure\n  \
+         bzr config set-server <NAME> --tls-pin-sha256 <PIN>"
+            .into(),
+    );
+    let table = format_dispatch_error(&err, OutputFormat::Table);
+
+    assert_eq!(
+        table,
+        "error: Config error: TLS certificate not trusted. To connect, use one of:\n  \
+         bzr config set-server <NAME> --tls-insecure\n  \
+         bzr config set-server <NAME> --tls-pin-sha256 <PIN>",
+        "the hint must render as three indented lines, not one line of literal \\n"
+    );
+    assert!(
+        !table.contains("\\n"),
+        "no literal backslash-n may appear: {table:?}"
+    );
+}
+
+#[test]
+fn format_dispatch_error_table_escapes_controls_on_every_line() {
+    // The per-line split is a layout concession, not an escaping hole: a server
+    // message that embeds its own newline renders as an extra line (a free-form error
+    // line has no row structure to forge — ADR 0070), but every Cc and bidi character
+    // on each of those lines is still escaped.
+    let err = BzrError::Api {
+        code: 400,
+        message: "first\u{1b}[2J\nsecond\u{202e}tail".into(),
+    };
+    let table = format_dispatch_error(&err, OutputFormat::Table);
+
+    assert_eq!(
+        table.lines().count(),
+        2,
+        "the server newline splits: {table:?}"
+    );
+    assert!(
+        table.contains("first\\u{1b}[2J"),
+        "the ESC on line 1 must be escaped: {table:?}"
+    );
+    assert!(
+        table.contains("second\\u{202e}tail"),
+        "the bidi override on line 2 must be escaped: {table:?}"
+    );
+    assert!(
+        !table.contains('\u{1b}') && !table.contains('\u{202e}'),
+        "no raw control may survive on any line: {table:?}"
+    );
+}
+
 #[cfg(feature = "test-helpers")]
 #[tokio::test]
 async fn format_dispatch_error_redacts_bare_configured_key_and_clears_context() {

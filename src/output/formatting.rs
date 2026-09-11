@@ -289,9 +289,16 @@ const BIDI_CONTROLS: [char; 12] = [
 /// ADR 0070 exposes this at `bzr::output::escape_terminal_controls` (re-exported in
 /// `src/output/mod.rs`) so the command layer (`src/commands/**`) and the binary
 /// (`src/main.rs`) can escape the server-controlled interpolations in the messages they
-/// compose outside `src/output/` — the batch stderr failure lines and the `error: {…}`
-/// renderings. Those sites escape per-interpolation; the `write_result`/`write_saved`
-/// table arms stay unescaped at the seam and their callers own their interpolations.
+/// compose outside `src/output/` — the batch stderr failure lines, the `write_result`
+/// table messages, and the `error: {…}` renderings. Those sites escape
+/// per-interpolation; the `write_result`/`write_saved` table arms stay unescaped at the
+/// seam and their callers own their interpolations.
+///
+/// A composition site whose message is deliberately multi-line escapes each line
+/// separately (`main.rs`'s `format_table_error`) or each interpolation separately
+/// (`comment search-tags`'s listing), so bzr's own line structure survives while every
+/// `Cc`/bidi character inside it is still escaped. Escaping a whole composed message in
+/// one call turns those newlines into literal `\n`.
 pub fn escape_terminal_controls(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for character in value.chars() {

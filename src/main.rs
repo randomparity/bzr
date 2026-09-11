@@ -132,12 +132,27 @@ fn format_dispatch_error(err: &BzrError, format: OutputFormat) -> String {
 /// Render a `BzrError` in the conventional table-mode `error: …` line, escaping
 /// any terminal controls the message carries (ADR 0070). Shared by the dispatch
 /// error path and the format-resolution error path so the two cannot drift.
+///
+/// Escaping runs **per line**: several `BzrError` displays end in a bzr-authored,
+/// multi-line remediation hint (the TLS trust hint in `tls::error::TLS_HINT`, the
+/// "TLS certificate not trusted" body, the ISO-8601 flag rejection), and escaping the
+/// whole display collapses those into one line of literal `\n`. The line structure is
+/// bzr's own, so it is preserved; every other `Cc`/bidi character on each line is still
+/// escaped. A server message that embeds its own newline therefore renders as an extra
+/// stderr line rather than being flattened — a deliberate consequence recorded in
+/// ADR 0070, since a free-form error line has no row structure to forge.
 fn format_table_error(err: &BzrError) -> String {
-    format!("error: {}", escape_terminal_controls(&err.to_string()))
+    let body = err
+        .to_string()
+        .split('\n')
+        .map(escape_terminal_controls)
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!("error: {body}")
 }
 
-/// Handle a format-resolution failure: write the escaped `error: …` line to the
-/// given sink and return the process exit code. Split from `main` so the path is
+/// Handle a format-resolution failure: write the escaped `error: …` rendering to
+/// the given sink and return the process exit code. Split from `main` so the path is
 /// unit-testable without spawning the binary.
 fn handle_format_error(e: &BzrError, sink: &mut dyn Write) -> ExitCode {
     let _ = writeln!(sink, "{}", format_table_error(e));
