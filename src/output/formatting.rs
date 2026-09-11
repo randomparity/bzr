@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::io::Write;
 
 use colored::{ColoredString, Colorize};
@@ -50,7 +51,7 @@ pub(super) fn write_json<W: Write + ?Sized>(value: &(impl Serialize + ?Sized), o
     let _ = writeln!(
         out,
         "{}",
-        serde_json::to_string_pretty(&envelope).expect("serializable to JSON")
+        escape_json_bidi(&serde_json::to_string_pretty(&envelope).expect("serializable to JSON"))
     );
 }
 
@@ -62,11 +63,11 @@ pub(crate) fn write_ndjson<W: Write + ?Sized>(value: &(impl Serialize + ?Sized),
     match value {
         serde_json::Value::Array(items) => {
             for item in &items {
-                let _ = writeln!(out, "{item}");
+                let _ = writeln!(out, "{}", escape_json_bidi(&item.to_string()));
             }
         }
         other => {
-            let _ = writeln!(out, "{other}");
+            let _ = writeln!(out, "{}", escape_json_bidi(&other.to_string()));
         }
     }
 }
@@ -264,6 +265,22 @@ const BIDI_CONTROLS: [char; 12] = [
     '\u{2069}', '\u{200e}', '\u{200f}', '\u{61c}',
 ];
 
+/// Escape the selected bidi controls in already-serialized JSON (ADR 0072).
+/// Standard four-hex escapes preserve decoded keys and values. Do not apply this
+/// to strings before serialization: doing so would change their decoded content.
+pub fn escape_json_bidi(json: &str) -> String {
+    let mut escaped = String::with_capacity(json.len());
+    for character in json.chars() {
+        if BIDI_CONTROLS.contains(&character) {
+            // The selected controls are all in the BMP, so four hex digits suffice.
+            let _ = write!(escaped, r"\u{:04x}", u32::from(character));
+        } else {
+            escaped.push(character);
+        }
+    }
+    escaped
+}
+
 /// Escape terminal-controlling characters before a server-controlled string is
 /// rendered to the terminal.
 ///
@@ -281,10 +298,8 @@ const BIDI_CONTROLS: [char; 12] = [
 ///
 /// Applied at three seams — [`write_table_records`], the [`write_field`] family,
 /// and [`write_status_field`] — plus an explicit call at each writer that
-/// composes its own line. It does **not** cover `--json`/`--output ndjson`:
-/// `serde_json` escapes only `"`, `\`, and code points below `0x20`, so bidi
-/// passes through the JSON family verbatim. That is a published-schema surface
-/// and a deliberate exclusion, not an oversight.
+/// composes its own line. JSON-family writers instead use [`escape_json_bidi`]
+/// after serialization to preserve decoded data with standard JSON escapes.
 ///
 /// ADR 0070 exposes this at `bzr::output::escape_terminal_controls` (re-exported in
 /// `src/output/mod.rs`) so the command layer (`src/commands/**`) and the binary

@@ -126,7 +126,11 @@ fn format_dispatch_error(err: &BzrError, format: OutputFormat) -> String {
         OutputFormat::Table => format_table_error(err),
     };
     bzr::error::clear_error_redaction_context();
-    formatted
+    if format.is_json_family() {
+        bzr::output::escape_json_bidi(&formatted)
+    } else {
+        formatted
+    }
 }
 
 /// Render a `BzrError` in the conventional table-mode `error: …` line, escaping
