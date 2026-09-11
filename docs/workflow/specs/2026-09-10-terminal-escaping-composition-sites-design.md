@@ -40,23 +40,34 @@ reach it.
 
 Each bypassing sink escapes its own server-controlled interpolation at the composition point:
 
-- The two batch stderr lines wrap the per-item `f.error` in `escape_terminal_controls`.
-- The two `src/main.rs` `error: {…}` table renderings wrap the `BzrError` display in
-  `escape_terminal_controls`. The JSON/NDJSON arms of `format_dispatch_error` are unchanged —
-  they route through `serde_json`.
-- `write_result`/`write_saved` are left unescaped at the seam. `src/commands/schema.rs`
-  passes static names, so its (no-op) escaping is not added; a doc comment on `write_result`
-  records the "print composed string, callers escape their own interpolations" contract.
+- Every command-layer stderr line that prints a server-supplied `BzrError` display or a
+  per-item `f.error` wraps it in `escape_terminal_controls`: the `bug update` / `bug create`
+  / `attachment upload` batch lines, and the sub-step warnings in `bug compound`,
+  `bug update`, `bug clone`, `bug history` and `comment list`.
+- The two `src/main.rs` `error: {…}` table renderings escape the `BzrError` display **per
+  line** — split on `\n`, escape each line, rejoin. Escaping the whole display in one call
+  collapses bzr's own multi-line remediation hints (`tls::error::TLS_HINT`, the "TLS
+  certificate not trusted" body, the ISO-8601 rejection) into a single line of literal `\n`.
+  The JSON/NDJSON arms of `format_dispatch_error` are unchanged — they route through
+  `serde_json`.
+- `write_result`/`write_saved` are left unescaped at the seam; a doc comment records the
+  "print composed string, callers escape their own interpolations" contract, and the callers
+  that carry server-controlled data honour it: `comment tag`, `comment search-tags` (per tag,
+  so the separator stays a separator) and `attachment download` (display only —
+  `DownloadResult.file` keeps the real path). `src/commands/schema.rs` passes static names,
+  so its escaping would be a no-op and is not added.
 
 ## Scope
 
-In: `src/output/formatting.rs` (visibility + doc), `src/commands/bug/update/output.rs`,
-`src/commands/bug/create_json.rs`, `src/main.rs` (both `error: {…}` table renderings),
-`src/output/result_types.rs` (doc comment only), and their test siblings
-(`update/output_tests.rs`, the `create_json` test sibling, `main_tests.rs`), one new
-functional phase under `tests/functional/phases/`, the `docs/adr/0070-*` record, its
-`docs/adr/README.md` index row (this is a solo run, and the index is not CI-gated), and
-`docs/bzr-cli.md`.
+In: `src/output/formatting.rs` (visibility + doc), `src/main.rs` (both `error: {…}` table
+renderings), `src/output/result_types.rs` (doc comment only), and every command-layer
+composition site that carries server-controlled text —
+`src/commands/bug/{update/output.rs,update/execute.rs,create_json.rs,compound.rs,clone.rs,history.rs}`,
+`src/commands/attachment/{upload.rs,download.rs}`,
+`src/commands/comment/{tag.rs,search_tags.rs,list.rs}` — plus their test siblings, a new
+functional phase and an extended `02c-tls-inline.sh` under `tests/functional/phases/`, the
+`docs/adr/0070-*` record, its `docs/adr/README.md` index row (this is a solo run, and the
+index is not CI-gated), and `docs/bzr-cli.md`.
 
 Out, each with an owner:
 
@@ -64,9 +75,9 @@ Out, each with an owner:
   JSON-family bidi gap as a separate follow-up. [owner: ADR 0065]
 - Seam-level escaping of `write_result`/`write_saved` — would collapse
   `src/commands/schema.rs`'s `names.join("\n")` listing. [owner: ADR 0065 + this record]
-- `write_result`/`write_saved` callers in other files that pass server-controlled
-  `human_message` (e.g. comment-tag listings in `src/commands/comment/`) — same defect class,
-  not a site this follow-up was filed to close. [owner: adjacent; tracked separately]
+- Command-layer error text that is never server-controlled: `bug view`'s "failed to open
+  browser" and `config keyring`'s config-validation warning. ADR 0065's threat actor is the
+  Bugzilla server, and neither line carries its data. [owner: out of threat model]
 - The `Cf` code points outside the Trojan-Source set — ADR 0065 follow-up. [owner: ADR 0065]
 
 ## Threat model
@@ -74,8 +85,9 @@ Out, each with an owner:
 **Boundary inventory.** The same boundary ADR 0065 named — the Bugzilla REST/XML-RPC response
 body, deserialized into `src/types/**` and rendered onto the terminal — is unchanged. This
 change adds no boundary; it adds the missing control on the three sinks ADR 0065 left open:
-the batch stderr lines, the two `src/main.rs` `error: {…}` renderings, and (by contract) the
-`write_result`/`write_saved` table arms, whose callers now own their interpolations. The
+the command-layer stderr lines, the two `src/main.rs` `error: {…}` renderings, and (by
+contract) the `write_result`/`write_saved` table arms, whose callers now own their
+interpolations. The
 server-supplied text enters through `BzrError::Api { message }` and
 `BzrError::HttpStatus { body }` (`src/error.rs`), which are redacted for API keys but not for
 terminal controls.
@@ -105,8 +117,16 @@ escaped. The JSON/NDJSON family is not encoded against bidi. `U+200B`/`U+200C`/`
 3. The `src/main.rs` `error: {…}` table rendering escapes a `BzrError` whose display carries
    a `Cc`/bidi character; the JSON and NDJSON arms of the dispatch error are byte-identical to
    before (still `serde_json`).
+3b. A `BzrError` whose display is a bzr-authored multi-line hint still renders one line per
+   `\n`, with its indentation, and contains no literal `\n` — proven in a unit test and
+   against the real self-signed-cert fixture in `02c-tls-inline.sh`.
+3c. Every other command-layer stderr composition site that prints a server-supplied error —
+   the `attachment upload` batch arms and the `bug compound` / `bug update` / `bug clone` /
+   `bug history` / `comment list` sub-step warnings — escapes its interpolation.
 4. `write_result`'s table arm is unchanged: `src/commands/schema.rs`'s
-   `names.join("\n")` listing still prints one name per line (no literal `\n`).
+   `names.join("\n")` listing still prints one name per line (no literal `\n`), and its
+   three server-carrying callers (`comment tag`, `comment search-tags`,
+   `attachment download`) escape their own interpolations.
 5. `--json` and `--output ndjson` output for every changed path is byte-identical to before.
 6. `docs/bzr-cli.md` records the stderr rendering change; the ADR 0070 index row is present.
 
