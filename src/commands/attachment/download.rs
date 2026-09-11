@@ -1,7 +1,5 @@
 use std::path::Path;
 
-use base64::Engine;
-
 use crate::client::BugzillaClient;
 use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::mutation::ensure_batch_complete;
@@ -87,7 +85,7 @@ pub(super) fn single_download_dest(
     }
 }
 
-/// Single-attachment download: writes one decoded blob to stdout when
+/// Single-attachment download: copies validated bytes to stdout when
 /// `--out -` is supplied, otherwise to `out` or the attachment's stored
 /// `file_name` in the current directory. Paired with `download_batch`
 /// for bulk shapes; both paths are first-class.
@@ -98,15 +96,20 @@ async fn download_single(
     format: OutputFormat,
     w: &mut Writers<'_>,
 ) -> Result<()> {
-    let (filename, data) = client.download_attachment(id).await?;
+    let (filename, mut data) = client.download_attachment(id).await?;
+    let bytes = usize::try_from(data.limit()).map_err(|_| {
+        crate::error::BzrError::DataIntegrity(
+            "attachment byte count exceeds platform capacity".into(),
+        )
+    })?;
     if out == Some("-") {
-        w.out.write_all(&data).map_err(|e| {
+        std::io::copy(&mut data, w.out).map_err(|e| {
             io_with_context(format!("failed to write attachment #{id} to stdout"), &e)
         })?;
         return Ok(());
     }
     let dest = single_download_dest(out, &filename)?;
-    std::fs::write(&dest, &data).map_err(|e| {
+    copy_download(&mut data, &dest).map_err(|e| {
         io_with_context(
             format!("failed to write attachment #{id} to '{}'", dest.display()),
             &e,
@@ -119,11 +122,11 @@ async fn download_single(
     // display only (ADR 0070). `DownloadResult` keeps the real path: it is the
     // published `--json` schema and names the file that was actually written.
     write_result(
-        &DownloadResult::new(id, dest.as_str(), data.len()),
+        &DownloadResult::new(id, dest.as_str(), bytes),
         &format!(
             "Downloaded attachment #{id} to {} ({} bytes)",
             escape_terminal_controls(&dest),
-            data.len(),
+            bytes,
         ),
         format,
         w.out,
@@ -131,7 +134,7 @@ async fn download_single(
     Ok(())
 }
 
-/// Decode (or re-fetch) one attachment's bytes and write them to
+/// Download one attachment's bytes and write them to
 /// `<out_dir>/<bug_id>/<att_id>.<file_name>`. Surfaces any failure
 /// back to the caller as `BzrError`; the caller decides whether to
 /// abort or record-and-continue.
@@ -152,19 +155,12 @@ pub(super) async fn write_one_attachment(
             att.id,
         ))
     })?;
-    let bytes = if let Some(b64) = att.data.as_deref() {
-        base64::engine::general_purpose::STANDARD
-            .decode(b64)
-            .map_err(|e| {
-                crate::error::BzrError::DataIntegrity(format!(
-                    "failed to decode attachment #{}: {e}",
-                    att.id,
-                ))
-            })?
-    } else {
-        let (_, fetched) = client.download_attachment(att.id).await?;
-        fetched
-    };
+    let (_, mut data) = client.download_attachment(att.id).await?;
+    let bytes = usize::try_from(data.limit()).map_err(|_| {
+        crate::error::BzrError::DataIntegrity(
+            "attachment byte count exceeds platform capacity".into(),
+        )
+    })?;
 
     let bug_subdir = Path::new(out_dir).join(bug_id.to_string());
     std::fs::create_dir_all(&bug_subdir).map_err(|e| {
@@ -178,7 +174,7 @@ pub(super) async fn write_one_attachment(
     })?;
     let dest = bug_subdir.join(format!("{}.{}", att.id, safe_basename(file_name)?));
     let dest_str = dest.to_string_lossy().into_owned();
-    std::fs::write(&dest, &bytes).map_err(|e| {
+    copy_download(&mut data, &dest).map_err(|e| {
         io_with_context(
             format!(
                 "failed to write attachment #{} to '{}'",
@@ -193,14 +189,14 @@ pub(super) async fn write_one_attachment(
         att_id = att.id,
         bug_id,
         path = %dest_str,
-        bytes = bytes.len(),
+        bytes = bytes,
         "downloaded attachment",
     );
 
     Ok(DownloadedFile {
         attachment_id: att.id,
         path: dest_str,
-        bytes: bytes.len(),
+        bytes,
     })
 }
 
@@ -265,7 +261,7 @@ async fn download_bug_target(
     out_dir: &str,
     ignore_obsolete: bool,
 ) -> BugDownloadResult {
-    let atts = match client.get_attachments(bug_id).await {
+    let atts = match client.get_attachments_metadata(bug_id).await {
         Ok(atts) => atts,
         Err(e) => {
             return BugDownloadResult {
@@ -326,7 +322,7 @@ async fn download_attachment_target(
     att_id: u64,
     out_dir: &str,
 ) -> AttachmentDownloadResult {
-    let att = match client.get_attachment(att_id).await {
+    let att = match client.get_attachment_metadata(att_id).await {
         Ok(att) => att,
         Err(e) => {
             return AttachmentDownloadResult {
@@ -363,3 +359,8 @@ async fn download_attachment_target(
 #[cfg(test)]
 #[path = "download_tests.rs"]
 mod tests;
+
+fn copy_download(data: &mut impl std::io::Read, dest: &Path) -> std::io::Result<u64> {
+    let mut file = std::fs::File::create(dest)?;
+    std::io::copy(data, &mut file)
+}

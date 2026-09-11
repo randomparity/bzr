@@ -211,7 +211,7 @@ fn parse_value_content(reader: &mut Reader<&[u8]>) -> Result<Value> {
 /// and is preserved (0.42 splits `&...;` into separate `GeneralRef`
 /// events, so the reader-level `trim_text(true)` would otherwise conjoin
 /// `Tom &amp; Jerry` into `Tom&amp;Jerry`).
-fn read_text_content(
+pub(crate) fn read_text_content(
     reader: &mut Reader<&[u8]>,
     end_tag: &str,
     first: Option<(bool, String)>,

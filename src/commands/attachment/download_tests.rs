@@ -18,6 +18,41 @@ fn bug_attachments_response(bug_id: u64, atts: &serde_json::Value) -> serde_json
     })
 }
 
+async fn mount_attachment(mock: &wiremock::MockServer, attachment: serde_json::Value) {
+    let id = attachment["id"].as_u64().unwrap();
+    Mock::given(method("GET"))
+        .and(path(format!("/rest/bug/attachment/{id}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "attachments": { id.to_string(): attachment }
+        })))
+        .mount(mock)
+        .await;
+}
+
+async fn mount_bug_attachments(
+    mock: &wiremock::MockServer,
+    bug_id: u64,
+    attachments: &serde_json::Value,
+) {
+    let mut metadata = attachments.clone();
+    for attachment in metadata.as_array_mut().unwrap() {
+        attachment.as_object_mut().unwrap().remove("data");
+    }
+    Mock::given(method("GET"))
+        .and(path(format!("/rest/bug/{bug_id}/attachment")))
+        .and(wiremock::matchers::query_param("exclude_fields", "data"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(bug_attachments_response(bug_id, &metadata)),
+        )
+        .mount(mock)
+        .await;
+    for attachment in attachments.as_array().unwrap() {
+        if attachment["data"].is_string() {
+            mount_attachment(mock, attachment.clone()).await;
+        }
+    }
+}
+
 fn one_att(id: u64, bug_id: u64, file_name: &str, body: &[u8]) -> serde_json::Value {
     serde_json::json!({
         "id": id,
@@ -148,8 +183,8 @@ async fn attachment_download_validation_rejects_out_with_multiple_ids() {
 }
 
 #[tokio::test]
-async fn write_one_attachment_writes_inline_data_with_att_id_prefix() {
-    let (_lock, _mock, tmp) = setup_test_env().await;
+async fn write_one_attachment_streams_data_with_att_id_prefix() {
+    let (_lock, mock, tmp) = setup_test_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
         &crate::commands::runtime::invocation::CommandContext::new(
             None,
@@ -172,6 +207,8 @@ async fn write_one_attachment_writes_inline_data_with_att_id_prefix() {
     att.is_patch = Some(true);
     let out_dir = tmp.path().to_string_lossy().into_owned();
 
+    mount_attachment(&mock, serde_json::to_value(&att).unwrap()).await;
+
     let file = super::write_one_attachment(&client, &att, &out_dir)
         .await
         .unwrap();
@@ -184,7 +221,7 @@ async fn write_one_attachment_writes_inline_data_with_att_id_prefix() {
 }
 
 #[tokio::test]
-async fn write_one_attachment_falls_back_when_data_missing() {
+async fn write_one_attachment_fetches_payload_from_metadata() {
     let (_lock, mock, tmp) = setup_test_env().await;
 
     Mock::given(method("GET"))
@@ -231,7 +268,7 @@ async fn write_one_attachment_falls_back_when_data_missing() {
 
 #[tokio::test]
 async fn write_one_attachment_overwrites_existing_file() {
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_lock, mock, tmp) = setup_test_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
         &crate::commands::runtime::invocation::CommandContext::new(
             None,
@@ -250,6 +287,8 @@ async fn write_one_attachment_overwrites_existing_file() {
     att.size = Some(11);
     let out_dir = tmp.path().to_string_lossy().into_owned();
 
+    mount_attachment(&mock, serde_json::to_value(&att).unwrap()).await;
+
     super::write_one_attachment(&client, &att, &out_dir)
         .await
         .unwrap();
@@ -260,7 +299,7 @@ async fn write_one_attachment_overwrites_existing_file() {
 
 #[tokio::test]
 async fn write_one_attachment_create_dir_error_names_destination() {
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_lock, mock, tmp) = setup_test_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
         &crate::commands::runtime::invocation::CommandContext::new(
             None,
@@ -280,6 +319,8 @@ async fn write_one_attachment_create_dir_error_names_destination() {
         Some(b64(b"content")),
     );
 
+    mount_attachment(&mock, serde_json::to_value(&att).unwrap()).await;
+
     let err = super::write_one_attachment(&client, &att, &out_file.to_string_lossy())
         .await
         .unwrap_err()
@@ -297,19 +338,15 @@ async fn write_one_attachment_create_dir_error_names_destination() {
 async fn attachment_download_batch_per_bug_writes_per_bug_subdir() {
     let (_lock, mock, tmp) = setup_test_env().await;
 
-    Mock::given(method("GET"))
-        .and(path("/rest/bug/12345/attachment"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
-                12345,
-                &serde_json::json!([
-                    one_att(9876, 12345, "patch.diff", b"alpha"),
-                    one_att(9877, 12345, "trace.log", b"bravo charlie"),
-                ]),
-            )),
-        )
-        .mount(&mock)
-        .await;
+    mount_bug_attachments(
+        &mock,
+        12345,
+        &serde_json::json!([
+            one_att(9876, 12345, "patch.diff", b"alpha"),
+            one_att(9877, 12345, "trace.log", b"bravo charlie"),
+        ]),
+    )
+    .await;
 
     let out_dir = tmp.path().to_string_lossy().into_owned();
     let action = AttachmentAction::Download {
@@ -346,7 +383,7 @@ async fn attachment_download_batch_per_bug_writes_per_bug_subdir() {
 }
 
 #[tokio::test]
-async fn attachment_download_batch_hybrid_uses_xmlrpc_inline_data_without_fallback() {
+async fn attachment_download_batch_hybrid_streams_xmlrpc_without_rest_fallback() {
     let (_lock, mock, tmp) = setup_test_env().await;
     let entries = format!(
         "{}{}",
@@ -356,6 +393,7 @@ async fn attachment_download_batch_hybrid_uses_xmlrpc_inline_data_without_fallba
 
     Mock::given(method("POST"))
         .and(path("/xmlrpc.cgi"))
+        .and(wiremock::matchers::body_string_contains("<name>ids</name>"))
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_string(xmlrpc_bug_attachments_response(12345, &entries)),
@@ -363,6 +401,26 @@ async fn attachment_download_batch_hybrid_uses_xmlrpc_inline_data_without_fallba
         .expect(1)
         .mount(&mock)
         .await;
+
+    for (id, filename, bytes) in [
+        (9876, "patch.diff", b"alpha".as_slice()),
+        (9877, "trace.log", b"bravo".as_slice()),
+    ] {
+        let entry = xmlrpc_one_att(id, 12345, filename, bytes);
+        let response = format!("<methodResponse><params><param><value><struct><member><name>attachments</name><value><struct><member><name>{id}</name>{entry}</member></struct></value></member></struct></value></param></params></methodResponse>");
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .and(wiremock::matchers::body_string_contains(
+                "<name>attachment_ids</name>",
+            ))
+            .and(wiremock::matchers::body_string_contains(format!(
+                "<int>{id}</int>"
+            )))
+            .respond_with(ResponseTemplate::new(200).set_body_string(response))
+            .expect(1)
+            .mount(&mock)
+            .await;
+    }
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/attachment/9876"))
@@ -414,19 +472,15 @@ async fn attachment_download_batch_hybrid_uses_xmlrpc_inline_data_without_fallba
 async fn attachment_download_batch_collision_filenames_resolved_by_att_id_prefix() {
     let (_lock, mock, tmp) = setup_test_env().await;
 
-    Mock::given(method("GET"))
-        .and(path("/rest/bug/12345/attachment"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
-                12345,
-                &serde_json::json!([
-                    one_att(9876, 12345, "trace.log", b"first"),
-                    one_att(9877, 12345, "trace.log", b"second"),
-                ]),
-            )),
-        )
-        .mount(&mock)
-        .await;
+    mount_bug_attachments(
+        &mock,
+        12345,
+        &serde_json::json!([
+            one_att(9876, 12345, "trace.log", b"first"),
+            one_att(9877, 12345, "trace.log", b"second"),
+        ]),
+    )
+    .await;
 
     let out_dir = tmp.path().to_string_lossy().into_owned();
     let action = AttachmentAction::Download {
@@ -459,16 +513,12 @@ async fn attachment_download_batch_collision_filenames_resolved_by_att_id_prefix
 async fn attachment_download_batch_mixed_bug_and_positional_ids() {
     let (_lock, mock, tmp) = setup_test_env().await;
 
-    Mock::given(method("GET"))
-        .and(path("/rest/bug/12345/attachment"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
-                12345,
-                &serde_json::json!([one_att(9876, 12345, "patch.diff", b"from bug")]),
-            )),
-        )
-        .mount(&mock)
-        .await;
+    mount_bug_attachments(
+        &mock,
+        12345,
+        &serde_json::json!([one_att(9876, 12345, "patch.diff", b"from bug")]),
+    )
+    .await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/attachment/4242"))
@@ -515,14 +565,7 @@ async fn attachment_download_batch_mixed_bug_and_positional_ids() {
 async fn attachment_download_batch_empty_bug_zero_files_success() {
     let (_lock, mock, tmp) = setup_test_env().await;
 
-    Mock::given(method("GET"))
-        .and(path("/rest/bug/12345/attachment"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(bug_attachments_response(12345, &serde_json::json!([]))),
-        )
-        .mount(&mock)
-        .await;
+    mount_bug_attachments(&mock, 12345, &serde_json::json!([])).await;
 
     let out_dir = tmp.path().to_string_lossy().into_owned();
     let action = AttachmentAction::Download {
@@ -652,16 +695,12 @@ async fn attachment_download_single_out_dash_streams_bytes_without_result() {
 async fn attachment_download_batch_bug_not_found_partial_failure() {
     let (_lock, mock, tmp) = setup_test_env().await;
 
-    Mock::given(method("GET"))
-        .and(path("/rest/bug/12345/attachment"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
-                12345,
-                &serde_json::json!([one_att(9876, 12345, "patch.diff", b"ok")]),
-            )),
-        )
-        .mount(&mock)
-        .await;
+    mount_bug_attachments(
+        &mock,
+        12345,
+        &serde_json::json!([one_att(9876, 12345, "patch.diff", b"ok")]),
+    )
+    .await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/99999/attachment"))
@@ -778,16 +817,7 @@ async fn attachment_download_batch_obsolete_attachments_included() {
 
     let mut obsolete = one_att(9876, 12345, "old.patch", b"obsolete content");
     obsolete["is_obsolete"] = serde_json::json!(true);
-    Mock::given(method("GET"))
-        .and(path("/rest/bug/12345/attachment"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
-                12345,
-                &serde_json::json!([obsolete]),
-            )),
-        )
-        .mount(&mock)
-        .await;
+    mount_bug_attachments(&mock, 12345, &serde_json::json!([obsolete])).await;
 
     let out_dir = tmp.path().to_string_lossy().into_owned();
     let action = AttachmentAction::Download {
@@ -819,16 +849,7 @@ async fn download_bug_ignore_obsolete_skips_obsolete_attachments() {
     let mut obsolete = one_att(9876, 12345, "old.patch", b"obsolete content");
     obsolete["is_obsolete"] = serde_json::json!(true);
     let current = one_att(9877, 12345, "current.patch", b"current content");
-    Mock::given(method("GET"))
-        .and(path("/rest/bug/12345/attachment"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
-                12345,
-                &serde_json::json!([obsolete, current]),
-            )),
-        )
-        .mount(&mock)
-        .await;
+    mount_bug_attachments(&mock, 12345, &serde_json::json!([obsolete, current])).await;
 
     let out_dir = tmp.path().to_string_lossy().into_owned();
     let action = AttachmentAction::Download {
@@ -864,16 +885,12 @@ async fn download_bug_ignore_obsolete_skips_obsolete_attachments() {
 async fn download_ignore_obsolete_leaves_positional_ids_alone() {
     let (_lock, mock, tmp) = setup_test_env().await;
 
-    Mock::given(method("GET"))
-        .and(path("/rest/bug/12345/attachment"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
-                12345,
-                &serde_json::json!([one_att(1111, 12345, "kept.patch", b"kept")]),
-            )),
-        )
-        .mount(&mock)
-        .await;
+    mount_bug_attachments(
+        &mock,
+        12345,
+        &serde_json::json!([one_att(1111, 12345, "kept.patch", b"kept")]),
+    )
+    .await;
 
     let mut positional_obsolete = one_att(9876, 67890, "obsolete.patch", b"still fetched");
     positional_obsolete["is_obsolete"] = serde_json::json!(true);
@@ -917,16 +934,7 @@ async fn download_bug_ignore_obsolete_keeps_attachment_missing_is_obsolete() {
 
     let mut missing_flag = one_att(9876, 12345, "no-flag.patch", b"no obsolete flag");
     missing_flag.as_object_mut().unwrap().remove("is_obsolete");
-    Mock::given(method("GET"))
-        .and(path("/rest/bug/12345/attachment"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
-                12345,
-                &serde_json::json!([missing_flag]),
-            )),
-        )
-        .mount(&mock)
-        .await;
+    mount_bug_attachments(&mock, 12345, &serde_json::json!([missing_flag])).await;
 
     let out_dir = tmp.path().to_string_lossy().into_owned();
     let action = AttachmentAction::Download {
@@ -959,16 +967,7 @@ async fn download_bug_all_obsolete_succeeds_with_no_files() {
 
     let mut obsolete = one_att(9876, 12345, "old.patch", b"obsolete content");
     obsolete["is_obsolete"] = serde_json::json!(true);
-    Mock::given(method("GET"))
-        .and(path("/rest/bug/12345/attachment"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(bug_attachments_response(
-                12345,
-                &serde_json::json!([obsolete]),
-            )),
-        )
-        .mount(&mock)
-        .await;
+    mount_bug_attachments(&mock, 12345, &serde_json::json!([obsolete])).await;
 
     let out_dir = tmp.path().to_string_lossy().into_owned();
     let action = AttachmentAction::Download {
@@ -1015,14 +1014,7 @@ async fn attachment_download_batch_data_missing_falls_back_via_get() {
     // Listing returns the attachment metadata WITHOUT data.
     let mut att = one_att(9876, 12345, "patch.diff", b"x");
     att.as_object_mut().unwrap().remove("data");
-    Mock::given(method("GET"))
-        .and(path("/rest/bug/12345/attachment"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(bug_attachments_response(12345, &serde_json::json!([att]))),
-        )
-        .mount(&mock)
-        .await;
+    mount_bug_attachments(&mock, 12345, &serde_json::json!([att])).await;
 
     // Fallback fetch DOES return data.
     Mock::given(method("GET"))
@@ -1089,7 +1081,7 @@ async fn attachment_download_batch_top_level_out_dir_unwritable_fails_fast() {
 
 #[tokio::test]
 async fn write_one_attachment_invalid_base64_returns_data_integrity() {
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_lock, mock, tmp) = setup_test_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
         &crate::commands::runtime::invocation::CommandContext::new(
             None,
@@ -1109,6 +1101,8 @@ async fn write_one_attachment_invalid_base64_returns_data_integrity() {
     );
     att.size = Some(0);
     let out_dir = tmp.path().to_string_lossy().into_owned();
+
+    mount_attachment(&mock, serde_json::to_value(&att).unwrap()).await;
 
     let result = super::write_one_attachment(&client, &att, &out_dir).await;
     assert!(result.is_err(), "expected DataIntegrity for invalid base64");
@@ -1218,7 +1212,7 @@ fn single_download_dest_sanitizes_server_filename_when_no_out() {
 
 #[tokio::test]
 async fn write_one_attachment_sanitizes_server_filename_with_separators() {
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_lock, mock, tmp) = setup_test_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
         &crate::commands::runtime::invocation::CommandContext::new(
             None,
@@ -1231,6 +1225,8 @@ async fn write_one_attachment_sanitizes_server_filename_with_separators() {
 
     let att = make_attachment(7, 42, "sub/dir/escape.txt", "evil", Some(b64(b"data")));
     let out_dir = tmp.path().to_string_lossy().into_owned();
+
+    mount_attachment(&mock, serde_json::to_value(&att).unwrap()).await;
 
     let file = super::write_one_attachment(&client, &att, &out_dir)
         .await
@@ -1333,4 +1329,41 @@ async fn attachment_download_single_json_keeps_raw_destination() {
         out_path.to_string_lossy(),
         "the JSON file must stay the real, unescaped destination"
     );
+}
+
+#[tokio::test]
+async fn attachment_download_truncated_response_preserves_file_and_stdout() {
+    let (_lock, mock, tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/9876"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(
+            r#"{"attachments":{"9876":{"id":9876,"file_name":"broken.bin","data":"QQ=="}"#,
+        ))
+        .mount(&mock)
+        .await;
+    let destination = tmp.path().join("existing.bin");
+    std::fs::write(&destination, b"original bytes").unwrap();
+    for output in [destination.to_str().unwrap(), "-"] {
+        let action = AttachmentAction::Download {
+            ids: vec![9876],
+            bug_ids: vec![],
+            out: Some(output.into()),
+            out_dir: tmp.path().to_string_lossy().into_owned(),
+            ignore_obsolete: false,
+        };
+        let mut io = crate::test_helpers::CapturedIo::new();
+        let result = crate::commands::attachment::execute(
+            &action,
+            &crate::commands::runtime::invocation::CommandContext::new(
+                None,
+                OutputFormat::Json,
+                None,
+            ),
+            &mut io.writers(),
+        )
+        .await;
+        assert!(result.is_err());
+        assert!(io.out.is_empty());
+        assert_eq!(std::fs::read(&destination).unwrap(), b"original bytes");
+    }
 }

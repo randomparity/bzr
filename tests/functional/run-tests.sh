@@ -104,7 +104,7 @@ for _phase in \
     08i-batch-error-escaping \
     09-bug-relationships 09b-bug-collision 09c-bug-links \
     10-bug-clone 11-batch-update 11b-bug-verbs 12-my-bugs 13-templates 14-queries \
-    15-comments 15b-comments-private 16-attachments 16b-attachments-private \
+    15-comments 15b-comments-private 16-attachments 16b-attachments-private 16c-attachments-large \
     17-global-options 17b-arg-validation 18-completion-schema 18a-json-envelope \
     18b-http-error-preview 18c-skills-install 18d-dependency-analysis \
     18e-release-readiness 18f-project-manager-reporting 99-sequences; do

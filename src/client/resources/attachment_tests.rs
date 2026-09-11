@@ -244,6 +244,7 @@ fn rest_attachment_by_id_value(id: u64, name: &str) -> serde_json::Value {
         "creation_time": "2026-01-01T00:00:00Z",
         "last_change_time": "2026-01-01T00:00:00Z",
         "size": 1,
+        "data": "QQ==",
         "is_obsolete": false,
         "is_private": false
     })
@@ -270,13 +271,15 @@ async fn rest_attachment_by_id_selects_requested_id_from_keyed_and_flat_envelope
             .await;
 
         let client = test_client(&mock.uri());
-        let attachment = client.get_attachment(200).await.unwrap();
+        let attachment = client.get_attachment_metadata(200).await.unwrap();
         assert_eq!(attachment.id, 200);
         assert_eq!(attachment.file_name.as_deref(), Some("requested.txt"));
 
-        let metadata = client.get_attachment_metadata(200).await.unwrap();
-        assert_eq!(metadata.id, 200);
-        assert_eq!(metadata.file_name.as_deref(), Some("requested.txt"));
+        let (filename, mut stream) = client.download_attachment(200).await.unwrap();
+        assert_eq!(filename, "requested.txt");
+        let mut bytes = Vec::new();
+        std::io::Read::read_to_end(&mut stream, &mut bytes).unwrap();
+        assert_eq!(bytes, b"A");
     }
 }
 
@@ -302,8 +305,8 @@ async fn rest_attachment_by_id_returns_not_found_for_known_missing_envelopes() {
 
         let client = test_client(&mock.uri());
         for result in [
-            client.get_attachment(200).await,
-            client.get_attachment_metadata(200).await,
+            client.get_attachment_metadata(200).await.map(|_| ()),
+            client.download_attachment(200).await.map(|_| ()),
         ] {
             assert!(
                 matches!(result, Err(BzrError::NotFound { .. })),
@@ -334,8 +337,8 @@ async fn rest_attachment_by_id_rejects_malformed_keyed_sibling_before_selection(
 
         let client = test_client(&mock.uri());
         for result in [
-            client.get_attachment(200).await,
-            client.get_attachment_metadata(200).await,
+            client.get_attachment_metadata(200).await.map(|_| ()),
+            client.download_attachment(200).await.map(|_| ()),
         ] {
             assert!(
                 matches!(result, Err(BzrError::Deserialize(_))),
@@ -361,8 +364,8 @@ async fn rest_attachment_by_id_rejects_missing_or_scalar_envelope() {
 
         let client = test_client(&mock.uri());
         for result in [
-            client.get_attachment(200).await,
-            client.get_attachment_metadata(200).await,
+            client.get_attachment_metadata(200).await.map(|_| ()),
+            client.download_attachment(200).await.map(|_| ()),
         ] {
             assert!(
                 matches!(result, Err(BzrError::Deserialize(_))),
@@ -387,8 +390,8 @@ async fn rest_attachment_by_id_rejects_key_with_mismatched_embedded_id() {
 
     let client = test_client(&mock.uri());
     for result in [
-        client.get_attachment(200).await,
-        client.get_attachment_metadata(200).await,
+        client.get_attachment_metadata(200).await.map(|_| ()),
+        client.download_attachment(200).await.map(|_| ()),
     ] {
         assert!(
             matches!(result, Err(BzrError::Deserialize(_))),
@@ -417,7 +420,7 @@ async fn hybrid_uses_xmlrpc_directly_for_get_attachment() {
         .await;
 
     let client = test_client_hybrid(&mock.uri());
-    let attachment = client.get_attachment(2001).await.unwrap();
+    let attachment = client.get_attachment_metadata(2001).await.unwrap();
     assert_eq!(attachment.id, 2001);
     assert_eq!(attachment.is_private, Some(true));
     assert_eq!(attachment.file_name.as_deref(), Some("x-2001.txt"));
@@ -441,7 +444,7 @@ async fn hybrid_xmlrpc_transport_error_falls_back_to_rest_for_get_attachment() {
         .await;
 
     let client = test_client_hybrid(&mock.uri());
-    let attachment = client.get_attachment(2002).await.unwrap();
+    let attachment = client.get_attachment_metadata(2002).await.unwrap();
     assert_eq!(attachment.id, 2002);
     assert_eq!(attachment.file_name.as_deref(), Some("rest-2002.txt"));
 }
@@ -471,7 +474,7 @@ async fn hybrid_xmlrpc_fault_does_not_fall_back_to_rest_for_get_attachment() {
         .await;
 
     let client = test_client_hybrid(&mock.uri());
-    let err = client.get_attachment(2002).await.unwrap_err();
+    let err = client.get_attachment_metadata(2002).await.unwrap_err();
     assert!(
         matches!(&err, BzrError::Api { code, .. } if *code == 410),
         "expected Api error with code 410, got {err:?}"
@@ -496,7 +499,7 @@ async fn rest_mode_uses_rest_only_for_get_attachment() {
         .await;
 
     let client = test_client(&mock.uri());
-    let attachment = client.get_attachment(2003).await.unwrap();
+    let attachment = client.get_attachment_metadata(2003).await.unwrap();
     assert_eq!(attachment.id, 2003);
 }
 
@@ -520,7 +523,7 @@ async fn xmlrpc_mode_skips_rest_for_get_attachment() {
         .await;
 
     let client = test_client_xmlrpc(&mock.uri());
-    let attachment = client.get_attachment(2004).await.unwrap();
+    let attachment = client.get_attachment_metadata(2004).await.unwrap();
     assert_eq!(attachment.id, 2004);
 }
 
@@ -1131,4 +1134,93 @@ async fn get_attachment_metadata_xmlrpc_uses_xmlrpc_and_strips_data() {
         att.data.is_none(),
         "metadata path must strip bytes in xmlrpc mode"
     );
+}
+
+#[tokio::test]
+async fn attachment_stream_download_exceeds_structured_body_limit() {
+    let mock = MockServer::start().await;
+    let payload = "QUFB".repeat(16 * 1024 * 1024 + 1);
+    Mock::given(method("GET"))
+        .and(path("/rest/bug/attachment/756"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "attachments": {"756": {"id": 756, "file_name": "large.bin", "data": payload}}
+        })))
+        .mount(&mock)
+        .await;
+    let client = test_client(&mock.uri());
+    let result = client.download_attachment(756).await;
+    assert!(result.is_ok(), "large attachment must download: {result:?}");
+    let (name, mut data) = result.unwrap();
+    assert_eq!(name, "large.bin");
+    assert_eq!(data.limit(), 48 * 1024 * 1024 + 3);
+    let mut first = [0; 3];
+    std::io::Read::read_exact(&mut data, &mut first).unwrap();
+    assert_eq!(&first, b"AAA");
+    assert_eq!(
+        std::io::copy(&mut data, &mut std::io::sink()).unwrap(),
+        48 * 1024 * 1024
+    );
+}
+
+#[tokio::test]
+async fn attachment_stream_download_selects_requested_record_after_data() {
+    use std::io::Read;
+    let mock = MockServer::start().await;
+    Mock::given(method("GET")).and(path("/rest/bug/attachment/756"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(
+            r#"{"attachments":[{"data":"QQ==","id":755,"file_name":"wrong"},{"data":"Qg==","id":756,"file_name":"wanted"}]}"#))
+        .mount(&mock).await;
+    let (name, mut stream) = test_client(&mock.uri())
+        .download_attachment(756)
+        .await
+        .unwrap();
+    let mut data = Vec::new();
+    stream.read_to_end(&mut data).unwrap();
+    assert_eq!(name, "wanted");
+    assert_eq!(data, b"B");
+}
+
+#[tokio::test]
+async fn attachment_stream_download_rejects_xmlrpc_mismatched_id_and_truncation() {
+    let valid = xmlrpc_attachment_by_id_response(756, true).replace(
+        "<member><name>size</name>",
+        "<member><name>data</name><value><base64>QQ==</base64></value></member><member><name>size</name>",
+    );
+    for body in [
+        valid.replace("<int>756</int>", "<int>757</int>"),
+        valid.trim_end_matches("</methodResponse>").to_owned(),
+    ] {
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(body))
+            .mount(&mock)
+            .await;
+        assert!(test_client_xmlrpc(&mock.uri())
+            .download_attachment(756)
+            .await
+            .is_err());
+    }
+}
+
+#[tokio::test]
+async fn attachment_stream_metadata_omits_data_in_xmlrpc_requests() {
+    use wiremock::matchers::body_string_contains;
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<name>exclude_fields</name>"))
+        .and(body_string_contains("<string>data</string>"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(xmlrpc_attachment_by_id_response(756, true)),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let attachment = test_client_xmlrpc(&mock.uri())
+        .get_attachment_metadata(756)
+        .await
+        .unwrap();
+    assert_eq!(attachment.id, 756);
+    assert!(attachment.data.is_none());
 }

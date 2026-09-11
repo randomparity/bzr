@@ -229,8 +229,8 @@ const UNBOUNDED_BODY_READERS: &[&str] = &[
     ".bytes_stream()",
     ".json().await",
     ".json::<",
-    // `read_body_within` is built on `chunk()`; anywhere else it is a hand-rolled
-    // accumulation that reimplements the bound without it.
+    // Only the shared bounded reader and attachment payload extractor may
+    // consume chunks. The latter bounds metadata while staging payloads.
     ".chunk().await",
 ];
 
@@ -266,6 +266,14 @@ fn no_unbounded_response_body_reads_outside_tests() {
                 .split_whitespace()
                 .collect();
             for reader in UNBOUNDED_BODY_READERS {
+                // ADR 0071: this exact reader incrementally decodes payloads to
+                // disk and enforces the shared bound on the retained envelope.
+                // Other whole-body readers remain forbidden even in this file.
+                if *reader == ".chunk().await"
+                    && path == root.join("client/attachment_stream/mod.rs")
+                {
+                    continue;
+                }
                 if source.contains(reader) {
                     offenders.push(format!("{} ({reader})", path.display()));
                 }
@@ -280,6 +288,6 @@ fn no_unbounded_response_body_reads_outside_tests() {
     assert!(
         offenders.is_empty(),
         "response bodies must be read through crate::http::read_body_bounded, \
-         which bounds them; these read unbounded: {offenders:?}",
+         or the attachment-only bounded extractor; these read unbounded: {offenders:?}",
     );
 }

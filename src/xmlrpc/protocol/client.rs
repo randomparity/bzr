@@ -48,9 +48,21 @@ impl XmlRpcClient {
     async fn call_with_status_policy(
         &self,
         method: &str,
-        mut params: BTreeMap<String, Value>,
+        params: BTreeMap<String, Value>,
         require_success: bool,
     ) -> Result<Value> {
+        let resp = self.send_call(method, params, require_success).await?;
+        let body_text = crate::http::read_body_bounded(resp, &format!("XML-RPC {method}")).await?;
+        tracing::trace!(body_len = body_text.len(), "XML-RPC response received");
+
+        parse_response(&body_text)
+    }
+    pub(crate) async fn send_call(
+        &self,
+        method: &str,
+        mut params: BTreeMap<String, Value>,
+        require_success: bool,
+    ) -> Result<reqwest::Response> {
         if let Some(api_key) = self.api_key.as_deref() {
             params.insert(AUTH_QUERY_PARAM.into(), Value::from(api_key));
         }
@@ -103,10 +115,7 @@ impl XmlRpcClient {
             });
         }
 
-        let body_text = crate::http::read_body_bounded(resp, &format!("XML-RPC {method}")).await?;
-        tracing::trace!(body_len = body_text.len(), "XML-RPC response received");
-
-        parse_response(&body_text)
+        Ok(resp)
     }
 }
 

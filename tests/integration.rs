@@ -920,6 +920,19 @@ async fn attachment_download_bulk_per_bug_integration() {
         .mount(&mock)
         .await;
 
+    for (id, file_name, data) in [(1001, "a.txt", "QUFBQUE="), (1002, "b.txt", "QkJCQg==")] {
+        Mock::given(method("GET"))
+            .and(path(format!("/rest/bug/attachment/{id}")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "attachments": { id.to_string(): {
+                    "id": id, "bug_id": 77, "file_name": file_name, "data": data
+                }}
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+    }
+
     let out_dir = tmp.path().to_str().unwrap();
     let result = dispatch_cli(&[
         "bzr",

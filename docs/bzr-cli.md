@@ -1362,9 +1362,12 @@ bzr --json attachment view 9876 | jq '.data.summary, .data.size'
 
 Download one or more attachments to disk, or stream one attachment's bytes to stdout.
 
-An attachment arrives base64-encoded inside the REST JSON response, and base64
-costs 4/3, so an attachment larger than about 48 MiB exceeds bzr's 64 MiB
-response-body limit and cannot be downloaded: the command exits 16.
+Attachment bytes are decoded incrementally through the authenticated REST/XML-RPC API.
+The 64 MiB response limit still applies to metadata, but does not cap the downloaded
+payload. Downloads use private temporary disk space proportional to the decoded data;
+ensure the system temporary directory has enough free space. The response is validated
+before opening the destination or writing stdout. Temporary storage is released when
+the download finishes or fails.
 
 **Synopsis:**
 
