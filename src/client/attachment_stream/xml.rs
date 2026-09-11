@@ -56,11 +56,14 @@ impl Reader {
                         self.xml_payload(&name, false).await?;
                         continue;
                     }
+                    if name == "value" && state.members.last() == Some(&None) {
+                        return Err(invalid("XML-RPC member value precedes its name"));
+                    }
                     if name == "struct" {
                         state.struct_keys.push(std::collections::HashSet::new());
                     }
                     if name == "member" {
-                        state.members.push(false);
+                        state.members.push(None);
                     }
                     if name == "name" {
                         state.name_start = Some(self.body.len());
@@ -76,7 +79,7 @@ impl Reader {
                         return Err(invalid("empty element outside attachment XML root"));
                     }
                     let name = tag.name().as_ref().to_owned();
-                    if state.members.last() == Some(&true)
+                    if state.members.last() == Some(&Some(true))
                         && ((state.stack.last().is_some_and(|s| s == "value")
                             && matches!(name.as_str(), "base64" | "string"))
                             || (name == "value"
@@ -219,7 +222,8 @@ impl Reader {
 #[derive(Default)]
 struct XmlState {
     stack: Vec<String>,
-    members: Vec<bool>,
+    // None until the member name is validated, then whether it names payload data.
+    members: Vec<Option<bool>>,
     struct_keys: Vec<std::collections::HashSet<String>>,
     name_start: Option<usize>,
     root_seen: bool,
@@ -227,7 +231,7 @@ struct XmlState {
 
 impl XmlState {
     fn in_data_value(&self) -> bool {
-        self.members.last() == Some(&true) && self.stack.last().is_some_and(|s| s == "value")
+        self.members.last() == Some(&Some(true)) && self.stack.last().is_some_and(|s| s == "value")
     }
 
     fn end(&mut self, name: &str, body: &[u8]) -> Result<()> {
@@ -246,7 +250,10 @@ impl XmlState {
                 }
             }
             if let Some(member) = self.members.last_mut() {
-                *member = field == "data";
+                if member.is_some() {
+                    return Err(invalid("duplicate XML-RPC member name"));
+                }
+                *member = Some(field == "data");
             }
         }
         if name == "struct" {

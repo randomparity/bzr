@@ -183,3 +183,13 @@ async fn attachment_stream_rejects_duplicate_xml_members() {
         .await
         .is_err());
 }
+
+#[tokio::test]
+async fn attachment_stream_rejects_xml_value_before_member_name() {
+    let input = xml("<string>YnpyLXBheWxvYWQtMA==</string>")
+        .replace("<member><name>data</name><value>", "<member><value>")
+        .replace("</value></member>", "</value><name>data</name></member>");
+    assert!(read(input.as_bytes(), Protocol::Xml, 1, 1024)
+        .await
+        .is_err());
+}
