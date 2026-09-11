@@ -163,7 +163,10 @@ if assert_exit_code 7; then test_pass; fi
 # ─ Issue #672: bug create --comment-tag (tags the first/description comment) ─
 
 test_begin "bug-create-comment-tag-round-trips" "bug create --comment-tag tags the first comment"
-_CT_TAG=$(unique_name comment-tag)
+# Bugzilla caps a comment tag at 24 characters. `unique_name` appends
+# "-$$-$RANDOM", which is up to 13 more, so the prefix must stay short:
+# "comment-tag" overflows the cap on any host with 7-digit PIDs.
+_CT_TAG=$(unique_name ctag)
 TID=$(make_bug "${_CF[@]}" --summary "comment-tag create" --comment-tag "$_CT_TAG")
 if [[ -z "$TID" ]]; then
     test_fail "no fixture bug: --comment-tag create did not succeed"
