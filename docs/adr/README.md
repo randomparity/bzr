@@ -75,3 +75,5 @@ rejected.
 | [0068](0068-response-bodies-are-read-under-one-shared-bound.md) | Response bodies are read under one shared bound | Accepted |
 | [0069](0069-auth-method-stamp-records-probe-outcome.md) | The auth-method stamp records whether the method was probed; `config show` surfaces it | Accepted |
 | [0070](0070-escape-terminal-controls-at-composition-sites.md) | Escape terminal controls at the composition sites outside the writers | Accepted |
+| [0071](0071-stream-attachment-payloads.md) | Stream authenticated attachment payloads into private staging files | Accepted |
+| [0072](0072-standard-json-bidi-escaping.md) | Standard JSON escapes for bidi controls | Accepted |
