@@ -19,6 +19,7 @@ mv extensions/ExternalBugs extensions/RedHat extensions/SubComponents /tmp/rhbz-
 perl checksetup.pl answers.txt
 perl checksetup.pl answers.txt
 mv /tmp/rhbz-extensions/ExternalBugs /tmp/rhbz-extensions/RedHat /tmp/rhbz-extensions/SubComponents extensions/
+mkdir -p data extensions/RedHat
 touch data/bz.log extensions/RedHat/info.log
 perl checksetup.pl answers.txt
 perl checksetup.pl answers.txt
