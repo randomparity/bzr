@@ -3349,6 +3349,26 @@ cleanup_container_fixture() {
     return 0
 }
 
+pybz_fixture_source_volume() {
+    local runtime="$1"
+    local volume="$PYBZ_DIR/..:/work:ro"
+
+    if [[ $runtime == podman ]]; then
+        volume+=',z'
+    fi
+    printf '%s\n' "$volume"
+}
+
+run_pybz_fixture_source_volume_fixture() {
+    local volume="$PYBZ_DIR/..:/work:ro"
+
+    assert_equals "$volume,z" "$(pybz_fixture_source_volume podman)" \
+        "Podman fixture source volume"
+    assert_equals "$volume" "$(pybz_fixture_source_volume docker)" \
+        "Docker fixture source volume"
+    return 0
+}
+
 run_container_fixture() (
     local runtime
     local checkout_id
@@ -3377,7 +3397,7 @@ run_container_fixture() (
 
     "$runtime" build -t "$fixture_image" -f "$PYBZ_DIR/Containerfile" "$PYBZ_DIR"
     # Exercise the same records with the sidecar's Linux awk as with the host's awk.
-    "$runtime" run --rm --volume "$PYBZ_DIR/..:/work:ro" "$fixture_image" bash -euc "
+    "$runtime" run --rm --volume "$(pybz_fixture_source_volume "$runtime")" "$fixture_image" bash -euc "
         source /work/lib.sh
         $(declare -f assert_equals run_transport_observation_fixture)
         run_transport_observation_fixture
@@ -3463,4 +3483,5 @@ run_membership_cleanup_fixture
 run_product_component_phase_fixture
 run_rhbz_extensions_fixture
 run_rhbz_externalbugs_fixture
+run_pybz_fixture_source_volume_fixture
 run_container_fixture
