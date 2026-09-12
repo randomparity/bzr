@@ -3130,14 +3130,20 @@ run_rhbz_extensions_fixture() (
     assert_equals 1 "$PASS_COUNT" "RHBZ extension smoke pass count"
     assert_equals 0 "$FAIL_COUNT" "RHBZ extension smoke fail count"
 
-    PASS_COUNT=0
-    FAIL_COUNT=0
-    SEEN_TEST_IDS=$'\n'
-    RHBZ_EXTENSIONS_RESPONSE='{"extensions":{"ExternalBugs":{},"SubComponents":{}}}'
-    source "$phase" >/dev/null
-    assert_equals 0 "$PASS_COUNT" "incomplete RHBZ extension smoke pass count"
-    assert_equals 1 "$FAIL_COUNT" "incomplete RHBZ extension smoke fail count"
-    printf 'controlled red: RHBZ extension smoke missing RedHat\n'
+    for missing_extension in ExternalBugs SubComponents RedHat; do
+        PASS_COUNT=0
+        FAIL_COUNT=0
+        SEEN_TEST_IDS=$'\n'
+        case "$missing_extension" in
+            ExternalBugs) RHBZ_EXTENSIONS_RESPONSE='{"extensions":{"SubComponents":{},"RedHat":{}}}' ;;
+            SubComponents) RHBZ_EXTENSIONS_RESPONSE='{"extensions":{"ExternalBugs":{},"RedHat":{}}}' ;;
+            RedHat) RHBZ_EXTENSIONS_RESPONSE='{"extensions":{"ExternalBugs":{},"SubComponents":{}}}' ;;
+        esac
+        source "$phase" >/dev/null
+        assert_equals 0 "$PASS_COUNT" "incomplete RHBZ extension smoke pass count"
+        assert_equals 1 "$FAIL_COUNT" "incomplete RHBZ extension smoke fail count"
+        printf 'controlled red: RHBZ extension smoke missing %s\n' "$missing_extension"
+    done
 )
 
 cleanup_container_fixture() {

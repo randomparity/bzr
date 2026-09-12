@@ -11,7 +11,7 @@ GNU make, podman or docker, Fedora image tooling, MariaDB, Apache, and `jq`.
 
 **Global Constraints.** Shell files use four-space indentation and `set -euo
 pipefail`; Make recipes use tabs. Preserve the default `bz50` and the exact stock
-arrays `bz50 bz52 bz53`. Do not add dependencies, bzr runtime behavior, proxy proof,
+arrays `bz50 bz52 bz53`. Do not add bzr runtime dependencies or behavior, proxy proof,
 or catalogue rows. The source is exactly
 `https://pagure.io/Red-Hat-Bugzilla/rh-bugzilla.git` at
 `167ccca1b256f9462cb4aebcb1edbced7e4663d5`. Run `make check-shell`, `make lint`,
@@ -24,7 +24,7 @@ three lifecycle/runner/Make edits, one smoke phase, and focused shell fixtures.
 `tests/functional/versions/rhbz/entrypoint.sh`,
 `tests/functional/run-rhbz-compare.sh`, and
 `tests/functional/compare/rhbz/07-rhbz-smoke.sh`. Modify
-`tests/functional/setup-bugzilla.sh`, `tests/functional/lib.sh`, `Makefile`, and
+`tests/functional/setup-bugzilla.sh`, `Makefile`, and
 `tests/functional/pybz/container-tests.sh`.
 
 ## Task 1 — add a pinned, disposable RHBZ image
@@ -117,7 +117,8 @@ from `lib.sh`. Provides `run-rhbz-compare.sh` and the stable test ID
    source only the smoke phase after lifecycle readiness has already completed, render
    the result, and clean temporary state without changing the phase’s exit status.
 3. Extend `container-tests.sh` with the two fixtures. Run its existing command and
-   `make check-shell`; expect exit 0.
+   `make check-shell`; expect exit 0. Exercise complete extension JSON, then each
+   missing required key as a controlled-red fixture.
 
 **Acceptance.** The smoke route supplies live, stable evidence of reachability and all
 three extension names, and it does not run stock comparison phases or sidecar setup.
@@ -143,7 +144,7 @@ three extension names, and it does not run stock comparison phases or sidecar se
    shell so Make cannot skip cleanup after a failing line:
 
    ```make
-   functional-compare-rhbz: release
+   functional-compare-rhbz:
 
 	@status=0; \
 	BZR_BZ_VERSION=rhbz tests/functional/setup-bugzilla.sh reset || status=1; \

@@ -29,6 +29,9 @@ functional run downloads and builds a larger external source tree only when the
 explicit RHBZ target is selected. Catalogue children can append RHBZ phases after
 the smoke contract without changing stock comparison phases. The Make target uses
 one shell so its stop arm runs after a failed reset or smoke execution.
+The immutable source revision is the reproducibility boundary required by this
+issue; the Fedora base image and package repositories retain the existing
+functional-test build policy and can change independently on a later rebuild.
 
 ## Considered & rejected
 
