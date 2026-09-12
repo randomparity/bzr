@@ -1,0 +1,26 @@
+FROM docker.io/library/fedora:39
+
+RUN dnf -y install mariadb-server mariadb httpd mod_perl perl-interpreter \
+        perl-CGI perl-DBI perl-DBD-MySQL perl-DateTime perl-Email-MIME \
+        perl-Email-Sender perl-Encode perl-JSON-XS perl-Template-Toolkit \
+        perl-URI perl-XMLRPC-Lite git && dnf clean all
+
+RUN git clone https://pagure.io/Red-Hat-Bugzilla/rh-bugzilla.git /var/www/html/bugzilla \
+    && cd /var/www/html/bugzilla \
+    && git checkout --detach 167ccca1b256f9462cb4aebcb1edbced7e4663d5 \
+    && test "$(git rev-parse HEAD)" = 167ccca1b256f9462cb4aebcb1edbced7e4663d5 \
+    && mysql_install_db --user=mysql --datadir=/var/lib/mysql
+
+RUN printf '%s\n' '$db_driver = "mysql";' '$db_host = "localhost";' \
+      '$db_name = "bugs";' '$db_user = "bugs";' '$db_pass = "bugzilla";' \
+      '$webservergroup = "apache";' > /var/www/html/bugzilla/localconfig \
+    && sed -i 's|DocumentRoot "/var/www/html"|DocumentRoot "/var/www/html/bugzilla"|' /etc/httpd/conf/httpd.conf \
+    && printf '%s\n' '<Directory "/var/www/html/bugzilla">' 'AddHandler cgi-script .cgi' \
+      'Options +ExecCGI +FollowSymLinks' 'Require all granted' '</Directory>' \
+      'RewriteEngine On' 'RewriteRule ^/rest/(.*)$ /rest.cgi/$1 [L]' > /etc/httpd/conf.d/bugzilla.conf \
+    && echo 'LoadModule rewrite_module modules/mod_rewrite.so' >> /etc/httpd/conf.modules.d/00-rewrite.conf
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+EXPOSE 80
+CMD ["/entrypoint.sh"]

@@ -30,8 +30,11 @@ bz52)
 bz53)
     DEFAULT_TIMEOUT=240
     ;;
+rhbz)
+    DEFAULT_TIMEOUT=300
+    ;;
 *)
-    echo "ERROR: Unknown BZR_BZ_VERSION=$BZ_VERSION (expected bz50, bz52, or bz53)" >&2
+    echo "ERROR: Unknown BZR_BZ_VERSION=$BZ_VERSION (expected bz50, bz52, bz53, or rhbz)" >&2
     exit 1
     ;;
 esac
@@ -232,7 +235,7 @@ logs)
     ;;
 *)
     echo "Usage: $0 {build|start|stop|status|reset|logs}"
-    echo "  Set BZR_BZ_VERSION=bz50|bz52|bz53 (default: bz50)"
+    echo "  Set BZR_BZ_VERSION=bz50|bz52|bz53|rhbz (default: bz50)"
     echo "  Host port is runtime-assigned by default; set BZR_FUNC_PORT to pin one"
     exit 1
     ;;
