@@ -24,6 +24,8 @@ RUN cpanm --notest Math::Random::ISAAC Mail::GPG HTTP::BrowserDetect JSON::RPC \
         Log::Log4perl::Layout::JSON List::Compare Net::SAML2 File::Slurp \
         Crypt::OpenPGP Crypt::SMIME GnuPG::Interface DateTime::Format::DBI
 
+RUN cpanm --notest TheSchwartz
+
 RUN cpanm --notest Path::Class
 
 # This production-data migration assumes a pre-existing Bugzilla product and
@@ -35,6 +37,12 @@ RUN sed -i '/## REDHAT EXTENSION START 2186036/,/## REDHAT EXTENSION END 2186036
 # does not load the module on the REST path.
 RUN sed -i '/^use Bugzilla::Flag;/a use Bugzilla::Install::Filesystem ();' \
         /var/www/html/bugzilla/extensions/RedHat/Extension.pm
+
+# The packaged SubComponents extension expects this legacy Bug accessor.
+RUN sed -i '/^1;$/i sub all_components { return [$_[0]->component]; }\nsub all_component_objs { return [$_[0]->component_obj]; }' \
+        /var/www/html/bugzilla/Bugzilla/Bug.pm
+RUN sed -i '/^1;$/i sub rule_group { return undef; }' \
+        /var/www/html/bugzilla/Bugzilla/Product.pm
 
 # RedHat's schema explicitly reads AgileTools tables. Keep that companion with
 # the three extensions this lifecycle verifies. Its group setup also uses

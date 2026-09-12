@@ -526,6 +526,57 @@ def _component_update_shape(_client, request):
     return client.editcomponent(_required_mapping(request, "params", nonempty=True))
 
 
+def _external_bug_fields(request, *, include_update):
+    required = ("api_key", "bug_id", "tracker_id", "external_bug_id")
+    optional = ("status", "description") if include_update else ()
+    _validate_keys(request, required, optional)
+    fields = {
+        "bug_id": _required_id(request),
+        "tracker_id": _required_positive_id(request, "tracker_id"),
+        "external_bug_id": _required_text(request, "external_bug_id", 128),
+    }
+    if include_update:
+        fields["status"] = _required_text(request, "status", 128)
+        fields["description"] = _required_text(request, "description", 256)
+    return fields
+
+
+def _externalbugs_add(client, request):
+    fields = _external_bug_fields(request, include_update=True)
+    return client.add_external_tracker(
+        fields["bug_id"],
+        fields["external_bug_id"],
+        ext_type_id=fields["tracker_id"],
+        ext_status=fields["status"],
+        ext_description=fields["description"],
+    )
+
+
+def _externalbugs_update(client, request):
+    fields = _external_bug_fields(request, include_update=True)
+    return client.update_external_tracker(
+        ext_type_id=fields["tracker_id"],
+        ext_bz_bug_id=fields["external_bug_id"],
+        bug_ids=fields["bug_id"],
+        ext_status=fields["status"],
+        ext_description=fields["description"],
+    )
+
+
+def _externalbugs_remove(client, request):
+    fields = _external_bug_fields(request, include_update=False)
+    return client.remove_external_tracker(
+        ext_type_id=fields["tracker_id"],
+        ext_bz_bug_id=fields["external_bug_id"],
+        bug_ids=fields["bug_id"],
+    )
+
+
+def _component_update(client, request):
+    _validate_keys(request, ("api_key", "params"))
+    return client.editcomponent(_required_mapping(request, "params", nonempty=True))
+
+
 def _required_url(request):
     value = _required_text(request, "url", 2048)
     parsed = urllib.parse.urlsplit(value)
@@ -671,6 +722,10 @@ OPERATIONS = {
     "product_catalogue": _product_catalogue,
     "component_add": _component_add,
     "component_update_shape": _component_update_shape,
+    "externalbugs_add": _externalbugs_add,
+    "externalbugs_update": _externalbugs_update,
+    "externalbugs_remove": _externalbugs_remove,
+    "component_update": _component_update,
     "login": _login_operation,
     "cached_auth": _cached_auth_operation,
     "api_key_identity": _api_key_identity_operation,

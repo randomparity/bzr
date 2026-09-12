@@ -30,7 +30,10 @@ This report tracks bzr against python-bugzilla 3.3.0 using stable comparison tes
 | Membership add and remove | `bzr group add-user/remove-user`, `bzr user search` | parity | `compare/04-users-groups/membership-add-remove` |
 | Product catalogues | `bzr product list --type` | parity | `compare/05-products-components/product-catalogues` |
 | Component create | `bzr component create`, `bzr component view` | parity | `compare/05-products-components/component-create` |
-| Red Hat component update | `bzr component update` | expected gap (#675) | `compare/05-products-components/component-update-redhat` |
+| RHBZ ExternalBugs add | no equivalent | expected gap (#774) | `compare/08-rhbz-externalbugs/add` |
+| RHBZ ExternalBugs update | no equivalent | expected gap (#774) | `compare/08-rhbz-externalbugs/update` |
+| RHBZ ExternalBugs remove | no equivalent | expected gap (#774) | `compare/08-rhbz-externalbugs/remove` |
+| RHBZ component update | `bzr component update` | expected gap (#774) | `compare/08-rhbz-externalbugs/component-update` |
 | API-key placement by server version | `bzr whoami` | bz50/bz52: both query; bz53: bzr header, python-bugzilla query | `compare/06-auth-config-tls/api-key-placement` |
 | Restricted password login | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/restricted-login` |
 | Cached login token reuse | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/cached-token` |

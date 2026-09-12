@@ -1792,6 +1792,18 @@ class Bugzilla:
 
     def addcomponent(self, data):
         return {"id": 901, "request": data}
+
+    def add_external_tracker(self, bug_ids, ext_bz_bug_id, **kwargs):
+        return {"action": "add", "bug_ids": [bug_ids], "external_bug_id": ext_bz_bug_id, **kwargs}
+
+    def update_external_tracker(self, **kwargs):
+        return {"action": "update", **kwargs}
+
+    def remove_external_tracker(self, **kwargs):
+        return {"action": "remove", **kwargs}
+
+    def editcomponent(self, data):
+        return {"action": "component-update", "request": data}
 PY
     cat >"$fixture_dir/bugzilla/_cli.py" <<'PY'
 import os
@@ -2098,6 +2110,18 @@ run_adapter_fixture() {
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" component-add component_add \
         '{"api_key":"fixture-secret","params":{"product":"Widget","name":"Core","description":"Core component","default_assignee":"admin@test.invalid"}}' \
         '{"result":{"id":901,"request":{"default_assignee":"admin@test.invalid","description":"Core component","name":"Core","product":"Widget"}},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" externalbugs-add externalbugs_add \
+        '{"api_key":"fixture-secret","bug_id":41,"tracker_id":7,"external_bug_id":"EXT-1","status":"NEW","description":"created"}' \
+        '{"result":{"action":"add","bug_ids":[41],"ext_description":"created","ext_status":"NEW","ext_type_id":7,"external_bug_id":"EXT-1"},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" externalbugs-update externalbugs_update \
+        '{"api_key":"fixture-secret","bug_id":41,"tracker_id":7,"external_bug_id":"EXT-1","status":"ASSIGNED","description":"updated"}' \
+        '{"result":{"action":"update","bug_ids":41,"ext_bz_bug_id":"EXT-1","ext_description":"updated","ext_status":"ASSIGNED","ext_type_id":7},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" externalbugs-remove externalbugs_remove \
+        '{"api_key":"fixture-secret","bug_id":41,"tracker_id":7,"external_bug_id":"EXT-1"}' \
+        '{"result":{"action":"remove","bug_ids":41,"ext_bz_bug_id":"EXT-1","ext_type_id":7},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" component-update component_update \
+        '{"api_key":"fixture-secret","params":{"product":"Widget","component":"Core","description":"Updated"}}' \
+        '{"result":{"action":"component-update","request":{"component":"Core","description":"Updated","product":"Widget"}},"transport":"XMLRPC"}'
 
     printf '%s\n' \
         '{"api_key":"fixture-secret","params":{"product":"Widget","component":"Core","initialowner":"admin@test.invalid","description":"Updated"}}' \
