@@ -3110,7 +3110,7 @@ run_product_component_phase_fixture() (
 )
 
 run_rhbz_extensions_fixture() (
-    local phase="$PYBZ_DIR/../compare/07-rhbz-smoke.sh"
+    local phase="$PYBZ_DIR/../compare/rhbz/07-rhbz-smoke.sh"
 
     BZ_URL=http://127.0.0.1
     TEST_ID_PREFIX=compare

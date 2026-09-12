@@ -10,6 +10,6 @@ port=$(bugzilla_container_port "$runtime" "$container")
 export BZ_URL="http://127.0.0.1:${port}"
 TEST_ID_PREFIX=compare
 CURRENT_TEST_GROUP=07-rhbz-smoke
-source "$SCRIPT_DIR/compare/07-rhbz-smoke.sh"
+source "$SCRIPT_DIR/compare/rhbz/07-rhbz-smoke.sh"
 _render_test_result
 test_summary

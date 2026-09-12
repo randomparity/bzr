@@ -23,7 +23,7 @@ three lifecycle/runner/Make edits, one smoke phase, and focused shell fixtures.
 **File map.** Create `tests/functional/versions/rhbz/Containerfile`,
 `tests/functional/versions/rhbz/entrypoint.sh`,
 `tests/functional/run-rhbz-compare.sh`, and
-`tests/functional/compare/07-rhbz-smoke.sh`. Modify
+`tests/functional/compare/rhbz/07-rhbz-smoke.sh`. Modify
 `tests/functional/setup-bugzilla.sh`, `tests/functional/lib.sh`, `Makefile`, and
 `tests/functional/pybz/container-tests.sh`.
 
@@ -109,7 +109,7 @@ from `lib.sh`. Provides `run-rhbz-compare.sh` and the stable test ID
 
 **Steps.**
 
-1. Add `07-rhbz-smoke.sh`, using a fixed endpoint and `jq -e` predicates for the three
+1. Add `rhbz/07-rhbz-smoke.sh`, using a fixed endpoint and `jq -e` predicates for the three
    fixed extension names. Call `test_begin "extensions" ...` before network work and
    call exactly one terminal test helper.
 2. Add `run-rhbz-compare.sh`: reject any selected version other than `rhbz`, resolve the
