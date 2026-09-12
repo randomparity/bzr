@@ -17,7 +17,9 @@ RUN cpanm --notest Math::Random::ISAAC Mail::GPG HTTP::BrowserDetect JSON::RPC \
         Log::Log4perl::Layout::JSON List::Compare Net::SAML2 File::Slurp \
         Crypt::OpenPGP Crypt::SMIME GnuPG::Interface
 
-RUN dnf -y install perl-Graph-Easy perl-List-UtilsBy perl-Regexp-Common perl-YAML-Syck && dnf clean all
+RUN dnf -y install perl-DBD-Pg perl-Graph-Easy perl-HTML-Scrubber perl-IPC-Run \
+        perl-List-MoreUtils perl-List-UtilsBy perl-perl-ldap perl-Regexp-Common \
+        perl-TimeDate perl-YAML-Syck && dnf clean all
 
 RUN printf '%s\n' '$db_driver = "mysql";' '$db_host = "localhost";' \
       '$db_name = "bugs";' '$db_user = "bugs";' '$db_pass = "bugzilla";' \
