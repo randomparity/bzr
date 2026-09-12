@@ -12,7 +12,7 @@ done
 mysqladmin ping --silent
 mysql -u root -e "CREATE DATABASE IF NOT EXISTS bugs; GRANT ALL ON bugs.* TO 'bugs'@'localhost' IDENTIFIED BY 'bugzilla'; FLUSH PRIVILEGES;"
 cd /var/www/html/bugzilla
-printf '%s\n' "\$answer{'ADMIN_EMAIL'} = 'admin@test.bzr';" "\$answer{'ADMIN_PASSWORD'} = 'FuncTest1!';" "\$answer{'ADMIN_REALNAME'} = 'Admin User';" "\$answer{'NO_PAUSE'} = 1;" > answers.txt
+printf '%s\n' "\$answer{'ADMIN_EMAIL'} = 'admin@test.bzr';" "\$answer{'ADMIN_PASSWORD'} = 'FuncTest1!';" "\$answer{'ADMIN_REALNAME'} = 'Admin User';" "\$answer{'ext_logins'} = '';" "\$answer{'NO_PAUSE'} = 1;" > answers.txt
 perl checksetup.pl answers.txt
 perl checksetup.pl answers.txt
 perl checksetup.pl answers.txt
