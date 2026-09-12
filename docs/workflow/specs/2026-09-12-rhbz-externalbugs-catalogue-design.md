@@ -10,23 +10,40 @@ records that boundary.
 
 ## Architecture
 
-`run-rhbz-compare.sh` will source `07-rhbz-smoke.sh` then a new
-`08-rhbz-externalbugs.sh`, preserving the smoke test as the prerequisite. The
-new phase owns a uniquely named product, component, external-tracker fixture,
-and bug. It invokes python-bugzilla only through
+`run-rhbz-compare.sh` will establish the same private exchange directory,
+adapter staging, and python-bugzilla sidecar lifecycle as the stock comparison
+runner, then source `07-rhbz-smoke.sh` followed by a new
+`08-rhbz-externalbugs.sh`. The new phase owns a uniquely named product,
+component, external-tracker fixture, and bug. It invokes python-bugzilla only through
 `python-bugzilla-adapter.py`, which validates JSON requests before calling the
 3.3.0 library's `add_external_tracker`, `update_external_tracker`,
 `remove_external_tracker`, and `editcomponent` methods.
 
-Each test first proves the python-bugzilla call succeeded over the selected
-RHBZ transport, then reads server state through fixed REST endpoints or the
-existing resource helpers. Add verifies the created link; update verifies its
-changed status/description; remove verifies it is absent; component update
-verifies the seeded component's persisted fields. The bzr command probe is
-accepted only when it produces the known missing-command parser diagnostic;
-that result becomes one `expect_gap 774` classification per test. Any
-successful bzr command, changed diagnostic, missing positive control, invalid
-response, or unexpected persisted state fails the phase.
+The fixture is explicit: `run_bugzilla_sql_file` inserts a tracker into
+`external_bugzilla` with the run-token description, a stable local URL,
+`full_url`, and `None` type; the RHBZ source exposes no product mapping for a
+tracker, so product scope comes from the test-created bug. The authenticated
+functional administrator belongs to both `editbugs` and `editcomponents`, the
+two server permissions the extension and `Component.update` check. The phase
+reads the inserted tracker and those group memberships before mutation; failure
+is reported separately from an operation failure.
+
+Each test first proves the python-bugzilla call succeeded over XML-RPC, then
+reads server state through the extension response or fixed REST endpoints. Add
+verifies the created link; update verifies its changed status/description;
+remove verifies it is absent; component update verifies the seeded component's
+persisted fields. The bzr command probe is accepted only when it produces the
+exact parser contracts below; that result becomes one `expect_gap 774`
+classification per test. Any successful bzr command, changed diagnostic,
+missing positive control, invalid response, or unexpected persisted state fails
+the phase.
+
+| Stable ID | bzr argv | Required parser contract |
+| --- | --- | --- |
+| `add` | `bzr bug external-bug add <bug-id>` | exit 2; `error: unrecognized subcommand 'external-bug'`; `Usage: bzr bug [OPTIONS] <COMMAND>` |
+| `update` | `bzr bug external-bug update <bug-id>` | exit 2; same `external-bug` and `bzr bug` usage lines |
+| `remove` | `bzr bug external-bug remove <bug-id>` | exit 2; same `external-bug` and `bzr bug` usage lines |
+| `component-update` | `bzr component update` | exit 2; `error: unrecognized subcommand 'update'`; `Usage: bzr component [OPTIONS] <COMMAND>` |
 
 The parity report replaces the obsolete stock-only component-update row with
 four rows, each naming one stable ID:

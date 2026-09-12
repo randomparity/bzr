@@ -14,14 +14,18 @@ cannot establish that RHBZ accepts the operation or its privileges and fixture.
 
 ## Decision
 
-Append one RHBZ-only phase after the extension smoke phase. Add narrowly
-validated python-bugzilla adapter operations for `add_external_tracker`,
+Append one RHBZ-only phase after the extension smoke phase. The RHBZ runner
+sets up the existing private comparison exchange directory and python-bugzilla
+sidecar before that phase. Add narrowly validated python-bugzilla adapter
+operations for `add_external_tracker`,
 `update_external_tracker`, `remove_external_tracker`, and `editcomponent`.
-The phase creates its own product, component, and bug; configures the minimum
-external tracker fixture; proves add, update, removal, and component mutation
-by reading RHBZ state; then records the absent `bzr` surfaces as controlled
-expected gaps for #774. Replace the former local-only component-update parity
-row with the four real-server rows and stable phase IDs.
+The phase creates its own product, component, and bug; inserts one disposable
+global `external_bugzilla` tracker through the existing container SQL-fixture
+helper (the public adapter deliberately exposes only the four catalogued
+operations); proves add, update, removal, and component mutation by reading
+RHBZ state; then records the absent `bzr` surfaces as controlled expected gaps
+for #774. Replace the former local-only component-update parity row with the
+four real-server rows and stable phase IDs.
 
 ## Consequences
 
