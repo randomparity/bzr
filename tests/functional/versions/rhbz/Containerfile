@@ -1,7 +1,7 @@
 FROM docker.io/library/fedora:39
 
 RUN dnf -y install mariadb-server mariadb httpd mod_perl perl-interpreter \
-        perl-CGI perl-DBI perl-DBD-MySQL perl-DateTime perl-Email-MIME \
+        perl-CGI perl-DBI perl-DBD-MySQL perl-DateTime perl-Email-MIME perl-Safe \
         perl-Email-Sender perl-Encode perl-JSON-XS perl-Template-Toolkit \
         perl-URI perl-XMLRPC-Lite git && dnf clean all
 
