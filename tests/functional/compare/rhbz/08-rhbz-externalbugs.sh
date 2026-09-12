@@ -7,6 +7,18 @@ RHBZ_COMPONENT=TestComponent
 RHBZ_EXTERNAL_ID="${RHBZ_TOKEN}-link"
 RHBZ_TRACKER="${RHBZ_TOKEN}-tracker"
 
+rhbz_controls_ready() {
+    local controls_file="$COMPARE_EXCHANGE_DIR/rhbz-controls.sql"
+    local -a controls
+
+    printf '%s\n' \
+        "SELECT COUNT(*) FROM components c JOIN products p ON p.id = c.product_id JOIN profiles u ON u.userid = c.initialowner WHERE p.name = '$RHBZ_PRODUCT' AND c.name = '$RHBZ_COMPONENT' AND c.isactive = 1 AND u.login_name = '$COMPARE_ADMIN_EMAIL';" \
+        "SELECT COUNT(DISTINCT g.name) FROM profiles p JOIN user_group_map m ON m.user_id = p.userid JOIN groups g ON g.id = m.group_id WHERE p.login_name = '$COMPARE_ADMIN_EMAIL' AND g.name IN ('editbugs', 'editcomponents');" \
+        >"$controls_file"
+    mapfile -t controls < <(run_bugzilla_sql_file "$controls_file" | awk '/^[0-9]+$/')
+    [[ ${controls[0]:-} == 1 && ${controls[1]:-} == 2 ]]
+}
+
 rhbz_external_state() {
     curl -fsS --get "$BZ_URL/rest/bug/$RHBZ_BUG_ID" \
         --data-urlencode 'include_fields=id,external_bugs' \
@@ -30,7 +42,8 @@ rhbz_expect_gap() {
 
 test_begin "add" "ExternalBugs add persists a configured tracker link"
 resource_gap_reset
-if printf '%s\n' "INSERT INTO bugs (assigned_to, bug_severity, bug_status, creation_ts, delta_ts, short_desc, op_sys, priority, product_id, rep_platform, reporter, version, component_id, everconfirmed) VALUES (1, 'normal', 'NEW', NOW(), NOW(), '$RHBZ_TOKEN ExternalBugs comparison bug', 'Linux', 'Normal', 1, 'PC', 1, 'unspecified', 1, 1); SELECT LAST_INSERT_ID();" >"$COMPARE_EXCHANGE_DIR/rhbz-bug.sql" &&
+if rhbz_controls_ready &&
+    printf '%s\n' "INSERT INTO bugs (assigned_to, bug_severity, bug_status, creation_ts, delta_ts, short_desc, op_sys, priority, product_id, rep_platform, reporter, version, component_id, everconfirmed) VALUES (1, 'normal', 'NEW', NOW(), NOW(), '$RHBZ_TOKEN ExternalBugs comparison bug', 'Linux', 'Normal', 1, 'PC', 1, 'unspecified', 1, 1); SELECT LAST_INSERT_ID();" >"$COMPARE_EXCHANGE_DIR/rhbz-bug.sql" &&
     RHBZ_BUG_ID=$(run_bugzilla_sql_file "$COMPARE_EXCHANGE_DIR/rhbz-bug.sql" | tail -n1) &&
     [[ $RHBZ_BUG_ID =~ ^[1-9][0-9]*$ ]] &&
     printf '%s\n' "INSERT INTO external_bugzilla (url, description, full_url, type) VALUES ('https://tracker.invalid/', '$RHBZ_TRACKER', 'https://tracker.invalid/%%s', 'None'); SELECT id FROM external_bugzilla WHERE description = '$RHBZ_TRACKER';" \

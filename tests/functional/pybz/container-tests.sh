@@ -3170,6 +3170,88 @@ run_rhbz_extensions_fixture() (
     done
 )
 
+run_rhbz_externalbugs_fixture() (
+    local phase="$PYBZ_DIR/../compare/rhbz/08-rhbz-externalbugs.sh"
+
+    COMPARE_EXCHANGE_DIR=$(mktemp -d)
+    trap 'rm -rf "$COMPARE_EXCHANGE_DIR"' EXIT
+    RESOURCE_GAP_FILE="$COMPARE_EXCHANGE_DIR/resource-gap"
+    BZ_URL=http://127.0.0.1
+    BZR_COMPARE_API_KEY=fixture-secret
+    COMPARE_ADMIN_EMAIL=admin@test.bzr
+    RESOURCE_SERVER=fixture
+    TEST_ID_PREFIX=compare
+    CURRENT_TEST_GROUP=08-rhbz-externalbugs
+    PASS_COUNT=0
+    FAIL_COUNT=0
+    SKIP_COUNT=0
+    GAP_COUNT=0
+    SEEN_TEST_IDS=$'\n'
+    RHBZ_FIXTURE_STATE=add
+
+    run_bugzilla_sql_file() {
+        case "$1" in
+            *rhbz-controls.sql) printf '1\n2\n' ;;
+            *rhbz-bug.sql) printf '101\n' ;;
+            *rhbz-tracker.sql) printf '7\n' ;;
+        esac
+    }
+    resource_pybz() {
+        case "$2" in
+            externalbugs_add)
+                RHBZ_FIXTURE_STATE=add
+                RHBZ_FIXTURE_EXTERNAL=$(jq -r '.external_bug_id' <<<"$3")
+                ;;
+            externalbugs_update)
+                RHBZ_FIXTURE_STATE=update
+                RHBZ_FIXTURE_EXTERNAL=$(jq -r '.external_bug_id' <<<"$3")
+                ;;
+            externalbugs_remove) RHBZ_FIXTURE_STATE=remove ;;
+            component_update) RHBZ_FIXTURE_STATE=component-update ;;
+        esac
+    }
+    curl() {
+        case "$RHBZ_FIXTURE_STATE" in
+            add)
+                jq -cn --arg external "$RHBZ_FIXTURE_EXTERNAL" \
+                    '{bugs:[{external_bugs:[{ext_bz_bug_id:$external,type:{id:7},ext_status:"NEW",ext_description:"created"}]}]}'
+                ;;
+            update)
+                jq -cn --arg external "$RHBZ_FIXTURE_EXTERNAL" \
+                    '{bugs:[{external_bugs:[{ext_bz_bug_id:$external,type:{id:7},ext_status:"ASSIGNED",ext_description:"updated"}]}]}'
+                ;;
+            remove) printf '%s\n' '{"bugs":[{"external_bugs":[]}]}' ;;
+            component-update)
+                printf '%s\n' '{"products":[{"components":[{"name":"TestComponent","description":"updated RHBZ component","is_active":false}]}]}'
+                ;;
+        esac
+    }
+    run_bzr() {
+        BZR_EXIT=2
+        BZR_STDOUT="$COMPARE_EXCHANGE_DIR/bzr.stdout"
+        BZR_STDERR="$COMPARE_EXCHANGE_DIR/bzr.stderr"
+        : >"$BZR_STDOUT"
+        if [[ " $* " == *' component update '* ]]; then
+            printf '%s\n%s\n' "error: unrecognized subcommand 'update'" \
+                'Usage: bzr component [OPTIONS] <COMMAND>' >"$BZR_STDERR"
+        else
+            printf '%s\n%s\n' "error: unrecognized subcommand 'external-bug'" \
+                'Usage: bzr bug [OPTIONS] <COMMAND>' >"$BZR_STDERR"
+        fi
+    }
+
+    source "$phase" >/dev/null
+    assert_equals 0 "$PASS_COUNT" "RHBZ ExternalBugs pass count"
+    assert_equals 0 "$FAIL_COUNT" "RHBZ ExternalBugs fail count"
+    assert_equals 4 "$GAP_COUNT" "RHBZ ExternalBugs gap count"
+    for test_id in add update remove component-update; do
+        if [[ $SEEN_TEST_IDS != *$'\ncompare/08-rhbz-externalbugs/'"$test_id"$'\n'* ]]; then
+            printf 'RHBZ ExternalBugs fixture did not run %s\n' "$test_id" >&2
+            return 1
+        fi
+    done
+)
+
 cleanup_container_fixture() {
     local runtime="$1"
     local donor="$2"
@@ -3296,4 +3378,5 @@ run_user_group_phase_fixture
 run_membership_cleanup_fixture
 run_product_component_phase_fixture
 run_rhbz_extensions_fixture
+run_rhbz_externalbugs_fixture
 run_container_fixture
