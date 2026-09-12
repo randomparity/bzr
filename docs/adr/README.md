@@ -77,3 +77,4 @@ rejected.
 | [0070](0070-escape-terminal-controls-at-composition-sites.md) | Escape terminal controls at the composition sites outside the writers | Accepted |
 | [0071](0071-stream-attachment-payloads.md) | Stream authenticated attachment payloads into private staging files | Accepted |
 | [0072](0072-standard-json-bidi-escaping.md) | Standard JSON escapes for bidi controls | Accepted |
+| [0074](0074-catalogue-rhbz-externalbugs-with-real-server-controls.md) | Catalogue RHBZ ExternalBugs with real-server controls | Accepted |
