@@ -15,4 +15,5 @@ cd /var/www/html/bugzilla
 printf '%s\n' "\$answer{'ADMIN_EMAIL'} = 'admin@test.bzr';" "\$answer{'ADMIN_PASSWORD'} = 'FuncTest1!';" "\$answer{'ADMIN_REALNAME'} = 'Admin User';" "\$answer{'NO_PAUSE'} = 1;" > answers.txt
 perl checksetup.pl answers.txt
 perl checksetup.pl answers.txt
+perl checksetup.pl answers.txt
 exec httpd -D FOREGROUND
