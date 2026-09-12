@@ -1,7 +1,7 @@
 FROM docker.io/library/fedora:39
 
 RUN dnf -y install mariadb-server mariadb httpd mod_perl perl-interpreter \
-        perl-CGI perl-DBI perl-DBD-MySQL perl-DateTime perl-Email-MIME perl-Memoize perl-Regexp-Common perl-Safe \
+        perl-CGI perl-DBI perl-DBD-MySQL perl-DateTime perl-Email-MIME perl-Memoize perl-Safe \
         perl-Email-Sender perl-Encode perl-JSON-XS perl-Template-Toolkit \
         perl-URI perl-XMLRPC-Lite perl-App-cpanminus gmp-devel openssl-devel gnupg2 which git && dnf clean all
 
@@ -16,6 +16,8 @@ RUN cpanm --notest Math::Random::ISAAC Mail::GPG HTTP::BrowserDetect JSON::RPC \
         Crypt::DES Crypt::DES_EDE3 File::pushd Text::Diff Parallel::ForkManager \
         Log::Log4perl::Layout::JSON List::Compare Net::SAML2 File::Slurp \
         Crypt::OpenPGP Crypt::SMIME GnuPG::Interface
+
+RUN dnf -y install perl-Regexp-Common && dnf clean all
 
 RUN printf '%s\n' '$db_driver = "mysql";' '$db_host = "localhost";' \
       '$db_name = "bugs";' '$db_user = "bugs";' '$db_pass = "bugzilla";' \
