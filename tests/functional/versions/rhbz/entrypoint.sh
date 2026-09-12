@@ -4,6 +4,7 @@ set -euo pipefail
 /usr/libexec/mysqld --user=mysql --datadir=/var/lib/mysql &
 for i in $(seq 1 30); do
     if mysqladmin ping --silent; then
+        echo "==> MariaDB ready after ${i}s"
         break
     fi
     sleep 1
