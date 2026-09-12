@@ -13,7 +13,7 @@ the RHBZ field names nor the permissions and persisted response shapes.
 
 ## Decision
 
-Append a RHBZ-only `09-rhbz-fields` phase after smoke and the ExternalBugs
+Add a RHBZ-only `09-rhbz-fields` phase after smoke and before the ExternalBugs
 catalogue. The phase will create disposable bugs in the seeded component,
 validate the needed administrator permissions and field metadata, and use the
 python-bugzilla adapter's Red Hat argument names to make each mutation. It
@@ -25,10 +25,11 @@ the observed result. The four stable IDs are `sub-components`,
 ## Consequences
 
 The evidence is isolated to the RHBZ runner and cannot change stock comparison
-coverage. A missing field, changed permission, rejected python-bugzilla call,
-or unexpected bzr outcome fails rather than producing a parity claim. The
-whiteboards remain one test because their shared fixture and update operation
-are one server contract.
+coverage. Phase 09 runs while the seeded component remains active; phase 08's
+component-deactivation check remains last. A missing field, changed permission,
+rejected python-bugzilla call, or unexpected bzr outcome fails rather than
+producing a parity claim. The whiteboards remain one test because their shared
+fixture and update operation are one server contract.
 
 ## Considered & rejected
 

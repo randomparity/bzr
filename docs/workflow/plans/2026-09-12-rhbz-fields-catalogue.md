@@ -21,7 +21,9 @@ one phase, runner and shell fixtures, and four report rows.
 ## File map
 
 - Modify `tests/functional/compare/python-bugzilla-adapter.py` for bounded RHBZ
-  argument operations.
+argument operations. The runner sources phase 09 after smoke and before phase
+08, whose final component-update fixture deliberately deactivates the seeded
+component.
 - Add `tests/functional/compare/rhbz/09-rhbz-fields.sh` for fixtures and live
   readbacks.
 - Modify `tests/functional/run-rhbz-compare.sh` and
@@ -38,8 +40,9 @@ responses to phase 09.
 
 - Contract: each operation rejects unknown, missing, or wrongly typed fields
   before dispatch. Mode: focused-test. Red: the new fixture fails on the base
-  because operations are absent. Green: `make test-one T=pybz_container_tests`
-  passes and records the exact python-bugzilla arguments.
+  because operations are absent. Green: `bash
+  tests/functional/pybz/container-tests.sh` passes and records the exact
+  python-bugzilla arguments.
 
 Steps: add one validator-backed operation for sub-component, target-release,
 fixed-in, and the three whiteboards; register them with the existing adapter;
@@ -58,13 +61,14 @@ produces exactly four stable IDs and one evidence-led classification per ID.
 
 - Contract: every positive control validates metadata/privilege, persists its
   value, and reads it back before probing bzr. Mode: focused-test. Red: a
-  missing phase/ID/control fails the shell fixture. Green: `make test-one
-  T=pybz_container_tests` passes.
+  missing phase/ID/control fails the shell fixture. Green: `bash
+  tests/functional/pybz/container-tests.sh` passes.
 
-Steps: source phase 09 after phase 08; create run-token bugs; check field
-metadata and administrator controls; call each Task 1 operation; assert the
-corresponding live REST fields; probe bzr; classify only the observed outcome;
-test missing-control and diagnostic paths in the shell fixture.
+Steps: source phase 09 after phase 07 and before phase 08; assert that the
+seeded component is active; create run-token bugs; check field metadata and
+administrator controls; call each Task 1 operation; assert the corresponding
+live REST fields; probe bzr; classify only the observed outcome; test ordering,
+missing-control, and diagnostic paths in the shell fixture.
 
 Acceptance: no missing field, permission, or python-bugzilla failure is
 reported as parity or an expected gap.
@@ -76,8 +80,8 @@ reported as parity or an expected gap.
 **Verification.**
 
 - Contract: four report rows name the four semantic IDs. Mode: focused-test.
-  Red: fixture rejects a missing row/ID. Green: `make test-one
-  T=pybz_container_tests` passes.
+  Red: fixture rejects a missing row/ID. Green: `bash
+  tests/functional/pybz/container-tests.sh` passes.
 
 Steps: add the four rows; run `make lint`, `make test`, and
 `make functional-compare-rhbz`; expect zero exits, phase 09 output for all

@@ -9,7 +9,9 @@ records the chosen boundary.
 
 ## Design
 
-`run-rhbz-compare.sh` will source `09-rhbz-fields.sh` after phases 07 and 08.
+`run-rhbz-compare.sh` will source `09-rhbz-fields.sh` after phase 07 and before
+phase 08. This preserves the seeded component's active state for its bzr probes;
+phase 08's deliberate component deactivation remains the final mutation.
 The phase owns four tests and run-token-scoped bugs in the seeded product and
 component. It first verifies that RHBZ advertises each required field and that
 the functional administrator has the existing write privilege; unavailable
@@ -41,7 +43,7 @@ No proxy or local recorder can substitute for a successful live-server control.
 ## Validation
 
 Focused shell/adapter fixtures must cover runner order, all IDs, rejected
-malformed requests, missing controls, and each report row. `make lint` and
-`make test` cover repository guardrails. `make functional-compare-rhbz` is the
-decisive proof: it must execute all four live controls and clean up the RHBZ
-container.
+malformed requests, missing controls, and each report row; run them with
+`bash tests/functional/pybz/container-tests.sh`. `make lint` and `make test`
+cover repository guardrails. `make functional-compare-rhbz` is the decisive
+proof: it must execute all four live controls and clean up the RHBZ container.
