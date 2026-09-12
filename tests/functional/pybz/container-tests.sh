@@ -3261,8 +3261,8 @@ run_rhbz_externalbugs_fixture() (
     unset RHBZ_BUG_ID RHBZ_TRACKER_ID RHBZ_PRODUCT_ID RHBZ_COMPONENT_ID
     rm -f "$RESOURCE_GAP_FILE"
     source "$phase" >"$COMPARE_EXCHANGE_DIR/missing-controls.out"
-    assert_equals 3 "$FAIL_COUNT" "RHBZ ExternalBugs missing-controls fail count"
-    assert_equals 1 "$GAP_COUNT" "RHBZ component gap after missing controls"
+    assert_equals 4 "$FAIL_COUNT" "RHBZ catalogue missing-controls fail count"
+    assert_equals 0 "$GAP_COUNT" "RHBZ catalogue missing-controls gap count"
     if ! grep -Fq 'ExternalBugs add positive control failed' \
         "$COMPARE_EXCHANGE_DIR/missing-controls.out" ||
         grep -Fq '[compare/08-rhbz-externalbugs/add] ExternalBugs add persists a configured tracker link ... GAP' \

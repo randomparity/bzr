@@ -101,7 +101,8 @@ fi
 
 test_begin "component-update" "Component.update persists the changed component"
 resource_gap_reset
-if resource_pybz rhbz-component-update component_update \
+if rhbz_controls_ready &&
+    resource_pybz rhbz-component-update component_update \
     "$(jq -cn --arg product "$RHBZ_PRODUCT" --arg component "$RHBZ_COMPONENT" --arg owner "$COMPARE_ADMIN_EMAIL" \
         '{transport:"XMLRPC",params:{product:$product,component:$component,initialowner:$owner,description:"updated RHBZ component",is_active:false}}')" XMLRPC &&
     curl -fsS --get "$BZ_URL/rest/product" \
