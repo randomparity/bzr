@@ -17,7 +17,7 @@ RUN cpanm --notest Math::Random::ISAAC Mail::GPG HTTP::BrowserDetect JSON::RPC \
         Log::Log4perl::Layout::JSON List::Compare Net::SAML2 File::Slurp \
         Crypt::OpenPGP Crypt::SMIME GnuPG::Interface
 
-RUN dnf -y install perl-DBD-Pg perl-Graph-Easy perl-HTML-Scrubber perl-IPC-Run \
+RUN dnf -y install perl-DBD-Pg perl-Graph-Easy perl-HTML-Scrubber perl-IPC-Run perl-JSON-Any \
         perl-LDAP perl-List-MoreUtils perl-List-UtilsBy perl-Regexp-Common \
         perl-TimeDate perl-YAML-Syck && dnf clean all
 
