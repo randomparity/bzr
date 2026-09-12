@@ -18,11 +18,11 @@ RUN cpanm --notest Math::Random::ISAAC Mail::GPG HTTP::BrowserDetect JSON::RPC \
         Crypt::OpenPGP Crypt::SMIME GnuPG::Interface
 
 # This isolated smoke image proves the three extensions issue #675 introduces.
-# RuleEngine stays because its core-patched product fields are required at setup time.
+# Core-patched fields from companion extensions are initialized during bootstrap.
 RUN find /var/www/html/bugzilla/extensions -mindepth 1 -maxdepth 1 -type d \
-        ! -name ExternalBugs ! -name RedHat ! -name RuleEngine ! -name SubComponents -exec rm -rf -- {} +
+        ! -name ExternalBugs ! -name RedHat ! -name SubComponents -exec rm -rf -- {} +
 
-RUN dnf -y install perl-DBD-Pg perl-DateTime-Format-DBI perl-Graph-Easy perl-HTML-Scrubber perl-IPC-Run perl-JSON-Any \
+RUN dnf -y install perl-DBD-Pg perl-Graph-Easy perl-HTML-Scrubber perl-IPC-Run perl-JSON-Any \
         perl-LDAP perl-List-MoreUtils perl-List-UtilsBy perl-Regexp-Common \
         perl-TimeDate perl-YAML-Syck && dnf clean all
 
