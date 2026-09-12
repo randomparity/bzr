@@ -22,7 +22,9 @@ mkdir -p /var/www/html/bugzilla/data
 touch /var/www/html/bugzilla/data/bz.log /var/www/html/bugzilla/extensions/RedHat/info.log
 mkdir /tmp/rhbz-extensions
 mv extensions/ExternalBugs extensions/RedHat extensions/SubComponents /tmp/rhbz-extensions/
-perl checksetup.pl --update-db answers.txt
+if ! perl checksetup.pl --update-db answers.txt; then
+    mysql -u root bugs -e 'ALTER TABLE groups ADD COLUMN category varchar(255);'
+fi
 perl checksetup.pl --update-db answers.txt
 mv /tmp/rhbz-extensions/ExternalBugs /tmp/rhbz-extensions/RedHat /tmp/rhbz-extensions/SubComponents extensions/
 perl checksetup.pl --update-db answers.txt
