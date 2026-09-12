@@ -3,7 +3,7 @@ FROM docker.io/library/fedora:39
 RUN dnf -y install mariadb-server mariadb httpd mod_perl perl-interpreter \
         perl-CGI perl-DBI perl-DBD-MySQL perl-DateTime perl-Email-MIME perl-Memoize perl-Safe \
         perl-Email-Sender perl-Encode perl-JSON-XS perl-Template-Toolkit \
-        perl-URI perl-XMLRPC-Lite perl-App-cpanminus gmp-devel openssl-devel gnupg2 git && dnf clean all
+        perl-URI perl-XMLRPC-Lite perl-App-cpanminus gmp-devel openssl-devel gnupg2 which git && dnf clean all
 
 RUN git clone https://pagure.io/Red-Hat-Bugzilla/rh-bugzilla.git /var/www/html/bugzilla \
     && cd /var/www/html/bugzilla \
