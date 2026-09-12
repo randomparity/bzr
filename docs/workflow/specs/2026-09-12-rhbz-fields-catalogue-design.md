@@ -13,9 +13,13 @@ records the chosen boundary.
 phase 08. This preserves the seeded component's active state for its bzr probes;
 phase 08's deliberate component deactivation remains the final mutation.
 The phase owns four tests and run-token-scoped bugs in the seeded product and
-component. It first verifies that RHBZ advertises each required field and that
-the functional administrator has the existing write privilege; unavailable
-metadata or privilege is a positive-control failure, never a gap.
+component. Its SQL fixture inserts one `releases` row for the seeded product
+and one `rh_sub_components` row owned by the seeded component, then reads their
+IDs and names back before use. The entrypoint grants `admin@test.bzr` the
+`devel`, `redhat`, and `qa` groups; phase 09 reads all three memberships plus
+its existing `editbugs` control before any whiteboard mutation. It verifies
+that RHBZ advertises each required field; unavailable metadata, fixture, or
+privilege is a positive-control failure, never a gap.
 
 The adapter will expose narrow validated RHBZ operations using python-bugzilla
 3.3.0's `sub_component`, `target_release`, `fixed_in`, `devel_whiteboard`,
@@ -27,9 +31,9 @@ the observed bzr result, not a preselected outcome.
 
 | Stable ID | Python-bugzilla control | Server readback |
 | --- | --- | --- |
-| `sub-components` | create/update with `sub_component` | `sub_components` |
-| `target-release` | create/update with `target_release` | `target_release` |
-| `fixed-in` | create/update with `fixed_in` | `cf_fixed_in` |
+| `sub-components` | update with run-token `sub_component` | `sub_components` |
+| `target-release` | create with run-token `target_release` | `target_release` |
+| `fixed-in` | update with run-token `fixed_in` | `cf_fixed_in` |
 | `whiteboards` | update all three whiteboard arguments | all three `cf_*_whiteboard` fields |
 
 ## Failure, isolation, and security
@@ -45,5 +49,7 @@ No proxy or local recorder can substitute for a successful live-server control.
 Focused shell/adapter fixtures must cover runner order, all IDs, rejected
 malformed requests, missing controls, and each report row; run them with
 `bash tests/functional/pybz/container-tests.sh`. `make lint` and `make test`
-cover repository guardrails. `make functional-compare-rhbz` is the decisive
-proof: it must execute all four live controls and clean up the RHBZ container.
+cover repository guardrails. Run `make release` before
+`make functional-compare-rhbz`; the latter requires `target/release/bzr` but
+does not build it. It is the decisive proof: it must execute all four live
+controls and clean up the RHBZ container.

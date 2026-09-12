@@ -2,7 +2,8 @@
 
 **Goal.** Add four real-RHBZ catalogue controls for #775 without adding bzr
 features. The phase uses the existing adapter, private exchange directory, and
-disposable RHBZ lifecycle after phases 07 and 08.
+disposable RHBZ lifecycle after phase 07 and before phase 08, whose final test
+deactivates the shared component.
 
 Tech stack: Bash, Python 3.14/python-bugzilla 3.3.0, jq, existing RHBZ image,
 and the existing Rust binary.
@@ -26,7 +27,8 @@ argument operations. The runner sources phase 09 after smoke and before phase
 component.
 - Add `tests/functional/compare/rhbz/09-rhbz-fields.sh` for fixtures and live
   readbacks.
-- Modify `tests/functional/run-rhbz-compare.sh` and
+- Modify `tests/functional/run-rhbz-compare.sh`,
+  `tests/functional/versions/rhbz/entrypoint.sh`, and
   `tests/functional/pybz/container-tests.sh` for order and focused fixtures.
 - Modify `docs/dev/python-bugzilla-parity.md` for four evidence rows.
 
@@ -65,9 +67,14 @@ produces exactly four stable IDs and one evidence-led classification per ID.
   tests/functional/pybz/container-tests.sh` passes.
 
 Steps: source phase 09 after phase 07 and before phase 08; assert that the
-seeded component is active; create run-token bugs; check field metadata and
-administrator controls; call each Task 1 operation; assert the corresponding
-live REST fields; probe bzr; classify only the observed outcome; test ordering,
+seeded component is active; make the entrypoint idempotently grant
+`admin@test.bzr` the `devel`, `redhat`, and `qa` groups; insert a run-token
+`releases` row bound to `TestProduct` and a run-token `rh_sub_components` row
+bound to `TestComponent`; query the inserted IDs/names and the four required
+group memberships before use; create run-token bugs; check field metadata; call
+each Task 1 operation with the SQL-created release/sub-component and bounded
+fixed-in/whiteboard values; assert the corresponding live REST fields; probe
+bzr; classify only the observed outcome; test ordering, configured fixture,
 missing-control, and diagnostic paths in the shell fixture.
 
 Acceptance: no missing field, permission, or python-bugzilla failure is
@@ -83,9 +90,9 @@ reported as parity or an expected gap.
   Red: fixture rejects a missing row/ID. Green: `bash
   tests/functional/pybz/container-tests.sh` passes.
 
-Steps: add the four rows; run `make lint`, `make test`, and
-`make functional-compare-rhbz`; expect zero exits, phase 09 output for all
-four IDs, and lifecycle cleanup.
+Steps: add the four rows; run `make lint`, `make test`, `make release`, and
+`make functional-compare-rhbz` in that order; expect zero exits, phase 09
+output for all four IDs, and lifecycle cleanup.
 
 Acceptance: the parity report has one evidence-led entry per required
 capability, and the real RHBZ invocation completes without failures.

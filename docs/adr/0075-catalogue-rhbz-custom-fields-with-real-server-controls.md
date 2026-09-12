@@ -15,8 +15,12 @@ the RHBZ field names nor the permissions and persisted response shapes.
 
 Add a RHBZ-only `09-rhbz-fields` phase after smoke and before the ExternalBugs
 catalogue. The phase will create disposable bugs in the seeded component,
-validate the needed administrator permissions and field metadata, and use the
-python-bugzilla adapter's Red Hat argument names to make each mutation. It
+insert a run-token target release and sub-component for that product, validate
+the needed administrator permissions and field metadata, and use the
+python-bugzilla adapter's Red Hat argument names to make each mutation. The
+entrypoint will grant the functional administrator `devel`, `redhat`, and `qa`
+in addition to its existing component and bug-edit groups, and the phase will
+read every required membership before mutating a whiteboard. It
 will read the live server state after each positive control, then probe the
 corresponding `bzr bug create` or `bzr bug update --field` surface and classify
 the observed result. The four stable IDs are `sub-components`,
