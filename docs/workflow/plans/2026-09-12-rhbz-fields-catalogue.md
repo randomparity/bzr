@@ -35,8 +35,9 @@ component.
 ## Task 1 — expose bounded Python-Bugzilla controls
 
 **Interfaces.** The adapter consumes an API key, a positive bug ID, and the
-named RHBZ values; it supplies existing `{"transport":...,"result":...}`
-responses to phase 09.
+named RHBZ values; it applies every control through `build_update`/`update_bugs`
+to phase 09's pre-created fixture bug and supplies existing
+`{"transport":...,"result":...}` responses to phase 09.
 
 **Verification.**
 

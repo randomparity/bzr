@@ -32,7 +32,7 @@ the observed bzr result, not a preselected outcome.
 | Stable ID | Python-bugzilla control | Server readback |
 | --- | --- | --- |
 | `sub-components` | update with run-token `sub_component` | `sub_components` |
-| `target-release` | create with run-token `target_release` | `target_release` |
+| `target-release` | update with run-token `target_release` | `target_release` |
 | `fixed-in` | update with run-token `fixed_in` | `cf_fixed_in` |
 | `whiteboards` | update all three whiteboard arguments | all three `cf_*_whiteboard` fields |
 
