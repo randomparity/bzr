@@ -3188,10 +3188,11 @@ run_rhbz_externalbugs_fixture() (
     GAP_COUNT=0
     SEEN_TEST_IDS=$'\n'
     RHBZ_FIXTURE_STATE=add
+    RHBZ_FIXTURE_CONTROLS=$'1\n1\n2'
 
     run_bugzilla_sql_file() {
         case "$1" in
-            *rhbz-controls.sql) printf '1\n2\n' ;;
+            *rhbz-controls.sql) printf '%s\n' "$RHBZ_FIXTURE_CONTROLS" ;;
             *rhbz-bug.sql) printf '101\n' ;;
             *rhbz-tracker.sql) printf '7\n' ;;
         esac
@@ -3250,6 +3251,25 @@ run_rhbz_externalbugs_fixture() (
             return 1
         fi
     done
+
+    PASS_COUNT=0
+    FAIL_COUNT=0
+    SKIP_COUNT=0
+    GAP_COUNT=0
+    SEEN_TEST_IDS=$'\n'
+    RHBZ_FIXTURE_CONTROLS=$'0\n0\n1'
+    unset RHBZ_BUG_ID RHBZ_TRACKER_ID RHBZ_PRODUCT_ID RHBZ_COMPONENT_ID
+    rm -f "$RESOURCE_GAP_FILE"
+    source "$phase" >"$COMPARE_EXCHANGE_DIR/missing-controls.out"
+    assert_equals 3 "$FAIL_COUNT" "RHBZ ExternalBugs missing-controls fail count"
+    assert_equals 1 "$GAP_COUNT" "RHBZ component gap after missing controls"
+    if ! grep -Fq 'ExternalBugs add positive control failed' \
+        "$COMPARE_EXCHANGE_DIR/missing-controls.out" ||
+        grep -Fq '[compare/08-rhbz-externalbugs/add] ExternalBugs add persists a configured tracker link ... GAP' \
+            "$COMPARE_EXCHANGE_DIR/missing-controls.out"; then
+        printf 'RHBZ ExternalBugs missing-controls path accepted an add gap\n' >&2
+        return 1
+    fi
 )
 
 cleanup_container_fixture() {
