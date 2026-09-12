@@ -21,7 +21,7 @@ printf '%s\n' "\$answer{'ADMIN_EMAIL'} = 'admin@test.bzr';" "\$answer{'ADMIN_PAS
 mkdir -p /var/www/html/bugzilla/data
 touch /var/www/html/bugzilla/data/bz.log /var/www/html/bugzilla/extensions/RedHat/info.log
 if ! perl checksetup.pl --update-db answers.txt; then
-    mysql -u root bugs -e 'ALTER TABLE groups ADD COLUMN category varchar(255);'
+    echo '==> RHBZ schema migration requires a second pass'
 fi
 perl checksetup.pl --update-db answers.txt
 perl checksetup.pl --update-db answers.txt
