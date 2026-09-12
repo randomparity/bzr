@@ -22,11 +22,11 @@ component, external-tracker fixture, and bug. It invokes python-bugzilla only th
 The fixture is explicit: `run_bugzilla_sql_file` inserts a tracker into
 `external_bugzilla` with the run-token description, a stable local URL,
 `full_url`, and `None` type; the RHBZ source exposes no product mapping for a
-tracker, so product scope comes from the test-created bug. The authenticated
-functional administrator belongs to both `editbugs` and `editcomponents`, the
-two server permissions the extension and `Component.update` check. The phase
-reads the inserted tracker and those group memberships before mutation; failure
-is reported separately from an operation failure.
+tracker, so product scope comes from the test-created bug. The RHBZ entrypoint
+idempotently adds `admin@test.bzr` to `editcomponents` after checksetup; the
+existing bootstrap already provides `editbugs`. The phase reads the inserted
+tracker and both group memberships before mutation; failure is reported
+separately from an operation failure.
 
 Each test first proves the python-bugzilla call succeeded over XML-RPC, then
 reads server state through the extension response or fixed REST endpoints. Add

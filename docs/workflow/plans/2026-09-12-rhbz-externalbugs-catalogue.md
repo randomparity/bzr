@@ -17,8 +17,8 @@ the existing disposable RHBZ container, and Rust's existing CLI binary.
 - Use stable `compare/08-rhbz-externalbugs/*` IDs and private exchange files.
 - Real RHBZ behavior, not a proxy or local recorder, is the acceptance proof.
 
-Expected implementation size: 180–280 changed lines (M) — one adapter extension,
-one RHBZ phase, runner/fixture coverage, and four report rows.
+Expected implementation size: 200–310 changed lines (M) — one adapter extension,
+one RHBZ phase, bootstrap privilege grant, runner/fixture coverage, and four report rows.
 
 ## File map
 
@@ -28,6 +28,8 @@ one RHBZ phase, runner/fixture coverage, and four report rows.
   persisted-state assertions, and controlled bzr gaps.
 - Modify `tests/functional/run-rhbz-compare.sh` to establish the existing
   private sidecar/exchange lifecycle and source phase 08 after smoke.
+- Modify `tests/functional/versions/rhbz/entrypoint.sh` to grant the test
+  administrator `editcomponents` after checksetup.
 - Modify `tests/functional/pybz/container-tests.sh` for adapter, phase, and
   stable-ID fixtures.
 - Modify `docs/dev/python-bugzilla-parity.md` for the four evidence rows.
@@ -87,20 +89,23 @@ Steps:
 
 1. Make the RHBZ runner stage the adapter, start/stop the existing sidecar, and
    create/remove its private exchange directory around smoke and phase 08.
-2. Seed a run-token-scoped product, component, and bug. Insert one tracker via
+2. Add an idempotent entrypoint SQL grant that joins `admin@test.bzr` to the
+   existing `editcomponents` group after checksetup; the assertion reads
+   `profiles`, `user_group_map`, and `groups` to prove the grant.
+3. Seed a run-token-scoped product, component, and bug. Insert one tracker via
    `run_bugzilla_sql_file` into `external_bugzilla` with `url`, `description`,
    `full_url`, and `type='None'`; read it back and prove the administrator has
    `editbugs` and `editcomponents` before mutation.
-3. Add the add/update/remove tests, reading the external-bug state after every
+4. Add the add/update/remove tests, reading the external-bug state after every
    python-bugzilla operation.
-4. Add the component-update test, reading the changed component state after
+5. Add the component-update test, reading the changed component state after
    `editcomponent`.
-5. Probe add, update, and remove with `bzr bug external-bug <verb> <bug-id>`;
+6. Probe add, update, and remove with `bzr bug external-bug <verb> <bug-id>`;
    require exit 2 plus the literal `external-bug` and `bzr bug` usage lines.
    Probe component update with `bzr component update`; require exit 2 plus its
    literal `update` and `bzr component` usage lines. Apply
    `resource_expect_gap 774` only after the matching probe.
-6. Extend shell fixtures for sidecar lifecycle, ordering, IDs,
+7. Extend shell fixtures for bootstrap membership, sidecar lifecycle, ordering, IDs,
    positive controls, and gap ownership.
 
 Acceptance criteria: every row's python-bugzilla positive control is real RHBZ

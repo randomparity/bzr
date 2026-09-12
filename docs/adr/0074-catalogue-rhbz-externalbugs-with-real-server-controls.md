@@ -22,10 +22,12 @@ operations for `add_external_tracker`,
 The phase creates its own product, component, and bug; inserts one disposable
 global `external_bugzilla` tracker through the existing container SQL-fixture
 helper (the public adapter deliberately exposes only the four catalogued
-operations); proves add, update, removal, and component mutation by reading
-RHBZ state; then records the absent `bzr` surfaces as controlled expected gaps
-for #774. Replace the former local-only component-update parity row with the
-four real-server rows and stable phase IDs.
+operations). RHBZ bootstrap grants the functional administrator
+`editcomponents` idempotently after checksetup; the phase reads that grant and
+the existing `editbugs` grant before mutation. It proves add, update, removal,
+and component mutation by reading RHBZ state; then records the absent `bzr`
+surfaces as controlled expected gaps for #774. Replace the former local-only
+component-update parity row with the four real-server rows and stable phase IDs.
 
 ## Consequences
 
