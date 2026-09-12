@@ -12,8 +12,9 @@ records the isolation decision.
 ## Scope and architecture
 
 `rhbz` becomes a valid `BZR_BZ_VERSION` only for the existing lifecycle's
-explicit selection. Its image lives beside stock version images, records the
-immutable remote and revision, runs the fork's own setup against its own MariaDB
+explicit selection. Its image lives beside stock version images, fetches and
+checks out the immutable remote revision in detached HEAD state, verifies that
+HEAD equals the pin, then runs the fork's own setup against its own MariaDB
 database, and starts Apache using the existing image conventions. It uses the
 existing checkout-scoped version container name and runtime-assigned port, so
 parallel worktrees remain isolated.
@@ -32,15 +33,16 @@ extension endpoint and passes only when the response establishes reachability an
 advertises `ExternalBugs`, `SubComponents`, and `RedHat`. It runs under the stable
 test ID `compare/07-rhbz-smoke/extensions`.
 
-`make functional-compare-rhbz` explicitly resets the RHBZ lifecycle, runs this
-runner, and stops the RHBZ container on success or failure. Future catalogue work
+`make functional-compare-rhbz` uses one shell to explicitly reset the RHBZ lifecycle,
+runs this runner only after a successful reset, always invokes `stop`, and returns
+failure if reset, runner, or stop fails. Future catalogue work
 may append RHBZ-only phases after this smoke phase; it must not add them to stock
 runners.
 
 ## Success and failure behavior
 
-- A clean build selects exactly the pinned public revision; a missing or changed
-  source revision fails the image build rather than selecting another revision.
+- A clean build fetches, detaches at, and verifies exactly the pinned public revision;
+  an unavailable source revision fails the image build rather than selecting another ref.
 - `BZR_BZ_VERSION=rhbz` can build, start, become REST-ready, and stop through
   the normal lifecycle without affecting stock version behavior.
 - The RHBZ smoke arm fails on an unreachable endpoint, invalid JSON, or any

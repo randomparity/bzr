@@ -46,9 +46,11 @@ whose `/rest/version` endpoint is ready and whose extension endpoint is availabl
 **Steps.**
 
 1. Create the Containerfile from the Fedora and package conventions used by
-   `versions/bz50/Containerfile`. Clone the pinned remote, verify `git rev-parse HEAD`
-   equals the full revision, and copy the fork into `/var/www/html/bugzilla` only when
-   its checkout layout requires it. Install only packages that the fork's `checksetup.pl`
+   `versions/bz50/Containerfile`. Clone the pinned remote, run
+   `git checkout --detach 167ccca1b256f9462cb4aebcb1edbced7e4663d5`, then verify
+   `git rev-parse HEAD` equals that full revision; a checkout failure stops the build.
+   Copy the fork into `/var/www/html/bugzilla` only when its checkout layout requires it.
+   Install only packages that the fork's `checksetup.pl`
    reports as required during the real build; do not retain a best-effort dependency
    install that hides a missing prerequisite.
 2. Create the entrypoint based on `versions/bz50/entrypoint.sh`: start MariaDB, create
@@ -137,9 +139,22 @@ three extension names, and it does not run stock comparison phases or sidecar se
 
 **Steps.**
 
-1. Add `functional-compare-rhbz` beside comparison targets. It invokes `reset`, then the
-   dedicated runner, preserves its status, invokes `stop` regardless, and fails if either
-   operation fails. Add both new shell files to shellcheck and `bash -n` lists.
+1. Add `functional-compare-rhbz` beside comparison targets. Its complete recipe is one
+   shell so Make cannot skip cleanup after a failing line:
+
+   ```make
+   functional-compare-rhbz: release
+
+	@status=0; \
+	BZR_BZ_VERSION=rhbz tests/functional/setup-bugzilla.sh reset || status=1; \
+	if [ $$status -eq 0 ]; then \
+	  BZR_BZ_VERSION=rhbz tests/functional/run-rhbz-compare.sh || status=1; \
+	fi; \
+	BZR_BZ_VERSION=rhbz tests/functional/setup-bugzilla.sh stop || status=1; \
+	exit $$status
+   ```
+
+   Add both new shell files to shellcheck and `bash -n` lists.
 2. Add the target fixture and run the red/green shell-gate observation. Run `make lint`
    and `make test`; expect exit 0.
 3. Run `make functional-compare-rhbz`; expect a passing extension smoke result and no
