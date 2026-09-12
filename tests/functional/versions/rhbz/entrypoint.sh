@@ -22,7 +22,7 @@ mkdir -p /var/www/html/bugzilla/data
 touch /var/www/html/bugzilla/data/bz.log /var/www/html/bugzilla/extensions/RedHat/info.log
 if ! perl checksetup.pl --update-db answers.txt; then
     echo '==> RHBZ schema migration requires a second pass'
-    mysql -u root bugs -e 'ALTER TABLE report_groups MODIFY report_id MEDIUMINT UNSIGNED NOT NULL;'
+    mysql -u root bugs -e 'ALTER TABLE report_groups MODIFY report_id MEDIUMINT UNSIGNED NOT NULL, MODIFY group_id MEDIUMINT UNSIGNED NOT NULL;'
 fi
 perl checksetup.pl --update-db answers.txt
 perl checksetup.pl --update-db answers.txt
