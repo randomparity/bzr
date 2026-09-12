@@ -3,13 +3,19 @@ FROM docker.io/library/fedora:39
 RUN dnf -y install mariadb-server mariadb httpd mod_perl perl-interpreter \
         perl-CGI perl-DBI perl-DBD-MySQL perl-DateTime perl-Email-MIME perl-Memoize perl-Safe \
         perl-Email-Sender perl-Encode perl-JSON-XS perl-Template-Toolkit \
-        perl-URI perl-XMLRPC-Lite git && dnf clean all
+        perl-URI perl-XMLRPC-Lite perl-App-cpanminus git && dnf clean all
 
 RUN git clone https://pagure.io/Red-Hat-Bugzilla/rh-bugzilla.git /var/www/html/bugzilla \
     && cd /var/www/html/bugzilla \
     && git checkout --detach 167ccca1b256f9462cb4aebcb1edbced7e4663d5 \
     && test "$(git rev-parse HEAD)" = 167ccca1b256f9462cb4aebcb1edbced7e4663d5 \
     && mysql_install_db --user=mysql --datadir=/var/lib/mysql
+
+RUN cpanm --notest Math::Random::ISAAC Mail::GPG HTTP::BrowserDetect JSON::RPC \
+        Test::Taint Email::Address Net::DNS Crypt::JWT Daemon::Generic Crypt::CBC \
+        Crypt::DES Crypt::DES_EDE3 File::pushd Text::Diff Parallel::ForkManager \
+        Log::Log4perl::Layout::JSON List::Compare Net::SAML2 File::Slurp \
+        Crypt::OpenPGP Crypt::SMIME GnuPG::Interface
 
 RUN printf '%s\n' '$db_driver = "mysql";' '$db_host = "localhost";' \
       '$db_name = "bugs";' '$db_user = "bugs";' '$db_pass = "bugzilla";' \
