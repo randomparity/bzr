@@ -20,6 +20,17 @@ assert_equals() {
     return 0
 }
 
+file_mode() {
+    local path="$1"
+    local mode
+
+    mode=$(stat -f '%Lp' "$path" 2>/dev/null || :)
+    if [[ ! $mode =~ ^[0-7]{3,4}$ ]]; then
+        mode=$(stat -c '%a' "$path")
+    fi
+    printf '%s\n' "$mode"
+}
+
 run_expected_gap_fixture() {
     local summary
     local result_output
@@ -204,7 +215,7 @@ run_api_key_identity_request_fixture() (
     assert_equals "$COMPARE_EXCHANGE_DIR/auth-placement.pybz.input.json" "$request" \
         "API-key identity request path"
     assert_equals 600 \
-        "$(stat -f '%Lp' "$request" 2>/dev/null || stat -c '%a' "$request")" \
+        "$(file_mode "$request")" \
         "API-key identity request mode"
     assert_equals \
         '{"api_key":"identity-api-secret","url":"http://identity-proxy.invalid:18080","username":"identity-user@test.invalid"}' \
@@ -1315,7 +1326,7 @@ run_namespace_proxy_helper_fixture() (
     : >"$FAKE_PROXY_LOG"
     sleep() { :; }
     fixture_mode() {
-        stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"
+        file_mode "$1"
     }
     openssl() {
         local previous='' argument
