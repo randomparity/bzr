@@ -1,0 +1,59 @@
+FROM docker.io/library/fedora:39
+
+RUN dnf -y install mariadb-server mariadb httpd mod_perl perl-interpreter \
+        perl-CGI perl-DBI perl-DBD-MySQL perl-DateTime perl-Email-MIME perl-Memoize perl-Safe \
+        perl-Email-Sender perl-Encode perl-JSON-XS perl-Template-Toolkit \
+        perl-URI perl-XMLRPC-Lite perl-App-cpanminus gmp-devel openssl-devel gnupg2 which git && dnf clean all
+
+RUN git clone https://pagure.io/Red-Hat-Bugzilla/rh-bugzilla.git /var/www/html/bugzilla \
+    && cd /var/www/html/bugzilla \
+    && git checkout --detach 167ccca1b256f9462cb4aebcb1edbced7e4663d5 \
+    && test "$(git rev-parse HEAD)" = 167ccca1b256f9462cb4aebcb1edbced7e4663d5 \
+    && mysql_install_db --user=mysql --datadir=/var/lib/mysql
+
+# This public source snapshot carries production field IDs. They do not apply
+# to a fresh database, so keep the fields but omit their stale dependencies.
+RUN sed -i '/^  \(visibility_field_id\|value_field_id\|visibility_values\):/d' \
+        /var/www/html/bugzilla/extensions/RedHat/custom_fields.yaml \
+    && sed -i 's/SELECT count (\*)/SELECT count(*)/' \
+        /var/www/html/bugzilla/extensions/RedHat/lib/Schema.pm
+
+RUN cpanm --notest Math::Random::ISAAC Mail::GPG HTTP::BrowserDetect JSON::RPC \
+        Test::Taint Email::Address Net::DNS Crypt::JWT Daemon::Generic Crypt::CBC \
+        Crypt::DES Crypt::DES_EDE3 File::pushd Text::Diff Parallel::ForkManager \
+        Log::Log4perl::Layout::JSON List::Compare Net::SAML2 File::Slurp \
+        Crypt::OpenPGP Crypt::SMIME GnuPG::Interface DateTime::Format::DBI
+
+RUN cpanm --notest Path::Class
+
+# This production-data migration assumes a pre-existing Bugzilla product and
+# bot accounts; neither is part of the fresh disposable smoke database.
+RUN sed -i '/## REDHAT EXTENSION START 2186036/,/## REDHAT EXTENSION END 2186036/d' \
+        /var/www/html/bugzilla/extensions/RedHat/lib/Schema.pm
+
+# RedHat's filesystem hook uses this module's qualified permission helper but
+# does not load the module on the REST path.
+RUN sed -i '/^use Bugzilla::Flag;/a use Bugzilla::Install::Filesystem ();' \
+        /var/www/html/bugzilla/extensions/RedHat/Extension.pm
+
+# RedHat's schema explicitly reads AgileTools tables. Keep that companion with
+# the three extensions this lifecycle verifies. Its group setup also uses
+# SecureMail's `secure_mail` option.
+RUN find /var/www/html/bugzilla/extensions -mindepth 1 -maxdepth 1 -type d \
+        ! -name AgileTools ! -name ExternalBugs ! -name RedHat ! -name SecureMail \
+        ! -name SubComponents -exec rm -rf -- {} +
+
+RUN dnf -y install perl-DBD-Pg perl-Graph-Easy perl-HTML-Scrubber perl-IPC-Run perl-JSON-Any \
+        perl-LDAP perl-List-MoreUtils perl-List-UtilsBy perl-Regexp-Common \
+        perl-TimeDate perl-YAML-Syck && dnf clean all
+
+RUN sed -i 's|DocumentRoot "/var/www/html"|DocumentRoot "/var/www/html/bugzilla"|' /etc/httpd/conf/httpd.conf \
+    && printf '%s\n' '<Directory "/var/www/html/bugzilla">' 'AddHandler cgi-script .cgi' \
+      'Options +ExecCGI +FollowSymLinks' 'Require all granted' '</Directory>' \
+      'RewriteEngine On' 'RewriteRule ^/rest/(.*)$ /rest.cgi/$1 [L]' > /etc/httpd/conf.d/bugzilla.conf \
+    && echo 'LoadModule rewrite_module modules/mod_rewrite.so' >> /etc/httpd/conf.modules.d/00-rewrite.conf
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+EXPOSE 80
+CMD ["/entrypoint.sh"]

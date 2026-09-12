@@ -151,8 +151,8 @@ check-shell: ## Lint shell scripts (shellcheck + shfmt, POSIX and bash)
 	# (SC1091, info-only) when the sourced file is a listed input.
 	# record-demo.sh's sources are silenced by their own disable=SC1091
 	# directives, so listing container-env.sh never changes its result.
-	shellcheck -s bash tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/run-compare.sh tests/functional/run-compare-all.sh tests/functional/run-all-versions.sh tests/functional/setup-bugzilla.sh tests/functional/container-env.sh tests/functional/keyring-test.sh tests/functional/phases/*.sh tests/functional/compare/*.sh tests/functional/pybz/*.sh tests/functional/versions/*/entrypoint.sh
-	bash -n tools/record-demo.sh tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/run-compare.sh tests/functional/run-compare-all.sh tests/functional/run-all-versions.sh tests/functional/setup-bugzilla.sh tests/functional/container-env.sh tests/functional/keyring-test.sh tests/functional/phases/*.sh tests/functional/compare/*.sh tests/functional/pybz/*.sh tests/functional/versions/*/entrypoint.sh
+	shellcheck -s bash tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/run-compare.sh tests/functional/run-rhbz-compare.sh tests/functional/run-compare-all.sh tests/functional/run-all-versions.sh tests/functional/setup-bugzilla.sh tests/functional/container-env.sh tests/functional/keyring-test.sh tests/functional/phases/*.sh tests/functional/compare/*.sh tests/functional/compare/rhbz/*.sh tests/functional/pybz/*.sh tests/functional/versions/*/entrypoint.sh
+	bash -n tools/record-demo.sh tests/functional/lib.sh tests/functional/run-tests.sh tests/functional/run-compare.sh tests/functional/run-rhbz-compare.sh tests/functional/run-compare-all.sh tests/functional/run-all-versions.sh tests/functional/setup-bugzilla.sh tests/functional/container-env.sh tests/functional/keyring-test.sh tests/functional/phases/*.sh tests/functional/compare/*.sh tests/functional/compare/rhbz/*.sh tests/functional/pybz/*.sh tests/functional/versions/*/entrypoint.sh
 	shfmt -d -ln posix -i 2 install.sh tests/installer/smoke.sh
 	shfmt -d -ln bash -i 2 tools/*.sh
 
@@ -238,6 +238,15 @@ functional-test-all: ## Run functional tests against all Bugzilla versions
 functional-compare-all: release ## Compare bzr and python-bugzilla on all versions
 	bash tests/functional/pybz/container-tests.sh
 	BZR_COMPARE_BIN="$(BZR_COMPARE_BIN)" tests/functional/run-compare-all.sh
+
+functional-compare-rhbz: ## Run the isolated RHBZ extension smoke comparison
+	@status=0; \
+	BZR_BZ_VERSION=rhbz tests/functional/setup-bugzilla.sh reset || status=1; \
+	if [ $$status -eq 0 ]; then \
+	  BZR_BZ_VERSION=rhbz tests/functional/run-rhbz-compare.sh || status=1; \
+	fi; \
+	BZR_BZ_VERSION=rhbz tests/functional/setup-bugzilla.sh stop || status=1; \
+	exit $$status
 
 # `stop` now fails when a container survives removal (ADR 0067), so run the three
 # as one shell: every version is still attempted, and the target fails if any did
