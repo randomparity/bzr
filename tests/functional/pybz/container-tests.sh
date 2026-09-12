@@ -3109,6 +3109,37 @@ run_product_component_phase_fixture() (
     printf 'controlled red: products/components wrong gap owner\n'
 )
 
+run_rhbz_extensions_fixture() (
+    local phase="$PYBZ_DIR/../compare/07-rhbz-smoke.sh"
+
+    BZ_URL=http://127.0.0.1
+    TEST_ID_PREFIX=compare
+    CURRENT_TEST_GROUP=07-rhbz-smoke
+    PASS_COUNT=0
+    FAIL_COUNT=0
+    SKIP_COUNT=0
+    GAP_COUNT=0
+    SEEN_TEST_IDS=$'\n'
+
+    curl() {
+        printf '%s\n' "${RHBZ_EXTENSIONS_RESPONSE}"
+    }
+
+    RHBZ_EXTENSIONS_RESPONSE='{"extensions":{"ExternalBugs":{},"SubComponents":{},"RedHat":{}}}'
+    source "$phase" >/dev/null
+    assert_equals 1 "$PASS_COUNT" "RHBZ extension smoke pass count"
+    assert_equals 0 "$FAIL_COUNT" "RHBZ extension smoke fail count"
+
+    PASS_COUNT=0
+    FAIL_COUNT=0
+    SEEN_TEST_IDS=$'\n'
+    RHBZ_EXTENSIONS_RESPONSE='{"extensions":{"ExternalBugs":{},"SubComponents":{}}}'
+    source "$phase" >/dev/null
+    assert_equals 0 "$PASS_COUNT" "incomplete RHBZ extension smoke pass count"
+    assert_equals 1 "$FAIL_COUNT" "incomplete RHBZ extension smoke fail count"
+    printf 'controlled red: RHBZ extension smoke missing RedHat\n'
+)
+
 cleanup_container_fixture() {
     local runtime="$1"
     local donor="$2"
@@ -3234,4 +3265,5 @@ run_attachment_phase_fixture
 run_user_group_phase_fixture
 run_membership_cleanup_fixture
 run_product_component_phase_fixture
+run_rhbz_extensions_fixture
 run_container_fixture
