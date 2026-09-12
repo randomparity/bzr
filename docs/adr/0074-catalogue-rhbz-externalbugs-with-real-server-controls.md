@@ -25,7 +25,8 @@ the exact returned IDs to its disposable bug; it inserts one disposable global
 (the public adapter deliberately exposes only the four catalogued operations).
 RHBZ bootstrap grants the functional administrator `editcomponents`
 idempotently after checksetup; the phase reads that grant and the existing
-`editbugs` grant before every mutation. It proves add, update, removal,
+`editbugs` grant before fixture creation and before component update. Update
+and removal depend on the successful validated add fixture. It proves add, update, removal,
 and component mutation by reading RHBZ state; then records the absent `bzr`
 surfaces as controlled expected gaps for #774. Replace the former local-only
 component-update parity row with the four real-server rows and stable phase IDs.

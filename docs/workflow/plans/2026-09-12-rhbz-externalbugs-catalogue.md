@@ -96,7 +96,8 @@ Steps:
    returned IDs to a run-token-scoped bug, and insert one tracker via
    `run_bugzilla_sql_file` into `external_bugzilla` with `url`, `description`,
    `full_url`, and `type='None'`; read the component and both administrator
-   grants before every mutation.
+   grants before fixture creation and before component update, with update and
+   removal dependent on the successful add fixture.
 4. Add the add/update/remove tests, reading the external-bug state after every
    python-bugzilla operation.
 5. Add the component-update test, reading the changed component state after
