@@ -2022,6 +2022,70 @@ run_adapter_fixture() {
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" bug-tags bug_tags \
         '{"api_key":"fixture-secret","bug_id":36,"tag":"probe"}' \
         '{"result":{"bugs":[{"id":201,"request":{"builder":"query","tags":["probe"]}}],"update":{"add":["probe"],"ids":[36],"remove":null}},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" rhbz-sub-component \
+        rhbz_sub_component \
+        '{"api_key":"fixture-secret","bug_id":38,"sub_component":"Fixture Subcomponent"}' \
+        '{"result":{"ids":[38],"update":{"builder":"update","sub_component":"Fixture Subcomponent"}},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" rhbz-target-release \
+        rhbz_target_release \
+        '{"api_key":"fixture-secret","bug_id":38,"target_release":"Fixture Release"}' \
+        '{"result":{"ids":[38],"update":{"builder":"update","target_release":"Fixture Release"}},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" rhbz-fixed-in \
+        rhbz_fixed_in \
+        '{"api_key":"fixture-secret","bug_id":38,"fixed_in":"fixture-1.0"}' \
+        '{"result":{"ids":[38],"update":{"builder":"update","fixed_in":"fixture-1.0"}},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" rhbz-whiteboards \
+        rhbz_whiteboards \
+        '{"api_key":"fixture-secret","bug_id":38,"devel_whiteboard":"devel","internal_whiteboard":"internal","qa_whiteboard":"qa"}' \
+        '{"result":{"ids":[38],"update":{"builder":"update","devel_whiteboard":"devel","internal_whiteboard":"internal","qa_whiteboard":"qa"}},"transport":"XMLRPC"}'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-sub-component-extra rhbz_sub_component \
+        '{"api_key":"fixture-secret","bug_id":38,"sub_component":"Fixture Subcomponent","extra":true}' \
+        'unexpected request fields: extra'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-sub-component-missing rhbz_sub_component \
+        '{"api_key":"fixture-secret","bug_id":38}' \
+        'missing request fields: sub_component'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-sub-component-invalid rhbz_sub_component \
+        '{"api_key":"fixture-secret","bug_id":38,"sub_component":false}' \
+        'sub_component must be a non-empty string'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-target-release-extra rhbz_target_release \
+        '{"api_key":"fixture-secret","bug_id":38,"target_release":"Fixture Release","extra":true}' \
+        'unexpected request fields: extra'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-target-release-missing rhbz_target_release \
+        '{"api_key":"fixture-secret","bug_id":38}' \
+        'missing request fields: target_release'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-target-release-invalid rhbz_target_release \
+        '{"api_key":"fixture-secret","bug_id":38,"target_release":false}' \
+        'target_release must be a non-empty string'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-fixed-in-extra rhbz_fixed_in \
+        '{"api_key":"fixture-secret","bug_id":38,"fixed_in":"fixture-1.0","extra":true}' \
+        'unexpected request fields: extra'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-fixed-in-missing rhbz_fixed_in \
+        '{"api_key":"fixture-secret","bug_id":38}' \
+        'missing request fields: fixed_in'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-fixed-in-invalid rhbz_fixed_in \
+        '{"api_key":"fixture-secret","bug_id":38,"fixed_in":false}' \
+        'fixed_in must be a non-empty string'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-whiteboards-extra rhbz_whiteboards \
+        '{"api_key":"fixture-secret","bug_id":38,"devel_whiteboard":"devel","internal_whiteboard":"internal","qa_whiteboard":"qa","extra":true}' \
+        'unexpected request fields: extra'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-whiteboards-missing rhbz_whiteboards \
+        '{"api_key":"fixture-secret","bug_id":38,"devel_whiteboard":"devel","internal_whiteboard":"internal"}' \
+        'missing request fields: qa_whiteboard'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-whiteboards-invalid rhbz_whiteboards \
+        '{"api_key":"fixture-secret","bug_id":38,"devel_whiteboard":"devel","internal_whiteboard":"internal","qa_whiteboard":false}' \
+        'qa_whiteboard must be a non-empty string'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" comment-add comment_add \
         '{"api_key":"fixture-secret","transport":"REST","bug_id":41,"text":"hello","is_private":true}' \
         '{"result":{"ids":[41],"update":{"builder":"update","comment":{"comment":"hello","is_private":true}}},"transport":"REST"}'

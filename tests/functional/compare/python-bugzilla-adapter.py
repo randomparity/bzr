@@ -278,6 +278,35 @@ def _bug_tags(client, request):
     return {"update": update, "bugs": _bug_list(client.query(query))}
 
 
+def _rhbz_update(client, request, fields):
+    _validate_keys(request, ("api_key", "bug_id", *fields))
+    bug_id = _required_id(request)
+    update = client.build_update(
+        **{field: _required_text(request, field) for field in fields}
+    )
+    return client.update_bugs([bug_id], update)
+
+
+def _rhbz_sub_component(client, request):
+    return _rhbz_update(client, request, ("sub_component",))
+
+
+def _rhbz_target_release(client, request):
+    return _rhbz_update(client, request, ("target_release",))
+
+
+def _rhbz_fixed_in(client, request):
+    return _rhbz_update(client, request, ("fixed_in",))
+
+
+def _rhbz_whiteboards(client, request):
+    return _rhbz_update(
+        client,
+        request,
+        ("devel_whiteboard", "internal_whiteboard", "qa_whiteboard"),
+    )
+
+
 def _comment_add(client, request):
     _validate_keys(request, ("api_key", "bug_id", "text", "is_private"))
     update = client.build_update(
@@ -705,6 +734,10 @@ OPERATIONS = {
     "update_options": _update_options,
     "match_type": _match_type,
     "bug_tags": _bug_tags,
+    "rhbz_sub_component": _rhbz_sub_component,
+    "rhbz_target_release": _rhbz_target_release,
+    "rhbz_fixed_in": _rhbz_fixed_in,
+    "rhbz_whiteboards": _rhbz_whiteboards,
     "comment_add": _comment_add,
     "comment_list": _comment_list,
     "attachment_upload": _attachment_upload,
