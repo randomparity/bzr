@@ -47,10 +47,7 @@ RUN dnf -y install perl-DBD-Pg perl-Graph-Easy perl-HTML-Scrubber perl-IPC-Run p
         perl-LDAP perl-List-MoreUtils perl-List-UtilsBy perl-Regexp-Common \
         perl-TimeDate perl-YAML-Syck && dnf clean all
 
-RUN printf '%s\n' '$db_driver = "mysql";' '$db_host = "localhost";' \
-      '$db_name = "bugs";' '$db_user = "bugs";' '$db_pass = "bugzilla";' \
-      '$webservergroup = "apache";' > /var/www/html/bugzilla/localconfig \
-    && sed -i 's|DocumentRoot "/var/www/html"|DocumentRoot "/var/www/html/bugzilla"|' /etc/httpd/conf/httpd.conf \
+RUN sed -i 's|DocumentRoot "/var/www/html"|DocumentRoot "/var/www/html/bugzilla"|' /etc/httpd/conf/httpd.conf \
     && printf '%s\n' '<Directory "/var/www/html/bugzilla">' 'AddHandler cgi-script .cgi' \
       'Options +ExecCGI +FollowSymLinks' 'Require all granted' '</Directory>' \
       'RewriteEngine On' 'RewriteRule ^/rest/(.*)$ /rest.cgi/$1 [L]' > /etc/httpd/conf.d/bugzilla.conf \
