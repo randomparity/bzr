@@ -13,8 +13,9 @@ records that boundary.
 `run-rhbz-compare.sh` will establish the same private exchange directory,
 adapter staging, and python-bugzilla sidecar lifecycle as the stock comparison
 runner, then source `07-rhbz-smoke.sh` followed by a new
-`08-rhbz-externalbugs.sh`. The new phase owns a uniquely named product,
-component, external-tracker fixture, and bug. It invokes python-bugzilla only through
+`08-rhbz-externalbugs.sh`. The new phase validates the seeded `TestProduct`/
+`TestComponent` pair, then owns an external-tracker fixture and bug bound to
+the validated IDs. It invokes python-bugzilla only through
 `python-bugzilla-adapter.py`, which validates JSON requests before calling the
 3.3.0 library's `add_external_tracker`, `update_external_tracker`,
 `remove_external_tracker`, and `editcomponent` methods.
@@ -31,7 +32,7 @@ separately from an operation failure.
 Each test first proves the python-bugzilla call succeeded over XML-RPC, then
 reads server state through the extension response or fixed REST endpoints. Add
 verifies the created link; update verifies its changed status/description;
-remove verifies it is absent; component update verifies the seeded component's
+remove verifies it is absent; component update verifies the validated component's
 persisted fields. The bzr command probe is accepted only when it produces the
 exact parser contracts below; that result becomes one `expect_gap 774`
 classification per test. Any successful bzr command, changed diagnostic,
