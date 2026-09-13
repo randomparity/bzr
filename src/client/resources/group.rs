@@ -80,14 +80,18 @@ impl BugzillaClient {
         // endpoint regardless of the configured API mode.
         match self.get_group_rest(group).await {
             Ok(info) => Ok(info),
-            Err(BzrError::Api { code: 32610, .. }) => {
+            Err(BzrError::Api { code: 32610, .. }) if self.api_key.is_some() => {
                 tracing::info!(
                     "REST Group.get blocked (32610), \
                      falling back to XML-RPC"
                 );
                 self.xmlrpc_client().get_group(group).await
             }
-            Err(e) if self.api_mode == ApiMode::Hybrid && e.is_transport_failure() => {
+            Err(e)
+                if self.api_key.is_some()
+                    && self.api_mode == ApiMode::Hybrid
+                    && e.is_transport_failure() =>
+            {
                 tracing::info!(
                     "REST group lookup failed ({e}), \
                      retrying via XML-RPC"

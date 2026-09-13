@@ -353,6 +353,41 @@ async fn rest_get_group_32610_falls_back_to_xmlrpc() {
 }
 
 #[tokio::test]
+async fn token_rest_get_group_32610_does_not_fall_back_to_xmlrpc() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/group"))
+        .and(query_param("names", "admin"))
+        .and(query_param("Bugzilla_token", "login-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "error": true,
+            "code": 32610,
+            "message": "For security reasons, you must use HTTP POST to call the 'get' method."
+        })))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = super::BugzillaClient::new(crate::client::BugzillaClientConfig {
+        base_url: &mock.uri(),
+        credential: None,
+        token: Some("login-token"),
+        auth_method: None,
+        api_mode: ApiMode::Rest,
+        email_hint: None,
+        server_name: "test",
+        tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
+    })
+    .unwrap();
+
+    let err = client.get_group("admin").await.unwrap_err();
+    assert!(matches!(err, BzrError::Api { code: 32610, .. }));
+    assert_eq!(mock.received_requests().await.unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn xmlrpc_mode_get_group_bypasses_rest() {
     let mock = MockServer::start().await;
 
