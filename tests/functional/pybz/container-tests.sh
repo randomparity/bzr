@@ -1230,6 +1230,7 @@ run_parity_report_fixture() {
     # matrix is a separate contract: it must retain every declared 3.3.0
     # reference-surface group, rather than silently returning to an unclassified
     # remainder as comparison phases evolve.
+    # shellcheck disable=SC2016 # Markdown code spans are literal fixture data.
     local -a surface_groups=(
         '`--bugzilla`, `--verbose`, `--debug`, `--version`, `--bztype`'
         '`--nosslverify`, `--cert`'
