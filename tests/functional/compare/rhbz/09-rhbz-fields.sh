@@ -68,6 +68,24 @@ rhbz_fields_read() {
         >"$COMPARE_EXCHANGE_DIR/rhbz-fields-${name}-state.json"
 }
 
+rhbz_fields_read_with_bzr() {
+    local name="$1" bug_id="$2" fields="$3" filter="$4" expected="$5"
+
+    RUST_LOG=bzr=debug run_bzr --server "$RESOURCE_SERVER" --api rest bug view "$bug_id" \
+        --fields "id,$fields"
+    resource_capture_bzr "rhbz-fields-${name}-read-json"
+    if [[ $BZR_EXIT -ne 0 ]] || ! jq -e --arg expected "$expected" "$filter" \
+        "$BZR_STDOUT" >/dev/null; then
+        return 1
+    fi
+
+    RUST_LOG=bzr=debug run_bzr_raw --output ndjson --server "$RESOURCE_SERVER" --api rest \
+        bug view "$bug_id" --fields "id,$fields"
+    resource_capture_bzr "rhbz-fields-${name}-read-ndjson"
+    [[ $BZR_EXIT -eq 0 ]] && jq -e --arg expected "$expected" "$filter" \
+        "$BZR_STDOUT" >/dev/null
+}
+
 rhbz_fields_probe_bzr() {
     local name="$1" bug_id="$2" field="$3" value="$4" state_filter="$5" expected="$6"
 
@@ -95,7 +113,8 @@ rhbz_fields_probe_bzr() {
 rhbz_fields_run() {
     local name="$1" operation="$2" payload="$3" pybz_fields="$4" bzr_field="$5"
     local pybz_filter="$6" pybz_expected="$7" bzr_value="$8" bzr_filter="$9"
-    local bzr_expected="${10}" bug_id
+    local bzr_expected="${10}" bug_id bzr_read_filter
+    bzr_read_filter=${pybz_filter//.bugs[0]./.}
 
     test_begin "$name" "RHBZ $name persists a configured field"
     resource_gap_reset
@@ -105,7 +124,9 @@ rhbz_fields_run() {
             "$(jq -cn --argjson bug_id "$bug_id" --argjson payload "$payload" '$payload + {bug_id:$bug_id,transport:"REST"}')" REST &&
         rhbz_fields_read "$bug_id" "$pybz_fields" "$name" &&
         jq -e --arg expected "$pybz_expected" "$pybz_filter" \
-            "$COMPARE_EXCHANGE_DIR/rhbz-fields-${name}-state.json" >/dev/null; then
+            "$COMPARE_EXCHANGE_DIR/rhbz-fields-${name}-state.json" >/dev/null &&
+        rhbz_fields_read_with_bzr "$name" "$bug_id" "$pybz_fields" "$bzr_read_filter" \
+            "$pybz_expected"; then
         rhbz_fields_probe_bzr "$name" "$bug_id" "$bzr_field" "$bzr_value" "$bzr_filter" "$bzr_expected"
     elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
         test_fail "RHBZ $name positive control failed"

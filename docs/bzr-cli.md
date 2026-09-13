@@ -433,10 +433,12 @@ signal. When a window is truncated:
 #### Field selection and custom fields
 
 `--fields` accepts built-in bug fields and Bugzilla custom fields whose names
-start with `cf_`. Custom fields are not fetched by default; request them
-explicitly, for example `--fields id,summary,cf_release`. If Bugzilla omits a
-requested custom field, it is omitted from JSON output and rendered as an empty
-table cell. Unknown non-custom field names warn or fail as described above.
+start with `cf_`. It also accepts the readable RHBZ extension fields
+`target_release` and `sub_components`. None are fetched by default; request
+them explicitly, for example `--fields id,summary,target_release`. If a stock
+or RHBZ server omits a requested dynamic field, it is omitted from JSON output
+and rendered as an empty table cell. Unknown names other than these extensions
+and `cf_*` fields warn or fail as described above.
 
 #### Additional field filters (issue #158)
 

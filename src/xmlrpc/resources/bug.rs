@@ -280,7 +280,7 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
 
 fn custom_fields_from_xmlrpc(m: &BTreeMap<String, Value>) -> BTreeMap<String, serde_json::Value> {
     m.iter()
-        .filter(|(name, _)| name.starts_with("cf_"))
+        .filter(|(name, _)| crate::types::bug::is_dynamic_bug_field(name))
         .map(|(name, value)| (name.clone(), xmlrpc_value_to_json(value)))
         .collect()
 }

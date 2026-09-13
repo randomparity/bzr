@@ -425,16 +425,37 @@ fn extract_bugs_rejects_non_array_payload() {
 }
 
 #[test]
-fn value_to_bug_captures_custom_fields() {
+fn value_to_bug_captures_custom_and_named_rhbz_fields() {
     let mut payload = BTreeMap::new();
     payload.insert("id".into(), Value::Int(42));
     payload.insert("summary".into(), Value::String("custom".into()));
     payload.insert("cf_release".into(), Value::String("9.6".into()));
+    payload.insert(
+        "target_release".into(),
+        Value::Array(vec![
+            Value::String("9.6".into()),
+            Value::String("9.7".into()),
+        ]),
+    );
+    let mut sub_components = BTreeMap::new();
+    sub_components.insert(
+        "Kernel".into(),
+        Value::Array(vec![Value::String("drivers".into())]),
+    );
+    payload.insert("sub_components".into(), Value::Struct(sub_components));
     payload.insert("x_extension".into(), Value::String("ignored".into()));
 
     let bug = value_to_bug(&Value::Struct(payload)).unwrap();
 
     assert_eq!(bug.custom_fields["cf_release"], serde_json::json!("9.6"));
+    assert_eq!(
+        bug.custom_fields["target_release"],
+        serde_json::json!(["9.6", "9.7"])
+    );
+    assert_eq!(
+        bug.custom_fields["sub_components"],
+        serde_json::json!({"Kernel": ["drivers"]})
+    );
     assert!(!bug.custom_fields.contains_key("x_extension"));
 }
 

@@ -279,8 +279,8 @@ pub fn default_selected_fields() -> Vec<SelectedBugField<'static>> {
         .collect()
 }
 
-pub fn is_custom_bug_field(token: &str) -> bool {
-    token.starts_with("cf_")
+pub fn is_dynamic_bug_field(token: &str) -> bool {
+    super::is_dynamic_bug_field(token)
 }
 
 /// Split a comma list into built-in fields, custom fields, and unknown tokens,
@@ -304,7 +304,7 @@ pub fn partition_include(list: &str) -> FieldPartition<'_> {
                     partition.ordered.push(SelectedBugField::BuiltIn(field));
                 }
             }
-            None if is_custom_bug_field(token) => {
+            None if is_dynamic_bug_field(token) => {
                 if seen.insert(token) {
                     partition.ordered.push(SelectedBugField::Custom(token));
                     partition.custom.push(token);

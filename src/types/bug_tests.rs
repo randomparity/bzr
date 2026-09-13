@@ -242,6 +242,37 @@ fn bug_deserializes_custom_fields() {
 }
 
 #[test]
+fn bug_retains_named_rhbz_extension_shapes() {
+    let json = r#"{
+        "id": 42,
+        "target_release": ["9.6", "9.7"],
+        "sub_components": {"Kernel": ["drivers", "net"]},
+        "x_extension": "ignored"
+    }"#;
+    let bug: Bug = serde_json::from_str(json).unwrap();
+
+    assert_eq!(
+        bug.custom_fields["target_release"],
+        serde_json::json!(["9.6", "9.7"])
+    );
+    assert_eq!(
+        bug.custom_fields["sub_components"],
+        serde_json::json!({"Kernel": ["drivers", "net"]})
+    );
+    assert!(!bug.custom_fields.contains_key("x_extension"));
+
+    let serialized = serde_json::to_value(&bug).unwrap();
+    assert_eq!(
+        serialized["target_release"],
+        serde_json::json!(["9.6", "9.7"])
+    );
+    assert_eq!(
+        serialized["sub_components"],
+        serde_json::json!({"Kernel": ["drivers", "net"]})
+    );
+}
+
+#[test]
 fn bug_deserializes_sparse_custom_fields_with_defaults() {
     let json = r#"{"id": 42, "cf_release": "9.6"}"#;
     let bug: Bug = serde_json::from_str(json).unwrap();
