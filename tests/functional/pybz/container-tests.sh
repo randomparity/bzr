@@ -1225,6 +1225,38 @@ run_parity_report_fixture() {
             return 1
         fi
     done
+
+    # The capability rows above prove individual operations.  The consolidation
+    # matrix is a separate contract: it must retain every declared 3.3.0
+    # reference-surface group, rather than silently returning to an unclassified
+    # remainder as comparison phases evolve.
+    local -a surface_groups=(
+        '`--bugzilla`, `--verbose`, `--debug`, `--version`, `--bztype`'
+        '`--nosslverify`, `--cert`'
+        '`--login`, `--username`, `--password`, `--restrict-login`, `--ensure-logged-in`, `--no-cache-credentials`, `--cookiefile`, `--tokenfile`, `--api-key`, `pos_username`, `pos_password`'
+        '`--full`, `--ids`, `--extra`, `--oneline`, `--json`, `--includefield`, `--extrafield`, `--excludefield`, `--raw`, `--outputformat`'
+        '`--field`, `--field-json`'
+        '`--product`, `--version`, `--component`, `--summary`, `--short_desc`, `--comment`, `--long_desc`, `--sub-component`, `--os`, `--arch`, `--severity`, `--priority`, `--alias`, `--status`, `--bug_status`, `--url`, `--target_milestone`, `--target_release`, `--blocked`, `--dependson`, `--keywords`, `--groups`, `--cc`, `--assigned_to`, `--assignee`, `--qa_contact`, `--private`, `--id`, `--bug_id`, `--reporter`'
+        '`--quicksearch`, `--savedsearch`, `--savedsearch-sharer-id`, `--from-url`, `--emailtype`, `--components_file`, `--url_type`, `--keywords_type`, `--status_whiteboard_type`, `--fixed_in_type`'
+        '`--products`, `--components`, `--component_owners`, `--versions`, `--active-components`'
+        '`--close`, `--dupeid`, `--reset-assignee`, `--reset-qa-contact`, `--file`, `--description`, `--type`, `--get`, `--getall`, `--get-all`, `--ignore-obsolete`, `--comment-tag`, `--minor-update`, `--flag`, `--tags`, `--whiteboard`, `--status_whiteboard`, `--devel_whiteboard`, `--internal_whiteboard`, `--qa_whiteboard`, `--fixed_in`'
+        '`url_to_query`, `fix_url`, `get_rcfile_default_url`, `bz_ver_major`, `bz_ver_minor`, `readconfig`, `connect`, `is_xmlrpc`, `is_rest`, `get_requests_session`, `disconnect`'
+        '`login`, `interactive_save_api_key`, `interactive_login`, `logout`, `logged_in`'
+        '`getbugfields`, `product_get`, `refresh_products`, `getproducts`, `getcomponentsdetails`, `getcomponentdetails`, `getcomponents`, `addcomponent`, `editcomponent`, `getbug`, `getbugs`, `get_comments`, `build_query`, `query_return_extra`, `query`, `pre_translation`, `post_translation`, `bugs_history_raw`'
+        '`update_bugs`, `update_tags`, `update_flags`, `build_update`, `attachfile`, `openattachment_data`, `openattachment`, `updateattachmentflags`, `get_attachments`, `build_createbug`, `createbug`'
+        '`getuser`, `getusers`, `searchusers`, `createuser`, `updateperms`, `getgroup`, `getgroups`'
+        '`add_external_tracker`, `update_external_tracker`, `remove_external_tracker`'
+    )
+    for row in "${surface_groups[@]}"; do
+        if [[ $(grep -Fc "| $row |" "$report") -ne 1 ]]; then
+            printf 'missing or duplicate 3.3.0 reference-surface group: %s\n' "$row" >&2
+            return 1
+        fi
+    done
+    if grep -Eiq '^\|.*\|[^|]*\bunknown\b[^|]*\|' "$report"; then
+        printf 'parity report contains an unclassified unknown row\n' >&2
+        return 1
+    fi
 }
 
 run_sidecar_stop_failure_fixture() (
