@@ -182,12 +182,19 @@ fn resolved_servers(sections: &Sections) -> Result<Vec<ImportedServer>> {
     let Some(url) = defaults.get("url").filter(|url| !url.is_empty()).cloned() else {
         return Ok(Vec::new());
     };
-    url::Url::parse(&url)
+    let parsed_url = url::Url::parse(&url)
         .map_err(|error| BzrError::input(format!("bugzillarc DEFAULT url is invalid: {error}")))?;
+    let host = parsed_url.host_str().unwrap_or_default();
     let mut values = defaults;
     for (section, override_values) in sections {
-        if section != "DEFAULT" && url.contains(section) {
+        let matches_url = if section.contains('/') {
+            url.contains(section)
+        } else {
+            section == host
+        };
+        if section != "DEFAULT" && matches_url {
             values.extend(override_values.clone());
+            break;
         }
     }
     Ok(vec![ImportedServer {
