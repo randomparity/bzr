@@ -151,7 +151,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   ├── list [--product <P>...] [--component <C>...] [--status <S>...] [--assignee <A>...]
 │   │        [--creator <C>...] [--priority <P>...] [--severity <S>...] [--id <ID>...]
 │   │        [--alias <A>] [--summary <S>] [--resolution <R>...] [--version <V>...] [--op-sys <OS>...]
-│   │        [--platform <P>...] [--whiteboard <W>] [--target-milestone <M>...] [--qa-contact <Q>...] [--url <U>]
+│   │        [--platform <P>...] [--whiteboard <W>] [--target-milestone <M>...] [--qa-contact <Q>...] [--url <U>] [--tag <TAG>...]
 │   │        [--status-whiteboard-type <TYPE>] [--url-type <TYPE>] [--email-type <TYPE>]
 │   │        [--limit <N>] [--offset <N>] [--paginate] [--count] [--fields <F>] [--exclude-fields <F>]
 │   │        [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
@@ -165,7 +165,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   ├── my [--created] [--cc] [--all] [--status <S>...] [--product <P>...] [--component <C>...]
 │   │       [--priority <P>...] [--severity <S>...] [--resolution <R>...] [--version <V>...]
 │   │       [--op-sys <OS>...] [--platform <P>...] [--whiteboard <W>...] [--target-milestone <M>...]
-│   │       [--qa-contact <Q>...] [--url <U>...] [--created-since <D>] [--changed-since <D>]
+│   │       [--qa-contact <Q>...] [--url <U>...] [--tag <TAG>...] [--created-since <D>] [--changed-since <D>]
 │   │       [--status-whiteboard-type <TYPE>] [--url-type <TYPE>] [--email-type <TYPE>]
 │   │       [--limit <N>] [--offset <N>] [--paginate] [--count] [--fields <F>] [--exclude-fields <F>]
 │   │       [--sort <FIELD>] [--order asc|desc]
@@ -284,7 +284,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   ├── save <NAME> (--from-url <URL> | [--product <P>...] [--component <C>...] [--status <S>...]
 │   │               [--assignee <A>...] [--creator <C>...] [--priority <P>...] [--severity <S>...]
 │   │               [--resolution <R>...] [--version <V>...] [--op-sys <OS>...] [--platform <P>...]
-│   │               [--whiteboard <W>] [--target-milestone <M>...] [--qa-contact <Q>...] [--url <U>]
+│   │               [--whiteboard <W>] [--target-milestone <M>...] [--qa-contact <Q>...] [--url <U>] [--tag <TAG>...]
 │   │               [--search <Q>]) [--limit <N>] [--fields <F>] [--exclude-fields <F>]
 │   │               [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
 │   ├── list
@@ -293,7 +293,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │                 [--status <S>...] [--assignee <A>...] [--creator <C>...] [--priority <P>...]
 │   │                 [--severity <S>...] [--resolution <R>...] [--version <V>...] [--op-sys <OS>...]
 │   │                 [--platform <P>...] [--whiteboard <W>...] [--target-milestone <M>...]
-│   │                 [--qa-contact <Q>...] [--url <U>...] [--clear <FIELD>])
+│   │                 [--qa-contact <Q>...] [--url <U>...] [--tag <TAG>...] [--clear <FIELD>])
 │   │                 [--limit <N>] [--fields <F>] [--exclude-fields <F>] [--created-since <D>]
 │   │                 [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
 │   ├── delete <NAME>
@@ -731,6 +731,19 @@ bare record: it has no `schema_version` envelope or `.data` wrapper. All other
 API, authentication, TLS, transport, redirect, and malformed-response failures
 remain command-fatal. Output is buffered, so a fatal failure writes no partial
 result to stdout.
+
+### `bzr bug tag`
+
+Add or remove personal tags through Bugzilla's XML-RPC `Bug.update_tags`
+operation. Supply at least one `--add` or `--remove` value.
+
+```bash
+bzr --api xmlrpc bug tag 12345 --add triage
+bzr --api xmlrpc bug tag 12345 --add needs-review --remove stale
+```
+
+The command requires credentials and does not fall back to REST. Use
+`bzr --api xmlrpc bug list --tag <TAG>` to find tagged bugs.
 
 ### `bzr bug my`
 
