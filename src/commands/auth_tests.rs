@@ -147,3 +147,45 @@ async fn failed_logout_retains_the_saved_token() {
         Some("saved")
     );
 }
+
+#[tokio::test]
+async fn login_refuses_to_replace_an_api_key_source() {
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = config_path(&tmp, &mock.uri(), None);
+    Config::update_locked_at(Some(&config_path), |config| {
+        config.servers.get_mut("test").unwrap().api_key = Some("key".into());
+        Ok(())
+    })
+    .unwrap();
+    let action = AuthAction::Login {
+        email: "alice@example.test".into(),
+        password: Some("secret".into()),
+        restrict_login: false,
+    };
+    let mut io = CapturedIo::new();
+
+    let error = super::execute(&action, &context(config_path), &mut io.writers())
+        .await
+        .unwrap_err();
+
+    assert!(error.to_string().contains("API-key credential source"));
+}
+
+#[tokio::test]
+async fn logout_without_a_saved_token_fails_locally() {
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = config_path(&tmp, &mock.uri(), None);
+    let mut io = CapturedIo::new();
+
+    let error = super::execute(
+        &AuthAction::Logout,
+        &context(config_path),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap_err();
+
+    assert!(error.to_string().contains("no saved login token"));
+}
