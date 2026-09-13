@@ -6,7 +6,7 @@ use std::path::Path;
 use crate::cli::ConfigAction;
 use crate::commands::config::execute;
 use crate::commands::runtime::invocation::CommandContext;
-use crate::config::{Config, ServerConfig};
+use crate::config::{Config, KeyringRef, ServerConfig};
 use crate::test_helpers::{load_config_unvalidated, setup_empty_config_env, CapturedIo};
 use crate::types::output::OutputFormat;
 
@@ -191,7 +191,7 @@ fn importing_api_key_replaces_other_credential_sources() {
     let server = &resolved_servers(&sections).unwrap()[0];
     let mut config = ServerConfig {
         api_key_env: Some("BZR_API_KEY".into()),
-        api_key_keyring: Some(Default::default()),
+        api_key_keyring: Some(KeyringRef::default()),
         token: Some("old-token".into()),
         ..ServerConfig::default()
     };
