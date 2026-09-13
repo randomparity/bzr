@@ -115,6 +115,19 @@ fn hostname_sections_do_not_match_a_host_substring() {
 }
 
 #[test]
+fn hostname_sections_match_the_exact_port() {
+    let sections = parse_sections(
+        "[DEFAULT]\nurl=https://bugs.example.test:8443/rest\n[bugs.example.test]\napi_key=wrong\n[bugs.example.test:8443]\napi_key=right\n",
+        Path::new("fixture"),
+    )
+    .unwrap();
+
+    let servers = resolved_servers(&sections).unwrap();
+
+    assert_eq!(servers[0].api_key.as_deref(), Some("right"));
+}
+
+#[test]
 fn first_sorted_matching_section_wins() {
     let sections = parse_sections(
         "[DEFAULT]\nurl=https://bugs.example.test/rest\n[/rest]\napi_key=first\n[bugs.example.test]\napi_key=second\n",

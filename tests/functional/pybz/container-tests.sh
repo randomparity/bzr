@@ -1214,7 +1214,7 @@ run_parity_report_fixture() {
         '| Disable TLS verification | `--server-tls-insecure` | parity | `compare/06-auth-config-tls/nosslverify` |'
         '| Login-token request transport | no equivalent | expected gap (#676) | `compare/06-auth-config-tls/token-transport-gap` |'
         '| Login and logout commands | no equivalent | expected gap (#681) | `compare/06-auth-config-tls/login-command-gap` |'
-        '| bugzillarc import | no equivalent | expected gap (#682) | `compare/06-auth-config-tls/bugzillarc-import-gap` |'
+        '| bugzillarc API-key import | `bzr config import-bugzillarc` | parity; username/password and client certificates are reported unsupported | `compare/06-auth-config-tls/bugzillarc-import` |'
         '| Client certificate configuration | no equivalent | surface gap (#677) | `compare/06-auth-config-tls/client-certificate-surface-gap` |'
         '| Red Hat Bearer API-key transport | no equivalent | expected gap (#678) | `compare/06-auth-config-tls/bearer-gap` |'
     )
@@ -1272,6 +1272,7 @@ run_auth_config_tls_phase_fixture() (
     r11_cached_control() { [[ ${R11_FIXTURE_CACHED_FAIL:-0} -eq 0 ]]; }
     r11_logout_control() { return 0; }
     r11_bugzillarc_control() { return 0; }
+    r11_bugzillarc_import_control() { return 0; }
     r11_tls_control() { return 0; }
     r11_certificate_control() { return 0; }
     r11_bearer_control() { return 0; }
@@ -1287,9 +1288,9 @@ run_auth_config_tls_phase_fixture() (
     assert_equals query "$(r11_expected_bzr_auth_kind bz50)" "bz50 auth kind"
     assert_equals query "$(r11_expected_bzr_auth_kind bz52)" "bz52 auth kind"
     assert_equals header "$(r11_expected_bzr_auth_kind bz53)" "bz53 auth kind"
-    assert_equals 8 "$PASS_COUNT" "auth/config/TLS pass count"
+    assert_equals 9 "$PASS_COUNT" "auth/config/TLS pass count"
     assert_equals 0 "$FAIL_COUNT" "auth/config/TLS failure count"
-    assert_equals 5 "$GAP_COUNT" "auth/config/TLS gap count"
+    assert_equals 4 "$GAP_COUNT" "auth/config/TLS gap count"
     (
         unset -f r11_tls_control
         tls_fixture_start() { return 0; }
