@@ -33,8 +33,8 @@ pub use search::{
 
 const BUG_BUILT_IN_FIELD_COUNT: usize = 30;
 
-fn is_custom_field_name(name: &str) -> bool {
-    name.starts_with("cf_")
+pub(crate) fn is_dynamic_bug_field(name: &str) -> bool {
+    name.starts_with("cf_") || matches!(name, "target_release" | "sub_components")
 }
 
 #[derive(Debug)]
@@ -234,7 +234,7 @@ impl From<BugWire> for Bug {
             custom_fields: wire
                 .extra
                 .into_iter()
-                .filter(|(name, _)| is_custom_field_name(name))
+                .filter(|(name, _)| is_dynamic_bug_field(name))
                 .collect(),
         }
     }
@@ -257,7 +257,7 @@ impl Serialize for Bug {
         let custom_field_count = self
             .custom_fields
             .keys()
-            .filter(|name| is_custom_field_name(name))
+            .filter(|name| is_dynamic_bug_field(name))
             .count();
         let mut map =
             serializer.serialize_map(Some(BUG_BUILT_IN_FIELD_COUNT + custom_field_count))?;
@@ -297,7 +297,7 @@ impl Serialize for Bug {
         for (name, value) in self
             .custom_fields
             .iter()
-            .filter(|(name, _)| is_custom_field_name(name))
+            .filter(|(name, _)| is_dynamic_bug_field(name))
         {
             map.serialize_entry(name, value)?;
         }

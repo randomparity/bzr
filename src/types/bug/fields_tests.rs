@@ -26,6 +26,21 @@ fn partition_include_dedupes_aliases_and_preserves_custom_fields() {
 }
 
 #[test]
+fn partition_include_accepts_named_rhbz_extension_fields_only() {
+    let partition = partition_include("target_release,sub_components,x_extension");
+
+    assert_eq!(
+        partition.ordered,
+        vec![
+            SelectedBugField::Custom("target_release"),
+            SelectedBugField::Custom("sub_components")
+        ]
+    );
+    assert_eq!(partition.custom, vec!["target_release", "sub_components"]);
+    assert_eq!(partition.unknown, vec!["x_extension"]);
+}
+
+#[test]
 fn field_selected_treats_aliases_as_same_field() {
     let spec = ColumnSpec::new(Some("assignee"), Some("assigned_to"));
 

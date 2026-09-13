@@ -610,6 +610,38 @@ fn write_bugs_table_renders_requested_custom_column() {
 }
 
 #[test]
+fn write_bugs_json_and_ndjson_preserve_requested_rhbz_extension_shapes() {
+    let spec = ColumnSpec::new(Some("target_release,sub_components"), None);
+
+    for format in [OutputFormat::Json, OutputFormat::Ndjson] {
+        let mut bug = make_bug(1, "summary text", "NEW");
+        bug.custom_fields
+            .insert("target_release".into(), serde_json::json!(["9.6", "9.7"]));
+        bug.custom_fields.insert(
+            "sub_components".into(),
+            serde_json::json!({"Kernel": ["drivers", "net"]}),
+        );
+        let (out, err) = capture_bugs_spec(format, &[bug], spec);
+        assert!(err.is_empty());
+        let value: serde_json::Value = if format == OutputFormat::Json {
+            serde_json::from_str(&out).unwrap()
+        } else {
+            serde_json::from_str(out.trim()).unwrap()
+        };
+        let bug = if format == OutputFormat::Json {
+            &value["data"][0]
+        } else {
+            &value
+        };
+        assert_eq!(bug["target_release"], serde_json::json!(["9.6", "9.7"]));
+        assert_eq!(
+            bug["sub_components"],
+            serde_json::json!({"Kernel": ["drivers", "net"]})
+        );
+    }
+}
+
+#[test]
 fn write_bugs_table_preserves_mixed_custom_order() {
     let bugs = vec![make_bug_with_custom(1, "summary text", "NEW")];
     let spec = ColumnSpec {
