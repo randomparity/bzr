@@ -7,6 +7,7 @@ RHBZ_FIELDS_PRODUCT=TestProduct
 RHBZ_FIELDS_COMPONENT=TestComponent
 RHBZ_FIELDS_RELEASE="${RHBZ_FIELDS_TOKEN}-release"
 RHBZ_FIELDS_SUB_COMPONENT="${RHBZ_FIELDS_TOKEN}-sub-component"
+RHBZ_FIELDS_SECOND_SUB_COMPONENT="${RHBZ_FIELDS_TOKEN}-second-sub-component"
 RHBZ_FIELDS_FIXED_IN="${RHBZ_FIELDS_TOKEN}-fixed-in"
 RHBZ_FIELDS_DEVEL_WHITEBOARD="${RHBZ_FIELDS_TOKEN}-devel"
 RHBZ_FIELDS_INTERNAL_WHITEBOARD="${RHBZ_FIELDS_TOKEN}-internal"
@@ -24,16 +25,19 @@ rhbz_fields_prepare() {
         "SELECT COUNT(DISTINCT g.name) FROM profiles p JOIN user_group_map m ON m.user_id = p.userid JOIN groups g ON g.id = m.group_id WHERE p.login_name = '$COMPARE_ADMIN_EMAIL' AND g.name IN ('devel', 'editbugs', 'qa', 'redhat');" \
         "INSERT INTO releases (product_id, value, sortkey, isactive) SELECT p.id, '$RHBZ_FIELDS_RELEASE', 0, 1 FROM products p WHERE p.name = '$RHBZ_FIELDS_PRODUCT' AND NOT EXISTS (SELECT 1 FROM releases r WHERE r.product_id = p.id AND r.value = '$RHBZ_FIELDS_RELEASE');" \
         "INSERT INTO rh_sub_components (name, component_id, initialowner, description, isactive, sortkey, level, full_name) SELECT '$RHBZ_FIELDS_SUB_COMPONENT', c.id, p.userid, '$RHBZ_FIELDS_TOKEN RHBZ comparison sub-component', 1, 0, 0, '$RHBZ_FIELDS_SUB_COMPONENT' FROM components c JOIN products product ON product.id = c.product_id JOIN profiles p ON p.login_name = '$COMPARE_ADMIN_EMAIL' WHERE product.name = '$RHBZ_FIELDS_PRODUCT' AND c.name = '$RHBZ_FIELDS_COMPONENT' AND NOT EXISTS (SELECT 1 FROM rh_sub_components sc WHERE sc.component_id = c.id AND sc.name = '$RHBZ_FIELDS_SUB_COMPONENT' AND sc.parent_id IS NULL);" \
+        "INSERT INTO rh_sub_components (name, component_id, initialowner, description, isactive, sortkey, level, full_name) SELECT '$RHBZ_FIELDS_SECOND_SUB_COMPONENT', c.id, p.userid, '$RHBZ_FIELDS_TOKEN second RHBZ comparison sub-component', 1, 0, 0, '$RHBZ_FIELDS_SECOND_SUB_COMPONENT' FROM components c JOIN products product ON product.id = c.product_id JOIN profiles p ON p.login_name = '$COMPARE_ADMIN_EMAIL' WHERE product.name = '$RHBZ_FIELDS_PRODUCT' AND c.name = '$RHBZ_FIELDS_COMPONENT' AND NOT EXISTS (SELECT 1 FROM rh_sub_components sc WHERE sc.component_id = c.id AND sc.name = '$RHBZ_FIELDS_SECOND_SUB_COMPONENT' AND sc.parent_id IS NULL);" \
         "SELECT id FROM releases WHERE value = '$RHBZ_FIELDS_RELEASE' LIMIT 1;" \
         "SELECT id FROM rh_sub_components WHERE name = '$RHBZ_FIELDS_SUB_COMPONENT' LIMIT 1;" \
+        "SELECT id FROM rh_sub_components WHERE name = '$RHBZ_FIELDS_SECOND_SUB_COMPONENT' LIMIT 1;" \
         >"$controls_file"
     mapfile -t controls < <(run_bugzilla_sql_file "$controls_file" | awk '/^[0-9]+$/')
     [[ ${controls[0]:-} =~ ^[1-9][0-9]*$ && ${controls[1]:-} =~ ^[1-9][0-9]*$ &&
         ${controls[2]:-} == 4 && ${controls[3]:-} =~ ^[1-9][0-9]*$ &&
-        ${controls[4]:-} =~ ^[1-9][0-9]*$ ]] || return 1
+        ${controls[4]:-} =~ ^[1-9][0-9]*$ && ${controls[5]:-} =~ ^[1-9][0-9]*$ ]] || return 1
     RHBZ_FIELDS_PRODUCT_ID=${controls[0]}
     RHBZ_FIELDS_COMPONENT_ID=${controls[1]}
     RHBZ_FIELDS_SUB_COMPONENT_ID=${controls[4]}
+    RHBZ_FIELDS_SECOND_SUB_COMPONENT_ID=${controls[5]}
     RHBZ_FIELDS_READY=1
 }
 
@@ -54,7 +58,7 @@ rhbz_fields_create_bug() {
     printf '%s\n' \
         "INSERT INTO bugs (assigned_to, bug_severity, bug_status, creation_ts, delta_ts, short_desc, op_sys, priority, product_id, rep_platform, reporter, version, component_id, everconfirmed) VALUES (1, 'normal', 'NEW', NOW(), NOW(), '$RHBZ_FIELDS_TOKEN $label comparison bug', 'Linux', 'Normal', $RHBZ_FIELDS_PRODUCT_ID, 'PC', 1, 'unspecified', $RHBZ_FIELDS_COMPONENT_ID, 1);" \
         'SET @rhbz_fields_bug_id = LAST_INSERT_ID();' \
-        "INSERT INTO bug_rh_sub_components (bug_id, rh_sub_component_id) VALUES (@rhbz_fields_bug_id, $RHBZ_FIELDS_SUB_COMPONENT_ID);" \
+        "INSERT INTO bug_rh_sub_components (bug_id, rh_sub_component_id) VALUES (@rhbz_fields_bug_id, $RHBZ_FIELDS_SUB_COMPONENT_ID), (@rhbz_fields_bug_id, $RHBZ_FIELDS_SECOND_SUB_COMPONENT_ID);" \
         'SELECT @rhbz_fields_bug_id;' >"$sql_file"
     run_bugzilla_sql_file "$sql_file" | tail -n1
 }
@@ -74,7 +78,8 @@ rhbz_fields_read_with_bzr() {
     RUST_LOG=bzr=debug run_bzr --server "$RESOURCE_SERVER" --api rest bug view "$bug_id" \
         --fields "id,$fields"
     resource_capture_bzr "rhbz-fields-${name}-read-json"
-    if [[ $BZR_EXIT -ne 0 ]] || ! jq -e --arg expected "$expected" "$filter" \
+    if [[ $BZR_EXIT -ne 0 ]] || ! jq -e --arg expected "$expected" \
+        --arg second "$RHBZ_FIELDS_SECOND_SUB_COMPONENT" "$filter" \
         "$BZR_STDOUT" >/dev/null; then
         return 1
     fi
@@ -82,8 +87,16 @@ rhbz_fields_read_with_bzr() {
     RUST_LOG=bzr=debug run_bzr_raw --output ndjson --server "$RESOURCE_SERVER" --api rest \
         bug view "$bug_id" --fields "id,$fields"
     resource_capture_bzr "rhbz-fields-${name}-read-ndjson"
-    [[ $BZR_EXIT -eq 0 ]] && jq -e --arg expected "$expected" "$filter" \
+    [[ $BZR_EXIT -eq 0 ]] && jq -e --arg expected "$expected" \
+        --arg second "$RHBZ_FIELDS_SECOND_SUB_COMPONENT" "$filter" \
         "$BZR_STDOUT" >/dev/null
+}
+
+rhbz_fields_assert_empty_target_release() {
+    local bug_id="$1"
+
+    rhbz_fields_read_with_bzr empty-target-release "$bug_id" target_release \
+        '.target_release | type == "array" and length == 0' ignored
 }
 
 rhbz_fields_probe_bzr() {
@@ -115,11 +128,15 @@ rhbz_fields_run() {
     local pybz_filter="$6" pybz_expected="$7" bzr_value="$8" bzr_filter="$9"
     local bzr_expected="${10}" bug_id bzr_read_filter
     bzr_read_filter=${pybz_filter//.bugs[0]./.}
+    if [[ $name == sub-components ]]; then
+        bzr_read_filter='(.sub_components | [.. | strings | select(. == $expected or . == $second)] | length) == 2'
+    fi
 
     test_begin "$name" "RHBZ $name persists a configured field"
     resource_gap_reset
     if rhbz_fields_prepare && rhbz_fields_metadata_ready &&
         bug_id=$(rhbz_fields_create_bug "$name") && [[ $bug_id =~ ^[1-9][0-9]*$ ]] &&
+        { [[ $name != target-release ]] || rhbz_fields_assert_empty_target_release "$bug_id"; } &&
         resource_pybz "rhbz-fields-${name}" "$operation" \
             "$(jq -cn --argjson bug_id "$bug_id" --argjson payload "$payload" '$payload + {bug_id:$bug_id,transport:"REST"}')" REST &&
         rhbz_fields_read "$bug_id" "$pybz_fields" "$name" &&
