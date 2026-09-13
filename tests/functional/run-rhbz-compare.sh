@@ -34,6 +34,9 @@ resource_init
 CURRENT_TEST_GROUP=07-rhbz-smoke
 source "$SCRIPT_DIR/compare/rhbz/07-rhbz-smoke.sh"
 _render_test_result
+CURRENT_TEST_GROUP=09-rhbz-fields
+source "$SCRIPT_DIR/compare/rhbz/09-rhbz-fields.sh"
+_render_test_result
 CURRENT_TEST_GROUP=08-rhbz-externalbugs
 source "$SCRIPT_DIR/compare/rhbz/08-rhbz-externalbugs.sh"
 _render_test_result
