@@ -112,28 +112,28 @@ rhbz_fields_run sub-components rhbz_sub_component \
     sub_components rh_sub_components \
     '(.bugs[0].sub_components | [.. | strings | select(. == $expected)] | length) > 0' \
     "$RHBZ_FIELDS_SUB_COMPONENT" \
-    "${RHBZ_FIELDS_SUB_COMPONENT}-bzr" \
+    "$RHBZ_FIELDS_SUB_COMPONENT" \
     '(.bugs[0].sub_components | [.. | strings | select(. == $expected)] | length) > 0' \
-    "${RHBZ_FIELDS_SUB_COMPONENT}-bzr"
+    "$RHBZ_FIELDS_SUB_COMPONENT"
 
 rhbz_fields_run target-release rhbz_target_release \
     "$(jq -cn --arg value "$RHBZ_FIELDS_RELEASE" '{target_release:$value}')" \
     target_release target_release \
     '.bugs[0].target_release | index($expected)' "$RHBZ_FIELDS_RELEASE" \
-    "${RHBZ_FIELDS_RELEASE}-bzr" \
-    '.bugs[0].target_release | index($expected)' "${RHBZ_FIELDS_RELEASE}-bzr"
+    "$RHBZ_FIELDS_RELEASE" \
+    '.bugs[0].target_release | index($expected)' "$RHBZ_FIELDS_RELEASE"
 
 rhbz_fields_run fixed-in rhbz_fixed_in \
     "$(jq -cn --arg value "$RHBZ_FIELDS_FIXED_IN" '{fixed_in:$value}')" \
     cf_fixed_in cf_fixed_in \
     '.bugs[0].cf_fixed_in == $expected' "$RHBZ_FIELDS_FIXED_IN" \
-    "${RHBZ_FIELDS_FIXED_IN}-bzr" \
-    '.bugs[0].cf_fixed_in == $expected' "${RHBZ_FIELDS_FIXED_IN}-bzr"
+    "$RHBZ_FIELDS_FIXED_IN" \
+    '.bugs[0].cf_fixed_in == $expected' "$RHBZ_FIELDS_FIXED_IN"
 
 rhbz_fields_run whiteboards rhbz_whiteboards \
     "$(jq -cn --arg devel "$RHBZ_FIELDS_DEVEL_WHITEBOARD" --arg internal "$RHBZ_FIELDS_INTERNAL_WHITEBOARD" --arg qa "$RHBZ_FIELDS_QA_WHITEBOARD" '{devel_whiteboard:$devel,internal_whiteboard:$internal,qa_whiteboard:$qa}')" \
     cf_devel_whiteboard,cf_internal_whiteboard,cf_qa_whiteboard cf_devel_whiteboard \
     '($expected | split(",")) as $values | .bugs[0].cf_devel_whiteboard == $values[0] and .bugs[0].cf_internal_whiteboard == $values[1] and .bugs[0].cf_qa_whiteboard == $values[2]' \
     "$RHBZ_FIELDS_DEVEL_WHITEBOARD,$RHBZ_FIELDS_INTERNAL_WHITEBOARD,$RHBZ_FIELDS_QA_WHITEBOARD" \
-    "${RHBZ_FIELDS_DEVEL_WHITEBOARD}-bzr" \
-    '.bugs[0].cf_devel_whiteboard == $expected' "${RHBZ_FIELDS_DEVEL_WHITEBOARD}-bzr"
+    "$RHBZ_FIELDS_DEVEL_WHITEBOARD" \
+    '.bugs[0].cf_devel_whiteboard == $expected' "$RHBZ_FIELDS_DEVEL_WHITEBOARD"
