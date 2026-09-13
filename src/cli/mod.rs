@@ -363,6 +363,17 @@ pub struct Cli {
 )]
 pub(crate) enum Commands {
     /// Authenticate with a named Bugzilla server using a login token.
+    ///
+    /// `auth login` obtains a token through REST or XML-RPC and stores it in
+    /// the named server configuration. `auth logout` invalidates the server
+    /// token before removing that local credential. Inline `--server-url`
+    /// invocations cannot use this family because they have no persistent
+    /// credential location.
+    ///
+    /// Examples:
+    ///
+    ///   bzr --server prod auth login --email alice@example.com
+    ///   bzr --server prod auth logout
     Auth {
         #[command(subcommand)]
         action: AuthAction,
