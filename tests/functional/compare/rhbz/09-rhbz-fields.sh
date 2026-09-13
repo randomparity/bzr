@@ -37,11 +37,11 @@ rhbz_fields_prepare() {
 }
 
 rhbz_fields_metadata_ready() {
-    curl -fsS --get "$BZ_URL/rest/field" \
+    curl -fsS --get "$BZ_URL/rest/field/bug" \
         --data-urlencode "Bugzilla_api_key=$BZR_COMPARE_API_KEY" \
         >"$COMPARE_EXCHANGE_DIR/rhbz-fields-metadata.json" &&
         jq -e --argjson names \
-            '["sub_components", "target_release", "cf_fixed_in", "cf_devel_whiteboard", "cf_internal_whiteboard", "cf_qa_whiteboard"]' \
+            '["rh_sub_components", "target_release", "cf_fixed_in", "cf_devel_whiteboard", "cf_internal_whiteboard", "cf_qa_whiteboard"]' \
             '. as $response | all($names[]; . as $name | $response.fields | any(.[]; .name == $name))' \
             "$COMPARE_EXCHANGE_DIR/rhbz-fields-metadata.json" >/dev/null
 }
@@ -106,7 +106,7 @@ rhbz_fields_run() {
 
 rhbz_fields_run sub-components rhbz_sub_component \
     "$(jq -cn --arg value "$RHBZ_FIELDS_SUB_COMPONENT" '{sub_component:$value}')" \
-    sub_components sub_components \
+    sub_components rh_sub_components \
     '.bugs[0].sub_components | any(.[]; (if type == "object" then .name else . end) == $expected)' \
     "$RHBZ_FIELDS_SUB_COMPONENT" \
     "${RHBZ_FIELDS_SUB_COMPONENT}-bzr" \

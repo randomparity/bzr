@@ -1203,7 +1203,7 @@ run_parity_report_fixture() {
         '| Product catalogues | `bzr product list --type` | parity | `compare/05-products-components/product-catalogues` |'
         '| Component create | `bzr component create`, `bzr component view` | parity | `compare/05-products-components/component-create` |'
         '| RHBZ component update | `bzr component update` | expected gap (#774) | `compare/08-rhbz-externalbugs/component-update` |'
-        '| RHBZ sub-components | `bzr bug update --field sub_components=...` | expected gap (#775) | `compare/09-rhbz-fields/sub-components` |'
+        '| RHBZ sub-components | `bzr bug update --field rh_sub_components=...` | expected gap (#775) | `compare/09-rhbz-fields/sub-components` |'
         '| RHBZ target release | `bzr bug update --field target_release=...` | expected gap (#775) | `compare/09-rhbz-fields/target-release` |'
         '| RHBZ fixed-in | `bzr bug update --field cf_fixed_in=...` | expected gap (#775) | `compare/09-rhbz-fields/fixed-in` |'
         '| RHBZ whiteboards | `bzr bug update --field cf_devel_whiteboard=...` | expected gap (#775) | `compare/09-rhbz-fields/whiteboards` |'
@@ -3293,7 +3293,7 @@ run_rhbz_fields_fixture() (
         for argument in "$@"; do
             if [[ $argument == */rest/field ]]; then
                 jq -cn '{fields:[
-                    {name:"sub_components"},{name:"target_release"},{name:"cf_fixed_in"},
+                    {name:"rh_sub_components"},{name:"target_release"},{name:"cf_fixed_in"},
                     {name:"cf_devel_whiteboard"},{name:"cf_internal_whiteboard"},{name:"cf_qa_whiteboard"}
                 ]}'
                 return 0
@@ -3330,7 +3330,7 @@ run_rhbz_fields_fixture() (
             field=${argument%%=*}
             value=${argument#*=}
             case "$field" in
-                sub_components) RHBZ_FIELDS_FIXTURE_SUB="$value" ;;
+                rh_sub_components) RHBZ_FIELDS_FIXTURE_SUB="$value" ;;
                 target_release) RHBZ_FIELDS_FIXTURE_RELEASE="$value" ;;
                 cf_fixed_in) RHBZ_FIELDS_FIXTURE_FIXED="$value" ;;
                 cf_devel_whiteboard) RHBZ_FIELDS_FIXTURE_DEVEL="$value" ;;
