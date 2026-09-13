@@ -3315,7 +3315,7 @@ run_rhbz_fields_fixture() (
             --arg devel "${RHBZ_FIELDS_FIXTURE_DEVEL:-}" \
             --arg internal "${RHBZ_FIELDS_FIXTURE_INTERNAL:-}" \
             --arg qa "${RHBZ_FIELDS_FIXTURE_QA:-}" \
-            '{bugs:[{sub_components:[$sub],target_release:[$release],cf_fixed_in:$fixed,cf_devel_whiteboard:$devel,cf_internal_whiteboard:$internal,cf_qa_whiteboard:$qa}]}'
+            '{bugs:[{sub_components:{TestComponent:[$sub]},target_release:[$release],cf_fixed_in:$fixed,cf_devel_whiteboard:$devel,cf_internal_whiteboard:$internal,cf_qa_whiteboard:$qa}]}'
     }
     run_bzr() {
         local argument field value
