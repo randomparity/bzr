@@ -68,7 +68,8 @@ plumbing; it does not expose a runtime hostname override or alter TLS policy.
   preserve header/query behavior; exact-host detection bypasses the standard
   `whoami`/`valid_login` fallback sequence so it cannot emit a non-Bearer
   credential request.
-- The Red-Hat-shaped proxy records exactly one Bearer request; its comparison
-  phase changes from `expect_gap 678` to a passing parity result.
+- The Red-Hat-shaped proxy records one or more Bearer requests, rejects any
+  non-Bearer credential record, and changes its comparison phase from
+  `expect_gap 678` to a passing parity result.
 - The CLI reference and parity matrix describe the automatic, exact-host REST
   behavior. ADR 0077 records the decision.

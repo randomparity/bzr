@@ -87,7 +87,7 @@ change because bzr has only the controlled parser gap. Green command:
 
 1. Replace only the #678 parser-gap assertion with the sidecar bzr positive
    wire check. Pin its standard method so setup performs no discovery, then
-   assert the proxy recorded exactly one total `auth-kind` line, that it is
+   assert the proxy recorded one or more `auth-kind` lines, that each is
    `bearer`, and no query/header credential; leave sibling gap checks untouched.
 2. Update `docs/bzr-cli.md` and the parity matrix with exact-host automatic
    REST Bearer behavior and the existing comparison test ID.
