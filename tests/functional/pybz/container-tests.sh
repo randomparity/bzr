@@ -20,6 +20,17 @@ assert_equals() {
     return 0
 }
 
+file_mode() {
+    local path="$1"
+    local mode
+
+    mode=$(stat -f '%Lp' "$path" 2>/dev/null || :)
+    if [[ ! $mode =~ ^[0-7]{3,4}$ ]]; then
+        mode=$(stat -c '%a' "$path")
+    fi
+    printf '%s\n' "$mode"
+}
+
 run_expected_gap_fixture() {
     local summary
     local result_output
@@ -204,7 +215,7 @@ run_api_key_identity_request_fixture() (
     assert_equals "$COMPARE_EXCHANGE_DIR/auth-placement.pybz.input.json" "$request" \
         "API-key identity request path"
     assert_equals 600 \
-        "$(stat -f '%Lp' "$request" 2>/dev/null || stat -c '%a' "$request")" \
+        "$(file_mode "$request")" \
         "API-key identity request mode"
     assert_equals \
         '{"api_key":"identity-api-secret","url":"http://identity-proxy.invalid:18080","username":"identity-user@test.invalid"}' \
@@ -1191,7 +1202,11 @@ run_parity_report_fixture() {
         '| Membership add and remove | `bzr group add-user/remove-user`, `bzr user search` | parity | `compare/04-users-groups/membership-add-remove` |'
         '| Product catalogues | `bzr product list --type` | parity | `compare/05-products-components/product-catalogues` |'
         '| Component create | `bzr component create`, `bzr component view` | parity | `compare/05-products-components/component-create` |'
-        '| Red Hat component update | `bzr component update` | expected gap (#675) | `compare/05-products-components/component-update-redhat` |'
+        '| RHBZ component update | `bzr component update` | expected gap (#774) | `compare/08-rhbz-externalbugs/component-update` |'
+        '| RHBZ sub-components | `bzr bug update --field rh_sub_components=...` | expected gap (#775) | `compare/09-rhbz-fields/sub-components` |'
+        '| RHBZ target release | `bzr bug update --field target_release=...` | expected gap (#775) | `compare/09-rhbz-fields/target-release` |'
+        '| RHBZ fixed-in | `bzr bug update --field cf_fixed_in=...` | expected gap (#775) | `compare/09-rhbz-fields/fixed-in` |'
+        '| RHBZ whiteboards | `bzr bug update --field cf_devel_whiteboard=...` | expected gap (#775) | `compare/09-rhbz-fields/whiteboards` |'
         '| API-key placement by server version | `bzr whoami` | bz50/bz52: both query; bz53: bzr header, python-bugzilla query | `compare/06-auth-config-tls/api-key-placement` |'
         '| Restricted password login | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/restricted-login` |'
         '| Cached login token reuse | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/cached-token` |'
@@ -1315,7 +1330,7 @@ run_namespace_proxy_helper_fixture() (
     : >"$FAKE_PROXY_LOG"
     sleep() { :; }
     fixture_mode() {
-        stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"
+        file_mode "$1"
     }
     openssl() {
         local previous='' argument
@@ -2022,6 +2037,74 @@ run_adapter_fixture() {
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" bug-tags bug_tags \
         '{"api_key":"fixture-secret","bug_id":36,"tag":"probe"}' \
         '{"result":{"bugs":[{"id":201,"request":{"builder":"query","tags":["probe"]}}],"update":{"add":["probe"],"ids":[36],"remove":null}},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" rhbz-sub-component \
+        rhbz_sub_component \
+        '{"api_key":"fixture-secret","bug_id":38,"component":"Fixture Component","sub_component":"Fixture Subcomponent"}' \
+        '{"result":{"ids":[38],"update":{"builder":"update","component":"Fixture Component","sub_component":"Fixture Subcomponent"}},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" rhbz-target-release \
+        rhbz_target_release \
+        '{"api_key":"fixture-secret","bug_id":38,"target_release":"Fixture Release"}' \
+        '{"result":{"ids":[38],"update":{"builder":"update","target_release":"Fixture Release"}},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" rhbz-fixed-in \
+        rhbz_fixed_in \
+        '{"api_key":"fixture-secret","bug_id":38,"fixed_in":"fixture-1.0"}' \
+        '{"result":{"ids":[38],"update":{"builder":"update","fixed_in":"fixture-1.0"}},"transport":"XMLRPC"}'
+    assert_adapter_case "$runtime" "$sidecar" "$config_dir" rhbz-whiteboards \
+        rhbz_whiteboards \
+        '{"api_key":"fixture-secret","bug_id":38,"devel_whiteboard":"devel","internal_whiteboard":"internal","qa_whiteboard":"qa"}' \
+        '{"result":{"ids":[38],"update":{"builder":"update","devel_whiteboard":"devel","internal_whiteboard":"internal","qa_whiteboard":"qa"}},"transport":"XMLRPC"}'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-sub-component-extra rhbz_sub_component \
+        '{"api_key":"fixture-secret","bug_id":38,"component":"Fixture Component","sub_component":"Fixture Subcomponent","extra":true}' \
+        'unexpected request fields: extra'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-sub-component-missing rhbz_sub_component \
+        '{"api_key":"fixture-secret","bug_id":38,"component":"Fixture Component"}' \
+        'missing request fields: sub_component'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-sub-component-invalid rhbz_sub_component \
+        '{"api_key":"fixture-secret","bug_id":38,"component":"Fixture Component","sub_component":false}' \
+        'sub_component must be a non-empty string'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-sub-component-component-missing rhbz_sub_component \
+        '{"api_key":"fixture-secret","bug_id":38,"sub_component":"Fixture Subcomponent"}' \
+        'missing request fields: component'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-target-release-extra rhbz_target_release \
+        '{"api_key":"fixture-secret","bug_id":38,"target_release":"Fixture Release","extra":true}' \
+        'unexpected request fields: extra'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-target-release-missing rhbz_target_release \
+        '{"api_key":"fixture-secret","bug_id":38}' \
+        'missing request fields: target_release'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-target-release-invalid rhbz_target_release \
+        '{"api_key":"fixture-secret","bug_id":38,"target_release":false}' \
+        'target_release must be a non-empty string'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-fixed-in-extra rhbz_fixed_in \
+        '{"api_key":"fixture-secret","bug_id":38,"fixed_in":"fixture-1.0","extra":true}' \
+        'unexpected request fields: extra'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-fixed-in-missing rhbz_fixed_in \
+        '{"api_key":"fixture-secret","bug_id":38}' \
+        'missing request fields: fixed_in'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-fixed-in-invalid rhbz_fixed_in \
+        '{"api_key":"fixture-secret","bug_id":38,"fixed_in":false}' \
+        'fixed_in must be a non-empty string'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-whiteboards-extra rhbz_whiteboards \
+        '{"api_key":"fixture-secret","bug_id":38,"devel_whiteboard":"devel","internal_whiteboard":"internal","qa_whiteboard":"qa","extra":true}' \
+        'unexpected request fields: extra'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-whiteboards-missing rhbz_whiteboards \
+        '{"api_key":"fixture-secret","bug_id":38,"devel_whiteboard":"devel","internal_whiteboard":"internal"}' \
+        'missing request fields: qa_whiteboard'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-whiteboards-invalid rhbz_whiteboards \
+        '{"api_key":"fixture-secret","bug_id":38,"devel_whiteboard":"devel","internal_whiteboard":"internal","qa_whiteboard":false}' \
+        'qa_whiteboard must be a non-empty string'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" comment-add comment_add \
         '{"api_key":"fixture-secret","transport":"REST","bug_id":41,"text":"hello","is_private":true}' \
         '{"result":{"ids":[41],"update":{"builder":"update","comment":{"comment":"hello","is_private":true}}},"transport":"REST"}'
@@ -3170,6 +3253,148 @@ run_rhbz_extensions_fixture() (
     done
 )
 
+run_rhbz_fields_fixture() (
+    local phase="$PYBZ_DIR/../compare/rhbz/09-rhbz-fields.sh"
+    local runner="$PYBZ_DIR/../run-rhbz-compare.sh"
+    local entrypoint="$PYBZ_DIR/../versions/rhbz/entrypoint.sh"
+
+    COMPARE_EXCHANGE_DIR=$(mktemp -d)
+    trap 'rm -rf "$COMPARE_EXCHANGE_DIR"' EXIT
+    RESOURCE_GAP_FILE="$COMPARE_EXCHANGE_DIR/resource-gap"
+    BZ_URL=http://127.0.0.1
+    BZR_COMPARE_API_KEY=fixture-secret
+    COMPARE_ADMIN_EMAIL=admin@test.bzr
+    RESOURCE_SERVER=fixture
+    TEST_ID_PREFIX=compare
+    CURRENT_TEST_GROUP=09-rhbz-fields
+    PASS_COUNT=0
+    FAIL_COUNT=0
+    SKIP_COUNT=0
+    GAP_COUNT=0
+    SEEN_TEST_IDS=$'\n'
+    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n4\n11\n12'
+    RHBZ_FIELDS_FIXTURE_BZR_FAIL=0
+
+    run_bugzilla_sql_file() {
+        case "$1" in
+            *rhbz-fields-controls.sql) printf '%s\n' "$RHBZ_FIELDS_FIXTURE_CONTROLS" ;;
+            *rhbz-fields-*.sql) printf '101\n' ;;
+        esac
+    }
+    resource_pybz() {
+        local payload="$3"
+
+        if ! jq -e '.transport == "REST"' <<<"$payload" >/dev/null; then
+            printf 'RHBZ fields fixture did not request REST\n' >&2
+            return 1
+        fi
+
+        RHBZ_FIELDS_FIXTURE_SUB=$(jq -r '.sub_component // empty' <<<"$payload")
+        RHBZ_FIELDS_FIXTURE_RELEASE=$(jq -r '.target_release // empty' <<<"$payload")
+        RHBZ_FIELDS_FIXTURE_FIXED=$(jq -r '.fixed_in // empty' <<<"$payload")
+        RHBZ_FIELDS_FIXTURE_DEVEL=$(jq -r '.devel_whiteboard // empty' <<<"$payload")
+        RHBZ_FIELDS_FIXTURE_INTERNAL=$(jq -r '.internal_whiteboard // empty' <<<"$payload")
+        RHBZ_FIELDS_FIXTURE_QA=$(jq -r '.qa_whiteboard // empty' <<<"$payload")
+    }
+    curl() {
+        local argument
+
+        for argument in "$@"; do
+            if [[ $argument == */rest/field ]]; then
+                jq -cn '{fields:[
+                    {name:"rh_sub_components"},{name:"target_release"},{name:"cf_fixed_in"},
+                    {name:"cf_devel_whiteboard"},{name:"cf_internal_whiteboard"},{name:"cf_qa_whiteboard"}
+                ]}'
+                return 0
+            fi
+        done
+        jq -cn \
+            --arg sub "${RHBZ_FIELDS_FIXTURE_SUB:-}" \
+            --arg release "${RHBZ_FIELDS_FIXTURE_RELEASE:-}" \
+            --arg fixed "${RHBZ_FIELDS_FIXTURE_FIXED:-}" \
+            --arg devel "${RHBZ_FIELDS_FIXTURE_DEVEL:-}" \
+            --arg internal "${RHBZ_FIELDS_FIXTURE_INTERNAL:-}" \
+            --arg qa "${RHBZ_FIELDS_FIXTURE_QA:-}" \
+            '{bugs:[{sub_components:{TestComponent:[$sub]},target_release:[$release],cf_fixed_in:$fixed,cf_devel_whiteboard:$devel,cf_internal_whiteboard:$internal,cf_qa_whiteboard:$qa}]}'
+    }
+    run_bzr() {
+        local argument field value
+
+        BZR_STDOUT="$COMPARE_EXCHANGE_DIR/bzr.stdout"
+        BZR_STDOUT_RAW="$COMPARE_EXCHANGE_DIR/bzr.raw"
+        BZR_STDERR="$COMPARE_EXCHANGE_DIR/bzr.stderr"
+        if [[ $RHBZ_FIELDS_FIXTURE_BZR_FAIL -eq 1 ]]; then
+            BZR_EXIT=4
+            : >"$BZR_STDOUT"
+            : >"$BZR_STDOUT_RAW"
+            printf '%s\n' "error: Bugzilla API error: The API for sub component excepts a hash (or dictionary)" >"$BZR_STDERR"
+            return 0
+        fi
+        BZR_EXIT=0
+        printf '{}\n' >"$BZR_STDOUT"
+        cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
+        printf 'DEBUG bzr::client::transport: API response\n' >"$BZR_STDERR"
+        for argument in "$@"; do
+            [[ $argument == *=* ]] || continue
+            field=${argument%%=*}
+            value=${argument#*=}
+            case "$field" in
+                rh_sub_components) RHBZ_FIELDS_FIXTURE_SUB="$value" ;;
+                target_release) RHBZ_FIELDS_FIXTURE_RELEASE="$value" ;;
+                cf_fixed_in) RHBZ_FIELDS_FIXTURE_FIXED="$value" ;;
+                cf_devel_whiteboard) RHBZ_FIELDS_FIXTURE_DEVEL="$value" ;;
+            esac
+        done
+    }
+
+    source "$phase" >/dev/null
+    assert_equals 4 "$PASS_COUNT" "RHBZ fields pass count"
+    assert_equals 0 "$FAIL_COUNT" "RHBZ fields fail count"
+    assert_equals 0 "$GAP_COUNT" "RHBZ fields gap count"
+    for test_id in sub-components target-release fixed-in whiteboards; do
+        if [[ $SEEN_TEST_IDS != *$'\ncompare/09-rhbz-fields/'"$test_id"$'\n'* ]]; then
+            printf 'RHBZ fields fixture did not run %s\n' "$test_id" >&2
+            return 1
+        fi
+    done
+    if ! grep -Fq "g.name IN ('admin', 'devel', 'editbugs', 'editcomponents', 'qa', 'redhat')" "$entrypoint"; then
+        printf 'RHBZ entrypoint does not grant field-control groups\n' >&2
+        return 1
+    fi
+    if ! awk '/07-rhbz-smoke/,/08-rhbz-externalbugs/' "$runner" | grep -Fq '09-rhbz-fields.sh'; then
+        printf 'RHBZ runner does not source phase 09 between phases 07 and 08\n' >&2
+        return 1
+    fi
+
+    PASS_COUNT=0
+    FAIL_COUNT=0
+    SKIP_COUNT=0
+    GAP_COUNT=0
+    SEEN_TEST_IDS=$'\n'
+    RHBZ_FIELDS_READY=0
+    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n3\n11\n12'
+    source "$phase" >"$COMPARE_EXCHANGE_DIR/missing-controls.out"
+    assert_equals 4 "$FAIL_COUNT" "RHBZ fields missing-controls fail count"
+    assert_equals 0 "$GAP_COUNT" "RHBZ fields missing-controls gap count"
+    if ! grep -Fq 'RHBZ sub-components positive control failed' \
+        "$COMPARE_EXCHANGE_DIR/missing-controls.out"; then
+        printf 'RHBZ fields missing-controls diagnostic was absent\n' >&2
+        return 1
+    fi
+
+    PASS_COUNT=0
+    FAIL_COUNT=0
+    SKIP_COUNT=0
+    GAP_COUNT=0
+    SEEN_TEST_IDS=$'\n'
+    RHBZ_FIELDS_READY=0
+    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n4\n11\n12'
+    RHBZ_FIELDS_FIXTURE_BZR_FAIL=1
+    source "$phase" >/dev/null
+    assert_equals 0 "$FAIL_COUNT" "RHBZ fields bzr-diagnostic fail count"
+    assert_equals 4 "$GAP_COUNT" "RHBZ fields bzr-diagnostic gap count"
+)
+
 run_rhbz_externalbugs_fixture() (
     local phase="$PYBZ_DIR/../compare/rhbz/08-rhbz-externalbugs.sh"
 
@@ -3285,6 +3510,26 @@ cleanup_container_fixture() {
     return 0
 }
 
+pybz_fixture_source_volume() {
+    local runtime="$1"
+    local volume="$PYBZ_DIR/..:/work:ro"
+
+    if [[ $runtime == podman ]]; then
+        volume+=',z'
+    fi
+    printf '%s\n' "$volume"
+}
+
+run_pybz_fixture_source_volume_fixture() {
+    local volume="$PYBZ_DIR/..:/work:ro"
+
+    assert_equals "$volume,z" "$(pybz_fixture_source_volume podman)" \
+        "Podman fixture source volume"
+    assert_equals "$volume" "$(pybz_fixture_source_volume docker)" \
+        "Docker fixture source volume"
+    return 0
+}
+
 run_container_fixture() (
     local runtime
     local checkout_id
@@ -3313,7 +3558,7 @@ run_container_fixture() (
 
     "$runtime" build -t "$fixture_image" -f "$PYBZ_DIR/Containerfile" "$PYBZ_DIR"
     # Exercise the same records with the sidecar's Linux awk as with the host's awk.
-    "$runtime" run --rm --volume "$PYBZ_DIR/..:/work:ro" "$fixture_image" bash -euc "
+    "$runtime" run --rm --volume "$(pybz_fixture_source_volume "$runtime")" "$fixture_image" bash -euc "
         source /work/lib.sh
         $(declare -f assert_equals run_transport_observation_fixture)
         run_transport_observation_fixture
@@ -3398,5 +3643,7 @@ run_user_group_phase_fixture
 run_membership_cleanup_fixture
 run_product_component_phase_fixture
 run_rhbz_extensions_fixture
+run_rhbz_fields_fixture
 run_rhbz_externalbugs_fixture
+run_pybz_fixture_source_volume_fixture
 run_container_fixture

@@ -34,6 +34,10 @@ This report tracks bzr against python-bugzilla 3.3.0 using stable comparison tes
 | RHBZ ExternalBugs update | no equivalent | expected gap (#774) | `compare/08-rhbz-externalbugs/update` |
 | RHBZ ExternalBugs remove | no equivalent | expected gap (#774) | `compare/08-rhbz-externalbugs/remove` |
 | RHBZ component update | `bzr component update` | expected gap (#774) | `compare/08-rhbz-externalbugs/component-update` |
+| RHBZ sub-components | `bzr bug update --field rh_sub_components=...` | expected gap (#775) | `compare/09-rhbz-fields/sub-components` |
+| RHBZ target release | `bzr bug update --field target_release=...` | expected gap (#775) | `compare/09-rhbz-fields/target-release` |
+| RHBZ fixed-in | `bzr bug update --field cf_fixed_in=...` | expected gap (#775) | `compare/09-rhbz-fields/fixed-in` |
+| RHBZ whiteboards | `bzr bug update --field cf_devel_whiteboard=...` | expected gap (#775) | `compare/09-rhbz-fields/whiteboards` |
 | API-key placement by server version | `bzr whoami` | bz50/bz52: both query; bz53: bzr header, python-bugzilla query | `compare/06-auth-config-tls/api-key-placement` |
 | Restricted password login | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/restricted-login` |
 | Cached login token reuse | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/cached-token` |

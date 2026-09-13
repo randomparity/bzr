@@ -78,3 +78,4 @@ rejected.
 | [0071](0071-stream-attachment-payloads.md) | Stream authenticated attachment payloads into private staging files | Accepted |
 | [0072](0072-standard-json-bidi-escaping.md) | Standard JSON escapes for bidi controls | Accepted |
 | [0074](0074-catalogue-rhbz-externalbugs-with-real-server-controls.md) | Catalogue RHBZ ExternalBugs with real-server controls | Accepted |
+| [0075](0075-catalogue-rhbz-custom-fields-with-real-server-controls.md) | Catalogue RHBZ custom fields with real-server controls | Accepted |

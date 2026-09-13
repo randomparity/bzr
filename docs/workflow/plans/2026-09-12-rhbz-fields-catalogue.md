@@ -1,0 +1,99 @@
+# RHBZ custom-field and sub-component catalogue plan
+
+**Goal.** Add four real-RHBZ catalogue controls for #775 without adding bzr
+features. The phase uses the existing adapter, private exchange directory, and
+disposable RHBZ lifecycle after phase 07 and before phase 08, whose final test
+deactivates the shared component.
+
+Tech stack: Bash, Python 3.14/python-bugzilla 3.3.0, jq, existing RHBZ image,
+and the existing Rust binary.
+
+## Global Constraints
+
+- Rust 1.89.0 and the current-thread runtime are unchanged.
+- Add no dependency, bzr command, configuration, schema, or transport logic.
+- Keep RHBZ out of stock bz50/bz52/bz53 runners.
+- Use `compare/09-rhbz-fields/{sub-components,target-release,fixed-in,whiteboards}`.
+- A real RHBZ readback, not a proxy or recorder, decides every classification.
+
+Expected implementation size: 180–300 changed lines (M) — one adapter extension,
+one phase, runner and shell fixtures, and four report rows.
+
+## File map
+
+- Modify `tests/functional/compare/python-bugzilla-adapter.py` for bounded RHBZ
+argument operations. The runner sources phase 09 after smoke and before phase
+08, whose final component-update fixture deliberately deactivates the seeded
+component.
+- Add `tests/functional/compare/rhbz/09-rhbz-fields.sh` for fixtures and live
+  readbacks.
+- Modify `tests/functional/run-rhbz-compare.sh`,
+  `tests/functional/versions/rhbz/entrypoint.sh`, and
+  `tests/functional/pybz/container-tests.sh` for order and focused fixtures.
+- Modify `docs/dev/python-bugzilla-parity.md` for four evidence rows.
+
+## Task 1 — expose bounded Python-Bugzilla controls
+
+**Interfaces.** The adapter consumes an API key, a positive bug ID, and the
+named RHBZ values; it applies every control through `build_update`/`update_bugs`
+to phase 09's pre-created fixture bug and supplies existing
+`{"transport":...,"result":...}` responses to phase 09.
+
+**Verification.**
+
+- Contract: each operation rejects unknown, missing, or wrongly typed fields
+  before dispatch. Mode: focused-test. Red: the new fixture fails on the base
+  because operations are absent. Green: `bash
+  tests/functional/pybz/container-tests.sh` passes and records the exact
+  python-bugzilla arguments.
+
+Steps: add one validator-backed operation for sub-component, target-release,
+fixed-in, and the three whiteboards; register them with the existing adapter;
+extend recording-backend fixtures for valid and malformed requests.
+
+Acceptance: every forwarded argument uses python-bugzilla's documented RHBZ
+name and no unknown request member reaches a backend.
+
+## Task 2 — add the live RHBZ catalogue phase
+
+**Interfaces.** `09-rhbz-fields.sh` consumes the phase-08 runner environment,
+`resource_pybz`, `run_bugzilla_sql_file`, and the Task 1 operation names. It
+produces exactly four stable IDs and one evidence-led classification per ID.
+
+**Verification.**
+
+- Contract: every positive control validates metadata/privilege, persists its
+  value, and reads it back before probing bzr. Mode: focused-test. Red: a
+  missing phase/ID/control fails the shell fixture. Green: `bash
+  tests/functional/pybz/container-tests.sh` passes.
+
+Steps: source phase 09 after phase 07 and before phase 08; assert that the
+seeded component is active; make the entrypoint idempotently grant
+`admin@test.bzr` the `devel`, `redhat`, and `qa` groups; insert a run-token
+`releases` row bound to `TestProduct` and a run-token `rh_sub_components` row
+bound to `TestComponent`; query the inserted IDs/names and the four required
+group memberships before use; create run-token bugs; check field metadata; call
+each Task 1 operation with the SQL-created release/sub-component and bounded
+fixed-in/whiteboard values; assert the corresponding live REST fields; probe
+bzr; classify only the observed outcome; test ordering, configured fixture,
+missing-control, and diagnostic paths in the shell fixture.
+
+Acceptance: no missing field, permission, or python-bugzilla failure is
+reported as parity or an expected gap.
+
+## Task 3 — publish evidence and prove the full route
+
+**Interfaces.** The report consumes Task 2's four IDs and classifications.
+
+**Verification.**
+
+- Contract: four report rows name the four semantic IDs. Mode: focused-test.
+  Red: fixture rejects a missing row/ID. Green: `bash
+  tests/functional/pybz/container-tests.sh` passes.
+
+Steps: add the four rows; run `make lint`, `make test`, `make release`, and
+`make functional-compare-rhbz` in that order; expect zero exits, phase 09
+output for all four IDs, and lifecycle cleanup.
+
+Acceptance: the parity report has one evidence-led entry per required
+capability, and the real RHBZ invocation completes without failures.

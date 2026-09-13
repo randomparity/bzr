@@ -31,5 +31,5 @@ perl checksetup.pl --update-db answers.txt
 perl checksetup.pl answers.txt
 api_key=$(BZR_API_KEY='FuncTest0123456789abcdef0123456789abcdef' perl -I. -MBugzilla -MBugzilla::Constants=PASSWORD_DIGEST_ALGORITHM -MBugzilla::Util=bz_crypt -e 'print bz_crypt($ENV{BZR_API_KEY}, Bugzilla->localconfig->{site_wide_secret}, PASSWORD_DIGEST_ALGORITHM)')
 mysql -u root bugs -e "INSERT IGNORE INTO user_api_keys (user_id, api_key, description, revoked) SELECT userid, '$api_key', 'functional-test', 0 FROM profiles WHERE login_name = 'admin@test.bzr';"
-mysql -u root bugs -e "INSERT IGNORE INTO user_group_map (user_id, group_id, isbless, grant_type) SELECT p.userid, g.id, 0, 0 FROM profiles p JOIN groups g WHERE p.login_name = 'admin@test.bzr' AND g.name IN ('admin', 'editbugs', 'editcomponents');"
+mysql -u root bugs -e "INSERT IGNORE INTO user_group_map (user_id, group_id, isbless, grant_type) SELECT p.userid, g.id, 0, 0 FROM profiles p JOIN groups g WHERE p.login_name = 'admin@test.bzr' AND g.name IN ('admin', 'devel', 'editbugs', 'editcomponents', 'qa', 'redhat');"
 exec httpd -D FOREGROUND
