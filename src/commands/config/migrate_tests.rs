@@ -89,6 +89,36 @@ async fn migrate_to_keyring_without_api_key_source_errors() {
     ));
 }
 
+#[tokio::test]
+async fn migrate_to_keyring_rejects_login_tokens() {
+    let (_lock, _tmp) = setup_empty_config_env().await;
+    update_config_without_validation(|config| {
+        config.servers.insert(
+            "token".into(),
+            ServerConfig {
+                url: "https://token.example.com".into(),
+                token: Some("login-token".into()),
+                ..ServerConfig::default()
+            },
+        );
+        config.default_server = Some("token".into());
+        Ok(())
+    })
+    .unwrap();
+
+    let result = execute(
+        &migrate_action("token", true),
+        &CommandContext::new(None, OutputFormat::Json, None),
+        &mut CapturedIo::new().writers(),
+    )
+    .await;
+
+    assert!(matches!(
+        result,
+        Err(BzrError::Config(ref message)) if message.contains("token keyring storage")
+    ));
+}
+
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn migrate_to_keyring_from_inline_rewrites_config() {

@@ -189,6 +189,61 @@ async fn credentialless_named_server_persists_api_mode_without_auth_method() {
 }
 
 #[tokio::test]
+async fn token_server_detects_without_auth_and_uses_rest() {
+    let server = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = write_config_to(
+        &tmp,
+        &format!(
+            "default_server = \"token\"\n\n[servers.token]\nurl = \"{}\"\ntoken = \"login-token\"\n",
+            server.uri()
+        ),
+    );
+    Mock::given(method("GET"))
+        .and(path("/rest/version"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.1.2"})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/whoami"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let client = super::connect_and_configure(&ctx_at(&config_path, None))
+        .await
+        .unwrap();
+    assert_eq!(client.auth_mode(), crate::types::AuthMode::Token);
+    let reloaded = load_config(&config_path);
+    assert_eq!(
+        reloaded.servers["token"].api_mode,
+        Some(crate::types::ApiMode::Rest)
+    );
+    assert!(reloaded.servers["token"].auth_method.is_none());
+}
+
+#[tokio::test]
+async fn token_server_rejects_xmlrpc_override_before_network() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = write_config_to(
+        &tmp,
+        "default_server = \"token\"\n\n[servers.token]\nurl = \"http://127.0.0.1:1\"\ntoken = \"login-token\"\n",
+    );
+
+    let result =
+        super::connect_and_configure(&ctx_at(&config_path, Some(crate::types::ApiMode::XmlRpc)))
+            .await;
+    assert!(matches!(
+        result,
+        Err(BzrError::Config(ref message)) if message.contains("REST only")
+    ));
+}
+
+#[tokio::test]
 async fn credentialless_cached_mode_builds_anonymous_client() {
     let server = MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
