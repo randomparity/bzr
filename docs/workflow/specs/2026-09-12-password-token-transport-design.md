@@ -28,16 +28,27 @@ transport selection aligned.
 API-key credentials retain their detected header/query behavior and remain
 available to XML-RPC exactly as before. A token selects fixed REST query
 transport with `Bugzilla_token`; it does not run API-key method detection,
-does not write an API-key auth-method cache, and rejects an XML-RPC or hybrid
-override before a request could put the token into XML-RPC's API-key field.
-This makes the unsupported transport boundary explicit instead of silently
-mislabeling a token as an API key.
+does not write an API-key auth-method cache, and uses REST even when anonymous
+version detection cached Hybrid for Bugzilla 5.0. An explicit `--api xmlrpc` or
+`--api hybrid` request is rejected before a request could put the token into
+XML-RPC's API-key field. This makes the unsupported transport boundary explicit
+without making the default supported-server path unusable.
+
+The prepared-auth representation has a distinct token variant. Its requests
+always carry `Bugzilla_token` and never take the API-key alternate-auth retry
+on a 401. API-key query credentials retain that retry behavior.
 
 The redaction layer becomes credential-neutral: it tracks the active secret,
 redacts both API-key and token query markers in raw diagnostics, and preserves
 the existing bounded-preview protection for either secret. User-facing
 credential-required errors describe the accepted configured sources without
 printing their values.
+
+Configuration display must mask and identify the token as a token rather than
+an API key. Existing keyring commands remain API-key-only: migration rejects a
+token source, and setting an API-key keyring source removes a token so it never
+persists an invalid multi-source server. Token keyring storage is lifecycle
+work owned by #681, not a silent reinterpretation of existing keyring commands.
 
 ## Auth detection and proof
 
@@ -73,13 +84,19 @@ work or existing configuration-policy concerns.
 
 ## Test strategy
 
-Unit tests cover source exclusivity and token resolution, token request
-placement, API-key non-regression, REST-only rejection, and token redaction
-including bounded previews. Connection tests prove tokens bypass API-key
-detection/cache persistence. The auth comparison phase replaces #676's
-controlled expected gap with a real configured-token REST identity check and
-the parity report marks that row as parity. The functional run exercises the
-compiled binary against a real Bugzilla container.
+Unit tests cover source exclusivity and token resolution, configuration-display
+masking, keyring/migration safety, token request placement, API-key
+non-regression, REST-only rejection, no API-key fallback after a token 401, and
+token redaction including bounded previews. Connection tests prove tokens
+bypass API-key detection/cache persistence and force REST despite a detected
+Hybrid mode. The auth comparison phase replaces #676's controlled expected gap
+with a real configured-token REST identity check and the parity report marks
+that row as parity. The phase obtains a disposable token from the existing
+real-container `/rest/login` fixture credentials into a private 0600 file,
+writes it directly to a private test config, and never prints either file or
+token. This is test fixture setup, not a login command or comparison-harness
+change. `make functional-compare` exercises that comparison against a real
+Bugzilla container; `make functional-test` remains the separate regression arm.
 
 ## Alternatives considered
 
