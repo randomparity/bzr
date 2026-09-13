@@ -19,6 +19,7 @@ token. Existing API-key sources are rejected rather than silently replaced.
 - Missing named server, a non-token credential source, or inline configuration fails before a network write.
 - Failed login leaves the existing configuration untouched.
 - Failed remote logout retains the local token for a retry.
+- A concurrent replacement token is retained; logout removes only the token it revoked.
 - REST-only token use remains enforced by the existing connection path after persistence.
 
 ### Threat model

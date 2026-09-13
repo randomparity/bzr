@@ -47,18 +47,18 @@ pub(crate) async fn execute(
             );
         }
         AuthAction::Logout => {
-            let token = server.token.as_deref().ok_or_else(|| {
+            let token = server.token.clone().ok_or_else(|| {
                 BzrError::config(format!("server '{name}' has no saved login token"))
             })?;
             let client = unauthenticated_client(server, name, ctx).await?;
-            client.logout(token).await?;
+            client.logout(&token).await?;
             Config::update_locked_at(ctx.config_path_override(), |config| {
                 let server = config.servers.get_mut(name).ok_or_else(|| {
                     BzrError::config(format!(
                         "server '{name}' was removed while logout was running"
                     ))
                 })?;
-                server.token = None;
+                clear_token_if_matches(server, &token);
                 Ok(())
             })?;
             write_result(
@@ -78,6 +78,12 @@ fn ensure_token_slot(server: &ServerConfig, name: &str) -> Result<()> {
         return Err(BzrError::config(format!("server '{name}' already has an API-key credential source; remove it before using auth login")));
     }
     Ok(())
+}
+
+fn clear_token_if_matches(server: &mut ServerConfig, revoked_token: &str) {
+    if server.token.as_deref() == Some(revoked_token) {
+        server.token = None;
+    }
 }
 
 fn read_password() -> Result<String> {
