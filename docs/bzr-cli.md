@@ -152,6 +152,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │        [--creator <C>...] [--priority <P>...] [--severity <S>...] [--id <ID>...]
 │   │        [--alias <A>] [--summary <S>] [--resolution <R>...] [--version <V>...] [--op-sys <OS>...]
 │   │        [--platform <P>...] [--whiteboard <W>] [--target-milestone <M>...] [--qa-contact <Q>...] [--url <U>]
+│   │        [--status-whiteboard-type <TYPE>] [--url-type <TYPE>] [--email-type <TYPE>]
 │   │        [--limit <N>] [--offset <N>] [--paginate] [--count] [--fields <F>] [--exclude-fields <F>]
 │   │        [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
 │   ├── view <ID> [--fields <F>] [--exclude-fields <F>] [--permissive] [--web]
@@ -164,6 +165,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │       [--priority <P>...] [--severity <S>...] [--resolution <R>...] [--version <V>...]
 │   │       [--op-sys <OS>...] [--platform <P>...] [--whiteboard <W>...] [--target-milestone <M>...]
 │   │       [--qa-contact <Q>...] [--url <U>...] [--created-since <D>] [--changed-since <D>]
+│   │       [--status-whiteboard-type <TYPE>] [--url-type <TYPE>] [--email-type <TYPE>]
 │   │       [--limit <N>] [--offset <N>] [--paginate] [--count] [--fields <F>] [--exclude-fields <F>]
 │   │       [--sort <FIELD>] [--order asc|desc]
 │   ├── create [--from-json <PATH>] [--template <T>] [--product <P>] [--component <C>] --summary <S>
@@ -353,6 +355,9 @@ Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`,
 | `--id <ID>` | No | | Filter by bug ID (repeatable; `!` negation not supported) |
 | `--alias <A>` | No | | Filter by bug alias |
 | `--summary <S>` | No | | Substring match on the Summary field (matches all bug states) |
+| `--status-whiteboard-type <TYPE>` | No | | Boolean-chart operator for `--whiteboard`; cannot be combined with a `!`-prefixed value. |
+| `--url-type <TYPE>` | No | | Boolean-chart operator for `--url`; cannot be combined with a `!`-prefixed value. |
+| `--email-type <TYPE>` | No | | Boolean-chart operator for `--assignee`, `--creator`, and `--qa-contact`; cannot be combined with a `!`-prefixed value. |
 | `--limit <N>` | No | 50 | Max results |
 | `--offset <N>` | No | | Skip the first N matches (manual paging past `--limit`). Mutually exclusive with `--paginate`; cannot be combined with `--count` or with `--limit 0` when N is nonzero. |
 | `--paginate` | No | | Retrieve every matching page, looping internally past `--limit` (which becomes the per-request page size). For "process all matching bugs" workflows. Cannot be combined with `--count`. |
@@ -761,6 +766,9 @@ bzr bug my --status NEW --status '!RESOLVED'  # mixed positive and negated
 | `--resolution <R>` | No | | Filter by resolution (repeatable; `!` prefix to exclude; empty matches open bugs) |
 | `--qa-contact <Q>` | No | | Filter by QA contact login substring (repeatable; `!` prefix excludes substring matches; bare `!` is invalid) |
 | `--url <U>` | No | | Filter by URL field substring (repeatable; `!` prefix to exclude) |
+| `--status-whiteboard-type <TYPE>` | No | | Boolean-chart operator for `--whiteboard`; cannot be combined with a `!`-prefixed value. |
+| `--url-type <TYPE>` | No | | Boolean-chart operator for `--url`; cannot be combined with a `!`-prefixed value. |
+| `--email-type <TYPE>` | No | | Boolean-chart operator for `--assignee`, `--creator`, and `--qa-contact`; cannot be combined with a `!`-prefixed value. |
 | `--limit <N>` | No | 50 | Max results per category. With `--all`, each of the three categories (assigned, created, CC'd) is queried separately up to this limit; duplicates across categories are removed. |
 | `--offset <N>` | No | | Skip the first N matches in each category. Mutually exclusive with `--paginate`; cannot be combined with `--count` or with `--limit 0` when N is nonzero. |
 | `--paginate` | No | | Retrieve every matching page of each category, looping internally past `--limit`, then de-duplicate. Cannot be combined with `--count`. |
