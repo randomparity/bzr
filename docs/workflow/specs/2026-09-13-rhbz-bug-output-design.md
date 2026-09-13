@@ -29,7 +29,8 @@ field path.
 - Documentation calls out the two RHBZ-only readable extension fields and the
   defined stock-server absence behavior.
 - RHBZ server-backed tests perform write-to-read assertions for empty and
-  multi-value states.
+  multi-value states: a fresh bug proves an empty `target_release` array, and
+  the controlled sub-component setup proves a multi-value object.
 
 ## Validation
 
