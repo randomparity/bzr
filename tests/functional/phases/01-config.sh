@@ -32,6 +32,30 @@ if assert_success; then
         assert_json '.servers.public.api_key_source' "none"; then test_pass; fi
 fi
 
+_IMPORT_DIR=$(mktemp -d /tmp/bzr-func-bugzillarc.XXXXXX)
+_IMPORT_RC="$_IMPORT_DIR/bugzillarc"
+_IMPORT_CONFIG="$_IMPORT_DIR/config.toml"
+printf '[DEFAULT]\nurl=%s\napi_key=%s\nuser=fixture-user\npassword=fixture-password\ncert=fixture.pem\n' \
+    "$BZ_URL" "$API_KEY" >"$_IMPORT_RC"
+
+test_begin "config-import-bugzillarc-api-key-only" "config import-bugzillarc imports API key only"
+run_bzr --config "$_IMPORT_CONFIG" config import-bugzillarc --path "$_IMPORT_RC"
+if assert_success && assert_json '.imported' '1' &&
+    assert_json '.unsupported_password_credentials' '1' &&
+    assert_json '.unsupported_certificates' '1'; then
+    run_bzr --config "$_IMPORT_CONFIG" config show
+    if assert_success &&
+        jq -e --arg url "$BZ_URL" '[.servers[] | select(.url == $url)][0].api_key_source == "inline"' \
+            "$BZR_STDOUT" >/dev/null &&
+        ! grep -Fq 'token =' "$_IMPORT_CONFIG" &&
+        ! grep -Fq 'fixture-user' "$_IMPORT_CONFIG" &&
+        ! grep -Fq 'fixture-password' "$_IMPORT_CONFIG"; then
+        test_pass
+    fi
+fi
+rm -rf "$_IMPORT_DIR"
+unset _IMPORT_DIR _IMPORT_RC _IMPORT_CONFIG
+
 test_begin "config-set-default-alt" "config set-default alt"
 run_bzr config set-default alt
 if assert_success; then test_pass; fi

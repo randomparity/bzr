@@ -2053,6 +2053,27 @@ Agent note: this is safer after confirming the product exists with `bzr --json p
 
 Configuration is stored in `~/.config/bzr/config.toml`. Multiple servers can be configured and switched between using aliases.
 
+### `bzr config import-bugzillarc`
+
+Import server URLs and API keys from python-bugzilla configuration. Without `--path`, bzr reads
+`/etc/bugzillarc`, `~/.bugzillarc`, and `~/.config/python-bugzilla/bugzillarc` in that order;
+later files override earlier settings. An explicit `--path` reads only that file. The command is
+local-only and does not contact imported servers.
+
+`api_key` is imported as an inline bzr API key. `user`, `password`, and `cert` are reported as
+unsupported and are not stored: python-bugzilla login credentials are not interchangeable with
+an already-issued Bugzilla login token. Existing bzr server aliases with the same URL are updated;
+otherwise bzr derives an alias from the URL host.
+
+```bash
+bzr config import-bugzillarc
+bzr --json config import-bugzillarc --path ~/.bugzillarc
+```
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `--path <FILE>` | No | Import only this bugzillarc file instead of the standard search paths |
+
 ### `bzr config set-server`
 
 Add or update a named server configuration.

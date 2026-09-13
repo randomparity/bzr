@@ -9,6 +9,7 @@ use crate::commands::runtime::invocation::CommandContext;
 use crate::error::Result;
 use crate::output::writers::Writers;
 
+mod import_bugzillarc;
 mod keyring;
 mod migrate;
 mod remove;
@@ -23,6 +24,9 @@ pub(crate) async fn execute(
     w: &mut Writers<'_>,
 ) -> Result<()> {
     match action {
+        ConfigAction::ImportBugzillarc { path } => {
+            import_bugzillarc::handle(path.as_deref(), ctx, w)
+        }
         ConfigAction::SetServer {
             name,
             url,
