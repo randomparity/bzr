@@ -166,8 +166,14 @@ if [[ -n "$BUG1" ]]; then
                 [[ "$(jq --argjson id "$BUG1" '[.[] | select(.id == $id)] | length' "$BZR_STDOUT")" == 1 ]]; then
                 run_bzr --api xmlrpc bug tag "$BUG1" --remove "$_BUG_TAG"
                 if assert_success; then test_pass; fi
+            else
+                test_fail "tag filter did not return the tagged bug"
             fi
+        else
+            test_fail "tag projection did not include the added tag"
         fi
+    else
+        test_fail "XML-RPC tag addition failed"
     fi
     unset _BUG_TAG
 else test_skip "no BUG1"; fi
