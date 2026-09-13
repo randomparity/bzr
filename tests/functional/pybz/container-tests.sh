@@ -3284,6 +3284,11 @@ run_rhbz_fields_fixture() (
     resource_pybz() {
         local payload="$3"
 
+        if ! jq -e '.transport == "REST"' <<<"$payload" >/dev/null; then
+            printf 'RHBZ fields fixture did not request REST\n' >&2
+            return 1
+        fi
+
         RHBZ_FIELDS_FIXTURE_SUB=$(jq -r '.sub_component // empty' <<<"$payload")
         RHBZ_FIELDS_FIXTURE_RELEASE=$(jq -r '.target_release // empty' <<<"$payload")
         RHBZ_FIELDS_FIXTURE_FIXED=$(jq -r '.fixed_in // empty' <<<"$payload")

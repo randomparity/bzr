@@ -94,7 +94,7 @@ rhbz_fields_run() {
     if rhbz_fields_prepare && rhbz_fields_metadata_ready &&
         bug_id=$(rhbz_fields_create_bug "$name") && [[ $bug_id =~ ^[1-9][0-9]*$ ]] &&
         resource_pybz "rhbz-fields-${name}" "$operation" \
-            "$(jq -cn --argjson bug_id "$bug_id" --argjson payload "$payload" '$payload + {bug_id:$bug_id}')" REST &&
+            "$(jq -cn --argjson bug_id "$bug_id" --argjson payload "$payload" '$payload + {bug_id:$bug_id,transport:"REST"}')" REST &&
         rhbz_fields_read "$bug_id" "$pybz_fields" "$name" &&
         jq -e --arg expected "$pybz_expected" "$pybz_filter" \
             "$COMPARE_EXCHANGE_DIR/rhbz-fields-${name}-state.json" >/dev/null; then
