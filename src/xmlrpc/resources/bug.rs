@@ -76,7 +76,12 @@ impl XmlRpcClient {
         extract_bugs(&result)
     }
 
-    pub async fn get_bug(&self, id: &str) -> Result<Bug> {
+    pub async fn get_bug(
+        &self,
+        id: &str,
+        include_fields: Option<&str>,
+        exclude_fields: Option<&str>,
+    ) -> Result<Bug> {
         let mut rpc_params = BTreeMap::new();
 
         // Try parsing as integer ID first, fall back to alias.
@@ -86,6 +91,9 @@ impl XmlRpcClient {
             rpc_params.insert("ids".into(), Value::Array(vec![Value::Int(numeric_id)]));
         } else {
             rpc_params.insert("ids".into(), Value::Array(vec![Value::from(id)]));
+        }
+        if include_fields.is_some() || exclude_fields.is_some() {
+            add_field_lists_for_get(&mut rpc_params, include_fields, exclude_fields);
         }
 
         let result = self.call("Bug.get", rpc_params).await?;
@@ -97,6 +105,27 @@ impl XmlRpcClient {
             });
         }
         Ok(bugs.swap_remove(0))
+    }
+}
+
+fn add_field_lists_for_get(
+    rpc_params: &mut BTreeMap<String, Value>,
+    include_fields: Option<&str>,
+    exclude_fields: Option<&str>,
+) {
+    if let Some(include_fields) = include_fields {
+        let fields = include_fields
+            .split(',')
+            .map(|field| Value::from(field.trim()))
+            .collect();
+        rpc_params.insert("include_fields".into(), Value::Array(fields));
+    }
+    if let Some(exclude_fields) = exclude_fields {
+        let fields = exclude_fields
+            .split(',')
+            .map(|field| Value::from(field.trim()))
+            .collect();
+        rpc_params.insert("exclude_fields".into(), Value::Array(fields));
     }
 }
 

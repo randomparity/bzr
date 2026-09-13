@@ -1286,6 +1286,29 @@ async fn get_bug_prepends_id_to_idless_include_fields() {
 }
 
 #[tokio::test]
+async fn xmlrpc_get_bug_forwards_idless_include_fields() {
+    use crate::client::test_helpers::test_client_xmlrpc;
+    use wiremock::matchers::body_string_contains;
+
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<methodName>Bug.get</methodName>"))
+        .and(body_string_contains("<name>include_fields</name>"))
+        .and(body_string_contains("<string>id</string>"))
+        .and(body_string_contains("<string>tags</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(1, "tagged")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = test_client_xmlrpc(&mock.uri());
+    let bug = client.get_bug("1", Some("tags"), None).await.unwrap();
+
+    assert_eq!(bug.id, 1);
+}
+
+#[tokio::test]
 async fn get_bug_via_search_fallback_carries_id() {
     let mock = MockServer::start().await;
     // Direct endpoint crashes with 100500, forcing the search fallback.
