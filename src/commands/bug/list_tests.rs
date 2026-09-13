@@ -107,6 +107,7 @@ async fn bug_list_passes_every_field_through_to_search_params() {
             resolution: vec!["FIXED".into()],
             qa_contact: vec!["qa@test.com".into()],
             url: vec!["github.com/foo".into()],
+            tag: vec![],
         },
         actor_filters: crate::cli::BugActorFilterArgs {
             assignee: vec!["dev@test.com".into()],

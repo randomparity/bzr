@@ -56,6 +56,7 @@ pub enum BugField {
     EstimatedTime,
     RemainingTime,
     Flags,
+    Tags,
 }
 
 impl BugField {
@@ -90,6 +91,7 @@ impl BugField {
             BugField::EstimatedTime => "estimated_time",
             BugField::RemainingTime => "remaining_time",
             BugField::Flags => "flags",
+            BugField::Tags => "tags",
         }
     }
 
@@ -124,6 +126,7 @@ impl BugField {
             BugField::EstimatedTime => &["estimated_time"],
             BugField::RemainingTime => &["remaining_time"],
             BugField::Flags => &["flags"],
+            BugField::Tags => &["tags"],
         }
     }
 
@@ -158,6 +161,7 @@ impl BugField {
             BugField::EstimatedTime => "ESTIMATED_TIME",
             BugField::RemainingTime => "REMAINING_TIME",
             BugField::Flags => "FLAGS",
+            BugField::Tags => "TAGS",
         }
     }
 }
@@ -202,6 +206,7 @@ pub const BUG_FIELDS: &[BugField] = &[
     BugField::EstimatedTime,
     BugField::RemainingTime,
     BugField::Flags,
+    BugField::Tags,
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

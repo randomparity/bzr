@@ -156,6 +156,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   │        [--limit <N>] [--offset <N>] [--paginate] [--count] [--fields <F>] [--exclude-fields <F>]
 │   │        [--created-since <D>] [--changed-since <D>] [--sort <FIELD>] [--order asc|desc]
 │   ├── view <ID> [--fields <F>] [--exclude-fields <F>] [--permissive] [--web]
+│   ├── tag <ID> --add <TAG>... [--remove <TAG>...]
 │   ├── search [<QUERY>] [--from-url <URL>] [--save-as [NAME]] [--limit <N>] [--offset <N>] [--paginate] [--count] [--fields <F>] [--exclude-fields <F>]
 │   │          [--saved-search <NAME>] [--sharer <ID>] [--sort <FIELD>] [--order asc|desc]
 │   ├── history <ID> [--since <DATE>]
@@ -320,6 +321,7 @@ List bugs matching filter criteria.
 bzr bug list --product Fedora --status ASSIGNED --limit 20
 bzr bug list --assignee user@example.com
 bzr bug list --product Fedora --fields id,summary,status
+bzr bug list --tag triage --fields id,summary,tags
 bzr bug list --product Fedora --fields id,summary,cf_release
 # Select table columns
 bzr bug list --product Fedora --fields id,priority,severity,status,summary

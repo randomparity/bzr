@@ -35,6 +35,7 @@ fn save_action(name: &str) -> QueryAction {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],

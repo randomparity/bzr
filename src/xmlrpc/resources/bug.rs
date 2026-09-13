@@ -12,6 +12,23 @@ use crate::xmlrpc::resources::mappers::{
 };
 
 impl XmlRpcClient {
+    pub async fn update_bug_tags(&self, id: u64, add: &[String], remove: &[String]) -> Result<()> {
+        let mut params = BTreeMap::new();
+        params.insert("ids".into(), Value::Array(vec![xmlrpc_id(id, "bug ID")?]));
+        let mut tags = BTreeMap::new();
+        tags.insert(
+            "add".into(),
+            Value::Array(add.iter().map(|tag| Value::from(tag.as_str())).collect()),
+        );
+        tags.insert(
+            "remove".into(),
+            Value::Array(remove.iter().map(|tag| Value::from(tag.as_str())).collect()),
+        );
+        params.insert("tags".into(), Value::Struct(tags));
+        self.call("Bug.update_tags", params).await?;
+        Ok(())
+    }
+
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
         validate_role_negations(params)?;
         let mut rpc_params = BTreeMap::new();
@@ -216,6 +233,7 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         url: get_nonempty_str(m, "url"),
         whiteboard: get_nonempty_str(m, "whiteboard"),
         keywords: get_str_array(m, "keywords"),
+        tags: get_str_array(m, "tags"),
         blocks: get_int_array(m, "blocks"),
         depends_on: get_int_array(m, "depends_on"),
         cc: get_str_array(m, "cc"),

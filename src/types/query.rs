@@ -82,6 +82,7 @@ pub struct SavedQuery {
     /// Filter by URL field substring (repeatable).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub url: Vec<String>,
+    pub tags: Vec<String>,
     /// Persisted Bugzilla `order` clause (from `query save --sort/--order`).
     /// Overridden per-run by `query run --sort`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -233,6 +234,7 @@ impl SavedQuery {
             FilterField::Resolution => &mut self.resolution,
             FilterField::QaContact => &mut self.qa_contact,
             FilterField::Url => &mut self.url,
+            FilterField::Tags => &mut self.tags,
         }
     }
 
@@ -253,6 +255,7 @@ impl SavedQuery {
             FilterField::Resolution => &self.resolution,
             FilterField::QaContact => &self.qa_contact,
             FilterField::Url => &self.url,
+            FilterField::Tags => &self.tags,
         }
     }
 

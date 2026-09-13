@@ -30,6 +30,7 @@ fn saved_query_list_roundtrips_json() {
         resolution: vec![],
         qa_contact: vec![],
         url: vec![],
+        tags: vec![],
         order: None,
     };
     let json = serde_json::to_string(&query).unwrap();

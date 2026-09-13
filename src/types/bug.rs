@@ -31,7 +31,7 @@ pub use search::{
     FIELD_MAPPINGS,
 };
 
-const BUG_BUILT_IN_FIELD_COUNT: usize = 29;
+const BUG_BUILT_IN_FIELD_COUNT: usize = 30;
 
 fn is_custom_field_name(name: &str) -> bool {
     name.starts_with("cf_")
@@ -58,6 +58,7 @@ pub struct Bug {
     pub url: Option<String>,
     pub whiteboard: Option<String>,
     pub keywords: Vec<String>,
+    pub tags: Vec<String>,
     pub blocks: Vec<u64>,
     pub depends_on: Vec<u64>,
     pub cc: Vec<String>,
@@ -108,6 +109,8 @@ struct BugWire {
     whiteboard: Option<String>,
     #[serde(default)]
     keywords: Vec<String>,
+    #[serde(default)]
+    tags: Vec<String>,
     #[serde(default)]
     blocks: Vec<u64>,
     #[serde(default)]
@@ -217,6 +220,7 @@ impl From<BugWire> for Bug {
             url: wire.url,
             whiteboard: wire.whiteboard,
             keywords: wire.keywords,
+            tags: wire.tags,
             blocks: wire.blocks,
             depends_on: wire.depends_on,
             cc: wire.cc,
@@ -275,6 +279,7 @@ impl Serialize for Bug {
         map.serialize_entry("url", &self.url)?;
         map.serialize_entry("whiteboard", &self.whiteboard)?;
         map.serialize_entry("keywords", &self.keywords)?;
+        map.serialize_entry("tags", &self.tags)?;
         map.serialize_entry("blocks", &self.blocks)?;
         map.serialize_entry("depends_on", &self.depends_on)?;
         map.serialize_entry("cc", &self.cc)?;

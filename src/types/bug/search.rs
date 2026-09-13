@@ -19,6 +19,7 @@ pub enum FilterField {
     Resolution,
     QaContact,
     Url,
+    Tags,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -87,6 +88,8 @@ pub struct SearchParams {
     /// Filter by URL field substring (repeatable). Negated values
     /// use `notsubstring`.
     pub url: Vec<String>,
+    /// Filter by personal bug tags (repeatable for OR; prefix with ! to exclude).
+    pub tags: Vec<String>,
     /// Explicit Bugzilla boolean-chart match type for Status Whiteboard.
     pub whiteboard_type: Option<MatchType>,
     /// Explicit Bugzilla boolean-chart match type for the URL field.
@@ -183,6 +186,7 @@ macro_rules! filter_field_arm {
             FilterField::Resolution => & $($mutability)? $self.resolution,
             FilterField::QaContact => & $($mutability)? $self.qa_contact,
             FilterField::Url => & $($mutability)? $self.url,
+            FilterField::Tags => & $($mutability)? $self.tags,
         }
     };
 }
@@ -405,6 +409,13 @@ pub struct FieldMapping {
 
 /// Canonical field-mapping table for the 15 multi-value filter fields.
 pub const FIELD_MAPPINGS: &[FieldMapping] = &[
+    FieldMapping {
+        field: FilterField::Tags,
+        struct_field: "tags",
+        url_param: "tags",
+        internal_name: "tag",
+        negation_operator: NegationOp::NotEquals,
+    },
     FieldMapping {
         field: FilterField::Product,
         struct_field: "product",

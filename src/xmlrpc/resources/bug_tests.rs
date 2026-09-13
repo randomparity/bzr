@@ -16,6 +16,24 @@ fn test_http_client() -> reqwest::Client {
 }
 
 #[tokio::test]
+async fn update_bug_tags_uses_xmlrpc_method_and_tag_arrays() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<methodName>Bug.update_tags</methodName>"))
+        .and(body_string_contains("<name>tags</name>"))
+        .and(body_string_contains("<string>triage</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(r#"<?xml version="1.0"?><methodResponse><params><param><value><struct/></value></param></params></methodResponse>"#))
+        .mount(&mock)
+        .await;
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
+    client
+        .update_bug_tags(42, &["triage".into()], &["old".into()])
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
 async fn search_bugs_returns_results() {
     let mock = MockServer::start().await;
     Mock::given(method("POST"))

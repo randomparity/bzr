@@ -24,6 +24,7 @@ fn product_save_action(name: &str, product: &str, limit: u32) -> QueryAction {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
