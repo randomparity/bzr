@@ -60,6 +60,28 @@ fn auth_mode_reflects_credential_presence() {
     assert_eq!(token.auth_mode(), crate::types::AuthMode::Token);
 }
 
+#[test]
+fn token_client_rejects_non_rest_api_modes() {
+    for api_mode in [ApiMode::XmlRpc, ApiMode::Hybrid] {
+        let result = BugzillaClient::new(BugzillaClientConfig {
+            base_url: "https://bugzilla.example.com",
+            credential: None,
+            token: Some("login-token"),
+            auth_method: None,
+            api_mode,
+            email_hint: None,
+            server_name: "test",
+            tls_config: &crate::tls::TlsConfig::default(),
+            request_timeout: crate::http::REQUEST_TIMEOUT,
+            retry_max: 0,
+        });
+        assert!(matches!(
+            result,
+            Err(BzrError::Config(ref message)) if message.contains("REST only")
+        ));
+    }
+}
+
 #[tokio::test]
 async fn new_retains_a_no_redirect_client_for_strict_operations() {
     use wiremock::matchers::{method, path};
@@ -155,4 +177,35 @@ async fn current_credentials_valid_login_proof_requires_configured_email_and_cre
         Err(BzrError::Auth(_))
     ));
     assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn token_current_credentials_proof_uses_token_transport() {
+    use wiremock::matchers::{method, path, query_param};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/valid_login"))
+        .and(query_param("login", "user@example.com"))
+        .and(query_param("Bugzilla_token", "login-token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"result": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let client = BugzillaClient::new(BugzillaClientConfig {
+        base_url: &server.uri(),
+        credential: None,
+        token: Some("login-token"),
+        auth_method: None,
+        api_mode: ApiMode::Rest,
+        email_hint: Some("user@example.com"),
+        server_name: "test",
+        tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
+    })
+    .unwrap();
+
+    client.prove_current_credentials().await.unwrap();
 }

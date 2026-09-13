@@ -150,6 +150,12 @@ impl BugzillaClient {
             retry_max,
         } = config;
 
+        if token.is_some() && api_mode != ApiMode::Rest {
+            return Err(BzrError::config(
+                "login tokens support REST only; use API mode REST",
+            ));
+        }
+
         let auth = match (credential, token, auth_method) {
             (Some(key), None, Some(AuthMethod::Header)) => {
                 let value = HeaderValue::from_str(key)
@@ -244,14 +250,6 @@ impl BugzillaClient {
                 BzrError::Auth(
                     "current credential proof requires a configured email for rest/valid_login"
                         .to_owned(),
-                )
-            })?;
-        self.api_key
-            .as_deref()
-            .filter(|credential| !credential.is_empty())
-            .ok_or_else(|| {
-                BzrError::Auth(
-                    "current credential proof requires a configured credential".to_owned(),
                 )
             })?;
         let auth = self.auth.as_ref().ok_or_else(|| {
