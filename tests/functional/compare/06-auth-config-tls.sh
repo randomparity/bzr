@@ -277,7 +277,29 @@ r11_pass_test r11_tls_control
 test_begin "token-transport-gap" "login-token request transport"
 r11_pass_test r11_token_control && r11_pass_test r11_bzr_token_control
 test_begin "login-command-gap" "login and logout commands"
-r11_gap_test 681 login r11_login_control
+r11_pass_test r11_login_control && {
+    run_bzr config set-server r11-login --url "$BZ_URL"
+    [[ $BZR_EXIT -eq 0 ]] &&
+        run_bzr --server r11-login auth login --email "$COMPARE_ADMIN_EMAIL" \
+            --password "$COMPARE_ADMIN_PASSWORD" --restrict-login &&
+        [[ $BZR_EXIT -eq 0 ]] &&
+        run_bzr --server r11-login whoami &&
+        [[ $BZR_EXIT -eq 0 ]] &&
+        run_bzr --server r11-login auth logout &&
+        [[ $BZR_EXIT -eq 0 ]]
+}
+test_begin "login-command-xmlrpc" "login and logout commands over XML-RPC"
+run_bzr config set-server r11-login-xmlrpc --url "$BZ_URL"
+if [[ $BZR_EXIT -eq 0 ]] &&
+    run_bzr --server r11-login-xmlrpc --api xmlrpc auth login \
+        --email "$COMPARE_ADMIN_EMAIL" --password "$COMPARE_ADMIN_PASSWORD" &&
+    [[ $BZR_EXIT -eq 0 ]] &&
+    run_bzr --server r11-login-xmlrpc --api xmlrpc auth logout &&
+    [[ $BZR_EXIT -eq 0 ]]; then
+    test_pass
+else
+    test_fail "XML-RPC auth login/logout failed"
+fi
 test_begin "bugzillarc-import" "bugzillarc API-key import"
 r11_pass_test r11_bugzillarc_import_control
 test_begin "client-certificate-surface-gap" "client certificate configuration"

@@ -245,6 +245,9 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   ├── create [--from-json <PATH>] [--name <N>] [--description <D>] [--is-active <BOOL>]
 │   └── update [<GROUP>] [--from-json <PATH>] [--description <D>] [--is-active <BOOL>]
 ├── whoami
+├── auth
+│   ├── login --email <EMAIL> [--password <PASSWORD>] [--restrict-login]
+│   └── logout
 ├── server
 │   └── info
 ├── classification
@@ -3023,6 +3026,15 @@ transport. Other hosts retain their configured or detected API-key header/query
 method; XML-RPC continues to place API keys in its request body.
 
 `bzr` authenticates using Bugzilla API keys when a command needs an identity or write access. Public Bugzilla servers can omit credentials for read-only commands; writes and identity-derived reads such as `whoami` and `bug my` fail fast until a credential source is configured. Prefer `--api-key-env` so the secret is resolved at runtime rather than stored in `~/.config/bzr/config.toml`. On Unix systems, `bzr` warns if the config directory or config file permissions are broader than owner-only access. On first credentialed use, it auto-detects whether your server supports header-based auth (`X-BUGZILLA-API-KEY`) or query parameter auth (`Bugzilla_api_key`), and caches the result.
+
+For username/password login, configure a named server with no API-key source and run
+`bzr --server <NAME> auth login --email <EMAIL>`; it prompts with hidden input, or accepts
+`--password` for non-interactive automation. Command-line passwords can be visible to local
+process inspection, so prefer the hidden prompt for interactive use. The command
+stores the server-issued token in the protected config file; `--restrict-login` asks
+Bugzilla to restrict the session. `bzr --server <NAME> auth logout` invalidates the
+remote token before removing the local copy. Auth login is a network command and cannot
+use `--server-url`, because an inline server has no safe persistent token location.
 
 Detection probes endpoints in order:
 

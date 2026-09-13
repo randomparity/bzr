@@ -1,10 +1,15 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::client::encode_path;
 use crate::client::{BugzillaClient, UserDetailLevel, UserSearchResponse};
 use crate::error::{BzrError, Result};
 use crate::types::transport::ApiMode;
 use crate::types::user::{BugzillaUser, CreateUserParams, UpdateUserParams, WhoamiResponse};
+
+#[derive(Deserialize)]
+struct LoginResponse {
+    token: String,
+}
 
 #[derive(Serialize)]
 struct UpdateUserRequest<'a> {
@@ -30,6 +35,69 @@ impl<'a> From<&'a UpdateUserParams> for UpdateUserRequest<'a> {
 }
 
 impl BugzillaClient {
+    pub async fn login(&self, email: &str, password: &str, restrict_login: bool) -> Result<String> {
+        crate::bugzilla_auth::register_active_credential(password);
+        match self.api_mode {
+            ApiMode::Rest => self.rest_login(email, password, restrict_login).await,
+            ApiMode::XmlRpc => {
+                self.xmlrpc_client()
+                    .login(email, password, restrict_login)
+                    .await
+            }
+            ApiMode::Hybrid => match self.rest_login(email, password, restrict_login).await {
+                Ok(token) => Ok(token),
+                Err(error) if error.is_transport_failure() => {
+                    self.xmlrpc_client()
+                        .login(email, password, restrict_login)
+                        .await
+                }
+                Err(error) => Err(error),
+            },
+        }
+    }
+
+    pub async fn logout(&self, token: &str) -> Result<()> {
+        crate::bugzilla_auth::register_active_credential(token);
+        match self.api_mode {
+            ApiMode::Rest => self.rest_logout(token).await,
+            ApiMode::XmlRpc => self.xmlrpc_client().logout(token).await,
+            ApiMode::Hybrid => match self.rest_logout(token).await {
+                Ok(()) => Ok(()),
+                Err(error) if error.is_transport_failure() => {
+                    self.xmlrpc_client().logout(token).await
+                }
+                Err(error) => Err(error),
+            },
+        }
+    }
+
+    async fn rest_login(
+        &self,
+        email: &str,
+        password: &str,
+        restrict_login: bool,
+    ) -> Result<String> {
+        let restrict_login = if restrict_login { "1" } else { "0" };
+        let response: LoginResponse = self
+            .get_json_query(
+                "login",
+                &[
+                    ("login", email),
+                    ("password", password),
+                    ("restrict_login", restrict_login),
+                ],
+            )
+            .await?;
+        Ok(response.token)
+    }
+
+    async fn rest_logout(&self, token: &str) -> Result<()> {
+        let _: serde_json::Value = self
+            .get_json_query("logout", &[("Bugzilla_token", token)])
+            .await?;
+        Ok(())
+    }
+
     pub async fn whoami(&self) -> Result<WhoamiResponse> {
         let req = self.apply_auth(self.http.get(self.url("whoami")));
         let resp = self.send(req).await;

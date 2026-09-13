@@ -39,15 +39,15 @@ This report tracks bzr against python-bugzilla 3.3.0 using stable comparison tes
 | RHBZ fixed-in | `bzr bug update --field cf_fixed_in=...` | expected gap (#775) | `compare/09-rhbz-fields/fixed-in` |
 | RHBZ whiteboards | `bzr bug update --field cf_devel_whiteboard=...` | expected gap (#775) | `compare/09-rhbz-fields/whiteboards` |
 | API-key placement by server version | `bzr whoami` | bz50/bz52: both query; bz53: bzr header, python-bugzilla query | `compare/06-auth-config-tls/api-key-placement` |
-| Restricted password login | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/restricted-login` |
-| Cached login token reuse | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/cached-token` |
-| Logout token invalidation | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/logout` |
+| Restricted password login | `bzr auth login --restrict-login` | parity | `compare/06-auth-config-tls/restricted-login` |
+| Cached login token reuse | persisted `token` configuration | parity | `compare/06-auth-config-tls/cached-token` |
+| Logout token invalidation | `bzr auth logout` | parity | `compare/06-auth-config-tls/logout` |
 | bugzillarc three-file precedence | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/bugzillarc-precedence` |
 | bugzillarc default URL | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/bugzillarc-default-url` |
 | bugzillarc URL-substring section | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/bugzillarc-substring-section` |
 | Disable TLS verification | `--server-tls-insecure` | parity | `compare/06-auth-config-tls/nosslverify` |
 | Login-token request transport | persisted `token` configuration | parity | `compare/06-auth-config-tls/token-transport-gap` |
-| Login and logout commands | no equivalent | expected gap (#681) | `compare/06-auth-config-tls/login-command-gap` |
+| Login and logout commands | `bzr auth login`, `bzr auth logout` | parity | `compare/06-auth-config-tls/login-command-gap` |
 | bugzillarc API-key import | `bzr config import-bugzillarc` | parity; username/password and client certificates are reported unsupported | `compare/06-auth-config-tls/bugzillarc-import` |
 | Client certificate configuration | no equivalent | surface gap (#677) | `compare/06-auth-config-tls/client-certificate-surface-gap` |
 | Red Hat Bearer API-key transport | automatic REST transport for `bugzilla.redhat.com` | parity | `compare/06-auth-config-tls/bearer-gap` |
