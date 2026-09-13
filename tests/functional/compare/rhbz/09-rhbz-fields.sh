@@ -71,7 +71,7 @@ rhbz_fields_read() {
 rhbz_fields_probe_bzr() {
     local name="$1" bug_id="$2" field="$3" value="$4" state_filter="$5" expected="$6"
 
-    RUST_LOG=bzr=debug run_bzr --server "$RESOURCE_SERVER" --api REST bug update "$bug_id" \
+    RUST_LOG=bzr=debug run_bzr --server "$RESOURCE_SERVER" --api rest bug update "$bug_id" \
         --field "$field=$value"
     resource_capture_bzr "rhbz-fields-${name}"
     if [[ $BZR_EXIT -eq 0 ]] && jq -e . "$BZR_STDOUT" >/dev/null &&
