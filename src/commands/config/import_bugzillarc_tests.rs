@@ -1,10 +1,65 @@
 #![expect(clippy::unwrap_used)]
 
+use std::fs;
 use std::path::Path;
 
+use crate::cli::ConfigAction;
+use crate::commands::config::execute;
+use crate::commands::runtime::invocation::CommandContext;
 use crate::config::{Config, ServerConfig};
+use crate::test_helpers::{load_config_unvalidated, setup_empty_config_env, CapturedIo};
+use crate::types::output::OutputFormat;
 
 use super::{parse_sections, resolved_servers, server_name};
+
+#[tokio::test]
+async fn import_command_persists_api_key_and_reports_unsupported_credentials() {
+    let (_lock, temp) = setup_empty_config_env().await;
+    let path = temp.path().join("bugzillarc");
+    fs::write(
+        &path,
+        "[DEFAULT]\nurl=https://bugs.example.test/rest\napi_key=key\nuser=me\npassword=secret\ncert=client.pem\n",
+    )
+    .unwrap();
+    let mut io = CapturedIo::new();
+
+    execute(
+        &ConfigAction::ImportBugzillarc { path: Some(path) },
+        &CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap();
+
+    assert!(io.out_str().contains("\"imported\": 1"));
+    assert!(io
+        .out_str()
+        .contains("\"unsupported_password_credentials\": 1"));
+    assert!(io.out_str().contains("\"unsupported_certificates\": 1"));
+    let config = load_config_unvalidated();
+    let server = &config.servers["bugs-example-test"];
+    assert_eq!(server.url, "https://bugs.example.test/rest");
+    assert_eq!(server.api_key.as_deref(), Some("key"));
+    assert!(server.token.is_none());
+    assert_eq!(config.default_server.as_deref(), Some("bugs-example-test"));
+}
+
+#[tokio::test]
+async fn import_command_rejects_a_file_without_a_url() {
+    let (_lock, temp) = setup_empty_config_env().await;
+    let path = temp.path().join("bugzillarc");
+    fs::write(&path, "[DEFAULT]\napi_key=key\n").unwrap();
+    let mut io = CapturedIo::new();
+
+    let result = execute(
+        &ConfigAction::ImportBugzillarc { path: Some(path) },
+        &CommandContext::new(None, OutputFormat::Json, None),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(result.unwrap_err().to_string().contains("defines no URL"));
+}
 
 #[test]
 fn api_key_from_matching_section_is_imported() {
