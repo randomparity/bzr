@@ -189,3 +189,58 @@ async fn logout_without_a_saved_token_fails_locally() {
 
     assert!(error.to_string().contains("no saved login token"));
 }
+
+#[tokio::test]
+async fn login_detects_rest_when_the_server_has_no_cached_api_mode() {
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = write_config_to(
+        &tmp,
+        &format!(
+            "default_server = \"test\"\n\n[servers.test]\nurl = \"{}\"\n",
+            mock.uri()
+        ),
+    );
+    Mock::given(method("GET"))
+        .and(path("/rest/version"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.3.0"})),
+        )
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/login"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"token": "saved"})),
+        )
+        .mount(&mock)
+        .await;
+    let action = AuthAction::Login {
+        email: "alice@example.test".into(),
+        password: Some("secret".into()),
+        restrict_login: false,
+    };
+    let mut io = CapturedIo::new();
+
+    super::execute(&action, &context(config_path), &mut io.writers())
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn auth_commands_reject_inline_servers_before_loading_config() {
+    let inline = crate::commands::runtime::invocation::InlineServer {
+        url: "https://example.test".into(),
+        api_key_env: None,
+        email: None,
+        tls: crate::commands::runtime::invocation::InlineTlsOptions::default(),
+    };
+    let ctx = CommandContext::new(None, OutputFormat::Json, None).with_inline_server(Some(inline));
+    let mut io = CapturedIo::new();
+
+    let error = super::execute(&AuthAction::Logout, &ctx, &mut io.writers())
+        .await
+        .unwrap_err();
+
+    assert!(error.to_string().contains("require a named server"));
+}
