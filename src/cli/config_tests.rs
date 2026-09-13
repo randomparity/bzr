@@ -14,6 +14,16 @@ fn config_action(args: &[&str]) -> ConfigAction {
     }
 }
 
+#[test]
+fn parse_config_import_bugzillarc_path() {
+    match config_action(&["bzr", "config", "import-bugzillarc", "--path", "fixture.rc"]) {
+        ConfigAction::ImportBugzillarc { path } => {
+            assert_eq!(path.as_deref(), Some(std::path::Path::new("fixture.rc")));
+        }
+        _ => panic!("expected ImportBugzillarc"),
+    }
+}
+
 /// Parse arguments expected to fail and return the clap error kind, so
 /// negative tests pin *why* parsing was rejected rather than accepting any
 /// failure (which would mask argv drift in the test itself).
