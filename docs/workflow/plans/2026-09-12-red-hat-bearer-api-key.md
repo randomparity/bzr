@@ -16,6 +16,9 @@ focused unit coverage, one comparison assertion, and two documentation rows.
   REST base URL into the shared policy without changing XML-RPC.
 - `tests/functional/compare/06-auth-config-tls.sh`: turn the controlled Bearer
   absence case into a positive bzr wire check.
+- `tests/functional/lib.sh`: stage and invoke the release artifact in the
+  already-running comparison sidecar, whose `/etc/hosts` owns the exact-host
+  alias used only by this fixture.
 - `docs/bzr-cli.md`, `docs/dev/python-bugzilla-parity.md`: published behavior
   and parity result.
 
@@ -46,28 +49,39 @@ methods; its REST `apply_auth` supplies `self.base_url`. Pre-client detection
 and strict proof likewise supply their resolved base URL. XML-RPC constructors
 and protocol calls are unchanged.
 
-**Verification.** Mode: focused-test. Add a mock-server test that observes a
-Bearer header for `https://bugzilla.redhat.com`-shaped REST construction and
-standard header/query for all other hosts. Before wiring, the Red Hat case
-observes `X-BUGZILLA-API-KEY`; green command: `make test-one T=red_hat` exits 0.
+**Verification.** Mode: focused-test. Add a request matrix for the exact host
+with both persisted/pinned `Header` and `QueryParam` methods across normal
+client dispatch, pre-client detection, and strict credential proof; every
+exact-host case observes only `Authorization: Bearer`. Pair it with a
+non-Red-Hat control for each standard method, which observes its selected
+header or query transport. Before wiring, exact-host cases observe the selected
+standard method; green command: `make test-one T=red_hat` exits 0.
 
-1. Update every REST auth application call site, including probe and strict
-   paths, to pass the base URL.
-2. Add the client/probe tests and confirm their focused green run.
+1. Update every REST auth application call site, including normal dispatch,
+   auth detection/version probing, alternate-auth handling, and strict proof,
+   to apply the policy. Ensure a Bearer client does not retry a 401 with a
+   standard header or query key.
+2. Add the complete exact-host and non-Red-Hat request matrix and confirm its
+   focused green run.
 3. Run `cargo fmt` and commit the implementation and unit tests.
 
 ## Task 3 — Functional parity and documentation
 
 **Interfaces.** The existing `r11_bearer_control` remains the python-bugzilla
-positive control; bzr uses a Red Hat-shaped host alias and the proxy log must
-record one `auth-kind bearer` request. No CLI option is added.
+positive control. Add a narrow fixture helper in `tests/functional/lib.sh` that
+stages the release bzr artifact in the existing sidecar and invokes it with a
+mounted temporary config. `pybz_redhat_alias_install` already maps exactly
+`bugzilla.redhat.com` to sidecar loopback, so bzr's URL is
+`http://bugzilla.redhat.com:18082`; no runtime hostname override or CLI option
+is added.
 
 **Verification.** Mode: focused-test. The comparison phase fails before the
 change because bzr has only the controlled parser gap. Green command:
 `make functional-compare` exits 0 and reports no `expect_gap 678`.
 
-1. Replace only the #678 parser-gap assertion with bzr's positive wire check;
-   leave sibling gap checks untouched.
+1. Replace only the #678 parser-gap assertion with the sidecar bzr positive
+   wire check. Assert the proxy recorded exactly one `auth-kind bearer` and no
+   query/header credential; leave sibling gap checks untouched.
 2. Update `docs/bzr-cli.md` and the parity matrix with exact-host automatic
    REST Bearer behavior and the existing comparison test ID.
 3. Run `make lint`, `make test`, and `make functional-test`; each exits 0.

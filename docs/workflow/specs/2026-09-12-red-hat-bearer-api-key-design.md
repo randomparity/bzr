@@ -47,6 +47,19 @@ are the control against secret disclosure in diagnostics. TLS trust, client
 certificates, user-selected non-Red-Hat destinations, and XML-RPC payload
 authentication are explicitly out of scope.
 
+## Functional fixture routing
+
+The comparison sidecar already owns an isolated `/etc/hosts` alias mapping
+`bugzilla.redhat.com` to loopback. The functional harness will stage the
+release `bzr` artifact into that sidecar and run just the Bearer bzr invocation
+there, with an isolated mounted config directory. The request goes to
+`http://bugzilla.redhat.com:<sidecar proxy port>`: the non-default port changes
+only routing, while the parsed host remains the exact selector. The existing
+proxy translates only a valid Bearer Authorization value to the upstream
+header and records the auth kind, so the comparison asserts both Bearer and the
+absence of query/header alternatives. This helper is test-only direct fixture
+plumbing; it does not expose a runtime hostname override or alter TLS policy.
+
 ## Acceptance evidence
 
 - Unit tests prove exact host selection, false cases, Bearer syntax, and
