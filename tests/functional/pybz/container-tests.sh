@@ -572,47 +572,24 @@ run_lifecycle_phase_fixture() (
         source "$phase" >"$fixture_output"
         _render_test_result >>"$fixture_output"
         unset LIFECYCLE_REPEATED_REST_EVENTS
-        if [[ $FAIL_COUNT -ne 0 || $PASS_COUNT -ne 8 || $GAP_COUNT -ne 2 ]]; then
+        if [[ $FAIL_COUNT -ne 0 || $PASS_COUNT -ne 9 || $GAP_COUNT -ne 1 ]]; then
             printf 'repeated REST observations did not preserve lifecycle outcomes\n' >&2
             cat "$fixture_output" >&2
             return 1
         fi
     }
-    run_observed_rest_gap_control() {
+    run_observed_rest_transport_control() {
         reset_lifecycle_fixture
-        LIFECYCLE_STALE_GAPS=1 LIFECYCLE_BUG_TAGS_OBSERVED_REST=1
+        LIFECYCLE_BUG_TAGS_OBSERVED_REST=1
         : >"$fixture_output"
         source "$phase" >"$fixture_output"
         _render_test_result >>"$fixture_output"
-        unset LIFECYCLE_STALE_GAPS LIFECYCLE_BUG_TAGS_OBSERVED_REST
-        if [[ $GAP_COUNT -ne 1 ]] ||
-            ! grep -Fq \
-                '[compare/01-bug-lifecycle/bug-tags] personal bug tags ... GAP (#680)' \
-                "$fixture_output"; then
-            printf 'observed REST bug-tag operations did not remain gap #680\n' >&2
-            cat "$fixture_output" >&2
-            return 1
-        fi
-    }
-    # Gap eligibility must not survive into the next probe. The phase seeds
-    # eligibility immediately before bug-tags only in this fixture, so the
-    # control remains discriminating after real gaps close. It then makes the
-    # first bug-tags bzr call fail without the parser diagnostic; a leak would
-    # render it GAP (#680) instead of FAIL.
-    run_eligibility_reset_control() {
-        reset_lifecycle_fixture
-        LIFECYCLE_ELIGIBILITY_RESET_CONTROL=1
-        : >"$fixture_output"
-        source "$phase" >"$fixture_output"
-        _render_test_result >>"$fixture_output"
-        unset LIFECYCLE_ELIGIBILITY_RESET_CONTROL
-        if ! grep -Fq \
-            '[compare/01-bug-lifecycle/query-match-types] whiteboard match types ... PASS' \
-            "$fixture_output" ||
+        unset LIFECYCLE_BUG_TAGS_OBSERVED_REST
+        if [[ $FAIL_COUNT -eq 0 || $GAP_COUNT -ne 1 ]] ||
             ! grep -Fq \
                 '[compare/01-bug-lifecycle/bug-tags] personal bug tags ... FAIL' \
                 "$fixture_output"; then
-            printf 'gap eligibility leaked into the following probe\n' >&2
+            printf 'observed REST bug-tag operations did not fail\n' >&2
             cat "$fixture_output" >&2
             return 1
         fi
@@ -624,14 +601,13 @@ run_lifecycle_phase_fixture() (
         source "$phase" >"$fixture_output"
         _render_test_result >>"$fixture_output"
         unset LIFECYCLE_NOOP_STALE_GAPS
-        # update-options (#672) has no gap fallback left (both flags are
-        # real): a no-op --comment-tag now surfaces as a genuine FAIL, not a
-        # GAP, so it drops out of the GAP count and adds to the FAIL count.
-        if [[ $FAIL_COUNT -ne 1 || $GAP_COUNT -ne 3 ]] ||
+        # Both mutations are implemented, so a no-op must surface as a
+        # genuine failure rather than an expected gap.
+        if [[ $FAIL_COUNT -ne 2 || $GAP_COUNT -ne 1 ]] ||
             ! grep -Fq \
                 '[compare/01-bug-lifecycle/update-options] comment tags and minor update ... FAIL' \
                 "$fixture_output" ||
-            ! grep -Fq '[compare/01-bug-lifecycle/bug-tags] personal bug tags ... GAP (#680)' \
+            ! grep -Fq '[compare/01-bug-lifecycle/bug-tags] personal bug tags ... FAIL' \
                 "$fixture_output"; then
             printf 'no-op stale mutation controls did not behave as expected\n' >&2
             cat "$fixture_output" >&2
@@ -811,20 +787,10 @@ run_lifecycle_phase_fixture() (
             [[ ${LIFECYCLE_GENERIC_BZR_UPDATED:-0} -eq 0 ]] || value="$LIFECYCLE_FIELD_UPDATED"
             jq -cn --arg value "$value" '{id:46,whiteboard:$value}' >"$BZR_STDOUT"
         fi
-        if [[ ! -s $BZR_STDOUT && ${LIFECYCLE_STALE_GAPS:-0} -ne 1 &&
-            ( $args == *" bug tag "* || $args == *" --tag "* ) ]]; then
-            case "$args" in
-            *" bug tag "*) diagnostic="error: unrecognized subcommand 'tag'" ;;
-            *) diagnostic="error: unexpected argument '--tag' found" ;;
-            esac
-            if [[ ${LIFECYCLE_WRONG_PARSER_DIAGNOSTIC:-0} -eq 1 ]]; then
-                diagnostic="error: unexpected argument '--different-option' found"
-            fi
-            cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
-            printf '%s\n' "$diagnostic" >"$BZR_STDERR"
-            BZR_EXIT=2
-            [[ ${LIFECYCLE_EXPECTED_DIAGNOSTIC_EXIT_ONE:-0} -eq 0 ]] || BZR_EXIT=1
-            return 0
+        if [[ ! -s $BZR_STDOUT && $args == *" bug tag "* ]]; then
+            printf '{}\n' >"$BZR_STDOUT"
+        elif [[ ! -s $BZR_STDOUT && $args == *" bug list "* && $args == *" --tag "* ]]; then
+            printf '[{"id":42}]\n' >"$BZR_STDOUT"
         fi
         if [[ ! -s $BZR_STDOUT &&
             $args == *" bug list "*" --status-whiteboard-type equals "* ]]; then
@@ -994,9 +960,9 @@ run_lifecycle_phase_fixture() (
     # update-options (#672) and arbitrary-fields (#671) now pass cleanly in the
     # default scenario too:
     # both flags are real, so it moves from the gap count to the pass count.
-    assert_equals 8 "$PASS_COUNT" "lifecycle pass count"
+    assert_equals 9 "$PASS_COUNT" "lifecycle pass count"
     assert_equals 0 "$FAIL_COUNT" "lifecycle fail count"
-    assert_equals 2 "$GAP_COUNT" "lifecycle gap count"
+    assert_equals 1 "$GAP_COUNT" "lifecycle gap count"
     for slug in create query update view history saved-search arbitrary-fields update-options \
         query-match-types bug-tags; do
         grep -Fq "compare/01-bug-lifecycle/$slug" "$fixture_output"
@@ -1114,10 +1080,7 @@ CONTROLS
     if ! run_repeated_transport_control; then
         control_failures=$((control_failures + 1))
     fi
-    if ! run_observed_rest_gap_control; then
-        control_failures=$((control_failures + 1))
-    fi
-    if ! run_eligibility_reset_control; then
+    if ! run_observed_rest_transport_control; then
         control_failures=$((control_failures + 1))
     fi
 
@@ -1151,13 +1114,11 @@ CONTROLS
     # #671 and #672 are not in this list: their flags are real now, with no
     # gap fallback left, so their `lifecycle_expect_gap` sentinels are gone
     # from the phase script and there is nothing left to detect as stale.
-    for issue in 670 680; do
-        if ! grep -Fq "#${issue} appears resolved" "$fixture_output"; then
-            printf 'stale gap control did not name #%s\n' "$issue" >&2
-            return 1
-        fi
-    done
-    assert_equals 3 "$FAIL_COUNT" "stale gap fail count"
+    if ! grep -Fq '#670 appears resolved' "$fixture_output"; then
+        printf 'stale gap control did not name #670\n' >&2
+        return 1
+    fi
+    assert_equals 1 "$FAIL_COUNT" "stale gap fail count"
     if ! jq -e '.minor_update == true' \
         "$COMPARE_EXCHANGE_DIR/update-options-bzr.request.json" >/dev/null; then
         printf 'stale update-options control omitted minor_update request payload\n' >&2
@@ -1183,7 +1144,7 @@ run_parity_report_fixture() {
         '| Generic arbitrary fields | `bzr bug create/update --field` | parity | `compare/01-bug-lifecycle/arbitrary-fields` |'
         '| Comment tags and minor update | `bzr bug update --comment-tag --minor-update` | comment tags: parity; minor update — bz50/bz52: warns (no core support, mail sent anyway); bz53: parity | `compare/01-bug-lifecycle/update-options` |'
         '| Whiteboard match types | `bzr bug list --status-whiteboard-type` | supported | `compare/01-bug-lifecycle/query-match-types` |'
-        '| Personal bug tags | `bzr bug tag`, `bzr bug list --tag` | expected gap (#680) | `compare/01-bug-lifecycle/bug-tags` |'
+        '| Personal bug tags | `bzr bug tag`, `bzr bug list --tag` | parity | `compare/01-bug-lifecycle/bug-tags` |'
         '| Public comments | `bzr comment add`, `bzr comment list` | parity | `compare/02-comments/public-comments` |'
         '| Private comments over REST | `bzr comment add --private`, `bzr comment list` | parity | `compare/02-comments/private-comments-rest` |'
         '| Private comments over XML-RPC | `bzr comment add --private`, `bzr comment list` | parity | `compare/02-comments/private-comments-xmlrpc` |'
@@ -1212,11 +1173,11 @@ run_parity_report_fixture() {
         '| bugzillarc default URL | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/bugzillarc-default-url` |'
         '| bugzillarc URL-substring section | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/bugzillarc-substring-section` |'
         '| Disable TLS verification | `--server-tls-insecure` | parity | `compare/06-auth-config-tls/nosslverify` |'
-        '| Login-token request transport | no equivalent | expected gap (#676) | `compare/06-auth-config-tls/token-transport-gap` |'
-        '| Login and logout commands | no equivalent | expected gap (#681) | `compare/06-auth-config-tls/login-command-gap` |'
+        '| Login-token request transport | persisted `token` configuration | parity | `compare/06-auth-config-tls/token-transport-gap` |'
+        '| Login and logout commands | `bzr auth login`, `bzr auth logout` | parity | `compare/06-auth-config-tls/login-command-gap` |'
         '| bugzillarc API-key import | `bzr config import-bugzillarc` | parity; username/password and client certificates are reported unsupported | `compare/06-auth-config-tls/bugzillarc-import` |'
         '| Client certificate configuration | no equivalent | surface gap (#677) | `compare/06-auth-config-tls/client-certificate-surface-gap` |'
-        '| Red Hat Bearer API-key transport | no equivalent | expected gap (#678) | `compare/06-auth-config-tls/bearer-gap` |'
+        '| Red Hat Bearer API-key transport | automatic REST transport for `bugzilla.redhat.com` | parity | `compare/06-auth-config-tls/bearer-gap` |'
     )
 
     for row in "${rows[@]}"; do
@@ -1225,6 +1186,39 @@ run_parity_report_fixture() {
             return 1
         fi
     done
+
+    # The capability rows above prove individual operations.  The consolidation
+    # matrix is a separate contract: it must retain every declared 3.3.0
+    # reference-surface group, rather than silently returning to an unclassified
+    # remainder as comparison phases evolve.
+    # shellcheck disable=SC2016 # Markdown code spans are literal fixture data.
+    local -a surface_groups=(
+        '`--bugzilla`, `--verbose`, `--debug`, `--version`, `--bztype`'
+        '`--nosslverify`, `--cert`'
+        '`--login`, `--username`, `--password`, `--restrict-login`, `--ensure-logged-in`, `--no-cache-credentials`, `--cookiefile`, `--tokenfile`, `--api-key`, `pos_username`, `pos_password`'
+        '`--full`, `--ids`, `--extra`, `--oneline`, `--json`, `--includefield`, `--extrafield`, `--excludefield`, `--raw`, `--outputformat`'
+        '`--field`, `--field-json`'
+        '`--product`, `--version`, `--component`, `--summary`, `--short_desc`, `--comment`, `--long_desc`, `--sub-component`, `--os`, `--arch`, `--severity`, `--priority`, `--alias`, `--status`, `--bug_status`, `--url`, `--target_milestone`, `--target_release`, `--blocked`, `--dependson`, `--keywords`, `--groups`, `--cc`, `--assigned_to`, `--assignee`, `--qa_contact`, `--private`, `--id`, `--bug_id`, `--reporter`'
+        '`--quicksearch`, `--savedsearch`, `--savedsearch-sharer-id`, `--from-url`, `--emailtype`, `--components_file`, `--url_type`, `--keywords_type`, `--status_whiteboard_type`, `--fixed_in_type`'
+        '`--products`, `--components`, `--component_owners`, `--versions`, `--active-components`'
+        '`--close`, `--dupeid`, `--reset-assignee`, `--reset-qa-contact`, `--file`, `--description`, `--type`, `--get`, `--getall`, `--get-all`, `--ignore-obsolete`, `--comment-tag`, `--minor-update`, `--flag`, `--tags`, `--whiteboard`, `--status_whiteboard`, `--devel_whiteboard`, `--internal_whiteboard`, `--qa_whiteboard`, `--fixed_in`'
+        '`url_to_query`, `fix_url`, `get_rcfile_default_url`, `bz_ver_major`, `bz_ver_minor`, `readconfig`, `connect`, `is_xmlrpc`, `is_rest`, `get_requests_session`, `disconnect`'
+        '`login`, `interactive_save_api_key`, `interactive_login`, `logout`, `logged_in`'
+        '`getbugfields`, `product_get`, `refresh_products`, `getproducts`, `getcomponentsdetails`, `getcomponentdetails`, `getcomponents`, `addcomponent`, `editcomponent`, `getbug`, `getbugs`, `get_comments`, `build_query`, `query_return_extra`, `query`, `pre_translation`, `post_translation`, `bugs_history_raw`'
+        '`update_bugs`, `update_tags`, `update_flags`, `build_update`, `attachfile`, `openattachment_data`, `openattachment`, `updateattachmentflags`, `get_attachments`, `build_createbug`, `createbug`'
+        '`getuser`, `getusers`, `searchusers`, `createuser`, `updateperms`, `getgroup`, `getgroups`'
+        '`add_external_tracker`, `update_external_tracker`, `remove_external_tracker`'
+    )
+    for row in "${surface_groups[@]}"; do
+        if [[ $(grep -Fc "| $row |" "$report") -ne 1 ]]; then
+            printf 'missing or duplicate 3.3.0 reference-surface group: %s\n' "$row" >&2
+            return 1
+        fi
+    done
+    if grep -Eiq '^\|.*\|[^|]*\bunknown\b[^|]*\|' "$report"; then
+        printf 'parity report contains an unclassified unknown row\n' >&2
+        return 1
+    fi
 }
 
 run_sidecar_stop_failure_fixture() (
