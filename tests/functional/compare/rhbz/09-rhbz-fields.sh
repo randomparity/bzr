@@ -33,6 +33,7 @@ rhbz_fields_prepare() {
         ${controls[4]:-} =~ ^[1-9][0-9]*$ ]] || return 1
     RHBZ_FIELDS_PRODUCT_ID=${controls[0]}
     RHBZ_FIELDS_COMPONENT_ID=${controls[1]}
+    RHBZ_FIELDS_SUB_COMPONENT_ID=${controls[4]}
     RHBZ_FIELDS_READY=1
 }
 
@@ -52,7 +53,9 @@ rhbz_fields_create_bug() {
 
     printf '%s\n' \
         "INSERT INTO bugs (assigned_to, bug_severity, bug_status, creation_ts, delta_ts, short_desc, op_sys, priority, product_id, rep_platform, reporter, version, component_id, everconfirmed) VALUES (1, 'normal', 'NEW', NOW(), NOW(), '$RHBZ_FIELDS_TOKEN $label comparison bug', 'Linux', 'Normal', $RHBZ_FIELDS_PRODUCT_ID, 'PC', 1, 'unspecified', $RHBZ_FIELDS_COMPONENT_ID, 1);" \
-        'SELECT LAST_INSERT_ID();' >"$sql_file"
+        'SET @rhbz_fields_bug_id = LAST_INSERT_ID();' \
+        "INSERT INTO bug_rh_sub_components (bug_id, rh_sub_component_id) VALUES (@rhbz_fields_bug_id, $RHBZ_FIELDS_SUB_COMPONENT_ID);" \
+        'SELECT @rhbz_fields_bug_id;' >"$sql_file"
     run_bugzilla_sql_file "$sql_file" | tail -n1
 }
 
