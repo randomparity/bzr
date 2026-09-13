@@ -12,7 +12,7 @@ phase. No dependencies, schema changes, or new command surface are introduced.
 - Keep token/email writes in the existing `Config::update_locked_at` closure.
 
 Expected implementation size: 20–55 changed lines (S) — derived from one
-existing assignment, focused tests, and one functional sequence extension.
+existing assignment, focused tests, and two functional sequence extensions.
 
 ## Task 1: atomically persist authenticated identity
 
@@ -39,20 +39,25 @@ successful `client.login` result.
 
 ## Task 2: prove the named-server fallback on real Bugzilla
 
-Files: modify `tests/functional/compare/06-auth-config-tls.sh`.
+Files: modify `tests/functional/compare/06-auth-config-tls.sh` and
+`tests/functional/phases/02-server-auth.sh`.
 
 Interfaces: `run_bzr --server r11-login auth login`, `whoami`,
 `bug my --limit 1`, and `auth logout` are existing CLI commands.
 
 Verification:
 
-- Contract: the configured named server can log in, identify itself, list its
-  bugs, and log out. Mode: focused-test; the existing sequence lacks `bug my`,
-  so adding it would fail against the pre-change binary and
-  `make functional-compare-rhbz` passes after implementation.
+- Contract: the configured named RHBZ server can log in, identify itself, list
+  its bugs, and log out. Mode: focused-test; use an explicit failure-aware
+  `if`/`test_pass`/`test_fail` case because the nearby helper records PASS
+  before its command group; `make functional-compare-rhbz` passes afterward.
+- Contract: the same named-server path reaches the email fallback on stock 5.0
+  and 5.2. Mode: focused-test; add a version-gated case to phase 02 and run
+  `make functional-test-bz50` and `make functional-test-bz52` expecting pass.
 
-Steps: add `run_bzr --server r11-login bug my --limit 1` after `whoami`; run
-`make functional-compare-rhbz`; run `make lint` and `make test`.
+Steps: add a dedicated RHBZ assertion containing login, whoami, bug-my, and
+logout; add the stock version-gated phase assertion; run the three functional
+commands, then `make lint` and `make test`.
 
 Acceptance: the phase proves the real RHBZ path without changing the excluded
 transport semantics.

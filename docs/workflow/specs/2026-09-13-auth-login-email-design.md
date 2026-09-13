@@ -33,14 +33,18 @@ the existing client fallback and `bug my` consumers need no migration.
 - A failed login keeps the existing token/email pair unchanged.
 - Existing fallback behavior lets a post-login `whoami` and `bug my --limit 1`
   run on the supported 5.0/5.2 functional path.
-- Focused Rust tests and the real auth comparison phase prove the behavior.
+- Focused Rust tests, a failure-aware RHBZ comparison assertion, and stock 5.0
+  and 5.2 functional cases prove the behavior.
 
 ## Validation
 
 - `src/commands/auth_tests.rs`: focused mocked-login tests prove missing and
   stale identity replacement, plus preservation after a login failure; run
   `make test-one T=login_`.
-- `tests/functional/compare/06-auth-config-tls.sh`: the named-server login
-  sequence runs `whoami`, `bug my --limit 1`, and logout; run
-  `make functional-compare-rhbz`.
+- `tests/functional/compare/06-auth-config-tls.sh`: a dedicated failure-aware
+  named-server login sequence runs `whoami`, `bug my --limit 1`, and logout;
+  run `make functional-compare-rhbz`.
+- `tests/functional/phases/02-server-auth.sh`: a 5.0/5.2-only named-server
+  login sequence runs `whoami`, `bug my --limit 1`, and logout; run
+  `make functional-test-bz50` and `make functional-test-bz52`.
 - `make lint` and `make test` validate project-wide Rust and shell contracts.
