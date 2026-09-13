@@ -420,6 +420,7 @@ pub(crate) enum BugAction {
     #[command(long_about = update::LONG_ABOUT)]
     Update(UpdateArgs),
     /// Add or remove personal tags on a bug (XML-RPC servers only).
+    #[command(long_about = tag::LONG_ABOUT)]
     Tag(TagArgs),
     /// Resolve one or more bugs (sets status RESOLVED + a resolution).
     #[command(long_about = verbs::RESOLVE_LONG_ABOUT)]
