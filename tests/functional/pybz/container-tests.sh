@@ -829,7 +829,7 @@ run_lifecycle_phase_fixture() (
             fi
             cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
             printf '%s\n' "$diagnostic" >"$BZR_STDERR"
-            BZR_EXIT=4
+            BZR_EXIT=2
             [[ ${LIFECYCLE_EXPECTED_DIAGNOSTIC_EXIT_ONE:-0} -eq 0 ]] || BZR_EXIT=1
             return 0
         fi
