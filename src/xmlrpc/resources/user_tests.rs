@@ -59,3 +59,30 @@ async fn create_user_returns_id_from_response() {
     let id = client.create_user(&params).await.unwrap();
     assert_eq!(id, 4242);
 }
+
+#[tokio::test]
+async fn login_and_logout_use_user_methods() {
+    let mock = MockServer::start().await;
+    let login = r#"<?xml version="1.0"?><methodResponse><params><param><value><struct><member><name>token</name><value><string>token-1</string></value></member></struct></value></param></params></methodResponse>"#;
+    let logout = r#"<?xml version="1.0"?><methodResponse><params><param><value><struct /></value></param></params></methodResponse>"#;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("User.login"))
+        .and(body_string_contains("restrict_login"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(login))
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("User.logout"))
+        .and(body_string_contains("Bugzilla_token"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(logout))
+        .mount(&mock)
+        .await;
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), None);
+    let token = client
+        .login("alice@example.test", "secret", true)
+        .await
+        .unwrap();
+    client.logout(&token).await.unwrap();
+}

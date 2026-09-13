@@ -8,6 +8,17 @@ use crate::types::transport::AuthMethod;
     reason = "doc examples are literal shell commands; wrapping URLs in <> or identifiers in backticks would degrade copy-paste UX"
 )]
 pub(crate) enum ConfigAction {
+    /// Import server settings from python-bugzilla's bugzillarc files.
+    ///
+    /// Without `--path`, reads `/etc/bugzillarc`, `~/.bugzillarc`, then
+    /// `~/.config/python-bugzilla/bugzillarc`; later files take precedence.
+    /// An explicit path imports just that file. The command is local-only and
+    /// never contacts the imported servers.
+    ImportBugzillarc {
+        /// Import one bugzillarc file instead of the standard search paths.
+        #[arg(long)]
+        path: Option<std::path::PathBuf>,
+    },
     /// Add or update a named server in the local config.
     ///
     /// `--url` is required. `--api-key` (inline) and `--api-key-env`

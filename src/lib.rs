@@ -130,6 +130,7 @@ pub async fn dispatch(
     ensure_dispatch_allowed(cli, capabilities)?;
 
     let result = match &cli.command {
+        cli::Commands::Auth { action } => commands::auth::execute(action, &ctx, w).await,
         cli::Commands::Bug { action } => commands::bug::execute(action, &ctx, w).await,
         cli::Commands::Comment { action } => commands::comment::execute(action, &ctx, w).await,
         cli::Commands::Attachment { action } => {
@@ -240,6 +241,7 @@ fn command_capabilities(
     command: &cli::Commands,
 ) -> commands::runtime::invocation::CommandCapabilities {
     match command {
+        cli::Commands::Auth { action } => commands::auth::capabilities(action),
         cli::Commands::Bug { action } => commands::bug::capabilities(action),
         cli::Commands::Comment { action } => commands::comment::capabilities(action),
         cli::Commands::Attachment { action } => commands::attachment::capabilities(action),

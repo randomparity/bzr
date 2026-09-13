@@ -1,4 +1,5 @@
 mod attachment;
+mod auth;
 mod bug;
 mod classification;
 mod comment;
@@ -15,6 +16,7 @@ mod template;
 mod user;
 
 pub(crate) use attachment::{AttachmentAction, UpdateArgs as AttachmentUpdateArgs, UploadArgs};
+pub(crate) use auth::AuthAction;
 #[cfg(test)]
 pub(crate) use bug::MatchTypeArgs;
 pub(crate) use bug::{
@@ -360,6 +362,22 @@ pub struct Cli {
               matters only while parsing args, not in any hot path"
 )]
 pub(crate) enum Commands {
+    /// Authenticate with a named Bugzilla server using a login token.
+    ///
+    /// `auth login` obtains a token through REST or XML-RPC and stores it in
+    /// the named server configuration. `auth logout` invalidates the server
+    /// token before removing that local credential. Inline `--server-url`
+    /// invocations cannot use this family because they have no persistent
+    /// credential location.
+    ///
+    /// Examples:
+    ///
+    ///   bzr --server prod auth login --email alice@example.com
+    ///   bzr --server prod auth logout
+    Auth {
+        #[command(subcommand)]
+        action: AuthAction,
+    },
     /// Operate on bugs: list, view, search, create, clone, update, history.
     ///
     /// The `bug` group is the most commonly used part of bzr. Public read

@@ -106,10 +106,11 @@ declare -F r11_bugzillarc_control >/dev/null || r11_bugzillarc_control() {
         >"$COMPARE_EXCHANGE_DIR/r11-system.rc"
     printf '[DEFAULT]\nurl=http://home.invalid\n[127.0.0.1]\nuser=home\n' \
         >"$COMPARE_EXCHANGE_DIR/r11-home.rc"
+    printf '[DEFAULT]\nurl=http://127.0.0.1\napi_key=%s\n[127.0.0.1]\nuser=config\n' \
+        "$BZR_COMPARE_API_KEY" >"$COMPARE_EXCHANGE_DIR/r11-config.rc"
     printf '%b' \
-        '[DEFAULT]\nurl=http://127.0.0.1\n[127.0.0.1]\nuser=config\n' \
         '[fixture.invalid/rest]\nuser=substring\n' \
-        >"$COMPARE_EXCHANGE_DIR/r11-config.rc"
+        >>"$COMPARE_EXCHANGE_DIR/r11-config.rc"
     chmod 600 "$COMPARE_EXCHANGE_DIR"/r11-*.rc
     "$PYBZ_RUNTIME" exec -e R11_FIXTURE_OMIT_SYSTEM_RC="${R11_FIXTURE_OMIT_SYSTEM_RC:-0}" \
         "$sidecar" python -c '
@@ -143,6 +144,12 @@ for index, (source, destination) in enumerate(zip(sources, destinations)):
     substring) jq -s -e '.[2].substring == "substring"' "$output" >/dev/null ;;
     *) return 2 ;;
     esac
+}
+declare -F r11_bugzillarc_import_control >/dev/null || r11_bugzillarc_import_control() {
+    r11_bugzillarc_control precedence || return 1
+    run_bzr_in_pybz config import-bugzillarc || return 1
+    [[ $BZR_EXIT -eq 0 ]] &&
+        jq -e '.imported == 1 and .unsupported_password_credentials == 1' "$BZR_STDOUT" >/dev/null
 }
 declare -F r11_tls_control >/dev/null || r11_tls_control() (
     local cert_dir tls_url host_ok=0 pybz_ok=0
@@ -213,11 +220,6 @@ declare -F r11_parser_gap >/dev/null || r11_parser_gap() {
         run_bzr auth login
         [[ $BZR_EXIT -eq 2 ]] && grep -Fxq "error: unrecognized subcommand 'auth'" "$BZR_STDERR"
         ;;
-    bugzillarc)
-        run_bzr config import-bugzillarc
-        [[ $BZR_EXIT -eq 2 ]] &&
-            grep -Fxq "error: unrecognized subcommand 'import-bugzillarc'" "$BZR_STDERR"
-        ;;
     certificate)
         run_bzr --server-url "$BZ_URL" --server-tls-client-cert fixture.pem server info
         [[ $BZR_EXIT -eq 2 ]] && grep -Fxq \
@@ -245,6 +247,7 @@ r11_token_control() { r11_login_control && r11_cached_control; }
 r11_bzr_token_control() {
     local token_file="$COMPARE_EXCHANGE_DIR/r11-bzr-token" config_file token
     curl --fail --silent --show-error \
+        --get \
         --data-urlencode "login=$COMPARE_ADMIN_EMAIL" \
         --data-urlencode "password=$COMPARE_ADMIN_PASSWORD" \
         "$BZ_URL/rest/login" | jq --raw-output '.token // empty' >"$token_file" || return 1
@@ -252,7 +255,8 @@ r11_bzr_token_control() {
     token=$(<"$token_file")
     [[ -n $token ]] || return 1
     config_file="$XDG_CONFIG_HOME/bzr/config.toml"
-    printf '\n[servers.r11-token]\nurl = "%s"\ntoken = "%s"\n' "$BZ_URL" "$token" >>"$config_file"
+    printf '\n[servers.r11-token]\nurl = "%s"\nemail = "%s"\ntoken = "%s"\n' \
+        "$BZ_URL" "$COMPARE_ADMIN_EMAIL" "$token" >>"$config_file"
     run_bzr --server r11-token whoami
     [[ $BZR_EXIT -eq 0 ]]
 }
@@ -275,9 +279,31 @@ r11_pass_test r11_tls_control
 test_begin "token-transport-gap" "login-token request transport"
 r11_pass_test r11_token_control && r11_pass_test r11_bzr_token_control
 test_begin "login-command-gap" "login and logout commands"
-r11_gap_test 681 login r11_login_control
-test_begin "bugzillarc-import-gap" "bugzillarc import"
-r11_gap_test 682 bugzillarc r11_bugzillarc_control precedence
+r11_pass_test r11_login_control && {
+    run_bzr config set-server r11-login --url "$BZ_URL"
+    [[ $BZR_EXIT -eq 0 ]] &&
+        run_bzr --server r11-login auth login --email "$COMPARE_ADMIN_EMAIL" \
+            --password "$COMPARE_ADMIN_PASSWORD" --restrict-login &&
+        [[ $BZR_EXIT -eq 0 ]] &&
+        run_bzr --server r11-login whoami &&
+        [[ $BZR_EXIT -eq 0 ]] &&
+        run_bzr --server r11-login auth logout &&
+        [[ $BZR_EXIT -eq 0 ]]
+}
+test_begin "login-command-xmlrpc" "login and logout commands over XML-RPC"
+run_bzr config set-server r11-login-xmlrpc --url "$BZ_URL"
+if [[ $BZR_EXIT -eq 0 ]] &&
+    run_bzr --server r11-login-xmlrpc --api xmlrpc auth login \
+        --email "$COMPARE_ADMIN_EMAIL" --password "$COMPARE_ADMIN_PASSWORD" &&
+    [[ $BZR_EXIT -eq 0 ]] &&
+    run_bzr --server r11-login-xmlrpc --api xmlrpc auth logout &&
+    [[ $BZR_EXIT -eq 0 ]]; then
+    test_pass
+else
+    test_fail "XML-RPC auth login/logout failed"
+fi
+test_begin "bugzillarc-import" "bugzillarc API-key import"
+r11_pass_test r11_bugzillarc_import_control
 test_begin "client-certificate-surface-gap" "client certificate configuration"
 r11_gap_test 677 certificate r11_certificate_control
 test_begin "bearer-gap" "Red Hat Bearer API-key transport"
