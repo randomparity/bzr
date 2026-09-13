@@ -16,6 +16,24 @@ fn test_http_client() -> reqwest::Client {
 }
 
 #[tokio::test]
+async fn update_bug_tags_uses_xmlrpc_method_and_tag_arrays() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<methodName>Bug.update_tags</methodName>"))
+        .and(body_string_contains("<name>tags</name>"))
+        .and(body_string_contains("<string>triage</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(r#"<?xml version="1.0"?><methodResponse><params><param><value><struct/></value></param></params></methodResponse>"#))
+        .mount(&mock)
+        .await;
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
+    client
+        .update_bug_tags(42, &["triage".into()], &["old".into()])
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
 async fn search_bugs_returns_results() {
     let mock = MockServer::start().await;
     Mock::given(method("POST"))
@@ -120,9 +138,42 @@ async fn get_bug_by_id() {
         .await;
 
     let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
-    let bug = client.get_bug("100").await.unwrap();
+    let bug = client.get_bug("100", None, None).await.unwrap();
     assert_eq!(bug.id, 100);
     assert_eq!(bug.summary.as_deref(), Some("Specific bug"));
+}
+
+#[tokio::test]
+async fn get_bug_forwards_requested_field_lists() {
+    let mock = MockServer::start().await;
+    let xml = r#"<?xml version="1.0"?><methodResponse><params><param><value><struct>
+        <member><name>bugs</name><value><array><data><value><struct>
+            <member><name>id</name><value><int>100</int></value></member>
+            <member><name>tags</name><value><array><data>
+                <value><string>triage</string></value>
+            </data></array></value></member>
+        </struct></value></data></array></value></member>
+    </struct></value></param></params></methodResponse>"#;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<methodName>Bug.get</methodName>"))
+        .and(body_string_contains("<name>include_fields</name>"))
+        .and(body_string_contains("<string>id</string>"))
+        .and(body_string_contains("<string>tags</string>"))
+        .and(body_string_contains("<name>exclude_fields</name>"))
+        .and(body_string_contains("<string>cc</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(xml))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
+    let bug = client
+        .get_bug("100", Some("id,tags"), Some("cc"))
+        .await
+        .unwrap();
+
+    assert_eq!(bug.tags, ["triage"]);
 }
 
 #[tokio::test]
@@ -148,7 +199,7 @@ async fn get_bug_by_id_parses_dupe_of() {
         .await;
 
     let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
-    let bug = client.get_bug("100").await.unwrap();
+    let bug = client.get_bug("100", None, None).await.unwrap();
 
     assert_eq!(bug.dupe_of, Some(99));
 }
@@ -165,7 +216,7 @@ async fn get_bug_by_alias() {
         .await;
 
     let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
-    let bug = client.get_bug("my-alias").await.unwrap();
+    let bug = client.get_bug("my-alias", None, None).await.unwrap();
     assert_eq!(bug.id, 55);
     assert_eq!(bug.summary.as_deref(), Some("Alias bug"));
 }
@@ -355,7 +406,7 @@ async fn get_bug_empty_result_is_not_found() {
         .await;
 
     let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
-    let err = client.get_bug("42").await.unwrap_err();
+    let err = client.get_bug("42", None, None).await.unwrap_err();
     assert!(matches!(
         err,
         BzrError::NotFound {

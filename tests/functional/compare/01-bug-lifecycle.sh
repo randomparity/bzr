@@ -691,10 +691,10 @@ if [[ -n $LIFECYCLE_PYBZ_ID ]] &&
     lifecycle_transport_is bug-tags pybz XMLRPC &&
     jq -e --argjson id "$LIFECYCLE_PYBZ_ID" '[.bugs[].id] | sort == [$id]' \
         "$COMPARE_EXCHANGE_DIR/bug-tags.pybz.result.json" >/dev/null; then
-    if lifecycle_bzr_xmlrpc_gap bug-tags-add "error: unrecognized subcommand 'tag'" \
+    if lifecycle_bzr_probe bug-tags-add xmlrpc XMLRPC "" 2 exact \
         bug tag "$LIFECYCLE_PYBZ_ID" \
         --add "$LIFECYCLE_BZR_BUG_TAG" &&
-        lifecycle_bzr_xmlrpc_gap bug-tags-list "error: unexpected argument '--tag' found" \
+        lifecycle_bzr_probe bug-tags-list xmlrpc XMLRPC "" 2 exact \
             bug list --tag "$LIFECYCLE_BZR_BUG_TAG" &&
         lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/bug-tags-list.bzr.stdout.json" \
             "[$LIFECYCLE_PYBZ_ID]"; then
@@ -702,7 +702,6 @@ if [[ -n $LIFECYCLE_PYBZ_ID ]] &&
     elif [[ $LAST_TEST_RESULT != FAIL ]]; then
         test_fail "bzr bug-tags result differed"
     fi
-    lifecycle_expect_gap 680
 elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail "bug-tags precondition failed"
 fi

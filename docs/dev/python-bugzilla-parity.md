@@ -14,7 +14,7 @@ This report tracks bzr against python-bugzilla 3.3.0 using stable comparison tes
 | Generic arbitrary fields | `bzr bug create/update --field` | parity | `compare/01-bug-lifecycle/arbitrary-fields` |
 | Comment tags and minor update | `bzr bug update --comment-tag --minor-update` | comment tags: parity; minor update — bz50/bz52: warns (no core support, mail sent anyway); bz53: parity | `compare/01-bug-lifecycle/update-options` |
 | Whiteboard match types | `bzr bug list --status-whiteboard-type` | supported | `compare/01-bug-lifecycle/query-match-types` |
-| Personal bug tags | `bzr bug tag`, `bzr bug list --tag` | expected gap (#680) | `compare/01-bug-lifecycle/bug-tags` |
+| Personal bug tags | `bzr bug tag`, `bzr bug list --tag` | parity | `compare/01-bug-lifecycle/bug-tags` |
 | Public comments | `bzr comment add`, `bzr comment list` | parity | `compare/02-comments/public-comments` |
 | Private comments over REST | `bzr comment add --private`, `bzr comment list` | parity | `compare/02-comments/private-comments-rest` |
 | Private comments over XML-RPC | `bzr comment add --private`, `bzr comment list` | parity | `compare/02-comments/private-comments-xmlrpc` |

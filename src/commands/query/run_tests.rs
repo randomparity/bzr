@@ -41,6 +41,7 @@ fn save_action(name: &str) -> QueryAction {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
@@ -76,6 +77,7 @@ fn product_save_action(name: &str, product: &str, limit: u32) -> QueryAction {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
@@ -514,6 +516,7 @@ async fn query_run_applies_field_overrides() {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
@@ -745,6 +748,7 @@ async fn query_run_overrides_replace_saved_field_filters() {
             resolution: vec!["FIXED".into()],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
@@ -833,6 +837,7 @@ async fn query_run_empty_override_keeps_saved_field_filter() {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],

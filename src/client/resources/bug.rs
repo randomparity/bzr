@@ -431,17 +431,22 @@ impl BugzillaClient {
         exclude_fields: Option<&str>,
     ) -> Result<Bug> {
         // Guarantee `id` is fetched so the non-defaulted `Bug.id` deserializes.
-        // XML-RPC ignores field lists, so this is a no-op there.
         let (inc, exc) = force_id_fields(include_fields, exclude_fields);
         let (include_fields, exclude_fields) = (inc.as_deref(), exc.as_deref());
         match self.api_mode {
-            ApiMode::XmlRpc => self.xmlrpc_client().get_bug(id).await,
+            ApiMode::XmlRpc => {
+                self.xmlrpc_client()
+                    .get_bug(id, include_fields, exclude_fields)
+                    .await
+            }
             ApiMode::Hybrid => {
                 let rest_result = self.get_bug_rest(id, include_fields, exclude_fields).await;
                 match &rest_result {
                     Err(e) if e.is_transport_failure() => {
                         tracing::info!("REST bug lookup failed, retrying via XML-RPC");
-                        self.xmlrpc_client().get_bug(id).await
+                        self.xmlrpc_client()
+                            .get_bug(id, include_fields, exclude_fields)
+                            .await
                     }
                     Err(BzrError::Api {
                         code: BUGZILLA_INTERNAL_ERROR,
@@ -454,7 +459,9 @@ impl BugzillaClient {
                             "REST bug lookup returned 100500, \
                              retrying via XML-RPC"
                         );
-                        self.xmlrpc_client().get_bug(id).await
+                        self.xmlrpc_client()
+                            .get_bug(id, include_fields, exclude_fields)
+                            .await
                     }
                     _ => rest_result,
                 }
@@ -572,7 +579,7 @@ impl BugzillaClient {
         match self.api_mode {
             ApiMode::XmlRpc => self
                 .xmlrpc_client()
-                .get_bug(&id.to_string())
+                .get_bug(&id.to_string(), None, None)
                 .await
                 .map(|bug| BugLinksNode::from_bug(&bug)),
             ApiMode::Rest | ApiMode::Hybrid => self.get_bug_links_root_node_rest(id).await,
@@ -636,7 +643,11 @@ impl BugzillaClient {
             ApiMode::XmlRpc => {
                 let mut nodes = Vec::with_capacity(ids.len());
                 for &id in ids {
-                    match self.xmlrpc_client().get_bug(&id.to_string()).await {
+                    match self
+                        .xmlrpc_client()
+                        .get_bug(&id.to_string(), None, None)
+                        .await
+                    {
                         Ok(bug) => nodes.push(BugLinksNode::from_bug(&bug)),
                         Err(BzrError::NotFound { .. }) => {}
                         Err(e) => return Err(e),
@@ -672,6 +683,12 @@ impl BugzillaClient {
     /// Update a bug. Always uses REST (XML-RPC mutation support is not implemented).
     pub async fn update_bug(&self, id: u64, updates: &UpdateBugParams) -> Result<()> {
         self.put_json(&format!("bug/{id}"), updates).await
+    }
+
+    /// Update personal bug tags through XML-RPC. Bugzilla exposes this operation
+    /// only as `Bug.update_tags`; it deliberately does not fall back to REST.
+    pub async fn update_bug_tags(&self, id: u64, add: &[String], remove: &[String]) -> Result<()> {
+        self.xmlrpc_client().update_bug_tags(id, add, remove).await
     }
 }
 
