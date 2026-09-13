@@ -439,6 +439,68 @@ fn value_to_bug_captures_custom_fields() {
 }
 
 #[test]
+fn value_to_bug_normalizes_component_and_version_scalars_and_arrays() {
+    let cases = [
+        (
+            Value::String("Backend".into()),
+            Some(vec!["Backend".to_string()]),
+        ),
+        (Value::String(String::new()), None),
+        (Value::Array(vec![]), Some(vec![])),
+        (
+            Value::Array(vec![Value::String("40".into())]),
+            Some(vec!["40".to_string()]),
+        ),
+        (
+            Value::Array(vec![Value::String("40".into()), Value::String("41".into())]),
+            Some(vec!["40".to_string(), "41".to_string()]),
+        ),
+    ];
+
+    for (value, expected) in cases {
+        let mut payload = BTreeMap::new();
+        payload.insert("id".into(), Value::Int(42));
+        payload.insert("component".into(), value.clone());
+        payload.insert("version".into(), value);
+
+        let bug = value_to_bug(&Value::Struct(payload)).unwrap();
+        assert_eq!(bug.component, expected);
+        assert_eq!(bug.version, expected);
+    }
+}
+
+#[test]
+fn value_to_bug_keeps_missing_component_and_version_absent() {
+    let mut payload = BTreeMap::new();
+    payload.insert("id".into(), Value::Int(42));
+
+    let bug = value_to_bug(&Value::Struct(payload)).unwrap();
+
+    assert_eq!(bug.component, None);
+    assert_eq!(bug.version, None);
+}
+
+#[test]
+fn value_to_bug_rejects_non_string_component_and_version_values() {
+    for field in ["component", "version"] {
+        for value in [
+            Value::Int(1),
+            Value::Array(vec![Value::String("valid".into()), Value::Int(1)]),
+        ] {
+            let mut payload = BTreeMap::new();
+            payload.insert("id".into(), Value::Int(42));
+            payload.insert(field.into(), value);
+
+            let result = value_to_bug(&Value::Struct(payload));
+            assert!(
+                matches!(&result, Err(BzrError::XmlRpc(message)) if message.contains(field)),
+                "invalid {field} should be rejected: {result:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn value_to_bug_captures_groups_and_time_tracking_fields() {
     let mut payload = BTreeMap::new();
     payload.insert("id".into(), Value::Int(42));

@@ -120,6 +120,36 @@ pub(crate) fn get_str_array(m: &BTreeMap<String, Value>, key: &str) -> Vec<Strin
         .unwrap_or_default()
 }
 
+/// Normalize Bugzilla's scalar-or-array bug fields to the public list contract.
+///
+/// REST uses the same semantics through `deserialize_optional_string_list`:
+/// missing and empty scalar values are absent, while arrays (including empty
+/// arrays) keep their server-provided order and cardinality.
+pub(crate) fn get_optional_string_list(
+    m: &BTreeMap<String, Value>,
+    key: &str,
+) -> Result<Option<Vec<String>>> {
+    match m.get(key) {
+        None => Ok(None),
+        Some(Value::String(value)) if value.is_empty() => Ok(None),
+        Some(Value::String(value)) => Ok(Some(vec![value.clone()])),
+        Some(Value::Array(values)) => values
+            .iter()
+            .enumerate()
+            .map(|(index, value)| match value {
+                Value::String(value) => Ok(value.clone()),
+                _ => Err(BzrError::XmlRpc(format!(
+                    "bug {key} element {index} has unexpected XML-RPC type"
+                ))),
+            })
+            .collect::<Result<Vec<_>>>()
+            .map(Some),
+        Some(_) => Err(BzrError::XmlRpc(format!(
+            "bug {key} field has unexpected XML-RPC type"
+        ))),
+    }
+}
+
 /// Parse a `flags` array of flag structs into view-side [`Flag`] objects.
 /// Non-struct array elements are skipped; missing members stay `None`, matching
 /// the REST deserializer's tolerance without inventing empty names/statuses.

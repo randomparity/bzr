@@ -7,8 +7,9 @@ use crate::types::bug::{
 use crate::xmlrpc::protocol::Value;
 use crate::xmlrpc::protocol::XmlRpcClient;
 use crate::xmlrpc::resources::mappers::{
-    get_datetime_str, get_flags, get_int_array, get_nonempty_str, get_str, get_str_array, get_u64,
-    require_u64, xmlrpc_id, xmlrpc_value_to_json, EXPECTED_STRUCT_RESPONSE,
+    get_datetime_str, get_flags, get_int_array, get_nonempty_str, get_optional_string_list,
+    get_str, get_str_array, get_u64, require_u64, xmlrpc_id, xmlrpc_value_to_json,
+    EXPECTED_STRUCT_RESPONSE,
 };
 
 impl XmlRpcClient {
@@ -251,8 +252,8 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         dupe_of: get_u64(m, "dupe_of"),
         deadline: get_nonempty_str(m, "deadline"),
         product: get_nonempty_str(m, "product"),
-        component: get_nonempty_str(m, "component").map(|value| vec![value]),
-        version: get_nonempty_str(m, "version").map(|value| vec![value]),
+        component: get_optional_string_list(m, "component")?,
+        version: get_optional_string_list(m, "version")?,
         assigned_to: get_nonempty_str(m, "assigned_to"),
         priority: get_nonempty_str(m, "priority"),
         severity: get_nonempty_str(m, "severity"),
