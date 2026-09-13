@@ -25,6 +25,7 @@
       "type": "string",
       "enum": [
         "api_key",
+        "token",
         "anonymous"
       ]
     }

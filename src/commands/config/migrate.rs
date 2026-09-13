@@ -57,6 +57,11 @@ pub(super) fn handle(
             "server '{name}' already uses a keyring credential source"
         )));
     }
+    if source_kind == crate::config::CredentialSourceKind::Token {
+        return Err(crate::error::BzrError::config(format!(
+            "server '{name}' uses a login token; token keyring storage is not supported"
+        )));
+    }
 
     let current_secret = crate::credentials::resolve_api_key(server, name)?;
 

@@ -863,7 +863,7 @@ fn whoami_schema_constrains_auth_mode_enum() {
         .pointer("/properties/auth_mode/enum")
         .and_then(Value::as_array)
         .unwrap();
-    for mode in ["api_key", "anonymous"] {
+    for mode in ["api_key", "token", "anonymous"] {
         assert!(
             variants.contains(&Value::String(mode.into())),
             "whoami schema auth_mode enum must allow {mode}"

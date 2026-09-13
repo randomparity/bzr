@@ -112,6 +112,9 @@ pub(in crate::client) async fn prove_valid_login_current_method(
     let request = match auth {
         PreparedAuth::Header(key) => request.header(AUTH_HEADER_NAME, key.clone()),
         PreparedAuth::QueryParam(key) => request.query(&[(AUTH_QUERY_PARAM, key)]),
+        PreparedAuth::Token(token) => {
+            request.query(&[(crate::bugzilla_auth::TOKEN_QUERY_PARAM, token)])
+        }
     };
     let response = request.send().await?;
     let status = response.status();

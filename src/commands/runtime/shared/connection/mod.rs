@@ -54,6 +54,25 @@ pub async fn connect_and_configure(command: &CommandContext) -> Result<BugzillaC
         );
     }
 
+    if ctx.token.is_some() {
+        if matches!(
+            command.api(),
+            Some(crate::types::ApiMode::XmlRpc | crate::types::ApiMode::Hybrid)
+        ) {
+            return Err(BzrError::Config(
+                "login tokens support REST only; use --api rest or omit --api".to_owned(),
+            ));
+        }
+        let settings = crate::client::detect_server_settings_without_auth(
+            &ctx.url,
+            &tls_config,
+            ctx.request_timeout,
+        )
+        .await?;
+        ctx.persist_settings(&settings, false)?;
+        return ctx.build_client(None, crate::types::ApiMode::Rest, &tls_config);
+    }
+
     // Cached credentialed servers need auth + mode; cached anonymous servers
     // need only mode. Inline servers are always uncached (no config entry), so
     // they take the detect path and persist nothing.
@@ -130,12 +149,12 @@ fn persist_detected(
 }
 
 fn require_credentials_for_connection(ctx: &ConnectContext, command_name: &str) -> Result<()> {
-    if ctx.api_key.is_some() {
+    if ctx.api_key.is_some() || ctx.token.is_some() {
         return Ok(());
     }
     Err(BzrError::Config(format!(
         "{command_name} requires credentials; configure api_key, api_key_env, \
-         api_key_keyring, or pass --server-api-key-env with --server-url"
+         api_key_keyring, token, or pass --server-api-key-env with --server-url"
     )))
 }
 

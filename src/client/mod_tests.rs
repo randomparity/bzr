@@ -20,6 +20,7 @@ fn new_trims_trailing_slash_and_keeps_email_hint() {
     let client = BugzillaClient::new(BugzillaClientConfig {
         base_url: "https://bugzilla.example.com/",
         credential: Some("test-key"),
+        token: None,
         auth_method: Some(AuthMethod::Header),
         api_mode: ApiMode::Rest,
         email_hint: Some("user@example.com"),
@@ -42,6 +43,21 @@ fn auth_mode_reflects_credential_presence() {
 
     let anonymous = test_helpers::test_client_anon("https://bugzilla.example.com");
     assert_eq!(anonymous.auth_mode(), crate::types::AuthMode::Anonymous);
+
+    let token = BugzillaClient::new(BugzillaClientConfig {
+        base_url: "https://bugzilla.example.com",
+        credential: None,
+        token: Some("login-token"),
+        auth_method: None,
+        api_mode: ApiMode::Rest,
+        email_hint: None,
+        server_name: "test",
+        tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
+    })
+    .unwrap();
+    assert_eq!(token.auth_mode(), crate::types::AuthMode::Token);
 }
 
 #[tokio::test]
@@ -86,6 +102,7 @@ async fn current_credentials_valid_login_proof_requires_configured_email_and_cre
     let anonymous = BugzillaClient::new(BugzillaClientConfig {
         base_url: &server.uri(),
         credential: None,
+        token: None,
         auth_method: None,
         api_mode: ApiMode::Rest,
         email_hint: Some("user@example.com"),
@@ -104,6 +121,7 @@ async fn current_credentials_valid_login_proof_requires_configured_email_and_cre
     let empty_email = BugzillaClient::new(BugzillaClientConfig {
         base_url: &server.uri(),
         credential: Some("test-key"),
+        token: None,
         auth_method: Some(AuthMethod::Header),
         api_mode: ApiMode::Rest,
         email_hint: Some(""),
@@ -122,6 +140,7 @@ async fn current_credentials_valid_login_proof_requires_configured_email_and_cre
     let empty_credential = BugzillaClient::new(BugzillaClientConfig {
         base_url: &server.uri(),
         credential: Some(""),
+        token: None,
         auth_method: Some(AuthMethod::Header),
         api_mode: ApiMode::Rest,
         email_hint: Some("user@example.com"),

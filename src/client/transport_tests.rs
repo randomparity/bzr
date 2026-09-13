@@ -55,6 +55,66 @@ fn apply_auth_adds_query_param_credentials() {
     assert_eq!(request.url().query(), Some(expected_query.as_str()));
 }
 
+#[test]
+fn token_client_adds_only_bugzilla_token_query_auth() {
+    let client = BugzillaClient::new(BugzillaClientConfig {
+        base_url: "https://bugzilla.example.com",
+        credential: None,
+        token: Some("login-token"),
+        auth_method: None,
+        api_mode: ApiMode::Rest,
+        email_hint: None,
+        server_name: "test",
+        tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
+    })
+    .unwrap();
+    let request = client
+        .apply_auth(client.http.get(client.url("bug")))
+        .build()
+        .unwrap();
+    assert_eq!(request.url().query(), Some("Bugzilla_token=login-token"));
+    assert!(request
+        .headers()
+        .get(crate::bugzilla_auth::AUTH_HEADER_NAME)
+        .is_none());
+}
+
+#[tokio::test]
+async fn token_client_does_not_retry_401_with_api_key_auth() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/user"))
+        .and(query_param(
+            crate::bugzilla_auth::TOKEN_QUERY_PARAM,
+            "login-token",
+        ))
+        .and(has_no_auth_header)
+        .respond_with(ResponseTemplate::new(401).set_body_string("unauthorized"))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let client = BugzillaClient::new(BugzillaClientConfig {
+        base_url: &mock.uri(),
+        credential: None,
+        token: Some("login-token"),
+        auth_method: None,
+        api_mode: ApiMode::Rest,
+        email_hint: None,
+        server_name: "test",
+        tls_config: &crate::tls::TlsConfig::default(),
+        request_timeout: crate::http::REQUEST_TIMEOUT,
+        retry_max: 0,
+    })
+    .unwrap();
+    assert!(client
+        .search_users("alice", UserDetailLevel::Basic)
+        .await
+        .is_err());
+    assert_eq!(mock.received_requests().await.unwrap().len(), 1);
+}
+
 #[tokio::test]
 async fn anonymous_client_sends_no_api_key_header_or_query() {
     let mock = MockServer::start().await;
@@ -70,6 +130,7 @@ async fn anonymous_client_sends_no_api_key_header_or_query() {
     let client = BugzillaClient::new(BugzillaClientConfig {
         base_url: &mock.uri(),
         credential: None,
+        token: None,
         auth_method: None,
         api_mode: ApiMode::Rest,
         email_hint: None,
@@ -100,6 +161,7 @@ fn alternate_auth_rejects_invalid_header_characters() {
     let client = BugzillaClient::new(BugzillaClientConfig {
         base_url: "https://bugzilla.example.com",
         credential: Some("bad\nkey"),
+        token: None,
         auth_method: Some(AuthMethod::QueryParam),
         api_mode: ApiMode::Rest,
         email_hint: None,
@@ -301,6 +363,7 @@ async fn anonymous_client_does_not_retry_401_with_alternate_auth() {
     let client = BugzillaClient::new(BugzillaClientConfig {
         base_url: &mock.uri(),
         credential: None,
+        token: None,
         auth_method: None,
         api_mode: ApiMode::Rest,
         email_hint: None,

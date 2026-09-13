@@ -4,6 +4,8 @@ use std::cell::RefCell;
 pub(crate) const AUTH_HEADER_NAME: &str = "X-BUGZILLA-API-KEY";
 /// Bugzilla's query-param auth key, used by servers that reject header auth.
 pub(crate) const AUTH_QUERY_PARAM: &str = "Bugzilla_api_key";
+/// Bugzilla login-token query parameter, supported by REST only.
+pub(crate) const TOKEN_QUERY_PARAM: &str = "Bugzilla_token";
 
 const MIN_BARE_KEY_LEN: usize = 8;
 
@@ -15,10 +17,14 @@ pub(crate) fn clear_active_api_key() {
     ACTIVE_API_KEY.with(|slot| *slot.borrow_mut() = None);
 }
 
-pub(crate) fn register_active_api_key(api_key: &str) {
-    if !api_key.is_empty() {
-        ACTIVE_API_KEY.with(|slot| *slot.borrow_mut() = Some(api_key.to_string()));
+pub(crate) fn register_active_credential(credential: &str) {
+    if !credential.is_empty() {
+        ACTIVE_API_KEY.with(|slot| *slot.borrow_mut() = Some(credential.to_string()));
     }
+}
+
+pub(crate) fn register_active_api_key(api_key: &str) {
+    register_active_credential(api_key);
 }
 
 #[cfg(test)]
@@ -55,6 +61,13 @@ pub(crate) fn apply_auth_to_request(
     } else {
         builder
     }
+}
+
+pub(crate) fn apply_token_to_request(
+    builder: reqwest::RequestBuilder,
+    token: &str,
+) -> reqwest::RequestBuilder {
+    builder.query(&[(TOKEN_QUERY_PARAM, token)])
 }
 
 /// Apply auth credentials to a request builder based on the configured method.
@@ -122,9 +135,11 @@ fn redact_marked_api_key(msg: &str, marker: &str) -> String {
 
 pub(crate) fn redact_api_key(msg: &str) -> String {
     let mut redacted = msg.to_string();
-    for suffix in ["=", "%3D", "%3d"] {
-        let marker = format!("{AUTH_QUERY_PARAM}{suffix}");
-        redacted = redact_marked_api_key(&redacted, &marker);
+    for parameter in [AUTH_QUERY_PARAM, TOKEN_QUERY_PARAM] {
+        for suffix in ["=", "%3D", "%3d"] {
+            let marker = format!("{parameter}{suffix}");
+            redacted = redact_marked_api_key(&redacted, &marker);
+        }
     }
     ACTIVE_API_KEY.with(|slot| {
         let key = slot.borrow();
@@ -142,19 +157,21 @@ pub(crate) fn redact_api_key(msg: &str) -> String {
 /// cut moves the boundary, preventing a credential prefix from being retained.
 pub(crate) fn safe_api_key_preview_boundary(body: &str, boundary: usize) -> usize {
     let mut boundary = boundary;
-    for suffix in ["=", "%3D", "%3d"] {
-        let marker = format!("{AUTH_QUERY_PARAM}{suffix}");
-        let mut offset = 0;
-        while let Some(relative_start) = body[offset..].find(&marker) {
-            let marker_start = offset + relative_start;
-            let value_start = marker_start + marker.len();
-            let value_end = body[value_start..]
-                .find(ends_api_key_value)
-                .map_or(body.len(), |end| value_start + end);
-            if marker_start < boundary && value_end > boundary {
-                boundary = marker_start;
+    for parameter in [AUTH_QUERY_PARAM, TOKEN_QUERY_PARAM] {
+        for suffix in ["=", "%3D", "%3d"] {
+            let marker = format!("{parameter}{suffix}");
+            let mut offset = 0;
+            while let Some(relative_start) = body[offset..].find(&marker) {
+                let marker_start = offset + relative_start;
+                let value_start = marker_start + marker.len();
+                let value_end = body[value_start..]
+                    .find(ends_api_key_value)
+                    .map_or(body.len(), |end| value_start + end);
+                if marker_start < boundary && value_end > boundary {
+                    boundary = marker_start;
+                }
+                offset = value_start;
             }
-            offset = value_start;
         }
     }
 

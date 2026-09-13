@@ -379,6 +379,7 @@ async fn xmlrpc_mode_get_group_bypasses_rest() {
     let client = super::BugzillaClient::new(crate::client::BugzillaClientConfig {
         base_url: &mock.uri(),
         credential: Some("test-key"),
+        token: None,
         auth_method: Some(AuthMethod::Header),
         api_mode: ApiMode::XmlRpc,
         email_hint: None,

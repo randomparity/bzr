@@ -59,6 +59,7 @@ pub(crate) fn parse_adjacency_numeric(requested: &str) -> Option<i64> {
 enum PreparedAuth {
     Header(HeaderValue),
     QueryParam(String),
+    Token(String),
 }
 
 /// Bugzilla API client for REST, XML-RPC, and Hybrid transport modes.
@@ -96,6 +97,7 @@ pub struct BugzillaClient {
 pub struct BugzillaClientConfig<'a> {
     pub base_url: &'a str,
     pub credential: Option<&'a str>,
+    pub token: Option<&'a str>,
     pub auth_method: Option<AuthMethod>,
     pub api_mode: ApiMode,
     pub email_hint: Option<&'a str>,
@@ -138,6 +140,7 @@ impl BugzillaClient {
         let BugzillaClientConfig {
             base_url,
             credential,
+            token,
             auth_method,
             api_mode,
             email_hint,
@@ -147,22 +150,33 @@ impl BugzillaClient {
             retry_max,
         } = config;
 
-        let auth = match (credential, auth_method) {
-            (Some(key), Some(AuthMethod::Header)) => {
+        let auth = match (credential, token, auth_method) {
+            (Some(key), None, Some(AuthMethod::Header)) => {
                 let value = HeaderValue::from_str(key)
                     .map_err(|_| BzrError::config("invalid API key characters"))?;
                 Some(PreparedAuth::Header(value))
             }
-            (Some(key), Some(AuthMethod::QueryParam)) => {
+            (Some(key), None, Some(AuthMethod::QueryParam)) => {
                 Some(PreparedAuth::QueryParam(key.to_string()))
             }
-            (None, None) => None,
-            (Some(_), None) => {
+            (None, Some(token), None) => Some(PreparedAuth::Token(token.to_string())),
+            (None, Some(_), Some(_)) => {
+                return Err(BzrError::config(
+                    "internal: login token must not use an API key auth method",
+                ));
+            }
+            (None, None, None) => None,
+            (Some(_), Some(_), _) => {
+                return Err(BzrError::config(
+                    "internal: API key and token both provided",
+                ));
+            }
+            (Some(_), None, None) => {
                 return Err(BzrError::config(
                     "internal: credential provided without detected auth method",
                 ));
             }
-            (None, Some(_)) => {
+            (None, None, Some(_)) => {
                 return Err(BzrError::config(
                     "internal: auth method provided without credential",
                 ));
@@ -210,10 +224,10 @@ impl BugzillaClient {
     /// when a credential was supplied, [`crate::types::AuthMode::Anonymous`]
     /// otherwise.
     pub fn auth_mode(&self) -> crate::types::AuthMode {
-        if self.api_key.is_some() {
-            crate::types::AuthMode::ApiKey
-        } else {
-            crate::types::AuthMode::Anonymous
+        match self.auth {
+            Some(PreparedAuth::Token(_)) => crate::types::AuthMode::Token,
+            Some(_) => crate::types::AuthMode::ApiKey,
+            None => crate::types::AuthMode::Anonymous,
         }
     }
 

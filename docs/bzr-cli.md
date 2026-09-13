@@ -1864,7 +1864,7 @@ connection-metadata fields resolved locally by `bzr`:
 | `id` | Bugzilla user id |
 | `name` / `real_name` / `login` | identity fields (`null` when the server omits them) |
 | `server_name` | the configured/inline server the identity resolved against — a named server's config key (e.g. `default`, `auto`), or the literal `(inline)` for an inline `--server-url` connection |
-| `auth_mode` | how the connection authenticated: `api_key` or `anonymous` |
+| `auth_mode` | how the connection authenticated: `api_key`, `token`, or `anonymous` |
 
 ```json
 {
@@ -2994,6 +2994,12 @@ To generate an API key:
 2. Go to **Preferences > API Keys**
 3. Generate a new key
 4. Add it with `bzr config set-server --api-key-env <ENV_VAR>` (preferred) or `--api-key <KEY>` (legacy)
+
+Servers may also contain a persisted `token = "..."`. A token is mutually
+exclusive with every API-key source and is sent only to REST endpoints as
+`Bugzilla_token`; it does not support XML-RPC or hybrid overrides. Do not add a
+token by hand unless you can protect the configuration file like any other
+inline credential.
 
 ---
 

@@ -14,6 +14,7 @@ pub fn test_client(base_url: &str) -> BugzillaClient {
     BugzillaClient::new(BugzillaClientConfig {
         base_url,
         credential: Some("test-key"),
+        token: None,
         auth_method: Some(AuthMethod::Header),
         api_mode: ApiMode::Rest,
         email_hint: None,
@@ -29,6 +30,7 @@ pub fn test_client_hybrid(base_url: &str) -> BugzillaClient {
     BugzillaClient::new(BugzillaClientConfig {
         base_url,
         credential: Some("test-key"),
+        token: None,
         auth_method: Some(AuthMethod::Header),
         api_mode: ApiMode::Hybrid,
         email_hint: None,
@@ -47,6 +49,7 @@ pub fn test_client_hybrid_with_timeout(
     BugzillaClient::new(BugzillaClientConfig {
         base_url,
         credential: Some("test-key"),
+        token: None,
         auth_method: Some(AuthMethod::Header),
         api_mode: ApiMode::Hybrid,
         email_hint: None,
@@ -62,6 +65,7 @@ pub fn test_client_anon(base_url: &str) -> BugzillaClient {
     BugzillaClient::new(BugzillaClientConfig {
         base_url,
         credential: None,
+        token: None,
         auth_method: None,
         api_mode: ApiMode::Rest,
         email_hint: None,
@@ -77,6 +81,7 @@ pub fn test_client_query_param(base_url: &str) -> BugzillaClient {
     BugzillaClient::new(BugzillaClientConfig {
         base_url,
         credential: Some("test-key"),
+        token: None,
         auth_method: Some(AuthMethod::QueryParam),
         api_mode: ApiMode::Rest,
         email_hint: None,
@@ -92,6 +97,7 @@ pub fn test_client_xmlrpc(base_url: &str) -> BugzillaClient {
     BugzillaClient::new(BugzillaClientConfig {
         base_url,
         credential: Some("test-key"),
+        token: None,
         auth_method: Some(AuthMethod::Header),
         api_mode: ApiMode::XmlRpc,
         email_hint: None,

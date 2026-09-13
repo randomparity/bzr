@@ -50,6 +50,9 @@ impl BugzillaClient {
             Some(PreparedAuth::QueryParam(key)) => {
                 crate::bugzilla_auth::apply_auth_to_request(builder, None, Some(key))
             }
+            Some(PreparedAuth::Token(token)) => {
+                crate::bugzilla_auth::apply_token_to_request(builder, token)
+            }
             None => builder,
         }
     }
@@ -173,7 +176,10 @@ impl BugzillaClient {
         &self,
         retry_builder: Option<RequestBuilder>,
     ) -> Result<AlternateAuth> {
-        if self.auth.is_none() {
+        if !matches!(
+            self.auth,
+            Some(PreparedAuth::Header(_) | PreparedAuth::QueryParam(_))
+        ) {
             return Ok(AlternateAuth::Original);
         }
         let Some(clone) = retry_builder else {
