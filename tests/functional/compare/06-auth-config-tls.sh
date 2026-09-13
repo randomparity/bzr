@@ -8,7 +8,7 @@ r11_auth_evidence_is() {
             count=$((count + 1))
         }
     done <"$log"
-    [[ $count -gt 0 ]]
+    [[ $count -eq 1 ]]
 }
 r11_adapter_result_is() {
     local operation="$1" input="$2" output="$3" filter="$4"
@@ -184,19 +184,19 @@ declare -F r11_bearer_control >/dev/null || r11_bearer_control() {
     fi
     pybz_proxy_stop redhat || return 1
     [[ $ok -eq 1 ]] || return 1
-    BZR_FUNC_REDHAT_MODE=bearer-auth redhat_shape_start "$BZ_PORT" || return 1
+    pybz_proxy_start redhat 18082 >/dev/null || return 1
     run_bzr_in_pybz config set-server r11-bearer \
-        --url "http://bugzilla.redhat.com:${REDHAT_SHAPE_PORT}" \
+        --url 'http://bugzilla.redhat.com:18082' \
         --api-key-env BZR_COMPARE_API_KEY --email "$COMPARE_ADMIN_EMAIL" \
         --auth-method header --api rest
-    [[ $BZR_EXIT -eq 0 ]] || { redhat_shape_stop; return 1; }
+    [[ $BZR_EXIT -eq 0 ]] || { pybz_proxy_stop redhat; return 1; }
     run_bzr_in_pybz --server r11-bearer whoami
-    if [[ $BZR_EXIT -eq 0 ]] && r11_auth_evidence_is bearer "$REDHAT_SHAPE_LOG"; then
+    if [[ $BZR_EXIT -eq 0 ]] && r11_auth_evidence_is bearer "$COMPARE_EXCHANGE_DIR/redhat.proxy.log"; then
         ok=1
     else
         ok=0
     fi
-    redhat_shape_stop || return 1
+    pybz_proxy_stop redhat || return 1
     [[ $ok -eq 1 ]]
 }
 declare -F r11_parser_gap >/dev/null || r11_parser_gap() {
