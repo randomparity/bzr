@@ -21,7 +21,7 @@ pub(crate) use auth::AuthAction;
 pub(crate) use bug::MatchTypeArgs;
 pub(crate) use bug::{
     AdjacencyArgs, CloneArgs, CloseArgs, CreateArgs, DupArgs, HistoryArgs, LinksArgs, ListArgs,
-    MyArgs, ReopenArgs, ResolveArgs, SearchArgs, UpdateArgs, ViewArgs,
+    MyArgs, ReopenArgs, ResolveArgs, SearchArgs, TagArgs, UpdateArgs, ViewArgs,
 };
 pub(crate) use bug::{
     BugAction, BugActorFilterArgs, BugFilterArgs, CommentArgs, FieldArgs, PageArgs, SortArgs,

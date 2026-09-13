@@ -35,6 +35,7 @@ fn save_action(name: &str) -> QueryAction {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
@@ -70,6 +71,7 @@ fn product_save_action(name: &str, product: &str, limit: u32) -> QueryAction {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
@@ -104,6 +106,7 @@ fn empty_save_action(name: &str, search: Option<String>) -> QueryAction {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
@@ -138,6 +141,7 @@ fn url_save_action(name: &str, url: String) -> QueryAction {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
@@ -210,6 +214,7 @@ async fn query_save_persists_every_field() {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec!["dev@test.com".into()],
@@ -332,6 +337,7 @@ async fn query_save_existing_entry_reports_updated() {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
@@ -373,6 +379,7 @@ async fn query_save_existing_entry_reports_updated() {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
@@ -457,6 +464,7 @@ async fn query_save_rejects_malformed_created_since() {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
@@ -504,6 +512,7 @@ async fn query_save_stores_canonical_date_forms() {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
@@ -557,6 +566,7 @@ async fn query_save_accepts_date_only_query() {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
@@ -605,6 +615,7 @@ async fn query_save_persists_158_field_filters() {
             resolution: vec!["FIXED".into()],
             qa_contact: vec!["qa@example.com".into()],
             url: vec!["github.com/foo".into()],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
@@ -666,6 +677,7 @@ async fn query_save_accepts_whiteboard_only_filter() {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],

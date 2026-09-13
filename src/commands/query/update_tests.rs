@@ -37,6 +37,7 @@ fn save_action(name: &str) -> QueryAction {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
@@ -72,6 +73,7 @@ fn product_save_action(name: &str, product: &str, limit: u32) -> QueryAction {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
@@ -106,6 +108,7 @@ fn empty_save_action(name: &str, search: Option<String>) -> QueryAction {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
@@ -140,6 +143,7 @@ fn url_save_action(name: &str, url: String) -> QueryAction {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],
@@ -174,6 +178,7 @@ fn empty_update(name: &str) -> QueryAction {
             resolution: vec![],
             qa_contact: vec![],
             url: vec![],
+            tag: vec![],
         },
         actor_filters: BugActorFilterArgs {
             assignee: vec![],

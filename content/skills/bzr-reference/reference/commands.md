@@ -17,9 +17,11 @@ Operate on bugs.
   - Sort/page: `--sort <field> --order asc|desc`, `--offset N`, `--paginate`
     (fetch all pages), `--count` (return just the match count).
   - Extra filters: `--resolution --version --op-sys --platform --whiteboard
-    --target-milestone --qa-contact --url --created-since --changed-since`.
+    --target-milestone --qa-contact --url --tag --created-since --changed-since`.
 - `bzr bug view 12345 [--json] [--web]`   # `--web` opens the bug in a browser
   - Comments are not included — use `bzr comment list <id>` for those.
+- `bzr bug tag 12345 --add triage [--remove stale]`
+  - Mutates personal tags through XML-RPC `Bug.update_tags`; requires credentials.
 - `bzr bug search "memory leak" [--json]`
 - `bzr bug create --product Foo --component bar --summary "..." --description "..."`
   - Field parity with update in one call: `--alias --url --whiteboard

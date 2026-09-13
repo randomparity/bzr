@@ -20,6 +20,7 @@ mod links;
 mod list;
 mod my;
 mod search;
+mod tag;
 mod update;
 mod update_json;
 mod verbs;
@@ -54,6 +55,7 @@ pub(crate) fn capabilities(action: &BugAction) -> CommandCapabilities {
         BugAction::Create(_) => CommandCapabilities::dry_run_mutation("bug create"),
         BugAction::Clone(_) => CommandCapabilities::dry_run_mutation("bug clone"),
         BugAction::Update(_) => CommandCapabilities::dry_run_mutation("bug update"),
+        BugAction::Tag(_) => CommandCapabilities::authenticated("bug tag"),
         BugAction::Resolve(_) => CommandCapabilities::dry_run_mutation("bug resolve"),
         BugAction::Close(_) => CommandCapabilities::dry_run_mutation("bug close"),
         BugAction::Reopen(_) => CommandCapabilities::dry_run_mutation("bug reopen"),
@@ -128,6 +130,7 @@ pub(crate) async fn execute(
         BugAction::Create(args) => create::handle(args, ctx, w).await,
         BugAction::Clone(args) => clone::handle(args, ctx, w).await,
         BugAction::Update(args) => update::handle(args, ctx, w).await,
+        BugAction::Tag(args) => tag::handle(args, ctx, w).await,
         BugAction::Resolve(a) => verbs::resolve(a, ctx, w).await,
         BugAction::Close(a) => verbs::close(a, ctx, w).await,
         BugAction::Reopen(a) => verbs::reopen(a, ctx, w).await,
