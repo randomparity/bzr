@@ -49,7 +49,7 @@ fn field_mappings_covers_all_search_params_vec_fields() {
 
 #[test]
 fn field_mappings_has_expected_count() {
-    assert_eq!(FIELD_MAPPINGS.len(), 15);
+    assert_eq!(FIELD_MAPPINGS.len(), 16);
 }
 
 #[test]

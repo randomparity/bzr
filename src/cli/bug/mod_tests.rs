@@ -65,6 +65,10 @@ fn each_verb_binds_to_its_action_variant() {
         BugAction::Update(_)
     ));
     assert!(matches!(
+        bug_action(&["bzr", "bug", "tag", "1", "--add", "triage"]),
+        BugAction::Tag(_)
+    ));
+    assert!(matches!(
         bug_action(&["bzr", "bug", "resolve", "1"]),
         BugAction::Resolve(_)
     ));

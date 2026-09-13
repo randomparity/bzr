@@ -140,6 +140,7 @@ fn render_builtin_field(field: BugField, bug: &Bug) -> String {
             .remaining_time
             .map_or_else(String::new, |v| v.to_string()),
         BugField::Flags => render_flags_inline(&bug.flags),
+        BugField::Tags => bug.tags.join(", "),
     }
 }
 

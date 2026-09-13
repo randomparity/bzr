@@ -12,6 +12,7 @@ mod links;
 mod list;
 mod my;
 mod search;
+mod tag;
 mod update;
 mod verbs;
 mod view;
@@ -24,6 +25,7 @@ pub(crate) use links::LinksArgs;
 pub(crate) use list::ListArgs;
 pub(crate) use my::MyArgs;
 pub(crate) use search::SearchArgs;
+pub(crate) use tag::TagArgs;
 pub(crate) use update::UpdateArgs;
 pub(crate) use verbs::{CloseArgs, DupArgs, ReopenArgs, ResolveArgs};
 pub(crate) use view::ViewArgs;
@@ -248,6 +250,9 @@ pub(crate) struct BugFilterArgs {
     /// Filter by URL field substring (repeatable for OR; prefix with ! to exclude)
     #[arg(long)]
     pub url: Vec<String>,
+    /// Filter by personal bug tags (repeatable for OR; prefix with ! to exclude)
+    #[arg(long)]
+    pub tag: Vec<String>,
 }
 
 impl BugFilterArgs {
@@ -266,6 +271,7 @@ impl BugFilterArgs {
             FilterField::Resolution => Some(self.resolution.as_slice()),
             FilterField::QaContact => Some(self.qa_contact.as_slice()),
             FilterField::Url => Some(self.url.as_slice()),
+            FilterField::Tags => Some(self.tag.as_slice()),
             FilterField::AssignedTo | FilterField::Creator => None,
         }
     }
@@ -413,6 +419,9 @@ pub(crate) enum BugAction {
     /// Update one or more bugs with the same set of changes.
     #[command(long_about = update::LONG_ABOUT)]
     Update(UpdateArgs),
+    /// Add or remove personal tags on a bug (XML-RPC servers only).
+    #[command(long_about = tag::LONG_ABOUT)]
+    Tag(TagArgs),
     /// Resolve one or more bugs (sets status RESOLVED + a resolution).
     #[command(long_about = verbs::RESOLVE_LONG_ABOUT)]
     Resolve(ResolveArgs),

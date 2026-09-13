@@ -673,6 +673,12 @@ impl BugzillaClient {
     pub async fn update_bug(&self, id: u64, updates: &UpdateBugParams) -> Result<()> {
         self.put_json(&format!("bug/{id}"), updates).await
     }
+
+    /// Update personal bug tags through XML-RPC. Bugzilla exposes this operation
+    /// only as `Bug.update_tags`; it deliberately does not fall back to REST.
+    pub async fn update_bug_tags(&self, id: u64, add: &[String], remove: &[String]) -> Result<()> {
+        self.xmlrpc_client().update_bug_tags(id, add, remove).await
+    }
 }
 
 #[cfg(test)]

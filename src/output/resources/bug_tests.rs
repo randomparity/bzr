@@ -39,6 +39,7 @@ fn make_bug(id: u64, summary: &str, status: &str) -> Bug {
         url: None,
         whiteboard: None,
         keywords: vec!["regression".into()],
+        tags: vec![],
         blocks: vec![200, 201],
         depends_on: vec![100],
         cc: vec!["watcher@example.com".into()],
@@ -826,6 +827,7 @@ fn write_bug_detail_table_shows_dupe_of() {
         url: None,
         whiteboard: None,
         keywords: vec![],
+        tags: vec![],
         blocks: vec![],
         depends_on: vec![],
         cc: vec![],
@@ -873,6 +875,7 @@ fn write_bug_detail_table_handles_minimal_bug() {
         url: None,
         whiteboard: None,
         keywords: vec![],
+        tags: vec![],
         blocks: vec![],
         depends_on: vec![],
         cc: vec![],
@@ -1106,6 +1109,7 @@ fn sample_bug(id: u64, summary: &str) -> Bug {
         url: None,
         whiteboard: None,
         keywords: vec![],
+        tags: vec![],
         blocks: vec![],
         depends_on: vec![],
         cc: vec![],
@@ -1267,7 +1271,7 @@ fn validate_table_columns_ok_for_all_blank_include() {
 /// The serde key sequence of `Bug`, in struct-declaration order. Locks the
 /// `preserve_order` decision (Finding 4) and is the reference for the registry
 /// drift guard (Finding 3).
-const BUG_STRUCT_KEY_ORDER: [&str; 26] = [
+const BUG_STRUCT_KEY_ORDER: [&str; 27] = [
     "id",
     "summary",
     "status",
@@ -1286,6 +1290,7 @@ const BUG_STRUCT_KEY_ORDER: [&str; 26] = [
     "url",
     "whiteboard",
     "keywords",
+    "tags",
     "blocks",
     "depends_on",
     "cc",
