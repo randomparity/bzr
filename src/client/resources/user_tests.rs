@@ -29,6 +29,34 @@ async fn whoami_returns_user_info() {
 }
 
 #[tokio::test]
+async fn login_and_logout_use_rest_token_parameters() {
+    let mock = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/login"))
+        .and(query_param("login", "alice@example.test"))
+        .and(query_param("password", "secret"))
+        .and(query_param("restrict_login", "1"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"token": "token-1"})),
+        )
+        .mount(&mock)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/logout"))
+        .and(query_param("Bugzilla_token", "token-1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+        .mount(&mock)
+        .await;
+
+    let client = test_client(&mock.uri());
+    let token = client
+        .login("alice@example.test", "secret", true)
+        .await
+        .unwrap();
+    client.logout(&token).await.unwrap();
+}
+
+#[tokio::test]
 async fn whoami_missing_email_names_named_and_inline_recovery() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))

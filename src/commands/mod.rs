@@ -1,4 +1,5 @@
 pub mod attachment;
+pub mod auth;
 pub mod bug;
 pub mod classification;
 pub mod comment;
