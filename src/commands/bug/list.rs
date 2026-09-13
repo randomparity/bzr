@@ -19,6 +19,7 @@ pub(super) async fn handle(
     let ListArgs {
         filters,
         actor_filters,
+        match_types,
         id,
         alias,
         summary,
@@ -51,6 +52,7 @@ pub(super) async fn handle(
     params.summary.clone_from(summary);
     filters.write_search_filters(&mut params);
     actor_filters.write_search_filters(&mut params);
+    match_types.apply(&mut params);
     if *count {
         let bugs = client.search_bugs(&count_search_params(params)).await?;
         crate::output::result_types::write_count(bugs.len(), format, w.out);

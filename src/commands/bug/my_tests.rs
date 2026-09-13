@@ -157,6 +157,7 @@ async fn bug_my_all_passes_shared_filters_to_each_category() {
         },
         sort_args: crate::cli::SortArgs::default(),
         count: false,
+        match_types: crate::cli::MatchTypeArgs::default(),
         filters: crate::cli::BugFilterArgs {
             product: vec!["Core".into()],
             component: vec!["Networking".into()],

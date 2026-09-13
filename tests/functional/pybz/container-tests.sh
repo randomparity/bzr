@@ -572,7 +572,7 @@ run_lifecycle_phase_fixture() (
         source "$phase" >"$fixture_output"
         _render_test_result >>"$fixture_output"
         unset LIFECYCLE_REPEATED_REST_EVENTS
-        if [[ $FAIL_COUNT -ne 0 || $PASS_COUNT -ne 7 || $GAP_COUNT -ne 3 ]]; then
+        if [[ $FAIL_COUNT -ne 0 || $PASS_COUNT -ne 8 || $GAP_COUNT -ne 2 ]]; then
             printf 'repeated REST observations did not preserve lifecycle outcomes\n' >&2
             cat "$fixture_output" >&2
             return 1
@@ -594,14 +594,11 @@ run_lifecycle_phase_fixture() (
             return 1
         fi
     }
-    # Gap eligibility must not survive from one capability's probe into the
-    # next one's. The pair has to be a gap immediately followed by another
-    # gap-marked capability, or the assertion cannot tell a reset from a leak:
-    # since #671 shipped, arbitrary-fields carries no `lifecycle_expect_gap`
-    # sentinel, so query-match-types (#679) -> bug-tags (#680) is the adjacency
-    # that still discriminates. The control makes bug-tags' first bzr call fail
-    # without the parser diagnostic, which leaves it gap-ineligible; a leak
-    # would render it GAP (#680) instead of FAIL.
+    # Gap eligibility must not survive into the next probe. The phase seeds
+    # eligibility immediately before bug-tags only in this fixture, so the
+    # control remains discriminating after real gaps close. It then makes the
+    # first bug-tags bzr call fail without the parser diagnostic; a leak would
+    # render it GAP (#680) instead of FAIL.
     run_eligibility_reset_control() {
         reset_lifecycle_fixture
         LIFECYCLE_ELIGIBILITY_RESET_CONTROL=1
@@ -610,7 +607,7 @@ run_lifecycle_phase_fixture() (
         _render_test_result >>"$fixture_output"
         unset LIFECYCLE_ELIGIBILITY_RESET_CONTROL
         if ! grep -Fq \
-            '[compare/01-bug-lifecycle/query-match-types] whiteboard match types ... GAP (#679)' \
+            '[compare/01-bug-lifecycle/query-match-types] whiteboard match types ... PASS' \
             "$fixture_output" ||
             ! grep -Fq \
                 '[compare/01-bug-lifecycle/bug-tags] personal bug tags ... FAIL' \
@@ -815,12 +812,8 @@ run_lifecycle_phase_fixture() (
             jq -cn --arg value "$value" '{id:46,whiteboard:$value}' >"$BZR_STDOUT"
         fi
         if [[ ! -s $BZR_STDOUT && ${LIFECYCLE_STALE_GAPS:-0} -ne 1 &&
-            ( $args == *" --status-whiteboard-type "* ||
-                $args == *" bug tag "* || $args == *" --tag "* ) ]]; then
+            ( $args == *" bug tag "* || $args == *" --tag "* ) ]]; then
             case "$args" in
-            *" --status-whiteboard-type "*)
-                diagnostic="error: unexpected argument '--status-whiteboard-type' found"
-                ;;
             *" bug tag "*) diagnostic="error: unrecognized subcommand 'tag'" ;;
             *) diagnostic="error: unexpected argument '--tag' found" ;;
             esac
@@ -832,6 +825,10 @@ run_lifecycle_phase_fixture() (
             BZR_EXIT=2
             [[ ${LIFECYCLE_EXPECTED_DIAGNOSTIC_EXIT_ONE:-0} -eq 0 ]] || BZR_EXIT=1
             return 0
+        fi
+        if [[ ! -s $BZR_STDOUT &&
+            $args == *" bug list "*" --status-whiteboard-type equals "* ]]; then
+            printf '[{"id":44}]\n' >"$BZR_STDOUT"
         fi
         if [[ ! -s $BZR_STDOUT && ${LIFECYCLE_STALE_GAPS:-0} -eq 1 ]]; then
             case "$args" in
@@ -997,9 +994,9 @@ run_lifecycle_phase_fixture() (
     # update-options (#672) and arbitrary-fields (#671) now pass cleanly in the
     # default scenario too:
     # both flags are real, so it moves from the gap count to the pass count.
-    assert_equals 7 "$PASS_COUNT" "lifecycle pass count"
+    assert_equals 8 "$PASS_COUNT" "lifecycle pass count"
     assert_equals 0 "$FAIL_COUNT" "lifecycle fail count"
-    assert_equals 3 "$GAP_COUNT" "lifecycle gap count"
+    assert_equals 2 "$GAP_COUNT" "lifecycle gap count"
     for slug in create query update view history saved-search arbitrary-fields update-options \
         query-match-types bug-tags; do
         grep -Fq "compare/01-bug-lifecycle/$slug" "$fixture_output"
@@ -1154,7 +1151,7 @@ CONTROLS
     # #671 and #672 are not in this list: their flags are real now, with no
     # gap fallback left, so their `lifecycle_expect_gap` sentinels are gone
     # from the phase script and there is nothing left to detect as stale.
-    for issue in 670 679 680; do
+    for issue in 670 680; do
         if ! grep -Fq "#${issue} appears resolved" "$fixture_output"; then
             printf 'stale gap control did not name #%s\n' "$issue" >&2
             return 1
@@ -1185,7 +1182,7 @@ run_parity_report_fixture() {
         '| Server saved search | `bzr bug search --saved-search` | stock: bzr errors, python-bugzilla returns unfiltered results (#670); Red-Hat-shaped proxy: bzr filters | `compare/01-bug-lifecycle/saved-search` |'
         '| Generic arbitrary fields | `bzr bug create/update --field` | parity | `compare/01-bug-lifecycle/arbitrary-fields` |'
         '| Comment tags and minor update | `bzr bug update --comment-tag --minor-update` | comment tags: parity; minor update — bz50/bz52: warns (no core support, mail sent anyway); bz53: parity | `compare/01-bug-lifecycle/update-options` |'
-        '| Whiteboard match types | `bzr bug list --status-whiteboard-type` | expected gap (#679) | `compare/01-bug-lifecycle/query-match-types` |'
+        '| Whiteboard match types | `bzr bug list --status-whiteboard-type` | supported | `compare/01-bug-lifecycle/query-match-types` |'
         '| Personal bug tags | `bzr bug tag`, `bzr bug list --tag` | expected gap (#680) | `compare/01-bug-lifecycle/bug-tags` |'
         '| Public comments | `bzr comment add`, `bzr comment list` | parity | `compare/02-comments/public-comments` |'
         '| Private comments over REST | `bzr comment add --private`, `bzr comment list` | parity | `compare/02-comments/private-comments-rest` |'

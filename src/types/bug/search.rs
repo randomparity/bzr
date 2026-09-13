@@ -87,10 +87,52 @@ pub struct SearchParams {
     /// Filter by URL field substring (repeatable). Negated values
     /// use `notsubstring`.
     pub url: Vec<String>,
+    /// Explicit Bugzilla boolean-chart match type for Status Whiteboard.
+    pub whiteboard_type: Option<MatchType>,
+    /// Explicit Bugzilla boolean-chart match type for the URL field.
+    pub url_type: Option<MatchType>,
+    /// Explicit Bugzilla boolean-chart match type for role fields.
+    pub email_type: Option<MatchType>,
     /// Bugzilla `order` clause (e.g. `last_change_time DESC, bug_id`).
     /// Built from `--sort`/`--order`; defaults to a stable `bug_id` so
     /// identical runs return rows in a deterministic order.
     pub order: Option<String>,
+}
+
+/// Bugzilla boolean-chart match operators exposed by python-bugzilla.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MatchType {
+    Substring,
+    #[value(name = "notsubstring")]
+    NotSubstring,
+    Regexp,
+    #[value(name = "notregexp")]
+    NotRegexp,
+    #[value(name = "anywords")]
+    AnyWords,
+    #[value(name = "allwords")]
+    AllWords,
+    #[value(name = "nowords")]
+    NoWords,
+    Equals,
+    #[value(name = "notequals")]
+    NotEquals,
+}
+
+impl MatchType {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Substring => "substring",
+            Self::NotSubstring => "notsubstring",
+            Self::Regexp => "regexp",
+            Self::NotRegexp => "notregexp",
+            Self::AnyWords => "anywords",
+            Self::AllWords => "allwords",
+            Self::NoWords => "nowords",
+            Self::Equals => "equals",
+            Self::NotEquals => "notequals",
+        }
+    }
 }
 
 /// Optional per-invocation overrides applied to a `SearchParams`.
@@ -198,6 +240,36 @@ impl SearchParams {
     /// Access a multi-value filter field mutably by its typed [`FilterField`] key.
     pub(crate) fn get_field_mut(&mut self, field: FilterField) -> &mut Vec<String> {
         filter_field_arm!(self, field, assigned_to, mut)
+    }
+
+    pub(crate) const fn match_type_for(&self, field: FilterField) -> Option<MatchType> {
+        match field {
+            FilterField::Whiteboard => self.whiteboard_type,
+            FilterField::Url => self.url_type,
+            FilterField::AssignedTo | FilterField::Creator | FilterField::QaContact => {
+                self.email_type
+            }
+            _ => None,
+        }
+    }
+
+    pub(crate) fn invalid_explicit_match_type(&self) -> Option<(&'static str, &str)> {
+        [
+            ("--status-whiteboard-type", FilterField::Whiteboard),
+            ("--url-type", FilterField::Url),
+            ("--email-type", FilterField::AssignedTo),
+            ("--email-type", FilterField::Creator),
+            ("--email-type", FilterField::QaContact),
+        ]
+        .into_iter()
+        .find_map(|(flag, field)| {
+            self.match_type_for(field).and_then(|_| {
+                self.get_field(field)
+                    .iter()
+                    .find(|value| value.starts_with('!'))
+                    .map(|value| (flag, value.as_str()))
+            })
+        })
     }
 
     fn has_mapped_filters(&self) -> bool {

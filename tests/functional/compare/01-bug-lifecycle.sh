@@ -664,8 +664,7 @@ if lifecycle_pybz query-match-exact-create generic_fields "$(jq -cn \
     lifecycle_transport_is query-match-equals pybz XMLRPC &&
     lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/query-match-equals.pybz.result.json" \
         "[$LIFECYCLE_MATCH_EXACT_ID]"; then
-    if lifecycle_bzr_gap query-match-types \
-        "error: unexpected argument '--status-whiteboard-type' found" \
+    if lifecycle_bzr query-match-types \
         bug list --whiteboard "$LIFECYCLE_WHITEBOARD_EXACT" \
         --status-whiteboard-type equals &&
         lifecycle_ids_are "$COMPARE_EXCHANGE_DIR/query-match-types.bzr.stdout.json" \
@@ -674,9 +673,15 @@ if lifecycle_pybz query-match-exact-create generic_fields "$(jq -cn \
     elif [[ $LAST_TEST_RESULT != FAIL ]]; then
         test_fail "bzr query-match-types result differed"
     fi
-    lifecycle_expect_gap 679
 elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail "query-match-types precondition failed"
+fi
+
+# The reset-control fixture seeds only the eligibility state immediately before
+# this gap-marked probe. This keeps the control independent of whichever real
+# capability most recently carried an expected gap.
+if [[ ${LIFECYCLE_ELIGIBILITY_RESET_CONTROL:-0} -eq 1 ]]; then
+    lifecycle_gap_allow
 fi
 
 test_begin "bug-tags" "personal bug tags"

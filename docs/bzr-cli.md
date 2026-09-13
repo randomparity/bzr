@@ -337,6 +337,8 @@ output joins multiple values with `, `.
 
 Filter flags (`--product`, `--component`, `--status`, `--assignee`, `--creator`, `--priority`, `--severity`) are repeatable for OR semantics and support a `!` prefix for negation (NOT). Assignee and creator values match login substrings; negation excludes every matching substring, and a bare `!` is rejected.
 
+`--status-whiteboard-type`, `--url-type`, and `--email-type` select a Bugzilla boolean-chart operator (`substring`, `notsubstring`, `regexp`, `notregexp`, `anywords`, `allwords`, `nowords`, `equals`, or `notequals`) for their corresponding filters. An explicit type cannot be combined with a `!`-prefixed value; select a negating operator instead.
+
 `--summary` is the structured counterpart to [`bzr bug search`](#bzr-bug-search): it does a substring match against the bug's Summary field across all states (open and closed), whereas `bzr bug search` uses Bugzilla's quicksearch and defaults to open bugs only.
 
 | Option | Required | Default | Description |
@@ -441,6 +443,9 @@ within a field, AND across fields, with `!`-prefix to invert:
 | `--resolution` | exact (empty matches open) | `notequals` |
 | `--qa-contact` | login substring | `nowordssubstr` |
 | `--url` | substring | `notsubstring` |
+
+Use `--status-whiteboard-type`, `--url-type`, or `--email-type` to send one
+of Bugzilla's explicit boolean-chart operators for the corresponding values.
 
 Examples:
 

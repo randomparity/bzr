@@ -1,6 +1,6 @@
 use clap::Args;
 
-use crate::cli::bug::{BugFilterArgs, FieldArgs, PageArgs, SortArgs};
+use crate::cli::bug::{BugFilterArgs, FieldArgs, MatchTypeArgs, PageArgs, SortArgs};
 
 pub const LONG_ABOUT: &str = r"Show bugs related to the authenticated user.
 
@@ -51,6 +51,8 @@ pub(crate) struct MyArgs {
     pub all: bool,
     #[command(flatten)]
     pub filters: BugFilterArgs,
+    #[command(flatten)]
+    pub match_types: MatchTypeArgs,
     /// Filter to bugs created at or after this date.
     ///
     /// Accepts `YYYY-MM-DD` (interpreted as 00:00:00 UTC),

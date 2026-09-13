@@ -27,7 +27,7 @@ pub use payload::{
     CommentUpdate, CreateBugParams, ExtraBugFields, IdListUpdate, StringListUpdate, UpdateBugParams,
 };
 pub use search::{
-    partition_filters, FieldMapping, FilterField, NegationOp, Overrides, SearchParams,
+    partition_filters, FieldMapping, FilterField, MatchType, NegationOp, Overrides, SearchParams,
     FIELD_MAPPINGS,
 };
 

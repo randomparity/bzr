@@ -42,6 +42,7 @@ pub(super) async fn handle(
         order: args.sort_args.order,
     })?;
     args.filters.write_search_filters(&mut base);
+    args.match_types.apply(&mut base);
     // `--count` needs every distinct match, so fetch IDs only and lift the
     // per-category limit; the dedup below then yields the true distinct count.
     if args.count {
