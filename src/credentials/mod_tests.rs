@@ -24,6 +24,27 @@ fn resolve_optional_api_key_returns_none_without_source() {
 }
 
 #[test]
+fn resolve_optional_credential_returns_token_without_calling_it_an_api_key() {
+    let _redaction_guard = crate::bugzilla_auth::active_api_key_test_guard(None);
+    let server = ServerConfig {
+        url: "https://example.com".into(),
+        token: Some("login-token-secret".into()),
+        ..ServerConfig::default()
+    };
+    assert_eq!(
+        super::resolve_optional_credential(&server, "test").unwrap(),
+        Some(super::ResolvedCredential::Token(
+            "login-token-secret".into()
+        ))
+    );
+    assert!(super::resolve_api_key(&server, "test").is_err());
+    assert_eq!(
+        crate::bugzilla_auth::redact_api_key("rejected login-token-secret"),
+        "rejected [REDACTED]"
+    );
+}
+
+#[test]
 fn resolve_api_key_from_environment() {
     let _redaction_guard = crate::bugzilla_auth::active_api_key_test_guard(None);
     let _lock = crate::ENV_LOCK.blocking_lock();

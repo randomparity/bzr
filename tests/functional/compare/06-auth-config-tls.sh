@@ -228,6 +228,20 @@ r11_gap_test() {
     fi
 }
 r11_token_control() { r11_login_control && r11_cached_control; }
+r11_bzr_token_control() {
+    local token_file="$COMPARE_EXCHANGE_DIR/r11-bzr-token" config_file token
+    curl --fail --silent --show-error \
+        --data-urlencode "login=$COMPARE_ADMIN_EMAIL" \
+        --data-urlencode "password=$COMPARE_ADMIN_PASSWORD" \
+        "$BZ_URL/rest/login" | jq --raw-output '.token // empty' >"$token_file" || return 1
+    chmod 600 "$token_file"
+    token=$(<"$token_file")
+    [[ -n $token ]] || return 1
+    config_file="$XDG_CONFIG_HOME/bzr/config.toml"
+    printf '\n[servers.r11-token]\nurl = "%s"\ntoken = "%s"\n' "$BZ_URL" "$token" >>"$config_file"
+    run_bzr --server r11-token whoami
+    [[ $BZR_EXIT -eq 0 ]]
+}
 test_begin "api-key-placement" "API-key placement by server version"
 r11_pass_test r11_api_key_control
 test_begin "restricted-login" "restricted password login"
@@ -245,7 +259,7 @@ r11_pass_test r11_bugzillarc_control substring
 test_begin "nosslverify" "disable TLS verification"
 r11_pass_test r11_tls_control
 test_begin "token-transport-gap" "login-token request transport"
-r11_gap_test 676 token r11_token_control
+r11_pass_test r11_token_control && r11_pass_test r11_bzr_token_control
 test_begin "login-command-gap" "login and logout commands"
 r11_gap_test 681 login r11_login_control
 test_begin "bugzillarc-import-gap" "bugzillarc import"

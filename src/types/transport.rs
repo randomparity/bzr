@@ -42,6 +42,7 @@ impl fmt::Display for AuthMethod {
 #[serde(rename_all = "snake_case")]
 pub enum AuthMode {
     ApiKey,
+    Token,
     Anonymous,
 }
 
@@ -49,6 +50,7 @@ impl fmt::Display for AuthMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AuthMode::ApiKey => write!(f, "api_key"),
+            AuthMode::Token => write!(f, "token"),
             AuthMode::Anonymous => write!(f, "anonymous"),
         }
     }

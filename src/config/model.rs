@@ -40,6 +40,8 @@ pub struct ServerConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key_keyring: Option<KeyringRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth_method: Option<AuthMethod>,
@@ -140,6 +142,7 @@ pub enum CredentialSourceKind {
     Inline,
     Env,
     Keyring,
+    Token,
 }
 
 #[derive(Debug)]
@@ -150,6 +153,7 @@ pub enum CredentialSource<'a> {
         service: &'a str,
         account: KeyringAccount<'a>,
     },
+    Token(&'a str),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -166,6 +170,7 @@ impl CredentialSource<'_> {
             CredentialSource::Inline(_) => CredentialSourceKind::Inline,
             CredentialSource::EnvVar(_) => CredentialSourceKind::Env,
             CredentialSource::Keyring { .. } => CredentialSourceKind::Keyring,
+            CredentialSource::Token(_) => CredentialSourceKind::Token,
         }
     }
 }
@@ -209,7 +214,8 @@ impl ServerConfig {
     pub fn credential_source(&self) -> Result<Option<CredentialSource<'_>>> {
         let count = usize::from(self.api_key.is_some())
             + usize::from(self.api_key_env.is_some())
-            + usize::from(self.api_key_keyring.is_some());
+            + usize::from(self.api_key_keyring.is_some())
+            + usize::from(self.token.is_some());
         match count {
             0 => Ok(None),
             1 => {
@@ -217,6 +223,8 @@ impl ServerConfig {
                     Ok(Some(CredentialSource::Inline(api_key)))
                 } else if let Some(var_name) = self.api_key_env.as_deref() {
                     Ok(Some(CredentialSource::EnvVar(var_name)))
+                } else if let Some(token) = self.token.as_deref() {
+                    Ok(Some(CredentialSource::Token(token)))
                 } else {
                     let r = self.api_key_keyring.as_ref().ok_or_else(|| {
                         BzrError::config("internal: keyring credential unexpectedly missing")
@@ -232,8 +240,8 @@ impl ServerConfig {
                 }
             }
             _ => Err(BzrError::config(
-                "server config cannot define multiple API key sources \
-                 (api_key, api_key_env, api_key_keyring)",
+                "server config cannot define multiple API key sources or tokens \
+                 (api_key, api_key_env, api_key_keyring, token)",
             )),
         }
     }

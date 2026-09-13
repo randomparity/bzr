@@ -47,6 +47,7 @@ async fn adjacency_access_proof_uses_current_auth_once() {
     let client = BugzillaClient::new(BugzillaClientConfig {
         base_url: &server.uri(),
         credential: Some("test-key"),
+        token: None,
         auth_method: Some(AuthMethod::Header),
         api_mode: ApiMode::Rest,
         email_hint: Some("user@example.com"),

@@ -34,6 +34,7 @@ pub(super) fn connect_context(
         server_name: server_name.to_string(),
         url: url.to_string(),
         api_key: Some("test-key".to_string()),
+        token: None,
         email: None,
         api_override,
         request_timeout: crate::http::REQUEST_TIMEOUT,

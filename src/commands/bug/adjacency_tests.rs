@@ -19,6 +19,7 @@ fn client(
     BugzillaClient::new(BugzillaClientConfig {
         base_url: &server.uri(),
         credential,
+        token: None,
         auth_method: credential.map(|_| AuthMethod::Header),
         api_mode: ApiMode::Rest,
         email_hint: email,
@@ -260,6 +261,7 @@ async fn fatal_transport_failure_leaves_stdout_empty() {
     let client = BugzillaClient::new(BugzillaClientConfig {
         base_url: &server.uri(),
         credential: None,
+        token: None,
         auth_method: None,
         api_mode: ApiMode::Rest,
         email_hint: None,

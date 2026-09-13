@@ -16,6 +16,7 @@ fn make_server_config(url: &str) -> ServerConfig {
         api_key: Some("test-key".to_string()),
         api_key_env: None,
         api_key_keyring: None,
+        token: None,
         email: None,
         auth_method: None,
         auth_method_source: None,
@@ -374,6 +375,7 @@ fn env_backed_server_reports_env_credential_source() {
         api_key: None,
         api_key_env: Some("BZR_TEST_API_KEY".into()),
         api_key_keyring: None,
+        token: None,
         email: None,
         auth_method: None,
         auth_method_source: None,
@@ -398,12 +400,42 @@ fn env_backed_server_reports_env_credential_source() {
 }
 
 #[test]
+fn token_is_a_distinct_exclusive_credential_source() {
+    let token_server = ServerConfig {
+        url: "https://bugzilla.example.com".into(),
+        token: Some("login-token".into()),
+        ..ServerConfig::default()
+    };
+    assert!(matches!(
+        token_server.credential_source().unwrap(),
+        Some(CredentialSource::Token("login-token"))
+    ));
+    assert_eq!(
+        token_server.credential_source_kind().unwrap(),
+        Some(CredentialSourceKind::Token)
+    );
+
+    let conflicting = ServerConfig {
+        url: "https://bugzilla.example.com".into(),
+        api_key: Some("api-key".into()),
+        token: Some("login-token".into()),
+        ..ServerConfig::default()
+    };
+    assert!(conflicting
+        .credential_source()
+        .unwrap_err()
+        .to_string()
+        .contains("multiple API key sources or tokens"));
+}
+
+#[test]
 fn server_config_rejects_multiple_api_key_sources() {
     let server = ServerConfig {
         url: "https://bugzilla.example.com".into(),
         api_key: Some("inline".into()),
         api_key_env: Some("BZR_TEST_API_KEY".into()),
         api_key_keyring: None,
+        token: None,
         email: None,
         auth_method: None,
         auth_method_source: None,
@@ -480,6 +512,7 @@ fn credential_source_keyring_variant() {
             service: None,
             account: None,
         }),
+        token: None,
         email: None,
         auth_method: None,
         auth_method_source: None,
@@ -519,6 +552,7 @@ fn credential_source_keyring_explicit_account_variant() {
             service: Some("custom".into()),
             account: Some("acct".into()),
         }),
+        token: None,
         email: None,
         auth_method: None,
         auth_method_source: None,
@@ -554,6 +588,7 @@ fn credential_source_rejects_keyring_with_inline() {
             service: None,
             account: None,
         }),
+        token: None,
         email: None,
         auth_method: None,
         auth_method_source: None,
@@ -584,6 +619,7 @@ fn credential_source_rejects_keyring_with_env() {
             service: None,
             account: None,
         }),
+        token: None,
         email: None,
         auth_method: None,
         auth_method_source: None,
@@ -614,6 +650,7 @@ fn credential_source_rejects_all_three() {
             service: None,
             account: None,
         }),
+        token: None,
         email: None,
         auth_method: None,
         auth_method_source: None,
@@ -641,6 +678,7 @@ fn validate_tls_insecure_with_ca_cert_conflicts() {
         api_key: Some("key".into()),
         api_key_env: None,
         api_key_keyring: None,
+        token: None,
         email: None,
         auth_method: None,
         auth_method_source: None,
@@ -671,6 +709,7 @@ fn validate_tls_insecure_with_pin_conflicts() {
         api_key: Some("key".into()),
         api_key_env: None,
         api_key_keyring: None,
+        token: None,
         email: None,
         auth_method: None,
         auth_method_source: None,
@@ -701,6 +740,7 @@ fn validate_tls_ca_cert_with_pin_conflicts() {
         api_key: Some("key".into()),
         api_key_env: None,
         api_key_keyring: None,
+        token: None,
         email: None,
         auth_method: None,
         auth_method_source: None,
@@ -731,6 +771,7 @@ fn validate_tls_no_conflicts_passes() {
         api_key: Some("key".into()),
         api_key_env: None,
         api_key_keyring: None,
+        token: None,
         email: None,
         auth_method: None,
         auth_method_source: None,

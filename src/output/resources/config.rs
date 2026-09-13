@@ -24,6 +24,7 @@ enum DisplayCredentialSource {
     Inline,
     Env,
     Keyring,
+    Token,
     None,
     Invalid,
 }
@@ -34,6 +35,7 @@ impl DisplayCredentialSource {
             DisplayCredentialSource::Inline => "inline",
             DisplayCredentialSource::Env => "env",
             DisplayCredentialSource::Keyring => "keyring",
+            DisplayCredentialSource::Token => "token",
             DisplayCredentialSource::None => "none",
             DisplayCredentialSource::Invalid => "invalid",
         }
@@ -109,6 +111,9 @@ impl ServerDisplayInfo {
                 };
                 (display, DisplayCredentialSource::Keyring)
             }
+            Ok(Some(CredentialSource::Token(token))) => {
+                (mask_api_key(token), DisplayCredentialSource::Token)
+            }
             Ok(None) => ("none".to_string(), DisplayCredentialSource::None),
             Err(_) => (
                 "[invalid config]".to_string(),
@@ -165,6 +170,7 @@ fn write_api_key(out: &mut (impl Write + ?Sized), s: &ServerDisplayInfo) {
     let label = match s.api_key_source {
         DisplayCredentialSource::Env => "API Key Env",
         DisplayCredentialSource::Keyring => "Keyring",
+        DisplayCredentialSource::Token => "Token",
         DisplayCredentialSource::Inline
         | DisplayCredentialSource::None
         | DisplayCredentialSource::Invalid => "API Key",

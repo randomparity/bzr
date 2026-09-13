@@ -12,6 +12,7 @@ fn make_ctx(
         server_name: "test".into(),
         url: url.into(),
         api_key: None,
+        token: None,
         email: email.map(str::to_owned),
         api_override: None,
         request_timeout: crate::http::REQUEST_TIMEOUT,

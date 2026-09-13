@@ -41,6 +41,7 @@ pub(super) fn set(
         })?;
         server.api_key = None;
         server.api_key_env = None;
+        server.token = None;
         server.api_key_keyring = Some(crate::config::KeyringRef {
             service: service_persist,
             account: account_persist,

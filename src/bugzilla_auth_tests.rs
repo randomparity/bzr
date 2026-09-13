@@ -35,6 +35,24 @@ fn apply_auth_to_request_adds_query_param_auth() {
 }
 
 #[test]
+fn apply_token_to_request_uses_the_login_token_parameter() {
+    let request = apply_token_to_request(
+        reqwest::Client::new().get("https://bugzilla.example/rest/bug/1"),
+        "login-token",
+    )
+    .build()
+    .unwrap();
+    assert_eq!(request.url().query(), Some("Bugzilla_token=login-token"));
+    assert!(request.headers().get(AUTH_HEADER_NAME).is_none());
+}
+
+#[test]
+fn redact_api_key_redacts_login_token_markers() {
+    let redacted = redact_api_key("?Bugzilla_token=token-secret&id=1");
+    assert_eq!(redacted, "?Bugzilla_token=[REDACTED]&id=1");
+}
+
+#[test]
 fn apply_auth_to_request_without_auth_leaves_request_unchanged() {
     let client = reqwest::Client::new();
     let request = apply_auth_to_request(

@@ -164,6 +164,7 @@ fn config_view_from_config_masks_key_and_includes_flags() {
             api_key: Some("1234567890abcdef".into()),
             api_key_env: None,
             api_key_keyring: None,
+            token: None,
             auth_method: Some(AuthMethod::Header),
             auth_method_source: None,
             api_mode: None,
@@ -210,6 +211,7 @@ fn config_view_from_config_shows_env_backed_keys_without_resolving() {
             api_key: None,
             api_key_env: Some("BZR_API_KEY".into()),
             api_key_keyring: None,
+            token: None,
             auth_method: None,
             auth_method_source: None,
             api_mode: None,
@@ -252,6 +254,7 @@ fn config_view_displays_missing_api_key_source_as_none() {
             api_key: None,
             api_key_env: None,
             api_key_keyring: None,
+            token: None,
             auth_method: None,
             auth_method_source: None,
             api_mode: None,
@@ -293,6 +296,7 @@ fn server_display_info_keyring_source() {
             service: Some("bzr".into()),
             account: Some("prod".into()),
         }),
+        token: None,
         email: None,
         auth_method: None,
         auth_method_source: None,
@@ -316,6 +320,31 @@ fn server_display_info_keyring_source() {
 }
 
 #[test]
+fn server_display_info_masks_and_labels_token_source() {
+    let srv = ServerConfig {
+        url: "https://example.com".into(),
+        token: Some("token-secret-1234".into()),
+        ..ServerConfig::default()
+    };
+    let config = Config {
+        default_server: Some("prod".into()),
+        servers: [("prod".into(), srv)].into_iter().collect(),
+        queries: HashMap::new(),
+        templates: HashMap::new(),
+    };
+    let view = ConfigView::from_config(&config, Path::new("/tmp/bzr/config.toml"));
+    let json = serde_json::to_value(&view.servers["prod"]).unwrap();
+    assert_eq!(json["api_key_source"], "token");
+    assert!(!json["api_key"]
+        .as_str()
+        .unwrap()
+        .contains("token-secret-1234"));
+    let output = capture_write_config(&view);
+    assert!(output.contains("Token"));
+    assert!(!output.contains("token-secret-1234"));
+}
+
+#[test]
 fn display_server_with_tls_pin() {
     let mut servers = HashMap::new();
     servers.insert(
@@ -326,6 +355,7 @@ fn display_server_with_tls_pin() {
             api_key: Some("1234567890abcdef".into()),
             api_key_env: None,
             api_key_keyring: None,
+            token: None,
             auth_method: Some(AuthMethod::Header),
             auth_method_source: None,
             api_mode: None,
@@ -497,6 +527,7 @@ fn server_display_info_keyring_source_default_account() {
             service: None,
             account: None,
         }),
+        token: None,
         email: None,
         auth_method: None,
         auth_method_source: None,

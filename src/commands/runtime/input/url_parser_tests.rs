@@ -11,6 +11,7 @@ fn make_server_config(server_url: &str) -> ServerConfig {
         api_key: None,
         api_key_env: None,
         api_key_keyring: None,
+        token: None,
         email: None,
         auth_method: None,
         auth_method_source: None,
