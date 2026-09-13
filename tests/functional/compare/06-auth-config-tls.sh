@@ -291,7 +291,7 @@ if r11_login_control && {
         [[ $BZR_EXIT -eq 0 ]] &&
         run_bzr --server r11-login auth logout &&
         [[ $BZR_EXIT -eq 0 ]]
-then
+}; then
     test_pass
 else
     test_fail "named login identity flow failed"
