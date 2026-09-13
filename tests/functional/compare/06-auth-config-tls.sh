@@ -245,6 +245,7 @@ r11_token_control() { r11_login_control && r11_cached_control; }
 r11_bzr_token_control() {
     local token_file="$COMPARE_EXCHANGE_DIR/r11-bzr-token" config_file token
     curl --fail --silent --show-error \
+        --get \
         --data-urlencode "login=$COMPARE_ADMIN_EMAIL" \
         --data-urlencode "password=$COMPARE_ADMIN_PASSWORD" \
         "$BZ_URL/rest/login" | jq --raw-output '.token // empty' >"$token_file" || return 1
@@ -252,7 +253,8 @@ r11_bzr_token_control() {
     token=$(<"$token_file")
     [[ -n $token ]] || return 1
     config_file="$XDG_CONFIG_HOME/bzr/config.toml"
-    printf '\n[servers.r11-token]\nurl = "%s"\ntoken = "%s"\n' "$BZ_URL" "$token" >>"$config_file"
+    printf '\n[servers.r11-token]\nurl = "%s"\nemail = "%s"\ntoken = "%s"\n' \
+        "$BZ_URL" "$COMPARE_ADMIN_EMAIL" "$token" >>"$config_file"
     run_bzr --server r11-token whoami
     [[ $BZR_EXIT -eq 0 ]]
 }
