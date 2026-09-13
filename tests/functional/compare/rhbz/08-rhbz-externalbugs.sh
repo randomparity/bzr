@@ -44,10 +44,20 @@ rhbz_expect_gap() {
     resource_expect_gap 774
 }
 
+rhbz_external_bug_fixture_sql() {
+    printf '%s\n' \
+        "INSERT INTO bugs (assigned_to, bug_severity, bug_status, creation_ts, delta_ts, short_desc, op_sys, priority, product_id, rep_platform, reporter, version, component_id, everconfirmed) VALUES (1, 'normal', 'NEW', NOW(), NOW(), '$RHBZ_TOKEN ExternalBugs comparison bug', 'Linux', 'Normal', $RHBZ_PRODUCT_ID, 'PC', 1, 'unspecified', $RHBZ_COMPONENT_ID, 1);" \
+        'SET @rhbz_external_bug_id = LAST_INSERT_ID();'
+    if [[ ${RHBZ_FIELDS_SUB_COMPONENT_ID:-} =~ ^[1-9][0-9]*$ ]]; then
+        printf '%s\n' "INSERT INTO bug_rh_sub_components (bug_id, rh_sub_component_id) VALUES (@rhbz_external_bug_id, $RHBZ_FIELDS_SUB_COMPONENT_ID);"
+    fi
+    printf '%s\n' 'SELECT @rhbz_external_bug_id;'
+}
+
 test_begin "add" "ExternalBugs add persists a configured tracker link"
 resource_gap_reset
 if rhbz_controls_ready &&
-    printf '%s\n' "INSERT INTO bugs (assigned_to, bug_severity, bug_status, creation_ts, delta_ts, short_desc, op_sys, priority, product_id, rep_platform, reporter, version, component_id, everconfirmed) VALUES (1, 'normal', 'NEW', NOW(), NOW(), '$RHBZ_TOKEN ExternalBugs comparison bug', 'Linux', 'Normal', $RHBZ_PRODUCT_ID, 'PC', 1, 'unspecified', $RHBZ_COMPONENT_ID, 1); SELECT LAST_INSERT_ID();" >"$COMPARE_EXCHANGE_DIR/rhbz-bug.sql" &&
+    rhbz_external_bug_fixture_sql >"$COMPARE_EXCHANGE_DIR/rhbz-bug.sql" &&
     RHBZ_BUG_ID=$(run_bugzilla_sql_file "$COMPARE_EXCHANGE_DIR/rhbz-bug.sql" | tail -n1) &&
     [[ $RHBZ_BUG_ID =~ ^[1-9][0-9]*$ ]] &&
     printf '%s\n' "INSERT INTO external_bugzilla (url, description, full_url, type) VALUES ('https://tracker.invalid/', '$RHBZ_TRACKER', 'https://tracker.invalid/%%s', 'None'); SELECT id FROM external_bugzilla WHERE description = '$RHBZ_TRACKER';" \
