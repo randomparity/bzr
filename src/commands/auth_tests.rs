@@ -1,4 +1,28 @@
-use crate::config::ServerConfig;
+#![expect(clippy::unwrap_used)]
+
+use wiremock::matchers::{method, path, query_param};
+use wiremock::{Mock, MockServer, ResponseTemplate};
+
+use crate::cli::AuthAction;
+use crate::commands::runtime::invocation::CommandContext;
+use crate::config::{Config, ServerConfig};
+use crate::test_helpers::{write_config_to, CapturedIo};
+use crate::types::OutputFormat;
+
+fn context(config_path: std::path::PathBuf) -> CommandContext {
+    CommandContext::new(Some("test"), OutputFormat::Json, None)
+        .with_config_path_override(Some(config_path))
+}
+
+fn config_path(tmp: &tempfile::TempDir, url: &str, token: Option<&str>) -> std::path::PathBuf {
+    let token = token.map_or_else(String::new, |token| format!("token = \"{token}\"\n"));
+    write_config_to(
+        tmp,
+        &format!(
+            "default_server = \"test\"\n\n[servers.test]\nurl = \"{url}\"\napi_mode = \"rest\"\n{token}"
+        ),
+    )
+}
 
 #[test]
 fn api_key_source_blocks_token_login() {
@@ -26,4 +50,100 @@ fn logout_keeps_a_token_replaced_by_a_concurrent_login() {
     assert_eq!(server.token.as_deref(), Some("new-token"));
     super::clear_token_if_matches(&mut server, "new-token");
     assert!(server.token.is_none());
+}
+
+#[tokio::test]
+async fn login_persists_the_returned_token_and_reports_json() {
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = config_path(&tmp, &mock.uri(), None);
+    Mock::given(method("GET"))
+        .and(path("/rest/login"))
+        .and(query_param("login", "alice@example.test"))
+        .and(query_param("password", "secret"))
+        .and(query_param("restrict_login", "1"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"token": "saved"})),
+        )
+        .mount(&mock)
+        .await;
+    let action = AuthAction::Login {
+        email: "alice@example.test".into(),
+        password: Some("secret".into()),
+        restrict_login: true,
+    };
+    let mut io = CapturedIo::new();
+
+    super::execute(&action, &context(config_path.clone()), &mut io.writers())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        Config::load_at(Some(&config_path)).unwrap().servers["test"]
+            .token
+            .as_deref(),
+        Some("saved")
+    );
+    assert_eq!(
+        crate::test_helpers::json_envelope_data(io.out_str())["action"],
+        "logged-in"
+    );
+}
+
+#[tokio::test]
+async fn logout_revokes_then_removes_the_saved_token() {
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = config_path(&tmp, &mock.uri(), Some("saved"));
+    Mock::given(method("GET"))
+        .and(path("/rest/logout"))
+        .and(query_param("Bugzilla_token", "saved"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+        .mount(&mock)
+        .await;
+    let mut io = CapturedIo::new();
+
+    super::execute(
+        &AuthAction::Logout,
+        &context(config_path.clone()),
+        &mut io.writers(),
+    )
+    .await
+    .unwrap();
+
+    assert!(Config::load_at(Some(&config_path)).unwrap().servers["test"]
+        .token
+        .is_none());
+    assert_eq!(
+        crate::test_helpers::json_envelope_data(io.out_str())["action"],
+        "logged-out"
+    );
+}
+
+#[tokio::test]
+async fn failed_logout_retains_the_saved_token() {
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = config_path(&tmp, &mock.uri(), Some("saved"));
+    Mock::given(method("GET"))
+        .and(path("/rest/logout"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&mock)
+        .await;
+    let mut io = CapturedIo::new();
+
+    assert!(super::execute(
+        &AuthAction::Logout,
+        &context(config_path.clone()),
+        &mut io.writers()
+    )
+    .await
+    .is_err());
+
+    assert_eq!(
+        Config::load_at(Some(&config_path)).unwrap().servers["test"]
+            .token
+            .as_deref(),
+        Some("saved")
+    );
 }

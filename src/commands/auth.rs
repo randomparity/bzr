@@ -108,15 +108,18 @@ async fn unauthenticated_client(
     };
     let mode = match ctx.api() {
         Some(mode) => mode,
-        None => {
-            crate::client::detect_server_settings_without_auth(
-                &server.url,
-                &tls,
-                ctx.request_timeout(),
-            )
-            .await?
-            .api_mode
-        }
+        None => match server.api_mode {
+            Some(mode) => mode,
+            None => {
+                crate::client::detect_server_settings_without_auth(
+                    &server.url,
+                    &tls,
+                    ctx.request_timeout(),
+                )
+                .await?
+                .api_mode
+            }
+        },
     };
     BugzillaClient::new(BugzillaClientConfig {
         base_url: &server.url,
