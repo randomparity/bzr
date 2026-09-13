@@ -2993,7 +2993,8 @@ method; XML-RPC continues to place API keys in its request body.
 
 For username/password login, configure a named server with no API-key source and run
 `bzr --server <NAME> auth login --email <EMAIL>`; it prompts with hidden input, or accepts
-`--password` for automation. The command
+`--password` for non-interactive automation. Command-line passwords can be visible to local
+process inspection, so prefer the hidden prompt for interactive use. The command
 stores the server-issued token in the protected config file; `--restrict-login` asks
 Bugzilla to restrict the session. `bzr --server <NAME> auth logout` invalidates the
 remote token before removing the local copy. Auth login is a network command and cannot

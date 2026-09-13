@@ -6,7 +6,9 @@ pub(crate) enum AuthAction {
     ///
     /// The selected server must be named and must not already use an API-key
     /// credential source. Omitting `--password` prompts with hidden input;
-    /// use `--restrict-login` when the server supports restricted sessions.
+    /// command-line passwords can be visible to local process inspection, so
+    /// reserve `--password` for non-interactive automation. Use
+    /// `--restrict-login` when the server supports restricted sessions.
     ///
     /// Examples:
     ///
