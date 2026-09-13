@@ -85,8 +85,86 @@ async fn login_persists_the_returned_token_and_reports_json() {
         Some("saved")
     );
     assert_eq!(
+        Config::load_at(Some(&config_path)).unwrap().servers["test"]
+            .email
+            .as_deref(),
+        Some("alice@example.test")
+    );
+    assert_eq!(
         crate::test_helpers::json_envelope_data(io.out_str())["action"],
         "logged-in"
+    );
+}
+
+#[tokio::test]
+async fn login_replaces_a_stale_saved_email() {
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = config_path(&tmp, &mock.uri(), Some("old-token"));
+    Config::update_locked_at(Some(&config_path), |config| {
+        config.servers.get_mut("test").unwrap().email = Some("old@example.test".into());
+        Ok(())
+    })
+    .unwrap();
+    Mock::given(method("GET"))
+        .and(path("/rest/login"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"token": "saved"})),
+        )
+        .mount(&mock)
+        .await;
+    let action = AuthAction::Login {
+        email: "alice@example.test".into(),
+        password: Some("secret".into()),
+        restrict_login: false,
+    };
+    let mut io = CapturedIo::new();
+
+    super::execute(&action, &context(config_path.clone()), &mut io.writers())
+        .await
+        .unwrap();
+
+    let saved = Config::load_at(Some(&config_path)).unwrap();
+    assert_eq!(saved.servers["test"].token.as_deref(), Some("saved"));
+    assert_eq!(
+        saved.servers["test"].email.as_deref(),
+        Some("alice@example.test")
+    );
+}
+
+#[tokio::test]
+async fn failed_login_keeps_the_saved_credential_and_identity_pair() {
+    let mock = MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = config_path(&tmp, &mock.uri(), Some("old-token"));
+    Config::update_locked_at(Some(&config_path), |config| {
+        config.servers.get_mut("test").unwrap().email = Some("old@example.test".into());
+        Ok(())
+    })
+    .unwrap();
+    Mock::given(method("GET"))
+        .and(path("/rest/login"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&mock)
+        .await;
+    let action = AuthAction::Login {
+        email: "alice@example.test".into(),
+        password: Some("secret".into()),
+        restrict_login: false,
+    };
+    let mut io = CapturedIo::new();
+
+    assert!(
+        super::execute(&action, &context(config_path.clone()), &mut io.writers())
+            .await
+            .is_err()
+    );
+
+    let saved = Config::load_at(Some(&config_path)).unwrap();
+    assert_eq!(saved.servers["test"].token.as_deref(), Some("old-token"));
+    assert_eq!(
+        saved.servers["test"].email.as_deref(),
+        Some("old@example.test")
     );
 }
 

@@ -278,8 +278,8 @@ test_begin "nosslverify" "disable TLS verification"
 r11_pass_test r11_tls_control
 test_begin "token-transport-gap" "login-token request transport"
 r11_pass_test r11_token_control && r11_pass_test r11_bzr_token_control
-test_begin "login-command-gap" "login and logout commands"
-r11_pass_test r11_login_control && {
+test_begin "login-command-identity" "named login supports whoami and bug my"
+if r11_login_control && {
     run_bzr config set-server r11-login --url "$BZ_URL"
     [[ $BZR_EXIT -eq 0 ]] &&
         run_bzr --server r11-login auth login --email "$COMPARE_ADMIN_EMAIL" \
@@ -287,9 +287,15 @@ r11_pass_test r11_login_control && {
         [[ $BZR_EXIT -eq 0 ]] &&
         run_bzr --server r11-login whoami &&
         [[ $BZR_EXIT -eq 0 ]] &&
+        run_bzr --server r11-login bug my --limit 1 &&
+        [[ $BZR_EXIT -eq 0 ]] &&
         run_bzr --server r11-login auth logout &&
         [[ $BZR_EXIT -eq 0 ]]
-}
+then
+    test_pass
+else
+    test_fail "named login identity flow failed"
+fi
 test_begin "login-command-xmlrpc" "login and logout commands over XML-RPC"
 run_bzr config set-server r11-login-xmlrpc --url "$BZ_URL"
 if [[ $BZR_EXIT -eq 0 ]] &&
