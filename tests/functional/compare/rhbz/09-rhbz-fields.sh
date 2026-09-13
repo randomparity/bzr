@@ -6,6 +6,7 @@ RHBZ_FIELDS_TOKEN=$(unique_name rhbz-fields)
 RHBZ_FIELDS_PRODUCT=TestProduct
 RHBZ_FIELDS_COMPONENT=TestComponent
 RHBZ_FIELDS_RELEASE="${RHBZ_FIELDS_TOKEN}-release"
+RHBZ_FIELDS_SECOND_RELEASE="${RHBZ_FIELDS_TOKEN}-second-release"
 RHBZ_FIELDS_SUB_COMPONENT="${RHBZ_FIELDS_TOKEN}-sub-component"
 RHBZ_FIELDS_SECOND_SUB_COMPONENT="${RHBZ_FIELDS_TOKEN}-second-sub-component"
 RHBZ_FIELDS_FIXED_IN="${RHBZ_FIELDS_TOKEN}-fixed-in"
@@ -54,11 +55,17 @@ rhbz_fields_metadata_ready() {
 rhbz_fields_create_bug() {
     local label="$1"
     local sql_file="$COMPARE_EXCHANGE_DIR/rhbz-fields-${label}.sql"
+    local target_release_sql=''
+
+    if [[ $label == sub-components ]]; then
+        target_release_sql="INSERT INTO bugs_release (bug_id, value) VALUES (@rhbz_fields_bug_id, '$RHBZ_FIELDS_RELEASE'), (@rhbz_fields_bug_id, '$RHBZ_FIELDS_SECOND_RELEASE');"
+    fi
 
     printf '%s\n' \
         "INSERT INTO bugs (assigned_to, bug_severity, bug_status, creation_ts, delta_ts, short_desc, op_sys, priority, product_id, rep_platform, reporter, version, component_id, everconfirmed) VALUES (1, 'normal', 'NEW', NOW(), NOW(), '$RHBZ_FIELDS_TOKEN $label comparison bug', 'Linux', 'Normal', $RHBZ_FIELDS_PRODUCT_ID, 'PC', 1, 'unspecified', $RHBZ_FIELDS_COMPONENT_ID, 1);" \
         'SET @rhbz_fields_bug_id = LAST_INSERT_ID();' \
         "INSERT INTO bug_rh_sub_components (bug_id, rh_sub_component_id) VALUES (@rhbz_fields_bug_id, $RHBZ_FIELDS_SUB_COMPONENT_ID), (@rhbz_fields_bug_id, $RHBZ_FIELDS_SECOND_SUB_COMPONENT_ID);" \
+        "$target_release_sql" \
         'SELECT @rhbz_fields_bug_id;' >"$sql_file"
     run_bugzilla_sql_file "$sql_file" | tail -n1
 }
@@ -74,12 +81,13 @@ rhbz_fields_read() {
 
 rhbz_fields_read_with_bzr() {
     local name="$1" bug_id="$2" fields="$3" filter="$4" expected="$5"
+    local second="${6:-$RHBZ_FIELDS_SECOND_SUB_COMPONENT}"
 
     RUST_LOG=bzr=debug run_bzr --server "$RESOURCE_SERVER" --api rest bug view "$bug_id" \
         --fields "id,$fields"
     resource_capture_bzr "rhbz-fields-${name}-read-json"
     if [[ $BZR_EXIT -ne 0 ]] || ! jq -e --arg expected "$expected" \
-        --arg second "$RHBZ_FIELDS_SECOND_SUB_COMPONENT" "$filter" \
+        --arg second "$second" "$filter" \
         "$BZR_STDOUT" >/dev/null; then
         return 1
     fi
@@ -88,7 +96,7 @@ rhbz_fields_read_with_bzr() {
         bug view "$bug_id" --fields "id,$fields"
     resource_capture_bzr "rhbz-fields-${name}-read-ndjson"
     [[ $BZR_EXIT -eq 0 ]] && jq -e --arg expected "$expected" \
-        --arg second "$RHBZ_FIELDS_SECOND_SUB_COMPONENT" "$filter" \
+        --arg second "$second" "$filter" \
         "$BZR_STDOUT" >/dev/null
 }
 
@@ -97,6 +105,14 @@ rhbz_fields_assert_empty_target_release() {
 
     rhbz_fields_read_with_bzr empty-target-release "$bug_id" target_release \
         '.target_release | type == "array" and length == 0' ignored
+}
+
+rhbz_fields_assert_multi_target_releases() {
+    local bug_id="$1"
+
+    rhbz_fields_read_with_bzr multi-target-releases "$bug_id" target_release \
+        '(.target_release | [ .[] | select(. == $expected or . == $second) ] | length) == 2' \
+        "$RHBZ_FIELDS_RELEASE" "$RHBZ_FIELDS_SECOND_RELEASE"
 }
 
 rhbz_fields_probe_bzr() {
@@ -127,16 +143,31 @@ rhbz_fields_run() {
     local name="$1" operation="$2" payload="$3" pybz_fields="$4" bzr_field="$5"
     local pybz_filter="$6" pybz_expected="$7" bzr_value="$8" bzr_filter="$9"
     local bzr_expected="${10}" bug_id bzr_read_filter
-    bzr_read_filter=${pybz_filter//.bugs[0]./.}
-    if [[ $name == sub-components ]]; then
-        bzr_read_filter='(.sub_components | [.. | strings | select(. == $expected or . == $second)] | length) == 2'
-    fi
+    case "$name" in
+        sub-components)
+            bzr_read_filter='(.sub_components | [.. | strings | select(. == $expected)] | length) > 0'
+            ;;
+        target-release)
+            bzr_read_filter='.target_release | index($expected)'
+            ;;
+        fixed-in)
+            bzr_read_filter='.cf_fixed_in == $expected'
+            ;;
+        whiteboards)
+            bzr_read_filter='($expected | split(",")) as $values | .cf_devel_whiteboard == $values[0] and .cf_internal_whiteboard == $values[1] and .cf_qa_whiteboard == $values[2]'
+            ;;
+        *)
+            test_fail "RHBZ $name has no bzr read filter"
+            return 1
+            ;;
+    esac
 
     test_begin "$name" "RHBZ $name persists a configured field"
     resource_gap_reset
     if rhbz_fields_prepare && rhbz_fields_metadata_ready &&
         bug_id=$(rhbz_fields_create_bug "$name") && [[ $bug_id =~ ^[1-9][0-9]*$ ]] &&
         { [[ $name != target-release ]] || rhbz_fields_assert_empty_target_release "$bug_id"; } &&
+        { [[ $name != sub-components ]] || rhbz_fields_assert_multi_target_releases "$bug_id"; } &&
         resource_pybz "rhbz-fields-${name}" "$operation" \
             "$(jq -cn --argjson bug_id "$bug_id" --argjson payload "$payload" '$payload + {bug_id:$bug_id,transport:"REST"}')" REST &&
         rhbz_fields_read "$bug_id" "$pybz_fields" "$name" &&
