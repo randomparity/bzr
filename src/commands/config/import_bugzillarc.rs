@@ -182,9 +182,9 @@ fn resolved_servers(sections: &Sections) -> Result<Vec<ImportedServer>> {
     let Some(url) = defaults.get("url").filter(|url| !url.is_empty()).cloned() else {
         return Ok(Vec::new());
     };
-    let parsed_url = url::Url::parse(&url)
+    url::Url::parse(&url)
         .map_err(|error| BzrError::input(format!("bugzillarc DEFAULT url is invalid: {error}")))?;
-    let authority = &parsed_url[url::Position::BeforeUsername..url::Position::AfterPort];
+    let authority = raw_authority(&url);
     let mut values = defaults;
     for (section, override_values) in sections {
         let matches_url = if section.contains('/') {
@@ -212,6 +212,12 @@ fn resolved_servers(sections: &Sections) -> Result<Vec<ImportedServer>> {
             .filter(|value| !value.is_empty())
             .cloned(),
     }])
+}
+
+fn raw_authority(url: &str) -> &str {
+    url.split_once("://").map_or("", |(_, remainder)| {
+        remainder.split(['/', '?', '#']).next().unwrap_or_default()
+    })
 }
 
 fn server_name(config: &Config, url: &str) -> String {

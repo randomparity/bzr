@@ -128,6 +128,29 @@ fn hostname_sections_match_the_exact_port() {
 }
 
 #[test]
+fn hostname_sections_preserve_explicit_default_ports() {
+    let https = parse_sections(
+        "[DEFAULT]\nurl=https://bugs.example.test:443/rest\n[bugs.example.test]\napi_key=wrong\n[bugs.example.test:443]\napi_key=right\n",
+        Path::new("fixture"),
+    )
+    .unwrap();
+    let http = parse_sections(
+        "[DEFAULT]\nurl=http://bugs.example.test:80/rest\n[bugs.example.test]\napi_key=wrong\n[bugs.example.test:80]\napi_key=right\n",
+        Path::new("fixture"),
+    )
+    .unwrap();
+
+    assert_eq!(
+        resolved_servers(&https).unwrap()[0].api_key.as_deref(),
+        Some("right")
+    );
+    assert_eq!(
+        resolved_servers(&http).unwrap()[0].api_key.as_deref(),
+        Some("right")
+    );
+}
+
+#[test]
 fn hostname_sections_preserve_userinfo() {
     let sections = parse_sections(
         "[DEFAULT]\nurl=https://user:password@bugs.example.test/rest\n[bugs.example.test]\napi_key=wrong\n[user:password@bugs.example.test]\napi_key=right\n",
@@ -138,6 +161,29 @@ fn hostname_sections_preserve_userinfo() {
     let servers = resolved_servers(&sections).unwrap();
 
     assert_eq!(servers[0].api_key.as_deref(), Some("right"));
+}
+
+#[test]
+fn hostname_sections_preserve_default_ports_with_userinfo_and_ipv6() {
+    let userinfo = parse_sections(
+        "[DEFAULT]\nurl=https://user:password@bugs.example.test:443/rest\n[user:password@bugs.example.test]\napi_key=wrong\n[user:password@bugs.example.test:443]\napi_key=right\n",
+        Path::new("fixture"),
+    )
+    .unwrap();
+    let ipv6 = parse_sections(
+        "[DEFAULT]\nurl=http://[2001:db8::1]:80/rest\n[[2001:db8::1]]\napi_key=wrong\n[[2001:db8::1]:80]\napi_key=right\n",
+        Path::new("fixture"),
+    )
+    .unwrap();
+
+    assert_eq!(
+        resolved_servers(&userinfo).unwrap()[0].api_key.as_deref(),
+        Some("right")
+    );
+    assert_eq!(
+        resolved_servers(&ipv6).unwrap()[0].api_key.as_deref(),
+        Some("right")
+    );
 }
 
 #[test]
