@@ -631,6 +631,22 @@ async fn search_bugs_explicit_match_type_sends_boolean_chart() {
 }
 
 #[tokio::test]
+async fn search_bugs_rejects_negation_with_explicit_match_type_before_request() {
+    let mock = MockServer::start().await;
+    let client = test_client(&mock.uri());
+    let params = SearchParams {
+        whiteboard: vec!["!exact".into()],
+        whiteboard_type: Some(crate::types::bug::MatchType::Equals),
+        ..Default::default()
+    };
+
+    let err = client.search_bugs(&params).await.unwrap_err();
+    assert!(matches!(err, BzrError::InputValidation { .. }));
+    assert!(err.to_string().contains("--status-whiteboard-type"));
+    assert!(mock.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn search_bugs_mixed_positive_and_negated() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
