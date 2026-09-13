@@ -220,6 +220,44 @@ async fn search_bugs_negation_sends_boolean_chart() {
 }
 
 #[tokio::test]
+async fn search_bugs_explicit_match_type_sends_boolean_chart() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<string>status_whiteboard</string>"))
+        .and(body_string_contains("<string>equals</string>"))
+        .and(body_string_contains("<string>exact</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(xmlrpc_bug_response(2, "Exact")))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
+    let params = SearchParams {
+        whiteboard: vec!["exact".into()],
+        whiteboard_type: Some(crate::types::bug::MatchType::Equals),
+        ..Default::default()
+    };
+    assert_eq!(client.search_bugs(&params).await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn search_bugs_xmlrpc_rejects_negation_with_explicit_match_type_before_request() {
+    let mock = MockServer::start().await;
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
+    let params = SearchParams {
+        whiteboard: vec!["!exact".into()],
+        whiteboard_type: Some(crate::types::bug::MatchType::Equals),
+        ..Default::default()
+    };
+
+    let err = client.search_bugs(&params).await.unwrap_err();
+    assert!(matches!(err, BzrError::InputValidation { .. }));
+    assert!(err.to_string().contains("--status-whiteboard-type"));
+    assert!(mock.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn search_bugs_xmlrpc_role_negations_use_nowordssubstr() {
     let mock = MockServer::start().await;
     Mock::given(method("POST"))

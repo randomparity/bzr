@@ -123,6 +123,35 @@ fn parse_list_bzl_parity_field_filters() {
 }
 
 #[test]
+fn parse_list_match_type_filters() {
+    let list = list_args(&[
+        "bzr",
+        "bug",
+        "list",
+        "--whiteboard",
+        "exact",
+        "--status-whiteboard-type",
+        "equals",
+        "--url-type",
+        "regexp",
+        "--email-type",
+        "anywords",
+    ]);
+    assert_eq!(
+        list.match_types.status_whiteboard,
+        Some(crate::types::bug::MatchType::Equals)
+    );
+    assert_eq!(
+        list.match_types.url,
+        Some(crate::types::bug::MatchType::Regexp)
+    );
+    assert_eq!(
+        list.match_types.email,
+        Some(crate::types::bug::MatchType::AnyWords)
+    );
+}
+
+#[test]
 fn parse_list_negated_filter_value_is_passed_through() {
     let list = list_args(&["bzr", "bug", "list", "--status", "!CLOSED"]);
     assert_eq!(list.filters.status, vec!["!CLOSED"]);

@@ -84,6 +84,11 @@ impl XmlRpcClient {
 }
 
 fn validate_role_negations(params: &SearchParams) -> Result<()> {
+    if let Some((flag, value)) = params.invalid_explicit_match_type() {
+        return Err(BzrError::input(format!(
+            "{flag} cannot be combined with negated value '{value}'; select a negating match type instead"
+        )));
+    }
     let Some((flag, value)) = params.invalid_role_negation() else {
         return Ok(());
     };
@@ -96,6 +101,15 @@ fn add_vec_filters(rpc_params: &mut BTreeMap<String, Value>, params: &SearchPara
     let mut chart_idx = 1u32;
     for mapping in FIELD_MAPPINGS {
         let (positive, negated) = partition_filters(params.get_field(mapping.field));
+        if let Some(match_type) = params.match_type_for(mapping.field) {
+            for value in params.get_field(mapping.field) {
+                rpc_params.insert(format!("f{chart_idx}"), Value::from(mapping.internal_name));
+                rpc_params.insert(format!("o{chart_idx}"), Value::from(match_type.as_str()));
+                rpc_params.insert(format!("v{chart_idx}"), Value::from(value.as_str()));
+                chart_idx += 1;
+            }
+            continue;
+        }
         if !positive.is_empty() {
             let arr: Vec<Value> = positive.iter().map(|v| Value::from(*v)).collect();
             rpc_params.insert(mapping.struct_field.into(), Value::Array(arr));

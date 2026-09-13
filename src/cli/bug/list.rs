@@ -1,6 +1,8 @@
 use clap::Args;
 
-use crate::cli::bug::{BugActorFilterArgs, BugFilterArgs, FieldArgs, PageArgs, SortArgs};
+use crate::cli::bug::{
+    BugActorFilterArgs, BugFilterArgs, FieldArgs, MatchTypeArgs, PageArgs, SortArgs,
+};
 
 pub const LONG_ABOUT: &str = r#"List bugs that match the given filters.
 
@@ -66,6 +68,8 @@ pub(crate) struct ListArgs {
     pub filters: BugFilterArgs,
     #[command(flatten)]
     pub actor_filters: BugActorFilterArgs,
+    #[command(flatten)]
+    pub match_types: MatchTypeArgs,
     /// Filter by bug IDs
     #[arg(long)]
     pub id: Vec<u64>,

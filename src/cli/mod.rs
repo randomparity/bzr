@@ -15,6 +15,8 @@ mod template;
 mod user;
 
 pub(crate) use attachment::{AttachmentAction, UpdateArgs as AttachmentUpdateArgs, UploadArgs};
+#[cfg(test)]
+pub(crate) use bug::MatchTypeArgs;
 pub(crate) use bug::{
     AdjacencyArgs, CloneArgs, CloseArgs, CreateArgs, DupArgs, HistoryArgs, LinksArgs, ListArgs,
     MyArgs, ReopenArgs, ResolveArgs, SearchArgs, UpdateArgs, ViewArgs,

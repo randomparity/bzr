@@ -1,6 +1,6 @@
 use clap::{Args, Subcommand};
 
-use crate::types::bug::{FilterField, SearchParams, FIELD_MAPPINGS};
+use crate::types::bug::{FilterField, MatchType, SearchParams, FIELD_MAPPINGS};
 use crate::types::output::SortDirection;
 use crate::types::query::SavedQuery;
 
@@ -294,6 +294,28 @@ pub(crate) struct BugActorFilterArgs {
     /// Prefix with ! to exclude substring matches; ! alone is invalid.
     #[arg(long)]
     pub creator: Vec<String>,
+}
+
+/// Python-bugzilla-compatible boolean-chart operators for supported filters.
+#[derive(Args, Debug, Clone, Default)]
+pub(crate) struct MatchTypeArgs {
+    /// Match type for `--whiteboard` values. Cannot be combined with `!` values.
+    #[arg(long = "status-whiteboard-type")]
+    pub status_whiteboard: Option<MatchType>,
+    /// Match type for `--url` values. Cannot be combined with `!` values.
+    #[arg(id = "url-type", long = "url-type")]
+    pub url: Option<MatchType>,
+    /// Match type for assignee, creator, and QA contact values. Cannot be combined with `!` values.
+    #[arg(long = "email-type")]
+    pub email: Option<MatchType>,
+}
+
+impl MatchTypeArgs {
+    pub(crate) fn apply(&self, params: &mut SearchParams) {
+        params.whiteboard_type = self.status_whiteboard;
+        params.url_type = self.url;
+        params.email_type = self.email;
+    }
 }
 
 impl BugActorFilterArgs {

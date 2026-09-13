@@ -102,9 +102,36 @@ fn append_multi_value_params(
     params: &SearchParams,
 ) -> reqwest::RequestBuilder {
     for mapping in FIELD_MAPPINGS {
+        if params.match_type_for(mapping.field).is_some() {
+            continue;
+        }
         let (positive, _) = partition_filters(params.get_field(mapping.field));
         for v in positive {
             builder = builder.query(&[(mapping.struct_field, v)]);
+        }
+    }
+    builder
+}
+
+fn append_explicit_match_type_params(
+    mut builder: reqwest::RequestBuilder,
+    params: &SearchParams,
+) -> reqwest::RequestBuilder {
+    let mut idx = 1u32;
+    for mapping in FIELD_MAPPINGS {
+        let Some(match_type) = params.match_type_for(mapping.field) else {
+            continue;
+        };
+        for value in params.get_field(mapping.field) {
+            let f_key = format!("f{idx}");
+            let o_key = format!("o{idx}");
+            let v_key = format!("v{idx}");
+            builder = builder.query(&[
+                (&f_key, mapping.internal_name),
+                (&o_key, match_type.as_str()),
+                (&v_key, value),
+            ]);
+            idx += 1;
         }
     }
     builder
@@ -122,7 +149,18 @@ fn append_negated_params(
     mut builder: reqwest::RequestBuilder,
     params: &SearchParams,
 ) -> reqwest::RequestBuilder {
-    let mut idx = 1u32;
+    let mut idx = 1 + FIELD_MAPPINGS
+        .iter()
+        .filter(|mapping| params.match_type_for(mapping.field).is_some())
+        .map(|mapping| {
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "a CLI invocation cannot supply more than u32 boolean-chart values"
+            )]
+            let count = params.get_field(mapping.field).len() as u32;
+            count
+        })
+        .sum::<u32>();
     for mapping in FIELD_MAPPINGS {
         let (_, negated) = partition_filters(params.get_field(mapping.field));
         for v in negated {
@@ -297,6 +335,11 @@ impl BugzillaClient {
 }
 
 fn validate_role_negations(params: &SearchParams) -> Result<()> {
+    if let Some((flag, value)) = params.invalid_explicit_match_type() {
+        return Err(BzrError::input(format!(
+            "{flag} cannot be combined with negated value '{value}'; select a negating match type instead"
+        )));
+    }
     let Some((flag, value)) = params.invalid_role_negation() else {
         return Ok(());
     };
@@ -353,6 +396,7 @@ impl BugzillaClient {
 
         let mut req_builder = self.http.get(self.url("bug"));
         req_builder = append_multi_value_params(req_builder, params);
+        req_builder = append_explicit_match_type_params(req_builder, params);
         req_builder = append_negated_params(req_builder, params);
         req_builder = append_option_params(req_builder, params);
 
