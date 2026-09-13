@@ -3324,7 +3324,7 @@ run_rhbz_fields_fixture() (
         BZR_STDOUT_RAW="$COMPARE_EXCHANGE_DIR/bzr.raw"
         BZR_STDERR="$COMPARE_EXCHANGE_DIR/bzr.stderr"
         if [[ $RHBZ_FIELDS_FIXTURE_BZR_FAIL -eq 1 ]]; then
-            BZR_EXIT=2
+            BZR_EXIT=4
             : >"$BZR_STDOUT"
             : >"$BZR_STDOUT_RAW"
             printf '%s\n' "error: Bugzilla API error: The API for sub component excepts a hash (or dictionary)" >"$BZR_STDERR"
