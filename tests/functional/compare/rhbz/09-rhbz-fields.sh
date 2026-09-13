@@ -107,10 +107,10 @@ rhbz_fields_run() {
 rhbz_fields_run sub-components rhbz_sub_component \
     "$(jq -cn --arg component "$RHBZ_FIELDS_COMPONENT" --arg value "$RHBZ_FIELDS_SUB_COMPONENT" '{component:$component,sub_component:$value}')" \
     sub_components rh_sub_components \
-    '.bugs[0].sub_components | to_entries | any(.value[]; . == $expected)' \
+    '(.bugs[0].sub_components | [.. | strings | select(. == $expected)] | length) > 0' \
     "$RHBZ_FIELDS_SUB_COMPONENT" \
     "${RHBZ_FIELDS_SUB_COMPONENT}-bzr" \
-    '.bugs[0].sub_components | to_entries | any(.value[]; . == $expected)' \
+    '(.bugs[0].sub_components | [.. | strings | select(. == $expected)] | length) > 0' \
     "${RHBZ_FIELDS_SUB_COMPONENT}-bzr"
 
 rhbz_fields_run target-release rhbz_target_release \
