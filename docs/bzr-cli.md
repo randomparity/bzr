@@ -2968,6 +2968,11 @@ severity = "critical"
 
 ## Authentication
 
+For REST connections to `bugzilla.redhat.com`, bzr sends configured API keys as
+`Authorization: Bearer <key>`, matching Red Hat Bugzilla's documented API-key
+transport. Other hosts retain their configured or detected API-key header/query
+method; XML-RPC continues to place API keys in its request body.
+
 `bzr` authenticates using Bugzilla API keys when a command needs an identity or write access. Public Bugzilla servers can omit credentials for read-only commands; writes and identity-derived reads such as `whoami` and `bug my` fail fast until a credential source is configured. Prefer `--api-key-env` so the secret is resolved at runtime rather than stored in `~/.config/bzr/config.toml`. On Unix systems, `bzr` warns if the config directory or config file permissions are broader than owner-only access. On first credentialed use, it auto-detects whether your server supports header-based auth (`X-BUGZILLA-API-KEY`) or query parameter auth (`Bugzilla_api_key`), and caches the result.
 
 Detection probes endpoints in order:

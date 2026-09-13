@@ -183,6 +183,20 @@ declare -F r11_bearer_control >/dev/null || r11_bearer_control() {
         ok=1
     fi
     pybz_proxy_stop redhat || return 1
+    [[ $ok -eq 1 ]] || return 1
+    BZR_FUNC_REDHAT_MODE=bearer-auth redhat_shape_start "$BZ_PORT" || return 1
+    run_bzr_in_pybz config set-server r11-bearer \
+        --url "http://bugzilla.redhat.com:${REDHAT_SHAPE_PORT}" \
+        --api-key-env BZR_COMPARE_API_KEY --email "$COMPARE_ADMIN_EMAIL" \
+        --auth-method header --api rest
+    [[ $BZR_EXIT -eq 0 ]] || { redhat_shape_stop; return 1; }
+    run_bzr_in_pybz --server r11-bearer whoami
+    if [[ $BZR_EXIT -eq 0 ]] && r11_auth_evidence_is bearer "$REDHAT_SHAPE_LOG"; then
+        ok=1
+    else
+        ok=0
+    fi
+    redhat_shape_stop || return 1
     [[ $ok -eq 1 ]]
 }
 declare -F r11_parser_gap >/dev/null || r11_parser_gap() {
@@ -267,4 +281,4 @@ r11_gap_test 682 bugzillarc r11_bugzillarc_control precedence
 test_begin "client-certificate-surface-gap" "client certificate configuration"
 r11_gap_test 677 certificate r11_certificate_control
 test_begin "bearer-gap" "Red Hat Bearer API-key transport"
-r11_gap_test 678 bearer r11_bearer_control
+r11_pass_test r11_bearer_control
