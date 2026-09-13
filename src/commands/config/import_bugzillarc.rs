@@ -215,9 +215,11 @@ fn resolved_servers(sections: &Sections) -> Result<Vec<ImportedServer>> {
 }
 
 fn raw_authority(url: &str) -> &str {
-    url.split_once("://").map_or("", |(_, remainder)| {
-        remainder.split(['/', '?', '#']).next().unwrap_or_default()
-    })
+    url.split_once(':')
+        .and_then(|(_, remainder)| remainder.strip_prefix("//"))
+        .map_or("", |remainder| {
+            remainder.split(['/', '?', '#']).next().unwrap_or_default()
+        })
 }
 
 fn server_name(config: &Config, url: &str) -> String {

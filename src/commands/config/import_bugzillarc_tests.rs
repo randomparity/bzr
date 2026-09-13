@@ -148,6 +148,18 @@ fn hostname_sections_preserve_explicit_default_ports() {
         resolved_servers(&http).unwrap()[0].api_key.as_deref(),
         Some("right")
     );
+
+    let uppercase_scheme = parse_sections(
+        "[DEFAULT]\nurl=HTTPS://bugs.example.test:443/rest\n[bugs.example.test]\napi_key=wrong\n[bugs.example.test:443]\napi_key=right\n",
+        Path::new("fixture"),
+    )
+    .unwrap();
+    assert_eq!(
+        resolved_servers(&uppercase_scheme).unwrap()[0]
+            .api_key
+            .as_deref(),
+        Some("right")
+    );
 }
 
 #[test]
