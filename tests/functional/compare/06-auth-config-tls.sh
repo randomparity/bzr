@@ -288,12 +288,16 @@ r11_pass_test r11_login_control && {
 }
 test_begin "login-command-xmlrpc" "login and logout commands over XML-RPC"
 run_bzr config set-server r11-login-xmlrpc --url "$BZ_URL"
-[[ $BZR_EXIT -eq 0 ]] &&
+if [[ $BZR_EXIT -eq 0 ]] &&
     run_bzr --server r11-login-xmlrpc --api xmlrpc auth login \
         --email "$COMPARE_ADMIN_EMAIL" --password "$COMPARE_ADMIN_PASSWORD" &&
     [[ $BZR_EXIT -eq 0 ]] &&
     run_bzr --server r11-login-xmlrpc --api xmlrpc auth logout &&
-    [[ $BZR_EXIT -eq 0 ]] && test_pass || test_fail "XML-RPC auth login/logout failed"
+    [[ $BZR_EXIT -eq 0 ]]; then
+    test_pass
+else
+    test_fail "XML-RPC auth login/logout failed"
+fi
 test_begin "bugzillarc-import-gap" "bugzillarc import"
 r11_gap_test 682 bugzillarc r11_bugzillarc_control precedence
 test_begin "client-certificate-surface-gap" "client certificate configuration"
