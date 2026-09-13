@@ -226,6 +226,7 @@ fn saved_query_has_filters_for_each_individual_field() {
             q.qa_contact.push("X".into());
         }),
         ("url", |q: &mut SavedQuery| q.url.push("X".into())),
+        ("tags", |q: &mut SavedQuery| q.tags.push("X".into())),
     ];
     for (name, setter) in cases {
         let mut q = SavedQuery::default();
@@ -322,6 +323,7 @@ fn saved_query_into_search_params_forwards_158_fields() {
         resolution: vec!["FIXED".into()],
         qa_contact: vec!["qa@example.com".into()],
         url: vec!["github.com/foo".into()],
+        tags: vec!["triage".into()],
         ..SavedQuery::default()
     };
     let p = q.into_search_params();
@@ -333,6 +335,7 @@ fn saved_query_into_search_params_forwards_158_fields() {
     assert_eq!(p.resolution, vec!["FIXED"]);
     assert_eq!(p.qa_contact, vec!["qa@example.com"]);
     assert_eq!(p.url, vec!["github.com/foo"]);
+    assert_eq!(p.tags, vec!["triage"]);
 }
 
 #[test]
@@ -346,6 +349,7 @@ fn saved_query_toml_roundtrip_preserves_158_fields() {
         resolution: vec!["FIXED".into()],
         qa_contact: vec!["qa@example.com".into()],
         url: vec!["github.com/foo".into()],
+        tags: vec!["triage".into()],
         ..SavedQuery::default()
     };
     let toml_str = toml::to_string(&q).unwrap();
@@ -358,6 +362,7 @@ fn saved_query_toml_roundtrip_preserves_158_fields() {
     assert_eq!(parsed.resolution, vec!["FIXED"]);
     assert_eq!(parsed.qa_contact, vec!["qa@example.com"]);
     assert_eq!(parsed.url, vec!["github.com/foo"]);
+    assert_eq!(parsed.tags, vec!["triage"]);
 }
 
 #[test]
@@ -368,4 +373,5 @@ product = ["Firefox"]
     let parsed: SavedQuery = toml::from_str(toml_str).unwrap();
     assert!(parsed.whiteboard.is_empty());
     assert!(parsed.url.is_empty());
+    assert!(parsed.tags.is_empty());
 }

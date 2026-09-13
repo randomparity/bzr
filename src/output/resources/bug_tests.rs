@@ -1271,7 +1271,7 @@ fn validate_table_columns_ok_for_all_blank_include() {
 /// The serde key sequence of `Bug`, in struct-declaration order. Locks the
 /// `preserve_order` decision (Finding 4) and is the reference for the registry
 /// drift guard (Finding 3).
-const BUG_STRUCT_KEY_ORDER: [&str; 26] = [
+const BUG_STRUCT_KEY_ORDER: [&str; 27] = [
     "id",
     "summary",
     "status",
@@ -1290,6 +1290,7 @@ const BUG_STRUCT_KEY_ORDER: [&str; 26] = [
     "url",
     "whiteboard",
     "keywords",
+    "tags",
     "blocks",
     "depends_on",
     "cc",

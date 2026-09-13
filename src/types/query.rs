@@ -82,6 +82,8 @@ pub struct SavedQuery {
     /// Filter by URL field substring (repeatable).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub url: Vec<String>,
+    /// Filter by personal bug tags (repeatable).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
     /// Persisted Bugzilla `order` clause (from `query save --sort/--order`).
     /// Overridden per-run by `query run --sort`.
@@ -140,6 +142,8 @@ struct SavedQueryWire<'a> {
     qa_contact: &'a Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     url: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    tags: &'a Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     order: &'a Option<String>,
 }
@@ -172,6 +176,7 @@ impl Serialize for SavedQuery {
             resolution: &self.resolution,
             qa_contact: &self.qa_contact,
             url: &self.url,
+            tags: &self.tags,
             order: &self.order,
         }
         .serialize(serializer)
