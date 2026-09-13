@@ -117,7 +117,33 @@ fn hostname_sections_do_not_match_a_host_substring() {
 #[test]
 fn hostname_sections_match_the_exact_port() {
     let sections = parse_sections(
-        "[DEFAULT]\nurl=https://bugs.example.test:8443/rest\n[bugs.example.test]\napi_key=wrong\n[bugs.example.test:8443]\napi_key=right\n",
+        "[DEFAULT]\nurl=https://bugs.example.test:8443/rest\n[bugs.example.test]\napi_key=wrong\n[bugs.example.test:8444]\napi_key=also-wrong\n[bugs.example.test:8443]\napi_key=right\n",
+        Path::new("fixture"),
+    )
+    .unwrap();
+
+    let servers = resolved_servers(&sections).unwrap();
+
+    assert_eq!(servers[0].api_key.as_deref(), Some("right"));
+}
+
+#[test]
+fn hostname_sections_preserve_userinfo() {
+    let sections = parse_sections(
+        "[DEFAULT]\nurl=https://user:password@bugs.example.test/rest\n[bugs.example.test]\napi_key=wrong\n[user:password@bugs.example.test]\napi_key=right\n",
+        Path::new("fixture"),
+    )
+    .unwrap();
+
+    let servers = resolved_servers(&sections).unwrap();
+
+    assert_eq!(servers[0].api_key.as_deref(), Some("right"));
+}
+
+#[test]
+fn hostname_sections_preserve_ipv6_brackets() {
+    let sections = parse_sections(
+        "[DEFAULT]\nurl=https://[2001:db8::1]:8443/rest\n[[2001:db8::1]]\napi_key=wrong\n[[2001:db8::1]:8443]\napi_key=right\n",
         Path::new("fixture"),
     )
     .unwrap();
