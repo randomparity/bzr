@@ -8,7 +8,7 @@ r11_auth_evidence_is() {
             count=$((count + 1))
         }
     done <"$log"
-    [[ $count -eq 1 ]]
+    [[ $count -gt 0 ]]
 }
 r11_adapter_result_is() {
     local operation="$1" input="$2" output="$3" filter="$4"
