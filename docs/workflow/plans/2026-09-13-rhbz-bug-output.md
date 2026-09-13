@@ -5,9 +5,9 @@
    XML-RPC decoding, and field projection.
 2. Add sibling Rust tests that preserve empty and multi-value server shapes and
    reject an unrelated non-`cf_` name.
-3. Extend the RHBZ comparison phase so `bzr bug view` reads its write results
-   in JSON and NDJSON: assert a fresh bug's empty `target_release` array and
-   a server-controlled multi-value `sub_components` object before the existing
-   populated write-to-read checks.
+3. Extend the RHBZ comparison phase so `bzr bug view` reads server states in
+   JSON and NDJSON: assert a fresh bug's empty `target_release` array and a
+   controlled two-value `target_release` array before existing populated
+   readback checks.
 4. Document the named RHBZ extension fields and stock absence behavior.
 5. Run focused tests, lint, the quiet suite, and RHBZ functional coverage.
