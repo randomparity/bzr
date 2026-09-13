@@ -467,6 +467,25 @@ fn value_to_bug_normalizes_component_and_version_scalars_and_arrays() {
         assert_eq!(bug.component, expected);
         assert_eq!(bug.version, expected);
     }
+
+    let mut payload = BTreeMap::new();
+    payload.insert("id".into(), Value::Int(42));
+    payload.insert(
+        "component".into(),
+        Value::Array(vec![
+            Value::String("Backend".into()),
+            Value::String("CLI".into()),
+        ]),
+    );
+    payload.insert("version".into(), Value::String("40".into()));
+
+    let bug = value_to_bug(&Value::Struct(payload)).unwrap();
+
+    assert_eq!(
+        bug.component,
+        Some(vec!["Backend".to_string(), "CLI".to_string()])
+    );
+    assert_eq!(bug.version, Some(vec!["40".to_string()]));
 }
 
 #[test]
