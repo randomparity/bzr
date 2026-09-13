@@ -151,6 +151,33 @@ if [[ -n "$BUG1" ]]; then
     if assert_success && assert_json_exists '.id' && assert_json_exists '.summary'; then test_pass; fi
 else test_skip "no BUG1"; fi
 
+# Personal tags are only mutated through XML-RPC. Exercise the live server's
+# request and response shapes, then prove the tag is projected and searchable.
+test_begin "bug-tag-xmlrpc-round-trip" "bug tag XML-RPC mutation, projection, and filtering"
+if [[ -n "$BUG1" ]]; then
+    _BUG_TAG="functional-tag-${BUG1}"
+    run_bzr --api xmlrpc bug tag "$BUG1" --add "$_BUG_TAG"
+    if assert_success; then
+        run_bzr --api xmlrpc bug view "$BUG1" --fields tags
+        if assert_success &&
+            jq -e --arg tag "$_BUG_TAG" '.tags | index($tag) != null' "$BZR_STDOUT" >/dev/null; then
+            run_bzr --api xmlrpc bug list --tag "$_BUG_TAG" --fields id,tags
+            if assert_success &&
+                [[ "$(jq --argjson id "$BUG1" '[.[] | select(.id == $id)] | length' "$BZR_STDOUT")" == 1 ]]; then
+                run_bzr --api xmlrpc bug tag "$BUG1" --remove "$_BUG_TAG"
+                if assert_success; then test_pass; fi
+            fi
+        fi
+    fi
+    unset _BUG_TAG
+else test_skip "no BUG1"; fi
+
+test_begin "bug-tag-no-changes-exit-7" "bug tag requires an add or remove value"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug tag "$BUG1"
+    if assert_exit_code 7 && assert_stderr_contains "no bug tag changes"; then test_pass; fi
+else test_skip "no BUG1"; fi
+
 test_begin "bug-view-time-fields-round-trip" "bug update/view time fields round-trip"
 if [[ -n "$BUG1" ]]; then
     run_bzr bug update "$BUG1" --estimated-time 8 --remaining-time 5
