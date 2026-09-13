@@ -69,7 +69,7 @@ async fn fault_response_maps_to_error() {
         .await;
 
     let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
-    let err = client.get_bug("1").await.unwrap_err();
+    let err = client.get_bug("1", None, None).await.unwrap_err();
     let msg = err.to_string();
     assert!(msg.contains("102"), "should contain fault code: {msg}");
     assert!(
@@ -88,7 +88,7 @@ async fn http_error_maps_to_xmlrpc_error() {
         .await;
 
     let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
-    let err = client.get_bug("1").await.unwrap_err();
+    let err = client.get_bug("1", None, None).await.unwrap_err();
     let msg = err.to_string();
     assert!(msg.contains("500"), "should contain status code: {msg}");
 }

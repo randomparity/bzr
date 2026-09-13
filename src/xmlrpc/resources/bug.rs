@@ -12,6 +12,23 @@ use crate::xmlrpc::resources::mappers::{
 };
 
 impl XmlRpcClient {
+    pub async fn update_bug_tags(&self, id: u64, add: &[String], remove: &[String]) -> Result<()> {
+        let mut params = BTreeMap::new();
+        params.insert("ids".into(), Value::Array(vec![xmlrpc_id(id, "bug ID")?]));
+        let mut tags = BTreeMap::new();
+        tags.insert(
+            "add".into(),
+            Value::Array(add.iter().map(|tag| Value::from(tag.as_str())).collect()),
+        );
+        tags.insert(
+            "remove".into(),
+            Value::Array(remove.iter().map(|tag| Value::from(tag.as_str())).collect()),
+        );
+        params.insert("tags".into(), Value::Struct(tags));
+        self.call("Bug.update_tags", params).await?;
+        Ok(())
+    }
+
     pub async fn search_bugs(&self, params: &SearchParams) -> Result<Vec<Bug>> {
         validate_role_negations(params)?;
         let mut rpc_params = BTreeMap::new();
@@ -59,7 +76,12 @@ impl XmlRpcClient {
         extract_bugs(&result)
     }
 
-    pub async fn get_bug(&self, id: &str) -> Result<Bug> {
+    pub async fn get_bug(
+        &self,
+        id: &str,
+        include_fields: Option<&str>,
+        exclude_fields: Option<&str>,
+    ) -> Result<Bug> {
         let mut rpc_params = BTreeMap::new();
 
         // Try parsing as integer ID first, fall back to alias.
@@ -69,6 +91,9 @@ impl XmlRpcClient {
             rpc_params.insert("ids".into(), Value::Array(vec![Value::Int(numeric_id)]));
         } else {
             rpc_params.insert("ids".into(), Value::Array(vec![Value::from(id)]));
+        }
+        if include_fields.is_some() || exclude_fields.is_some() {
+            add_field_lists_for_get(&mut rpc_params, include_fields, exclude_fields);
         }
 
         let result = self.call("Bug.get", rpc_params).await?;
@@ -80,6 +105,27 @@ impl XmlRpcClient {
             });
         }
         Ok(bugs.swap_remove(0))
+    }
+}
+
+fn add_field_lists_for_get(
+    rpc_params: &mut BTreeMap<String, Value>,
+    include_fields: Option<&str>,
+    exclude_fields: Option<&str>,
+) {
+    if let Some(include_fields) = include_fields {
+        let fields = include_fields
+            .split(',')
+            .map(|field| Value::from(field.trim()))
+            .collect();
+        rpc_params.insert("include_fields".into(), Value::Array(fields));
+    }
+    if let Some(exclude_fields) = exclude_fields {
+        let fields = exclude_fields
+            .split(',')
+            .map(|field| Value::from(field.trim()))
+            .collect();
+        rpc_params.insert("exclude_fields".into(), Value::Array(fields));
     }
 }
 
@@ -216,6 +262,7 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         url: get_nonempty_str(m, "url"),
         whiteboard: get_nonempty_str(m, "whiteboard"),
         keywords: get_str_array(m, "keywords"),
+        tags: get_str_array(m, "tags"),
         blocks: get_int_array(m, "blocks"),
         depends_on: get_int_array(m, "depends_on"),
         cc: get_str_array(m, "cc"),

@@ -27,6 +27,7 @@ fn clear_query_field(saved_query: &mut SavedQuery, field: &str) -> Result<()> {
         "resolution" => saved_query.resolution.clear(),
         "qa-contact" => saved_query.qa_contact.clear(),
         "url" => saved_query.url.clear(),
+        "tag" => saved_query.tags.clear(),
         "search" => saved_query.quicksearch = None,
         "limit" => saved_query.limit = None,
         "fields" => saved_query.fields = None,
