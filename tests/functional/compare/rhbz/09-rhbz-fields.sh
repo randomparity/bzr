@@ -105,7 +105,7 @@ rhbz_fields_run() {
 }
 
 rhbz_fields_run sub-components rhbz_sub_component \
-    "$(jq -cn --arg value "$RHBZ_FIELDS_SUB_COMPONENT" '{sub_component:$value}')" \
+    "$(jq -cn --arg component "$RHBZ_FIELDS_COMPONENT" --arg value "$RHBZ_FIELDS_SUB_COMPONENT" '{component:$component,sub_component:$value}')" \
     sub_components rh_sub_components \
     '.bugs[0].sub_components | any(.[]; (if type == "object" then .name else . end) == $expected)' \
     "$RHBZ_FIELDS_SUB_COMPONENT" \

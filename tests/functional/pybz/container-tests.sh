@@ -2039,8 +2039,8 @@ run_adapter_fixture() {
         '{"result":{"bugs":[{"id":201,"request":{"builder":"query","tags":["probe"]}}],"update":{"add":["probe"],"ids":[36],"remove":null}},"transport":"XMLRPC"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" rhbz-sub-component \
         rhbz_sub_component \
-        '{"api_key":"fixture-secret","bug_id":38,"sub_component":"Fixture Subcomponent"}' \
-        '{"result":{"ids":[38],"update":{"builder":"update","sub_component":"Fixture Subcomponent"}},"transport":"XMLRPC"}'
+        '{"api_key":"fixture-secret","bug_id":38,"component":"Fixture Component","sub_component":"Fixture Subcomponent"}' \
+        '{"result":{"ids":[38],"update":{"builder":"update","component":"Fixture Component","sub_component":"Fixture Subcomponent"}},"transport":"XMLRPC"}'
     assert_adapter_case "$runtime" "$sidecar" "$config_dir" rhbz-target-release \
         rhbz_target_release \
         '{"api_key":"fixture-secret","bug_id":38,"target_release":"Fixture Release"}' \
@@ -2055,16 +2055,20 @@ run_adapter_fixture() {
         '{"result":{"ids":[38],"update":{"builder":"update","devel_whiteboard":"devel","internal_whiteboard":"internal","qa_whiteboard":"qa"}},"transport":"XMLRPC"}'
     assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
         rhbz-sub-component-extra rhbz_sub_component \
-        '{"api_key":"fixture-secret","bug_id":38,"sub_component":"Fixture Subcomponent","extra":true}' \
+        '{"api_key":"fixture-secret","bug_id":38,"component":"Fixture Component","sub_component":"Fixture Subcomponent","extra":true}' \
         'unexpected request fields: extra'
     assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
         rhbz-sub-component-missing rhbz_sub_component \
-        '{"api_key":"fixture-secret","bug_id":38}' \
+        '{"api_key":"fixture-secret","bug_id":38,"component":"Fixture Component"}' \
         'missing request fields: sub_component'
     assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
         rhbz-sub-component-invalid rhbz_sub_component \
-        '{"api_key":"fixture-secret","bug_id":38,"sub_component":false}' \
+        '{"api_key":"fixture-secret","bug_id":38,"component":"Fixture Component","sub_component":false}' \
         'sub_component must be a non-empty string'
+    assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
+        rhbz-sub-component-component-missing rhbz_sub_component \
+        '{"api_key":"fixture-secret","bug_id":38,"sub_component":"Fixture Subcomponent"}' \
+        'missing request fields: component'
     assert_adapter_rejection "$runtime" "$sidecar" "$config_dir" \
         rhbz-target-release-extra rhbz_target_release \
         '{"api_key":"fixture-secret","bug_id":38,"target_release":"Fixture Release","extra":true}' \

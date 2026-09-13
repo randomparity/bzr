@@ -281,6 +281,10 @@ def _bug_tags(client, request):
 def _rhbz_update(client, request, fields):
     _validate_keys(request, ("api_key", "bug_id", *fields))
     bug_id = _required_id(request)
+    # The sidecar shares the RHBZ container network namespace, so its loopback
+    # URL cannot satisfy python-bugzilla's hostname-only Red Hat detection.
+    # These operations are deliberately RHBZ-only and need its converters.
+    client._is_redhat_bugzilla = True
     update = client.build_update(
         **{field: _required_text(request, field) for field in fields}
     )
@@ -288,7 +292,14 @@ def _rhbz_update(client, request, fields):
 
 
 def _rhbz_sub_component(client, request):
-    return _rhbz_update(client, request, ("sub_component",))
+    _validate_keys(request, ("api_key", "bug_id", "component", "sub_component"))
+    bug_id = _required_id(request)
+    client._is_redhat_bugzilla = True
+    update = client.build_update(
+        component=_required_text(request, "component"),
+        sub_component=_required_text(request, "sub_component"),
+    )
+    return client.update_bugs([bug_id], update)
 
 
 def _rhbz_target_release(client, request):
