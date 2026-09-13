@@ -62,6 +62,15 @@ enum PreparedAuth {
     Token(String),
 }
 
+impl PreparedAuth {
+    fn is_empty(&self) -> bool {
+        match self {
+            Self::Header(value) => value.is_empty(),
+            Self::QueryParam(value) | Self::Token(value) => value.is_empty(),
+        }
+    }
+}
+
 /// Bugzilla API client for REST, XML-RPC, and Hybrid transport modes.
 ///
 /// The client owns the shared HTTP stack, authentication material, API-mode
@@ -252,9 +261,15 @@ impl BugzillaClient {
                         .to_owned(),
                 )
             })?;
-        let auth = self.auth.as_ref().ok_or_else(|| {
-            BzrError::Auth("current credential proof requires a configured auth method".to_owned())
-        })?;
+        let auth = self
+            .auth
+            .as_ref()
+            .filter(|auth| !auth.is_empty())
+            .ok_or_else(|| {
+                BzrError::Auth(
+                    "current credential proof requires a configured credential".to_owned(),
+                )
+            })?;
 
         auth::prove_valid_login_current_method(&self.strict_http, &self.base_url, login, auth).await
     }
