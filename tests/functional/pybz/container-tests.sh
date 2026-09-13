@@ -829,7 +829,7 @@ run_lifecycle_phase_fixture() (
             fi
             cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
             printf '%s\n' "$diagnostic" >"$BZR_STDERR"
-            BZR_EXIT=2
+            BZR_EXIT=4
             [[ ${LIFECYCLE_EXPECTED_DIAGNOSTIC_EXIT_ONE:-0} -eq 0 ]] || BZR_EXIT=1
             return 0
         fi
@@ -3327,7 +3327,7 @@ run_rhbz_fields_fixture() (
             BZR_EXIT=2
             : >"$BZR_STDOUT"
             : >"$BZR_STDOUT_RAW"
-            printf "error: unexpected argument '--field' found\n" >"$BZR_STDERR"
+            printf '%s\n' "error: Bugzilla API error: The API for sub component excepts a hash (or dictionary)" >"$BZR_STDERR"
             return 0
         fi
         BZR_EXIT=0

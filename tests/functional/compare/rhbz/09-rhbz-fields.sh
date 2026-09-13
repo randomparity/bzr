@@ -82,9 +82,14 @@ rhbz_fields_probe_bzr() {
         test_pass
         return 0
     fi
-    test_fail "bzr $name probe did not persist its value"
-    resource_gap_allow
-    resource_expect_gap 775
+    if [[ $name == sub-components && $BZR_EXIT -eq 4 ]] &&
+        grep -Fq "The API for sub component excepts a hash (or dictionary)" "$BZR_STDERR"; then
+        test_fail "bzr $name uses an unsupported RHBZ field shape"
+        resource_gap_allow
+        resource_expect_gap 775
+    else
+        test_fail "bzr $name probe did not persist its value"
+    fi
 }
 
 rhbz_fields_run() {
