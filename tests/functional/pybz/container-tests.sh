@@ -1174,7 +1174,7 @@ run_parity_report_fixture() {
         '| bugzillarc URL-substring section | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/bugzillarc-substring-section` |'
         '| Disable TLS verification | `--server-tls-insecure` | parity | `compare/06-auth-config-tls/nosslverify` |'
         '| Login-token request transport | persisted `token` configuration | parity | `compare/06-auth-config-tls/token-transport-gap` |'
-        '| Login and logout commands | no equivalent | expected gap (#681) | `compare/06-auth-config-tls/login-command-gap` |'
+        '| Login and logout commands | `bzr auth login`, `bzr auth logout` | parity | `compare/06-auth-config-tls/login-command-gap` |'
         '| bugzillarc API-key import | `bzr config import-bugzillarc` | parity; username/password and client certificates are reported unsupported | `compare/06-auth-config-tls/bugzillarc-import` |'
         '| Client certificate configuration | no equivalent | surface gap (#677) | `compare/06-auth-config-tls/client-certificate-surface-gap` |'
         '| Red Hat Bearer API-key transport | automatic REST transport for `bugzilla.redhat.com` | parity | `compare/06-auth-config-tls/bearer-gap` |'
