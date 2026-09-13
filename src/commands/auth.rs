@@ -37,6 +37,7 @@ pub(crate) async fn execute(
                 })?;
                 ensure_token_slot(server, name)?;
                 server.token = Some(token);
+                server.email = Some(email.clone());
                 Ok(())
             })?;
             write_result(

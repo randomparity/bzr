@@ -61,6 +61,44 @@ test_begin "server-auto-whoami" "--server auto whoami"
 run_bzr_raw --json --server auto whoami
 if assert_success && assert_json_exists '.id'; then test_pass; fi
 
+test_begin "named-login-old-server-identity" "named login supports whoami and bug my on 5.0/5.2"
+case "$BZ_VERSION" in
+bz50 | bz52)
+  _SA_LOGIN_IDENTITY_FAIL=""
+  run_bzr config set-server login-identity --url "$BZ_URL"
+  if [[ $BZR_EXIT -ne 0 ]]; then
+    _SA_LOGIN_IDENTITY_FAIL="config set-server exited $BZR_EXIT"
+  else
+    run_bzr --server login-identity auth login --email "$ADMIN_EMAIL" --password "$ADMIN_PASSWORD"
+    if [[ $BZR_EXIT -ne 0 ]]; then
+      _SA_LOGIN_IDENTITY_FAIL="auth login exited $BZR_EXIT"
+    else
+      run_bzr --server login-identity whoami
+      if [[ $BZR_EXIT -ne 0 ]]; then
+        _SA_LOGIN_IDENTITY_FAIL="whoami fallback exited $BZR_EXIT"
+      else
+        run_bzr --server login-identity bug my --limit 1
+        if [[ $BZR_EXIT -ne 0 ]]; then
+          _SA_LOGIN_IDENTITY_FAIL="bug my fallback exited $BZR_EXIT"
+        else
+          run_bzr --server login-identity auth logout
+          if [[ $BZR_EXIT -ne 0 ]]; then
+            _SA_LOGIN_IDENTITY_FAIL="auth logout exited $BZR_EXIT"
+          fi
+        fi
+      fi
+    fi
+  fi
+  if [[ -z $_SA_LOGIN_IDENTITY_FAIL ]]; then
+    test_pass
+  else
+    test_fail "$_SA_LOGIN_IDENTITY_FAIL"
+  fi
+  unset _SA_LOGIN_IDENTITY_FAIL
+  ;;
+*) test_skip "identity fallback is specific to Bugzilla 5.0/5.2" ;;
+esac
+
 test_begin "fixture-flag-types-exist" "fixture flag types exist"
 _FLAG_SQL=$(mktemp /tmp/bzr-func-flags.XXXXXX.sql)
 cat >"$_FLAG_SQL" <<'SQL'
