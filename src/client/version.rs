@@ -62,14 +62,16 @@ async fn detect_version_and_mode_inner(
     let url = format!("{base}/rest/version");
 
     let req = match auth {
-        Some((api_key, auth_method)) => match apply_auth(http.get(&url), api_key, auth_method) {
-            Ok(r) => r,
-            Err(e) => {
-                tracing::debug!("auth setup failed for version probe: {e}");
-                // Fall back to unauthenticated request — version endpoint is often public.
-                http.get(&url)
+        Some((api_key, auth_method)) => {
+            match apply_auth(http.get(&url), base_url, api_key, auth_method) {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::debug!("auth setup failed for version probe: {e}");
+                    // Fall back to unauthenticated request — version endpoint is often public.
+                    http.get(&url)
+                }
             }
-        },
+        }
         None => http.get(&url),
     };
 

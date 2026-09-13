@@ -50,6 +50,9 @@ impl BugzillaClient {
             Some(PreparedAuth::QueryParam(key)) => {
                 crate::bugzilla_auth::apply_auth_to_request(builder, None, Some(key))
             }
+            Some(PreparedAuth::Bearer(value)) => {
+                builder.header(reqwest::header::AUTHORIZATION, value.clone())
+            }
             Some(PreparedAuth::Token(token)) => {
                 crate::bugzilla_auth::apply_token_to_request(builder, token)
             }

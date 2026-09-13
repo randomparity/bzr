@@ -56,6 +56,28 @@ fn apply_auth_adds_query_param_credentials() {
 }
 
 #[test]
+fn red_hat_client_overrides_pinned_query_auth_with_bearer() {
+    let client = test_client_query_param("https://bugzilla.redhat.com");
+    let request = client
+        .apply_auth(client.http.get(client.url("bug")))
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        request
+            .headers()
+            .get(reqwest::header::AUTHORIZATION)
+            .unwrap(),
+        "Bearer test-key"
+    );
+    assert!(request
+        .headers()
+        .get(crate::bugzilla_auth::AUTH_HEADER_NAME)
+        .is_none());
+    assert!(request.url().query().is_none());
+}
+
+#[test]
 fn token_client_adds_only_bugzilla_token_query_auth() {
     let client = BugzillaClient::new(BugzillaClientConfig {
         base_url: "https://bugzilla.example.com",

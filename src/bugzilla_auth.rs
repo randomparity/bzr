@@ -2,8 +2,26 @@ use std::cell::RefCell;
 
 /// Bugzilla's non-standard auth header (not `Authorization`).
 pub(crate) const AUTH_HEADER_NAME: &str = "X-BUGZILLA-API-KEY";
+/// Red Hat Bugzilla's documented REST API-key destination.
+pub(crate) const RED_HAT_BUGZILLA_HOST: &str = "bugzilla.redhat.com";
 /// Bugzilla's query-param auth key, used by servers that reject header auth.
 pub(crate) const AUTH_QUERY_PARAM: &str = "Bugzilla_api_key";
+
+/// Whether a resolved REST base URL is the one documented Red Hat production
+/// endpoint. This parses the URL instead of trusting a substring in user input.
+pub(crate) fn uses_red_hat_bearer_auth(base_url: &str) -> bool {
+    reqwest::Url::parse(base_url)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_owned))
+        .is_some_and(|host| host.eq_ignore_ascii_case(RED_HAT_BUGZILLA_HOST))
+}
+
+pub(crate) fn bearer_header_value(
+    api_key: &str,
+) -> crate::error::Result<reqwest::header::HeaderValue> {
+    reqwest::header::HeaderValue::from_str(&format!("Bearer {api_key}"))
+        .map_err(|_| crate::error::BzrError::config("API key contains invalid header characters"))
+}
 /// Bugzilla login-token query parameter, supported by REST only.
 pub(crate) const TOKEN_QUERY_PARAM: &str = "Bugzilla_token";
 
@@ -77,9 +95,16 @@ pub(crate) fn apply_token_to_request(
 /// API key contains characters invalid for HTTP headers.
 pub(crate) fn apply_auth(
     builder: reqwest::RequestBuilder,
+    base_url: &str,
     api_key: &str,
     method: crate::types::transport::AuthMethod,
 ) -> crate::error::Result<reqwest::RequestBuilder> {
+    if uses_red_hat_bearer_auth(base_url) {
+        return Ok(builder.header(
+            reqwest::header::AUTHORIZATION,
+            bearer_header_value(api_key)?,
+        ));
+    }
     match method {
         crate::types::transport::AuthMethod::Header => {
             let val = reqwest::header::HeaderValue::from_str(api_key).map_err(|_| {

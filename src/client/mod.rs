@@ -59,13 +59,14 @@ pub(crate) fn parse_adjacency_numeric(requested: &str) -> Option<i64> {
 enum PreparedAuth {
     Header(HeaderValue),
     QueryParam(String),
+    Bearer(HeaderValue),
     Token(String),
 }
 
 impl PreparedAuth {
     fn is_empty(&self) -> bool {
         match self {
-            Self::Header(value) => value.is_empty(),
+            Self::Header(value) | Self::Bearer(value) => value.is_empty(),
             Self::QueryParam(value) | Self::Token(value) => value.is_empty(),
         }
     }
@@ -165,36 +166,43 @@ impl BugzillaClient {
             ));
         }
 
-        let auth = match (credential, token, auth_method) {
-            (Some(key), None, Some(AuthMethod::Header)) => {
-                let value = HeaderValue::from_str(key)
-                    .map_err(|_| BzrError::config("invalid API key characters"))?;
-                Some(PreparedAuth::Header(value))
-            }
-            (Some(key), None, Some(AuthMethod::QueryParam)) => {
-                Some(PreparedAuth::QueryParam(key.to_string()))
-            }
-            (None, Some(token), None) => Some(PreparedAuth::Token(token.to_string())),
-            (None, Some(_), Some(_)) => {
-                return Err(BzrError::config(
-                    "internal: login token must not use an API key auth method",
-                ));
-            }
-            (None, None, None) => None,
-            (Some(_), Some(_), _) => {
-                return Err(BzrError::config(
-                    "internal: API key and token both provided",
-                ));
-            }
-            (Some(_), None, None) => {
-                return Err(BzrError::config(
-                    "internal: credential provided without detected auth method",
-                ));
-            }
-            (None, None, Some(_)) => {
-                return Err(BzrError::config(
-                    "internal: auth method provided without credential",
-                ));
+        let auth = if token.is_none() && crate::bugzilla_auth::uses_red_hat_bearer_auth(base_url) {
+            credential
+                .map(crate::bugzilla_auth::bearer_header_value)
+                .transpose()?
+                .map(PreparedAuth::Bearer)
+        } else {
+            match (credential, token, auth_method) {
+                (Some(key), None, Some(AuthMethod::Header)) => {
+                    let value = HeaderValue::from_str(key)
+                        .map_err(|_| BzrError::config("invalid API key characters"))?;
+                    Some(PreparedAuth::Header(value))
+                }
+                (Some(key), None, Some(AuthMethod::QueryParam)) => {
+                    Some(PreparedAuth::QueryParam(key.to_string()))
+                }
+                (None, Some(token), None) => Some(PreparedAuth::Token(token.to_string())),
+                (None, Some(_), Some(_)) => {
+                    return Err(BzrError::config(
+                        "internal: login token must not use an API key auth method",
+                    ));
+                }
+                (None, None, None) => None,
+                (Some(_), Some(_), _) => {
+                    return Err(BzrError::config(
+                        "internal: API key and token both provided",
+                    ));
+                }
+                (Some(_), None, None) => {
+                    return Err(BzrError::config(
+                        "internal: credential provided without detected auth method",
+                    ));
+                }
+                (None, None, Some(_)) => {
+                    return Err(BzrError::config(
+                        "internal: auth method provided without credential",
+                    ));
+                }
             }
         };
 

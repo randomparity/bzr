@@ -322,6 +322,17 @@ async fn detect_auth_method(
 ) -> Result<DetectedAuthMethod> {
     let base = base_url.trim_end_matches('/');
 
+    // The Red Hat endpoint documents Bearer as its REST API-key transport.
+    // Avoid trying either standard method first: a query probe would expose a
+    // key in a URL and a header probe is not the documented scheme. The version
+    // probe and constructed client use Bearer through the shared policy.
+    if crate::bugzilla_auth::uses_red_hat_bearer_auth(base) {
+        return Ok(DetectedAuthMethod {
+            method: AuthMethod::Header,
+            probed: false,
+        });
+    }
+
     if !base.starts_with("https://") {
         tracing::warn!(
             url = base,
