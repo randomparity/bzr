@@ -36,6 +36,7 @@ impl<'a> From<&'a UpdateUserParams> for UpdateUserRequest<'a> {
 
 impl BugzillaClient {
     pub async fn login(&self, email: &str, password: &str, restrict_login: bool) -> Result<String> {
+        crate::bugzilla_auth::register_active_credential(password);
         match self.api_mode {
             ApiMode::Rest => self.rest_login(email, password, restrict_login).await,
             ApiMode::XmlRpc => {
@@ -56,6 +57,7 @@ impl BugzillaClient {
     }
 
     pub async fn logout(&self, token: &str) -> Result<()> {
+        crate::bugzilla_auth::register_active_credential(token);
         match self.api_mode {
             ApiMode::Rest => self.rest_logout(token).await,
             ApiMode::XmlRpc => self.xmlrpc_client().logout(token).await,

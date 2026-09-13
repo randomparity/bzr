@@ -21,6 +21,14 @@ token. Existing API-key sources are rejected rather than silently replaced.
 - Failed remote logout retains the local token for a retry.
 - REST-only token use remains enforced by the existing connection path after persistence.
 
+### Threat model
+
+The email/password CLI values and server-issued token are secrets. Passwords are sent only
+to the selected server over its configured TLS policy and are never written, logged, or
+returned. A token crosses into the existing atomic config writer, which creates owner-only
+files; logout removes it only after the server accepts invalidation. Server name and URL come
+from validated named configuration, so the command does not accept a destination URL.
+
 ## Success
 
 The commands use `GET /login` and `GET /logout` for REST and `User.login` and
