@@ -1,4 +1,4 @@
-FROM python:3.14.7-slim-bookworm
+FROM python:3.14.7-slim-trixie
 
 # The staged bzr comparison artifact uses the default keyring feature, whose
 # Linux backend links libdbus. Keep this fixture dependency local to the
