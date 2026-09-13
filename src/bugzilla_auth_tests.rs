@@ -75,6 +75,7 @@ fn apply_auth_header_method_adds_header() {
     let client = reqwest::Client::new();
     let request = apply_auth(
         client.get("https://bugzilla.example/rest/bug/1"),
+        "https://bugzilla.example",
         "header-key",
         AuthMethod::Header,
     )
@@ -93,6 +94,7 @@ fn apply_auth_query_param_method_adds_query() {
     let client = reqwest::Client::new();
     let request = apply_auth(
         client.get("https://bugzilla.example/rest/bug/1"),
+        "https://bugzilla.example",
         "query-key",
         AuthMethod::QueryParam,
     )
@@ -108,12 +110,50 @@ fn apply_auth_header_method_rejects_invalid_value() {
     let client = reqwest::Client::new();
     let err = apply_auth(
         client.get("https://bugzilla.example/rest/bug/1"),
+        "https://bugzilla.example",
         "bad\nkey",
         AuthMethod::Header,
     )
     .unwrap_err();
 
     assert!(err.to_string().contains("invalid header characters"));
+}
+
+#[test]
+fn red_hat_host_selection_is_exact() {
+    assert!(uses_red_hat_bearer_auth(
+        "https://bugzilla.redhat.com:8443/rest"
+    ));
+    assert!(uses_red_hat_bearer_auth("https://BUGZILLA.REDHAT.COM"));
+    assert!(!uses_red_hat_bearer_auth(
+        "https://bugzilla.redhat.com.example"
+    ));
+    assert!(!uses_red_hat_bearer_auth(
+        "https://example.test/bugzilla.redhat.com"
+    ));
+}
+
+#[test]
+fn apply_auth_uses_bearer_for_red_hat_host() {
+    let request = apply_auth(
+        reqwest::Client::new().get("https://bugzilla.redhat.com/rest/version"),
+        "https://bugzilla.redhat.com",
+        "secret-key",
+        AuthMethod::QueryParam,
+    )
+    .unwrap()
+    .build()
+    .unwrap();
+
+    assert_eq!(
+        request
+            .headers()
+            .get(reqwest::header::AUTHORIZATION)
+            .unwrap(),
+        "Bearer secret-key"
+    );
+    assert!(request.headers().get(AUTH_HEADER_NAME).is_none());
+    assert!(request.url().query().is_none());
 }
 
 #[test]

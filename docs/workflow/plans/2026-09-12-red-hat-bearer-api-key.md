@@ -57,12 +57,18 @@ non-Red-Hat control for each standard method, which observes its selected
 header or query transport. Before wiring, exact-host cases observe the selected
 standard method; green command: `make test-one T=red_hat` exits 0.
 
+The detection matrix explicitly proves exact-host detection bypasses the
+standard `whoami`-not-found → `valid_login` → REST header-verification sequence
+and sends the version probe with Bearer instead. This is the smaller safe
+alternative: no standard query/header probe can reach the exact host. The
+non-Red-Hat control retains the current query/header sequence.
+
 1. Update every REST auth application call site, including normal dispatch,
    auth detection/version probing, alternate-auth handling, and strict proof,
    to apply the policy. Ensure a Bearer client does not retry a 401 with a
    standard header or query key.
 2. Add the complete exact-host and non-Red-Hat request matrix and confirm its
-   focused green run.
+   focused green run, including the exact-host fallback bypass.
 3. Run `cargo fmt` and commit the implementation and unit tests.
 
 ## Task 3 — Functional parity and documentation
@@ -80,8 +86,9 @@ change because bzr has only the controlled parser gap. Green command:
 `make functional-compare` exits 0 and reports no `expect_gap 678`.
 
 1. Replace only the #678 parser-gap assertion with the sidecar bzr positive
-   wire check. Assert the proxy recorded exactly one `auth-kind bearer` and no
-   query/header credential; leave sibling gap checks untouched.
+   wire check. Pin its standard method so setup performs no discovery, then
+   assert the proxy recorded exactly one total `auth-kind` line, that it is
+   `bearer`, and no query/header credential; leave sibling gap checks untouched.
 2. Update `docs/bzr-cli.md` and the parity matrix with exact-host automatic
    REST Bearer behavior and the existing comparison test ID.
 3. Run `make lint`, `make test`, and `make functional-test`; each exits 0.
