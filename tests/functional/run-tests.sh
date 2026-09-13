@@ -40,6 +40,7 @@ if [[ -z "$BZ_PORT" ]]; then
 fi
 BZ_URL="http://127.0.0.1:${BZ_PORT}"
 ADMIN_EMAIL="admin@test.bzr"
+ADMIN_PASSWORD="FuncTest1!"
 API_KEY="FuncTest0123456789abcdef0123456789abcdef"
 
 # ── Variables set by earlier phases (initialized for -u safety) ──────
