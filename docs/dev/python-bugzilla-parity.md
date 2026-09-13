@@ -50,7 +50,7 @@ This report tracks bzr against python-bugzilla 3.3.0 using stable comparison tes
 | Login and logout commands | no equivalent | expected gap (#681) | `compare/06-auth-config-tls/login-command-gap` |
 | bugzillarc import | no equivalent | expected gap (#682) | `compare/06-auth-config-tls/bugzillarc-import-gap` |
 | Client certificate configuration | no equivalent | surface gap (#677) | `compare/06-auth-config-tls/client-certificate-surface-gap` |
-| Red Hat Bearer API-key transport | no equivalent | expected gap (#678) | `compare/06-auth-config-tls/bearer-gap` |
+| Red Hat Bearer API-key transport | automatic REST transport for `bugzilla.redhat.com` | parity | `compare/06-auth-config-tls/bearer-gap` |
 
 The Red-Hat-shaped proxy arm is a harness fixture built from the vendor's documented
 parameter names (ADR 0061). It proves bzr's behaviour, not that Red Hat Bugzilla resolves a

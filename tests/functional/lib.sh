@@ -344,6 +344,26 @@ run_bzr_raw() {
     return 0
 }
 
+# Run the release artifact in the comparison sidecar. This is limited to
+# fixtures that need the sidecar's private DNS aliases; production bzr always
+# runs on the invoking host.
+run_bzr_in_pybz() {
+    if [[ -z ${PYBZ_RUNTIME:-} || ! -x ${BZR_BIN:-} ]]; then
+        return 2
+    fi
+    local sidecar
+    sidecar=$(pybz_sidecar_name) || return 1
+    "$PYBZ_RUNTIME" cp "$BZR_BIN" "$sidecar:/work/compare/bzr" || return 1
+    set +e
+    "$PYBZ_RUNTIME" exec --env XDG_CONFIG_HOME=/work/compare/bzr-config \
+        --env BZR_COMPARE_API_KEY "$sidecar" /work/compare/bzr --json "$@" \
+        >"$BZR_STDOUT_RAW" 2>"$BZR_STDERR"
+    BZR_EXIT=$?
+    set -e
+    _project_envelope
+    return 0
+}
+
 pybz_image_name() {
     local checkout_id
 
