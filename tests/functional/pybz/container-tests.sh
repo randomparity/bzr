@@ -3435,6 +3435,17 @@ run_rhbz_core_fixture() (
         return 1
     fi
 
+    local stock_containerfile
+    for stock_containerfile in "$PYBZ_DIR"/../versions/{bz50,bz52,bz53}/Containerfile; do
+        if ! grep -Fq 'Cpanel-JSON-XS-4.42.tar.gz' "$stock_containerfile" ||
+            ! grep -Fq 'e1ac2fab1e3a6d2d998d3440c600067365bdc7dbf0c8f2b2059cbce4b4c83173' \
+                "$stock_containerfile" ||
+            ! grep -Fq 'sha256sum --check --strict' "$stock_containerfile"; then
+            printf 'stock functional Containerfile lacks the verified JSON dependency\n' >&2
+            return 1
+        fi
+    done
+
     COMPARE_EXCHANGE_DIR=$(mktemp -d)
     trap 'rm -rf "$COMPARE_EXCHANGE_DIR"' EXIT
     BZR_COMPARE_API_KEY=fixture-secret

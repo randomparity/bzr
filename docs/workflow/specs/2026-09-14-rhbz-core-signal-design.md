@@ -61,3 +61,8 @@ minimum. The operator authorized a replacement limited to the fixture: install
 the pinned 4.42 archive from the CPAN MetaCPAN mirror only after its CPAN
 published SHA-256 is verified. This stops the later unpinned CPAN resolution
 from fetching that module while retaining ordinary dependency installation.
+
+The operator separately authorized the same verified preinstall in the stock
+Bugzilla 5.0, 5.2, and 5.3 fixture Containerfiles after scheduled main runs
+showed the same unpinned 4.52 fetch failure. This is fixture provisioning only;
+it neither changes test semantics nor expands the selected versions.
