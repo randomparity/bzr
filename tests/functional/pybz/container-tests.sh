@@ -3315,16 +3315,36 @@ run_rhbz_extensions_fixture() (
 
         case "$name:$api:$expected_transport" in
             rhbz-component-array-rest:rest:REST | rhbz-component-array-xmlrpc:xmlrpc:XMLRPC) ;;
+            rhbz-version-rest:rest:REST | rhbz-version-xmlrpc:xmlrpc:XMLRPC) ;;
             *) return 1 ;;
         esac
-        printf '%s\n' '{"component":["TestComponent"]}' \
-            >"$COMPARE_EXCHANGE_DIR/${name}.bzr.stdout.json"
+        case "$name" in
+            rhbz-component-array-*)
+                printf '%s\n' '{"component":["TestComponent"]}' \
+                    >"$COMPARE_EXCHANGE_DIR/${name}.bzr.stdout.json"
+                ;;
+            rhbz-version-*)
+                printf '%s\n' "$RHBZ_VERSION_RESPONSE" \
+                    >"$COMPARE_EXCHANGE_DIR/${name}.bzr.stdout.json"
+                ;;
+        esac
     }
 
     RHBZ_EXTENSIONS_RESPONSE='{"extensions":{"ExternalBugs":{},"SubComponents":{},"RedHat":{}}}'
+    RHBZ_VERSION_RESPONSE='{"version":["unspecified"]}'
     source "$phase" >/dev/null
-    assert_equals 2 "$PASS_COUNT" "RHBZ extension smoke pass count"
+    assert_equals 3 "$PASS_COUNT" "RHBZ extension smoke pass count"
     assert_equals 0 "$FAIL_COUNT" "RHBZ extension smoke fail count"
+
+    PASS_COUNT=0
+    FAIL_COUNT=0
+    SEEN_TEST_IDS=$'\n'
+    RHBZ_VERSION_RESPONSE='{"version":"unspecified"}'
+    source "$phase" >/dev/null
+    assert_equals 2 "$PASS_COUNT" "scalar RHBZ version smoke pass count"
+    assert_equals 1 "$FAIL_COUNT" "scalar RHBZ version smoke fail count"
+    printf 'controlled red: RHBZ version scalar response\n'
+    RHBZ_VERSION_RESPONSE='{"version":["unspecified"]}'
 
     for missing_extension in ExternalBugs SubComponents RedHat; do
         PASS_COUNT=0
@@ -3336,7 +3356,7 @@ run_rhbz_extensions_fixture() (
             RedHat) RHBZ_EXTENSIONS_RESPONSE='{"extensions":{"ExternalBugs":{},"SubComponents":{}}}' ;;
         esac
         source "$phase" >/dev/null
-        assert_equals 1 "$PASS_COUNT" "incomplete RHBZ extension smoke pass count"
+        assert_equals 2 "$PASS_COUNT" "incomplete RHBZ extension smoke pass count"
         assert_equals 1 "$FAIL_COUNT" "incomplete RHBZ extension smoke fail count"
         printf 'controlled red: RHBZ extension smoke missing %s\n' "$missing_extension"
     done

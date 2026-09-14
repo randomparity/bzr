@@ -27,3 +27,15 @@ if [[ $rhbz_component_bug_id =~ ^[1-9][0-9]*$ ]] &&
 else
     test_fail "RHBZ component array did not match between REST and XML-RPC"
 fi
+
+test_begin "version-array" "RHBZ bug version is readable through REST and XML-RPC"
+if resource_bzr rhbz-version-rest rest REST bug view "$rhbz_component_bug_id" --fields id,version &&
+    resource_bzr rhbz-version-xmlrpc xmlrpc XMLRPC bug view "$rhbz_component_bug_id" --fields id,version &&
+    jq -e '.version == ["unspecified"]' \
+        "$COMPARE_EXCHANGE_DIR/rhbz-version-rest.bzr.stdout.json" >/dev/null &&
+    jq -e '.version == ["unspecified"]' \
+        "$COMPARE_EXCHANGE_DIR/rhbz-version-xmlrpc.bzr.stdout.json" >/dev/null; then
+    test_pass
+else
+    test_fail "RHBZ version was not a one-element array through REST and XML-RPC"
+fi
