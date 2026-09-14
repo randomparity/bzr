@@ -3523,6 +3523,8 @@ run_rhbz_fields_fixture() (
     fi
     assert_equals 0 "$FAIL_COUNT" "RHBZ fields fail count"
     assert_equals 0 "$GAP_COUNT" "RHBZ fields gap count"
+    assert_equals 12 "$RHBZ_FIELDS_SUB_COMPONENT_ID" \
+        "RHBZ fields primary sub-component ID"
     for test_id in sub-components target-release fixed-in whiteboards; do
         if [[ $SEEN_TEST_IDS != *$'\ncompare/09-rhbz-fields/'"$test_id"$'\n'* ]]; then
             printf 'RHBZ fields fixture did not run %s\n' "$test_id" >&2
@@ -3665,19 +3667,19 @@ run_rhbz_externalbugs_fixture() (
             RHBZ_FIXTURE_STATE=bzr-add
             RHBZ_FIXTURE_BZR_EXTERNAL=$(awk '/--external-id/{getline; print; exit}' < <(printf '%s\n' "$@"))
             printf '{}\n' >"$BZR_STDOUT"
-            : >"$BZR_STDERR"
+            printf '%s\n' 'DEBUG bzr::xmlrpc::protocol::client: XML-RPC call' >"$BZR_STDERR"
         elif [[ " $* " == *' external-bug update '* ]]; then
             BZR_EXIT=0
             RHBZ_FIXTURE_STATE=bzr-update
             RHBZ_FIXTURE_BZR_EXTERNAL=$(awk '/--external-id/{getline; print; exit}' < <(printf '%s\n' "$@"))
             printf '{}\n' >"$BZR_STDOUT"
-            : >"$BZR_STDERR"
+            printf '%s\n' 'DEBUG bzr::xmlrpc::protocol::client: XML-RPC call' >"$BZR_STDERR"
         elif [[ " $* " == *' external-bug remove '* ]]; then
             BZR_EXIT=0
             RHBZ_FIXTURE_STATE=bzr-remove
             RHBZ_FIXTURE_BZR_EXTERNAL=$(awk '/--external-id/{getline; print; exit}' < <(printf '%s\n' "$@"))
             printf '{}\n' >"$BZR_STDOUT"
-            : >"$BZR_STDERR"
+            printf '%s\n' 'DEBUG bzr::xmlrpc::protocol::client: XML-RPC call' >"$BZR_STDERR"
         elif [[ " $* " == *' component update '* ]]; then
             printf '%s\n%s\n' "error: unrecognized subcommand 'update'" \
                 'Usage: bzr component [OPTIONS] <COMMAND>' >"$BZR_STDERR"
