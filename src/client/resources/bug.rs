@@ -248,6 +248,27 @@ pub(crate) struct BugSearch<'a> {
 }
 
 impl BugzillaClient {
+    pub async fn add_external_bug(
+        &self,
+        mutation: crate::types::bug::ExternalBugMutation<'_>,
+    ) -> Result<()> {
+        self.xmlrpc_client().add_external_bug(mutation).await
+    }
+
+    pub async fn update_external_bug(
+        &self,
+        mutation: crate::types::bug::ExternalBugMutation<'_>,
+    ) -> Result<()> {
+        self.xmlrpc_client().update_external_bug(mutation).await
+    }
+
+    pub async fn remove_external_bug(
+        &self,
+        mutation: crate::types::bug::ExternalBugMutation<'_>,
+    ) -> Result<()> {
+        self.xmlrpc_client().remove_external_bug(mutation).await
+    }
+
     pub async fn get_bug_history_since(
         &self,
         bug_id: u64,

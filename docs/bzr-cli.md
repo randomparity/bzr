@@ -752,6 +752,22 @@ The command requires an API key and does not fall back to REST; REST-only login
 tokens are not supported. Use
 `bzr --api xmlrpc bug list --tag <TAG>` to find tagged bugs.
 
+### `bzr bug external-bug`
+
+Manage configured RHBZ ExternalBugs links through the `ExternalBugs` XML-RPC
+extension. Every operation requires an API key and a server advertising that
+extension; stock Bugzilla is refused with exit 15 before a mutation request.
+
+```bash
+bzr bug external-bug add 12345 --tracker 7 --external-id EXT-1 --status NEW --description created
+bzr bug external-bug update 12345 --tracker 7 --external-id EXT-1 --status ASSIGNED --description updated
+bzr bug external-bug remove 12345 --tracker 7 --external-id EXT-1
+```
+
+`--tracker` is the configured external-tracker ID, while `--external-id` is
+the linked issue identifier. Add and update require non-empty `--status` and
+`--description`; remove targets the same `(bug, tracker, external-id)` link.
+
 ### `bzr bug my`
 
 Show bugs related to the authenticated user. Defaults to bugs assigned to you.

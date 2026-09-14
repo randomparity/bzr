@@ -7,6 +7,7 @@ use crate::types::query::SavedQuery;
 mod adjacency;
 mod clone;
 mod create;
+mod external_bug;
 mod history;
 mod links;
 mod list;
@@ -20,6 +21,10 @@ mod view;
 pub(crate) use adjacency::AdjacencyArgs;
 pub(crate) use clone::CloneArgs;
 pub(crate) use create::CreateArgs;
+pub(crate) use external_bug::{
+    AddExternalBugArgs, ExternalBugAction, ExternalBugArgs, RemoveExternalBugArgs,
+    UpdateExternalBugArgs,
+};
 pub(crate) use history::HistoryArgs;
 pub(crate) use links::LinksArgs;
 pub(crate) use list::ListArgs;
@@ -422,6 +427,9 @@ pub(crate) enum BugAction {
     /// Add or remove personal tags on a bug (XML-RPC servers only).
     #[command(long_about = tag::LONG_ABOUT)]
     Tag(TagArgs),
+    /// Manage RHBZ `ExternalBugs` links (XML-RPC extension only).
+    #[command(long_about = external_bug::LONG_ABOUT)]
+    ExternalBug(ExternalBugArgs),
     /// Resolve one or more bugs (sets status RESOLVED + a resolution).
     #[command(long_about = verbs::RESOLVE_LONG_ABOUT)]
     Resolve(ResolveArgs),

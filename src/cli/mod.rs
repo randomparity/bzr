@@ -20,8 +20,10 @@ pub(crate) use auth::AuthAction;
 #[cfg(test)]
 pub(crate) use bug::MatchTypeArgs;
 pub(crate) use bug::{
-    AdjacencyArgs, CloneArgs, CloseArgs, CreateArgs, DupArgs, HistoryArgs, LinksArgs, ListArgs,
-    MyArgs, ReopenArgs, ResolveArgs, SearchArgs, TagArgs, UpdateArgs, ViewArgs,
+    AddExternalBugArgs, AdjacencyArgs, CloneArgs, CloseArgs, CreateArgs, DupArgs,
+    ExternalBugAction, ExternalBugArgs, HistoryArgs, LinksArgs, ListArgs, MyArgs,
+    RemoveExternalBugArgs, ReopenArgs, ResolveArgs, SearchArgs, TagArgs, UpdateArgs,
+    UpdateExternalBugArgs, ViewArgs,
 };
 pub(crate) use bug::{
     BugAction, BugActorFilterArgs, BugFilterArgs, CommentArgs, FieldArgs, PageArgs, SortArgs,
