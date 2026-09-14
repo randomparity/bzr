@@ -47,7 +47,7 @@ test_begin "bug-search-saved-search-refused-over-xmlrpc" "bug search --saved-sea
 RUST_LOG=bzr=debug run_bzr --api xmlrpc bug search --saved-search "$_SS_NAME"
 if assert_exit_code 15 &&
     assert_stderr_contains 'unsupported_server_capability' &&
-    assert_stderr_contains 'Bugzilla.extensions'; then
+    assert_stderr_contains 'capability_status":"absent'; then
     test_pass
 fi
 
