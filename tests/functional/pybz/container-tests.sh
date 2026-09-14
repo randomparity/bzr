@@ -1161,10 +1161,10 @@ run_parity_report_fixture() {
         '| Product catalogues | `bzr product list --type` | parity | `compare/05-products-components/product-catalogues` |'
         '| Component create | `bzr component create`, `bzr component view` | parity | `compare/05-products-components/component-create` |'
         '| RHBZ component update | `bzr component update` | expected gap (#774) | `compare/08-rhbz-externalbugs/component-update` |'
-        '| RHBZ sub-components | `bzr bug update --field rh_sub_components=...` | expected gap (#775) | `compare/09-rhbz-fields/sub-components` |'
-        '| RHBZ target release | `bzr bug update --field target_release=...` | expected gap (#775) | `compare/09-rhbz-fields/target-release` |'
-        '| RHBZ fixed-in | `bzr bug update --field cf_fixed_in=...` | expected gap (#775) | `compare/09-rhbz-fields/fixed-in` |'
-        '| RHBZ whiteboards | `bzr bug update --field cf_devel_whiteboard=...` | expected gap (#775) | `compare/09-rhbz-fields/whiteboards` |'
+        '| RHBZ sub-components | `bzr bug update --field-json -` with `rh_sub_components` | parity | `compare/09-rhbz-fields/sub-components` |'
+        '| RHBZ target release | `bzr bug update --field target_release=...` | parity | `compare/09-rhbz-fields/target-release` |'
+        '| RHBZ fixed-in | `bzr bug update --field cf_fixed_in=...` | parity | `compare/09-rhbz-fields/fixed-in` |'
+        '| RHBZ whiteboards | `bzr bug update --field cf_*_whiteboard=...` | parity | `compare/09-rhbz-fields/whiteboards` |'
         '| API-key placement by server version | `bzr whoami` | bz50/bz52: both query; bz53: bzr header, python-bugzilla query | `compare/06-auth-config-tls/api-key-placement` |'
         '| Restricted password login | `bzr auth login --restrict-login` | parity | `compare/06-auth-config-tls/restricted-login` |'
         '| Cached login token reuse | persisted `token` configuration | parity | `compare/06-auth-config-tls/cached-token` |'
@@ -3319,8 +3319,9 @@ run_rhbz_fields_fixture() (
     SKIP_COUNT=0
     GAP_COUNT=0
     SEEN_TEST_IDS=$'\n'
-    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n4\n11\n12\n13'
+    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n4\n10\n11\n12\n13'
     RHBZ_FIELDS_FIXTURE_BZR_FAIL=''
+    RHBZ_FIELDS_FIXTURE_BZR_NOOP=0
 
     run_bugzilla_sql_file() {
         case "$1" in
@@ -3370,14 +3371,14 @@ run_rhbz_fields_fixture() (
             '{bugs:[{sub_components:{TestComponent:[$sub]},target_release:[$release],cf_fixed_in:$fixed,cf_devel_whiteboard:$devel,cf_internal_whiteboard:$internal,cf_qa_whiteboard:$qa}]}'
     }
     run_bzr() {
-        local argument field value label
+        local argument field value label json
 
         BZR_STDOUT="$COMPARE_EXCHANGE_DIR/bzr.stdout"
         BZR_STDOUT_RAW="$COMPARE_EXCHANGE_DIR/bzr.raw"
         BZR_STDERR="$COMPARE_EXCHANGE_DIR/bzr.stderr"
         if [[ $RHBZ_FIELDS_FIXTURE_BZR_FAIL == all ]] ||
             [[ $RHBZ_FIELDS_FIXTURE_BZR_FAIL == sub-components &&
-                " $* " == *' --field rh_sub_components='* ]]; then
+                " $* " == *' --field-json - '* ]]; then
             BZR_EXIT=4
             : >"$BZR_STDOUT"
             : >"$BZR_STDOUT_RAW"
@@ -3391,12 +3392,11 @@ run_rhbz_fields_fixture() (
                 jq -cn \
                     --arg sub "${RHBZ_FIELDS_FIXTURE_SUB:-}" \
                     --arg release "$RHBZ_FIELDS_RELEASE" \
-                    --arg second "$RHBZ_FIELDS_SECOND_RELEASE" \
                     --arg fixed "${RHBZ_FIELDS_FIXTURE_FIXED:-}" \
                     --arg devel "${RHBZ_FIELDS_FIXTURE_DEVEL:-}" \
                     --arg internal "${RHBZ_FIELDS_FIXTURE_INTERNAL:-}" \
                     --arg qa "${RHBZ_FIELDS_FIXTURE_QA:-}" \
-                    '{sub_components:{TestComponent:[$sub]},target_release:[$release,$second],cf_fixed_in:$fixed,cf_devel_whiteboard:$devel,cf_internal_whiteboard:$internal,cf_qa_whiteboard:$qa}' \
+                    '{sub_components:{TestComponent:[$sub]},target_release:(if $release == "" then [] else [$release] end),cf_fixed_in:$fixed,cf_devel_whiteboard:$devel,cf_internal_whiteboard:$internal,cf_qa_whiteboard:$qa}' \
                     >"$BZR_STDOUT"
             else
                 jq -cn \
@@ -3414,17 +3414,31 @@ run_rhbz_fields_fixture() (
         fi
         cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
         printf 'DEBUG bzr::client::transport: API response\n' >"$BZR_STDERR"
-        for argument in "$@"; do
-            [[ $argument == *=* ]] || continue
-            field=${argument%%=*}
-            value=${argument#*=}
-            case "$field" in
-                rh_sub_components) RHBZ_FIELDS_FIXTURE_SUB="$value" ;;
-                target_release) RHBZ_FIELDS_FIXTURE_RELEASE="$value" ;;
-                cf_fixed_in) RHBZ_FIELDS_FIXTURE_FIXED="$value" ;;
-                cf_devel_whiteboard) RHBZ_FIELDS_FIXTURE_DEVEL="$value" ;;
-            esac
-        done
+        [[ $RHBZ_FIELDS_FIXTURE_BZR_NOOP -eq 1 ]] && return 0
+        if [[ " $* " == *' --field-json - '* ]]; then
+            json=$(cat)
+            if ! jq -e --arg component TestComponent \
+                '.rh_sub_components[$component] | type == "array" and length == 1 and all(.[]; type == "string")' \
+                <<<"$json" >/dev/null || jq -e 'has("component")' <<<"$json" >/dev/null; then
+                BZR_EXIT=4
+                printf 'field-json input did not use rh_sub_components object\n' >"$BZR_STDERR"
+                return 0
+            fi
+            RHBZ_FIELDS_FIXTURE_SUB=$(jq -r '.rh_sub_components.TestComponent[0]' <<<"$json")
+        else
+            for argument in "$@"; do
+                [[ $argument == *=* ]] || continue
+                field=${argument%%=*}
+                value=${argument#*=}
+                case "$field" in
+                    target_release) RHBZ_FIELDS_FIXTURE_RELEASE="$value" ;;
+                    cf_fixed_in) RHBZ_FIELDS_FIXTURE_FIXED="$value" ;;
+                    cf_devel_whiteboard) RHBZ_FIELDS_FIXTURE_DEVEL="$value" ;;
+                    cf_internal_whiteboard) RHBZ_FIELDS_FIXTURE_INTERNAL="$value" ;;
+                    cf_qa_whiteboard) RHBZ_FIELDS_FIXTURE_QA="$value" ;;
+                esac
+            done
+        fi
     }
     run_bzr_raw() {
         run_bzr "$@"
@@ -3458,7 +3472,7 @@ run_rhbz_fields_fixture() (
     GAP_COUNT=0
     SEEN_TEST_IDS=$'\n'
     RHBZ_FIELDS_READY=0
-    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n3\n11\n12\n13'
+    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n3\n10\n11\n12\n13'
     source "$phase" >"$COMPARE_EXCHANGE_DIR/missing-controls.out"
     assert_equals 4 "$FAIL_COUNT" "RHBZ fields missing-controls fail count"
     assert_equals 0 "$GAP_COUNT" "RHBZ fields missing-controls gap count"
@@ -3474,7 +3488,7 @@ run_rhbz_fields_fixture() (
     GAP_COUNT=0
     SEEN_TEST_IDS=$'\n'
     RHBZ_FIELDS_READY=0
-    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n4\n11\n12\n13'
+    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n4\n10\n11\n12\n13'
     RHBZ_FIELDS_FIXTURE_BZR_FAIL=sub-components
     source "$phase" >/dev/null
     assert_equals 3 "$PASS_COUNT" "RHBZ fields supported gap pass count"
@@ -3492,6 +3506,19 @@ run_rhbz_fields_fixture() (
     assert_equals 0 "$PASS_COUNT" "RHBZ fields unexpected-error pass count"
     assert_equals 4 "$FAIL_COUNT" "RHBZ fields unexpected-error fail count"
     assert_equals 0 "$GAP_COUNT" "RHBZ fields unexpected-error gap count"
+
+    PASS_COUNT=0
+    FAIL_COUNT=0
+    SKIP_COUNT=0
+    GAP_COUNT=0
+    SEEN_TEST_IDS=$'\n'
+    RHBZ_FIELDS_READY=0
+    RHBZ_FIELDS_FIXTURE_BZR_FAIL=''
+    RHBZ_FIELDS_FIXTURE_BZR_NOOP=1
+    source "$phase" >/dev/null
+    assert_equals 0 "$PASS_COUNT" "RHBZ fields no-op pass count"
+    assert_equals 4 "$FAIL_COUNT" "RHBZ fields no-op fail count"
+    assert_equals 0 "$GAP_COUNT" "RHBZ fields no-op gap count"
 )
 
 run_rhbz_externalbugs_fixture() (
