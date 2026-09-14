@@ -1160,7 +1160,10 @@ run_parity_report_fixture() {
         '| Membership add and remove | `bzr group add-user/remove-user`, `bzr user search` | parity | `compare/04-users-groups/membership-add-remove` |'
         '| Product catalogues | `bzr product list --type` | parity | `compare/05-products-components/product-catalogues` |'
         '| Component create | `bzr component create`, `bzr component view` | parity | `compare/05-products-components/component-create` |'
-        '| RHBZ component update | `bzr component update` | expected gap (#774) | `compare/08-rhbz-externalbugs/component-update` |'
+        '| RHBZ ExternalBugs add | no equivalent | expected gap (#801) | `compare/08-rhbz-externalbugs/add` |'
+        '| RHBZ ExternalBugs update | no equivalent | expected gap (#801) | `compare/08-rhbz-externalbugs/update` |'
+        '| RHBZ ExternalBugs remove | no equivalent | expected gap (#801) | `compare/08-rhbz-externalbugs/remove` |'
+        '| RHBZ component update | no equivalent | expected gap (#802) | `compare/08-rhbz-externalbugs/component-update` |'
         '| RHBZ sub-components | `bzr bug update --field-json -` with `rh_sub_components` | parity | `compare/09-rhbz-fields/sub-components` |'
         '| RHBZ target release | `bzr bug update --field target_release=...` | parity | `compare/09-rhbz-fields/target-release` |'
         '| RHBZ fixed-in | `bzr bug update --field cf_fixed_in=...` | parity | `compare/09-rhbz-fields/fixed-in` |'
@@ -1176,7 +1179,7 @@ run_parity_report_fixture() {
         '| Login-token request transport | persisted `token` configuration | parity | `compare/06-auth-config-tls/token-transport-gap` |'
         '| Login and logout commands | `bzr auth login`, `bzr auth logout` | parity | `compare/06-auth-config-tls/login-command-gap` |'
         '| bugzillarc API-key import | `bzr config import-bugzillarc` | parity; username/password and client certificates are reported unsupported | `compare/06-auth-config-tls/bugzillarc-import` |'
-        '| Client certificate configuration | no equivalent | surface gap (#677) | `compare/06-auth-config-tls/client-certificate-surface-gap` |'
+        '| Client certificate configuration | no equivalent | deliberate non-goal; #677 closed NOT_PLANNED | `compare/06-auth-config-tls/client-certificate-surface-gap` |'
         '| Red Hat Bearer API-key transport | automatic REST transport for `bugzilla.redhat.com` | parity | `compare/06-auth-config-tls/bearer-gap` |'
     )
 
@@ -1215,10 +1218,49 @@ run_parity_report_fixture() {
             return 1
         fi
     done
+    # shellcheck disable=SC2016 # Markdown code spans are literal fixture data.
+    local -a classification_fragments=(
+        'RHBZ sub-components and target release are proven writable and readable through `bzr bug view`;'
+        'URL/whiteboard/email match types are parity.'
+        'RHBZ whiteboard/fixed-in writes are parity.'
+        'RHBZ component update is the open #802 gap.'
+        'RHBZ `ExternalBugs` methods are owned by open #801.'
+    )
+    for row in "${classification_fragments[@]}"; do
+        if [[ $(grep -Fc "$row" "$report") -ne 1 ]]; then
+            printf 'missing or duplicate parity classification: %s\n' "$row" >&2
+            return 1
+        fi
+    done
     if grep -Eiq '^\|.*\|[^|]*\bunknown\b[^|]*\|' "$report"; then
         printf 'parity report contains an unclassified unknown row\n' >&2
         return 1
     fi
+
+    local cli_doc="$PYBZ_DIR/../../../docs/bzr-cli.md"
+    local commands="$PYBZ_DIR/../../../content/skills/bzr-reference/reference/commands.md"
+    local cli_config="$PYBZ_DIR/../../../src/cli/config.rs"
+    local cli_auth="$PYBZ_DIR/../../../src/cli/auth.rs"
+    local cli_bug="$PYBZ_DIR/../../../src/cli/bug/mod.rs"
+    local -a mappings=(
+        "$cli_config|ImportBugzillarc|$cli_doc|│   ├── import-bugzillarc [--path <FILE>]"
+        "$cli_config|ImportBugzillarc|$commands|bzr config import-bugzillarc [--path <file>]"
+        "$cli_auth|AuthAction|$commands|## auth"
+        "$cli_auth|restrict_login|$commands|--restrict-login"
+        "$cli_bug|status-whiteboard-type|$commands|--status-whiteboard-type"
+        "$cli_bug|url-type|$commands|--url-type"
+        "$cli_bug|email-type|$commands|--email-type"
+    )
+    local mapping source source_term reference reference_term
+    for mapping in "${mappings[@]}"; do
+        IFS='|' read -r source source_term reference reference_term <<<"$mapping"
+        if ! grep -Fq -- "$source_term" "$source" ||
+            ! grep -Fq -- "$reference_term" "$reference"; then
+            printf 'CLI reference mapping is missing: %s -> %s\n' \
+                "$source_term" "$reference_term" >&2
+            return 1
+        fi
+    done
 }
 
 run_sidecar_stop_failure_fixture() (
