@@ -168,6 +168,30 @@ fn section_only_import_rejects_malformed_explicit_url_sections() {
 }
 
 #[test]
+fn section_only_import_rejects_url_credentials() {
+    let sections = parse_sections(
+        "[https://user:password@bugs.example.test]\napi_key=key\n",
+        Path::new("fixture"),
+    )
+    .unwrap();
+
+    assert!(resolved_servers(&sections)
+        .unwrap_err()
+        .to_string()
+        .contains("must not contain credentials"));
+}
+
+#[test]
+fn section_only_import_rejects_malformed_http_prefix() {
+    let sections = parse_sections("[https:]\n", Path::new("fixture")).unwrap();
+
+    assert!(resolved_servers(&sections)
+        .unwrap_err()
+        .to_string()
+        .contains("section URL is invalid"));
+}
+
+#[test]
 fn hostname_sections_do_not_match_a_host_substring() {
     let sections = parse_sections(
         "[DEFAULT]\nurl=https://evil-bugzilla.redhat.com/rest\n[bugzilla.redhat.com]\napi_key=wrong\n[evil-bugzilla.redhat.com]\napi_key=right\n",

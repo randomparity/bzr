@@ -209,7 +209,7 @@ fn resolved_explicit_url_sections(sections: &Sections) -> Result<Vec<ImportedSer
 }
 
 fn explicit_section_url(section: &str) -> Result<Option<String>> {
-    if !section.contains("://") {
+    if !section.contains("://") && !section.starts_with("http:") && !section.starts_with("https:") {
         return Ok(None);
     }
     let parsed = url::Url::parse(section)
@@ -217,6 +217,11 @@ fn explicit_section_url(section: &str) -> Result<Option<String>> {
     if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
         return Err(BzrError::input(
             "bugzillarc section URL must be an absolute HTTP(S) URL".into(),
+        ));
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err(BzrError::input(
+            "bugzillarc section URL must not contain credentials".into(),
         ));
     }
     Ok(Some(section.into()))
