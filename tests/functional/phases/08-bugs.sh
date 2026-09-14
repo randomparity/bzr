@@ -184,6 +184,20 @@ if [[ -n "$BUG1" ]]; then
     if assert_exit_code 7 && assert_stderr_contains "no bug tag changes"; then test_pass; fi
 else test_skip "no BUG1"; fi
 
+test_begin "bug-tag-login-token-rejected" "bug tag rejects REST-only login tokens locally"
+if [[ -n "$BUG1" ]]; then
+    _TAG_TOKEN_SERVER="tag-login-token"
+    run_bzr config set-server "$_TAG_TOKEN_SERVER" --url "$BZ_URL"
+    if assert_success; then
+        run_bzr --server "$_TAG_TOKEN_SERVER" auth login --email "$ADMIN_EMAIL" --password "$ADMIN_PASSWORD"
+        if assert_success; then
+            run_bzr --server "$_TAG_TOKEN_SERVER" bug tag "$BUG1" --add token-rejected
+            if assert_exit_code 3 && assert_stderr_contains "requires an API key"; then test_pass; fi
+        fi
+    fi
+    unset _TAG_TOKEN_SERVER
+else test_skip "no BUG1"; fi
+
 test_begin "bug-view-time-fields-round-trip" "bug update/view time fields round-trip"
 if [[ -n "$BUG1" ]]; then
     run_bzr bug update "$BUG1" --estimated-time 8 --remaining-time 5

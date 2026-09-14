@@ -15,6 +15,11 @@ pub(super) async fn handle(
         ));
     }
     let client = crate::commands::runtime::shared::connect_and_configure(ctx).await?;
+    if client.auth_mode() == crate::types::AuthMode::Token {
+        return Err(BzrError::Auth(
+            "bug tag uses XML-RPC and requires an API key; login tokens support REST only".into(),
+        ));
+    }
     client
         .update_bug_tags(args.id, &args.add, &args.remove)
         .await?;

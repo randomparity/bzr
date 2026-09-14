@@ -4,7 +4,8 @@ pub const LONG_ABOUT: &str = r"Update personal tags on a bug through Bugzilla's 
 
 Use one or more `--add` or `--remove` values. Tags already present, or tags
 already absent, are accepted by Bugzilla without changing the bug. This command
-uses XML-RPC because Bugzilla exposes personal-tag mutation as `Bug.update_tags`.
+uses XML-RPC because Bugzilla exposes personal-tag mutation as `Bug.update_tags`,
+so it requires an API key; REST-only login tokens are not supported.
 
 Examples:
 
