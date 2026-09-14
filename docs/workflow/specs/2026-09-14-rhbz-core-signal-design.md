@@ -49,3 +49,9 @@ Containerfile substitution to MariaDB `max_statement_time`, including reset,
 solely to make the bounded live search proof executable. The fixture retains a
 60-second RHBZ query limit. No stock image, version array, or application code
 is changed.
+
+Fresh rootless CI image builds also need a Containerfile-local `tar
+--no-same-owner` wrapper before `cpanm`: CPAN archive owner IDs are invalid for
+the runner and otherwise make the image build fail before the RHBZ phase. The
+operator separately authorized that wrapper; it applies only while preparing
+this disposable RHBZ image.

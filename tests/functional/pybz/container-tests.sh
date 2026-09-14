@@ -3425,6 +3425,7 @@ run_rhbz_core_fixture() (
 
     local containerfile="$PYBZ_DIR/../versions/rhbz/Containerfile"
     if ! grep -Fq 'long_query_timeout} = "60"' "$entrypoint" ||
+        ! grep -Fq 'exec /usr/bin/tar "$@" --no-same-owner' "$containerfile" ||
         ! grep -Fq 's/SET STATEMENT_TIMEOUT TO /SET max_statement_time = /' "$containerfile" ||
         ! grep -Fq 's/SET STATEMENT_TIMEOUT TO 0/SET max_statement_time = 0/' "$containerfile"; then
         printf 'RHBZ fixture must use a MariaDB-compatible core search timeout\n' >&2

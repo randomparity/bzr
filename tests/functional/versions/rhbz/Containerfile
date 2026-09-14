@@ -11,6 +11,11 @@ RUN git clone https://pagure.io/Red-Hat-Bugzilla/rh-bugzilla.git /var/www/html/b
     && test "$(git rev-parse HEAD)" = 167ccca1b256f9462cb4aebcb1edbced7e4663d5 \
     && mysql_install_db --user=mysql --datadir=/var/lib/mysql
 
+# CPAN archives retain owner IDs that are invalid in rootless CI image builds.
+# cpanm resolves tar from PATH, so suppress ownership restoration there only.
+RUN printf '%s\n' '#!/bin/sh' 'exec /usr/bin/tar "$@" --no-same-owner' > /usr/local/bin/tar \
+    && chmod +x /usr/local/bin/tar
+
 # This public source snapshot carries production field IDs. They do not apply
 # to a fresh database, so keep the fields but omit their stale dependencies.
 RUN sed -i '/^  \(visibility_field_id\|value_field_id\|visibility_values\):/d' \
