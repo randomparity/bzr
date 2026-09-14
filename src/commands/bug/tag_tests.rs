@@ -109,7 +109,7 @@ async fn bug_tag_rejects_login_tokens_before_xmlrpc_dispatch() {
     )
     .await;
 
-    assert!(
-        matches!(result, Err(crate::error::BzrError::Auth(message)) if message.contains("requires an API key"))
-    );
+    let error = result.unwrap_err();
+    assert_eq!(error.exit_code(), 9);
+    assert!(error.to_string().contains("requires an API key"));
 }
