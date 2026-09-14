@@ -16,6 +16,16 @@ RUN git clone https://pagure.io/Red-Hat-Bugzilla/rh-bugzilla.git /var/www/html/b
 RUN printf '%s\n' '#!/bin/sh' 'exec /usr/bin/tar "$@" --no-same-owner' > /usr/local/bin/tar \
     && chmod +x /usr/local/bin/tar
 
+# Fedora 39 supplies Cpanel::JSON::XS 4.37, but JSON::MaybeXS requires 4.38.
+# Pin a CPAN mirror archive and verify its published SHA-256 before cpanm sees
+# the dependency, avoiding an unpinned network resolution during the next step.
+RUN curl --fail --location --retry 3 --retry-all-errors --output /tmp/Cpanel-JSON-XS-4.42.tar.gz \
+        https://cpan.metacpan.org/authors/id/R/RU/RURBAN/Cpanel-JSON-XS-4.42.tar.gz \
+    && echo 'e1ac2fab1e3a6d2d998d3440c600067365bdc7dbf0c8f2b2059cbce4b4c83173  /tmp/Cpanel-JSON-XS-4.42.tar.gz' \
+        | sha256sum --check --strict \
+    && cpanm --notest /tmp/Cpanel-JSON-XS-4.42.tar.gz \
+    && rm /tmp/Cpanel-JSON-XS-4.42.tar.gz
+
 # This public source snapshot carries production field IDs. They do not apply
 # to a fresh database, so keep the fields but omit their stale dependencies.
 RUN sed -i '/^  \(visibility_field_id\|value_field_id\|visibility_values\):/d' \
