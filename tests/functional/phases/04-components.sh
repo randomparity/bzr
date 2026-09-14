@@ -18,9 +18,16 @@ else
     assert_success
 fi
 
-test_begin "component-update-removed" "component update is not a subcommand"
-run_bzr_raw component update
-if assert_exit_code 2 && assert_stderr_contains "unrecognized subcommand 'update'"; then
+test_begin "component-update-requires-change" "component update requires a mutable field"
+run_bzr_raw component update --product FuncTestProd --component Backend
+if assert_exit_code 7 && assert_stderr_contains "no fields to update"; then
+    test_pass
+fi
+
+test_begin "component-update-stock-refused" "component update refuses stock capability"
+run_bzr_raw component update --product FuncTestProd --component Backend \
+    --description "must not be sent"
+if assert_exit_code 15 && assert_stderr_contains "does not implement the Bugzilla 'RedHat' extension"; then
     test_pass
 fi
 

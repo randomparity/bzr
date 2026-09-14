@@ -125,9 +125,33 @@ fn parse_component_create_from_json_relaxes_required_fields() {
 }
 
 #[test]
-fn parse_component_update_is_not_a_subcommand() {
-    assert_eq!(
-        parse_error_kind(&["bzr", "component", "update"]),
-        ErrorKind::InvalidSubcommand
-    );
+fn parse_component_update_binds_rhbz_target_and_changes() {
+    match component_action(&[
+        "bzr",
+        "component",
+        "update",
+        "--product",
+        "MyApp",
+        "--component",
+        "Backend",
+        "--description",
+        "updated",
+        "--is-active",
+        "false",
+    ]) {
+        ComponentAction::Update {
+            product,
+            component,
+            description,
+            default_assignee,
+            is_active,
+        } => {
+            assert_eq!(product, "MyApp");
+            assert_eq!(component, "Backend");
+            assert_eq!(description.as_deref(), Some("updated"));
+            assert!(default_assignee.is_none());
+            assert_eq!(is_active, Some(false));
+        }
+        _ => panic!("expected Update"),
+    }
 }

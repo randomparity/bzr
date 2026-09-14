@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+> **Superseded by [0079](0079-rhbz-component-update.md)**
 
 ## Context
 

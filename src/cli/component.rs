@@ -91,6 +91,37 @@ pub(crate) enum ComponentAction {
         #[arg(long, required_unless_present = "from_json")]
         default_assignee: Option<String>,
     },
+
+    /// Update a component on a Red Hat Bugzilla server (admin only).
+    ///
+    /// This command uses Red Hat Bugzilla's XML-RPC `Component.update`
+    /// capability. Stock Bugzilla does not advertise that capability and is
+    /// refused before an update request is sent.
+    ///
+    /// Examples:
+    ///
+    ///   bzr component update --product MyApp --component Backend \
+    ///     --description "Updated backend services"
+    ///   bzr component update --product MyApp --component Backend \
+    ///     --is-active false
+    #[command(verbatim_doc_comment)]
+    Update {
+        /// Product containing the component
+        #[arg(long)]
+        product: String,
+        /// Current component name
+        #[arg(long)]
+        component: String,
+        /// New component description
+        #[arg(long)]
+        description: Option<String>,
+        /// New default assignee email
+        #[arg(long)]
+        default_assignee: Option<String>,
+        /// Whether the component is active
+        #[arg(long)]
+        is_active: Option<bool>,
+    },
 }
 
 #[cfg(test)]

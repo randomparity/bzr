@@ -33,4 +33,14 @@ fn capabilities_allow_dry_run_and_credentials_for_writes() {
     let create = super::capabilities(&create_action());
     assert!(create.supports_dry_run());
     assert_eq!(create.credential_requirement(), Some("component create"));
+
+    let update = super::capabilities(&ComponentAction::Update {
+        product: "P".into(),
+        component: "C".into(),
+        description: Some("D".into()),
+        default_assignee: None,
+        is_active: None,
+    });
+    assert!(update.supports_dry_run());
+    assert_eq!(update.credential_requirement(), Some("component update"));
 }

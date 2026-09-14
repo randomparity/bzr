@@ -53,7 +53,7 @@ For installation and quick start, see [README.md](../README.md).
 | `--timeout <SECS>` | Per-request timeout in seconds (default 30). Takes precedence over `BZR_TIMEOUT`. The 10s connect timeout is unaffected. |
 | `--retry <N>` | Retry transient failures up to N times with exponential backoff honoring `Retry-After`. 429 and connect failures are retried for any operation; 5xx and read timeouts only for safe reads (GET/HEAD), never for writes (create, update, comment) where a replay could duplicate the effect. Default 0 (disabled); max 10. Exhausted retries exit 5. |
 | `--progress <FORMAT>` | Emit structured progress events on stderr for long operations. `ndjson` streams newline-delimited JSON (`page`/`batch`/`done`, and `error` on failure) during `bug list`/`search --paginate`, `query run --paginate`, and `bug create`/`update --from-json` array form. stdout is unaffected; absent the flag stderr stays silent (or `-v` logs). Only `ndjson` is supported. Intended for non-verbose runs, since `-v` log lines interleave on the same stream. |
-| `--dry-run` | Preview a supported mutation without writing. Resolves and validates the request, then prints the would-be payload and affected IDs as `{"resource":"bug","action":"dry-run","ids":[...],"changes":{...}}` instead of calling the write API. Exits 0 on a valid request. Supported for `bug create`, `update`, `clone`, `resolve`, `close`, `reopen`, `dup`; `product`, `user`, and `group` `create` and `update`; and `component create`. On any other command it exits 7. `bug clone` still reads the source bug to build the preview. |
+| `--dry-run` | Preview a supported mutation without writing. Resolves and validates the request, then prints the would-be payload and affected IDs as `{"resource":"bug","action":"dry-run","ids":[...],"changes":{...}}` instead of calling the write API. Exits 0 on a valid request. Supported for `bug create`, `update`, `clone`, `resolve`, `close`, `reopen`, `dup`; `product`, `user`, and `group` `create` and `update`; and `component create` and `update`. On any other command it exits 7. `bug clone` still reads the source bug to build the preview. |
 | `-y, --yes` | Skip the confirmation prompt for a large batch mutation. A `bug update`/`resolve`/`close`/`reopen` or `attachment upload` targeting more than 10 bugs prompts for confirmation at an interactive terminal; `--yes` bypasses it. Non-interactive runs (piped stdin, agents) never prompt, so this is only needed in an interactive session. |
 | `-v, --verbose` | Increase log verbosity (`-v`=info, `-vv`=debug, `-vvv`=trace; `RUST_LOG` overrides) |
 | `-h, --help` | Print help |
@@ -256,7 +256,8 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 ├── component
 │   ├── list --product <P> [--fields <F>] [--exclude-fields <F>]
 │   ├── view <PRODUCT> <COMPONENT> [--fields <F>] [--exclude-fields <F>]
-│   └── create [--from-json <PATH>] [--product <P>] [--name <N>] [--description <D>] [--default-assignee <E>]
+│   ├── create [--from-json <PATH>] [--product <P>] [--name <N>] [--description <D>] [--default-assignee <E>]
+│   └── update --product <P> --component <C> [--description <D>] [--default-assignee <E>] [--is-active <BOOL>]
 ├── config
 │   ├── import-bugzillarc [--path <FILE>]
 │   ├── set-server <NAME> --url <URL> [--api-key <KEY> | --api-key-env <ENV_VAR>] [--email <EMAIL>] [--auth-method <METHOD>]
@@ -2068,6 +2069,27 @@ bzr --dry-run component create --product Fedora --name "new-component" \
 | `--default-assignee <E>` | Yes unless JSON supplies it | Default assignee email |
 
 Agent note: this is safer after confirming the product exists with `bzr --json product view <product>` and that the assignee is valid with `bzr --json user search "<email-or-name>"`.
+
+### `bzr component update`
+
+Update a component through Red Hat Bugzilla's XML-RPC `Component.update`
+capability. Stock Bugzilla is refused before a mutation request is sent. The
+command requires an API key rather than a REST login token.
+
+```bash
+bzr component update --product Fedora --component kernel \
+  --description "Kernel team component" --is-active true
+bzr --dry-run component update --product Fedora --component kernel \
+  --default-assignee maintainer@example.com
+```
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `--product <P>` | Yes | Product containing the component |
+| `--component <C>` | Yes | Current component name |
+| `--description <D>` | One mutable field | New description |
+| `--default-assignee <E>` | One mutable field | New default assignee |
+| `--is-active <BOOL>` | One mutable field | New active state |
 
 ## `bzr config` -- Configuration Management
 

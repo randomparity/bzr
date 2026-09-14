@@ -4,6 +4,7 @@ mod attachment;
 mod bug;
 mod bug_adjacency;
 mod comment;
+mod component;
 mod group;
 mod mappers;
 mod server;

@@ -138,7 +138,6 @@ elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
 fi
 
 test_begin "component-update" "Component.update persists the changed component"
-resource_gap_reset
 if rhbz_controls_ready &&
     resource_pybz rhbz-component-update component_update \
     "$(jq -cn --arg product "$RHBZ_PRODUCT" --arg component "$RHBZ_COMPONENT" --arg owner "$COMPARE_ADMIN_EMAIL" \
@@ -149,8 +148,23 @@ if rhbz_controls_ready &&
     jq -e --arg component "$RHBZ_COMPONENT" \
         '.products[0].components[] | select(.name == $component) | .description == "updated RHBZ component" and .is_active == false' \
         "$COMPARE_EXCHANGE_DIR/rhbz-component-view.json" >/dev/null; then
-    rhbz_expect_gap component-update "error: unrecognized subcommand 'update'" \
-        'Usage: bzr component [OPTIONS] <COMMAND>' component update
+    RUST_LOG=bzr=debug run_bzr --server "$RESOURCE_SERVER" --api xmlrpc component update \
+        --product "$RHBZ_PRODUCT" --component "$RHBZ_COMPONENT" \
+        --description "updated by bzr" --default-assignee "$COMPARE_ADMIN_EMAIL" --is-active true
+    resource_capture_bzr rhbz-component-update
+    if [[ $BZR_EXIT -eq 0 ]] && jq -e . "$BZR_STDOUT" >/dev/null &&
+        observe_bzr_transport && [[ $BZR_TRANSPORT == XMLRPC ]] &&
+        curl -fsS --get "$BZ_URL/rest/product" \
+            --data-urlencode "names=$RHBZ_PRODUCT" \
+            --data-urlencode "Bugzilla_api_key=$BZR_COMPARE_API_KEY" \
+            >"$COMPARE_EXCHANGE_DIR/rhbz-component-bzr-view.json" &&
+        jq -e --arg component "$RHBZ_COMPONENT" \
+            '.products[0].components[] | select(.name == $component) | .description == "updated by bzr" and .is_active == true' \
+            "$COMPARE_EXCHANGE_DIR/rhbz-component-bzr-view.json" >/dev/null; then
+        test_pass
+    else
+        test_fail 'bzr Component.update did not persist its component changes'
+    fi
 elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail 'Component.update positive control failed'
 fi
