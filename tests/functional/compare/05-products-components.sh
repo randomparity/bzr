@@ -94,7 +94,6 @@ if resource_bzr component-bzr-product rest REST product create \
 fi
 
 test_begin "component-update-redhat" "Red Hat component update client surface"
-resource_gap_reset
 if resource_pybz component-update-shape component_update_shape \
     "$(jq -cn --arg product "$PRODUCT_PYBZ_NAME" --arg component "$COMPONENT_NAME" \
         --arg owner "$COMPARE_ADMIN_EMAIL" \
@@ -106,18 +105,19 @@ if resource_pybz component-update-shape component_update_shape \
           updates:{default_assignee:$owner,description:"updated comparison component",
             is_active:false}}' \
         "$COMPARE_EXCHANGE_DIR/component-update-shape.pybz.result.json" >/dev/null; then
-    run_bzr --server "$RESOURCE_SERVER" component update
-    if [[ $BZR_EXIT -eq 0 ]]; then
+    run_bzr --dry-run component update --product "$PRODUCT_PYBZ_NAME" \
+        --component "$COMPONENT_NAME" --description "updated comparison component" \
+        --default-assignee "$COMPARE_ADMIN_EMAIL" --is-active false
+    if [[ $BZR_EXIT -eq 0 ]] &&
+        jq -e --arg product "$PRODUCT_PYBZ_NAME" --arg component "$COMPONENT_NAME" \
+            --arg owner "$COMPARE_ADMIN_EMAIL" \
+            '.product == $product and .component == $component and
+             .changes == {description:"updated comparison component",default_assignee:$owner,is_active:false}' \
+            "$BZR_STDOUT" >/dev/null; then
         test_pass
-    elif [[ $BZR_EXIT -eq 2 ]] &&
-        grep -Fxq "error: unrecognized subcommand 'update'" "$BZR_STDERR" &&
-        grep -Fxq 'Usage: bzr component [OPTIONS] <COMMAND>' "$BZR_STDERR"; then
-        test_fail "bzr component update surface is not implemented"
-        resource_gap_allow
     else
-        test_fail "bzr component update parser result was not the controlled gap"
+        test_fail "bzr component update dry-run shape is invalid"
     fi
 elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail "python-bugzilla component update request-shape proof is invalid"
 fi
-resource_expect_gap 675

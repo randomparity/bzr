@@ -28,6 +28,17 @@ pub struct CreateComponentParams {
     pub default_assignee: String,
 }
 
+/// RHBZ XML-RPC fields accepted by `Component.update`.
+#[derive(Debug, Default)]
+#[non_exhaustive]
+pub struct UpdateComponentParams<'a> {
+    pub product: &'a str,
+    pub component: &'a str,
+    pub description: Option<&'a str>,
+    pub default_assignee: Option<&'a str>,
+    pub is_active: Option<bool>,
+}
+
 #[cfg(test)]
 #[path = "component_tests.rs"]
 mod tests;

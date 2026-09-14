@@ -6,6 +6,7 @@ use crate::output::writers::Writers;
 
 mod create;
 mod list;
+mod update;
 mod view;
 
 pub(crate) async fn execute(
@@ -39,6 +40,22 @@ pub(crate) async fn execute(
             };
             create::handle(&args, ctx, w).await
         }
+        ComponentAction::Update {
+            product,
+            component,
+            description,
+            default_assignee,
+            is_active,
+        } => {
+            let args = update::UpdateArgs {
+                product,
+                component,
+                description: description.as_deref(),
+                default_assignee: default_assignee.as_deref(),
+                is_active: *is_active,
+            };
+            update::handle(&args, ctx, w).await
+        }
     }
 }
 
@@ -49,6 +66,7 @@ pub(crate) fn capabilities(action: &ComponentAction) -> CommandCapabilities {
             CommandCapabilities::anonymous()
         }
         ComponentAction::Create { .. } => CommandCapabilities::dry_run_mutation("component create"),
+        ComponentAction::Update { .. } => CommandCapabilities::dry_run_mutation("component update"),
     }
 }
 

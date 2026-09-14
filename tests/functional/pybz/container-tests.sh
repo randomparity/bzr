@@ -1163,7 +1163,7 @@ run_parity_report_fixture() {
         '| RHBZ ExternalBugs add | `bzr bug external-bug add` | RHBZ XML-RPC parity | `compare/08-rhbz-externalbugs/add` |'
         '| RHBZ ExternalBugs update | `bzr bug external-bug update` | RHBZ XML-RPC parity | `compare/08-rhbz-externalbugs/update` |'
         '| RHBZ ExternalBugs remove | `bzr bug external-bug remove` | RHBZ XML-RPC parity | `compare/08-rhbz-externalbugs/remove` |'
-        '| RHBZ component update | no equivalent | expected gap (#802) | `compare/08-rhbz-externalbugs/component-update` |'
+        '| RHBZ component update | `bzr component update --product <P> --component <C>` | parity | `compare/08-rhbz-externalbugs/component-update` |'
         '| RHBZ sub-components | `bzr bug update --field-json -` with `rh_sub_components` | parity | `compare/09-rhbz-fields/sub-components` |'
         '| RHBZ target release | `bzr bug update --field target_release=...` | parity | `compare/09-rhbz-fields/target-release` |'
         '| RHBZ fixed-in | `bzr bug update --field cf_fixed_in=...` | parity | `compare/09-rhbz-fields/fixed-in` |'
@@ -1223,7 +1223,7 @@ run_parity_report_fixture() {
         'RHBZ sub-components and target release are proven writable and readable through `bzr bug view`;'
         'URL/whiteboard/email match types are parity.'
         'RHBZ whiteboard/fixed-in writes are parity.'
-        'RHBZ component update is the open #802 gap.'
+        'RHBZ component update is capability-gated XML-RPC parity.'
         'RHBZ `ExternalBugs` mutations are parity through `bzr bug external-bug`.'
     )
     for row in "${classification_fragments[@]}"; do
