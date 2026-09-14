@@ -56,7 +56,7 @@ stable IDs and their observed classification for Task 3.
    target release, insert and read back three distinct configured release rows
    before creating the bug; initialize its bug with the before row, then assert
    REST state after the python-bugzilla reference operation.
-2. Split bzr probing by field shape: pipe a jq-built
+2. Split bzr probing by field shape: feed stdin from a jq-built
    `{"rh_sub_components":{"TestComponent":["<subcomponent>"]}}` object to
    `--field-json -`, retain scalar `--field` for the remaining fields, and
    assert response `sub_components`.
