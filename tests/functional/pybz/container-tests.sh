@@ -3154,12 +3154,6 @@ run_product_component_phase_fixture() (
     RESOURCE_SERVER=compare-resource
     COMPARE_ADMIN_EMAIL=admin@test.bzr
     RESOURCE_GAP_FILE="$COMPARE_EXCHANGE_DIR/.resource-gap-eligible"
-    eval "$(declare -f expect_gap | sed '1s/expect_gap/product_fixture_expect_gap/')"
-    expect_gap() {
-        local issue="$1"
-        [[ ${PRODUCT_GAP_OWNER_FAULT:-0} -eq 1 ]] && issue=999
-        product_fixture_expect_gap "$issue"
-    }
     reset_product_fixture() {
         PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
         SEEN_TEST_IDS=$'\n' TEST_RESULT_PENDING=0 GAP_APPLIED=0
@@ -3230,23 +3224,18 @@ run_product_component_phase_fixture() (
         printf '%s\n' "$result" >"$COMPARE_EXCHANGE_DIR/${name}.pybz.result.json"
     }
     run_bzr() {
-        : >"$BZR_STDOUT"
-        cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
-        if [[ ${PRODUCT_GAP_STALE:-0} -eq 1 ]]; then
-            BZR_EXIT=0
-            : >"$BZR_STDERR"
+        if [[ ${PRODUCT_BZR_DRY_RUN_FAULT:-0} -eq 1 ]]; then
+            printf '%s\n' '{"product":"wrong","component":"wrong","changes":{}}' >"$BZR_STDOUT"
         else
-            BZR_EXIT=2
-            local diagnostic="error: unrecognized subcommand 'update'"
-            [[ ${PRODUCT_GAP_WRONG_DIAGNOSTIC:-0} -eq 1 ]] && diagnostic='error: unrelated'
-            printf "%s\n\n%s\n" "$diagnostic" \
-                'Usage: bzr component [OPTIONS] <COMMAND>' >"$BZR_STDERR"
+            jq -cn --arg product "$PRODUCT_PYBZ_NAME" --arg component "$COMPONENT_NAME" \
+                --arg owner "$COMPARE_ADMIN_EMAIL" \
+                '{product:$product,component:$component,
+                  changes:{description:"updated comparison component",default_assignee:$owner,
+                    is_active:false}}' >"$BZR_STDOUT"
         fi
-    }
-    product_assert_gap_owner() {
-        grep -Eq \
-            '\[compare/05-products-components/component-update-redhat\].*GAP \(#675\)$' \
-            "$fixture_output"
+        cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
+        : >"$BZR_STDERR"
+        BZR_EXIT=0
     }
     run_product_control() {
         local flag="$1" slug="$2"
@@ -3266,28 +3255,16 @@ run_product_component_phase_fixture() (
     reset_product_fixture
     source "$phase" >"$fixture_output"
     _render_test_result >>"$fixture_output"
-    assert_equals 2 "$PASS_COUNT" "product/component comparison pass count"
+    assert_equals 3 "$PASS_COUNT" "product/component comparison pass count"
     assert_equals 0 "$FAIL_COUNT" "product/component comparison fail count"
-    assert_equals 1 "$GAP_COUNT" "product/component comparison gap count"
-    product_assert_gap_owner
+    assert_equals 0 "$GAP_COUNT" "product/component comparison gap count"
     run_product_control PRODUCT_CATALOGUE_FAULT product-catalogues
     run_product_control PRODUCT_COMPONENT_FAULT component-create
     run_product_control PRODUCT_BZR_COMPONENT_ID_FAULT component-create
     run_product_control PRODUCT_PYBZ_COMPONENT_ID_FAULT component-create
     run_product_control PRODUCT_SHAPE_FAULT component-update-redhat
     run_product_control PRODUCT_SHAPE_COMMAND_FAILURE component-update-redhat
-    run_product_control PRODUCT_GAP_WRONG_DIAGNOSTIC component-update-redhat
-    run_product_control PRODUCT_GAP_STALE component-update-redhat
-    reset_product_fixture
-    PRODUCT_GAP_OWNER_FAULT=1
-    source "$phase" >"$fixture_output"
-    _render_test_result >>"$fixture_output"
-    unset PRODUCT_GAP_OWNER_FAULT
-    if product_assert_gap_owner; then
-        printf 'component-update wrong-owner control unexpectedly passed\n' >&2
-        return 1
-    fi
-    printf 'controlled red: products/components wrong gap owner\n'
+    run_product_control PRODUCT_BZR_DRY_RUN_FAULT component-update-redhat
 )
 
 run_rhbz_extensions_fixture() (
