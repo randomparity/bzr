@@ -32,6 +32,20 @@ rhbz_external_state() {
         >"$COMPARE_EXCHANGE_DIR/rhbz-external-state.json"
 }
 
+rhbz_expect_gap() {
+    local command_name="$1" expected_error="$2" expected_usage="$3"
+    shift 3
+    run_bzr --server "$RESOURCE_SERVER" "$@"
+    if [[ $BZR_EXIT -eq 2 ]] && grep -Fxq "$expected_error" "$BZR_STDERR" &&
+        grep -Fxq "$expected_usage" "$BZR_STDERR"; then
+        test_fail "bzr $command_name surface is not implemented"
+        resource_gap_allow
+    else
+        test_fail "bzr $command_name parser result was not the controlled gap"
+    fi
+    resource_expect_gap 774
+}
+
 rhbz_bzr_external_mutation() {
     local name="$1" expected_state="$2"
     shift 2

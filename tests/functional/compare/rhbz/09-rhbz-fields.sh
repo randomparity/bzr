@@ -47,6 +47,7 @@ rhbz_fields_prepare() {
         ${controls[6]:-} =~ ^[1-9][0-9]*$ && ${controls[7]:-} =~ ^[1-9][0-9]*$ ]] || return 1
     RHBZ_FIELDS_PRODUCT_ID=${controls[0]}
     RHBZ_FIELDS_COMPONENT_ID=${controls[1]}
+    RHBZ_FIELDS_SUB_COMPONENT_ID=${controls[5]}
     RHBZ_FIELDS_SECOND_SUB_COMPONENT_ID=${controls[6]}
     RHBZ_FIELDS_READY=1
 }
