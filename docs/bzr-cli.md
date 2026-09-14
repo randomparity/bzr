@@ -258,6 +258,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 │   ├── view <PRODUCT> <COMPONENT> [--fields <F>] [--exclude-fields <F>]
 │   └── create [--from-json <PATH>] [--product <P>] [--name <N>] [--description <D>] [--default-assignee <E>]
 ├── config
+│   ├── import-bugzillarc [--path <FILE>]
 │   ├── set-server <NAME> --url <URL> [--api-key <KEY> | --api-key-env <ENV_VAR>] [--email <EMAIL>] [--auth-method <METHOD>]
 │   │                     [--tls-insecure] [--tls-ca-cert <PATH>] [--tls-pin-sha256 <PIN>] [--tls-pin-now] [--tls-pin-clear]
 │   ├── set-keyring <NAME> [--service <S>] [--account <A>]
