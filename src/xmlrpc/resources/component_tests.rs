@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used)]
 
-use super::*;
+use super::XmlRpcClient;
 use crate::types::component::UpdateComponentParams;
 use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
