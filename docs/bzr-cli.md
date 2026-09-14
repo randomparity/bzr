@@ -747,7 +747,8 @@ bzr --api xmlrpc bug tag 12345 --add triage
 bzr --api xmlrpc bug tag 12345 --add needs-review --remove stale
 ```
 
-The command requires credentials and does not fall back to REST. Use
+The command requires an API key and does not fall back to REST; REST-only login
+tokens are not supported. Use
 `bzr --api xmlrpc bug list --tag <TAG>` to find tagged bugs.
 
 ### `bzr bug my`

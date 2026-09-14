@@ -68,3 +68,48 @@ async fn bug_tag_without_changes_is_rejected_before_connecting() {
     assert_eq!(error.exit_code(), 7);
     assert!(error.to_string().contains("no bug tag changes"));
 }
+
+#[tokio::test]
+async fn bug_tag_rejects_login_tokens_before_xmlrpc_dispatch() {
+    let mock = wiremock::MockServer::start().await;
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = crate::test_helpers::write_config_to(
+        &tmp,
+        &format!(
+            "default_server = \"token\"\n\n[servers.token]\nurl = \"{}\"\ntoken = \"login-token\"\n",
+            mock.uri()
+        ),
+    );
+    Mock::given(method("GET"))
+        .and(path("/rest/version"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"version": "5.1.2"})),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&mock)
+        .await;
+
+    let action = BugAction::Tag(TagArgs {
+        id: 42,
+        add: vec!["triage".into()],
+        remove: vec![],
+    });
+    let mut io = crate::test_helpers::CapturedIo::new();
+    let result = crate::commands::bug::execute(
+        &action,
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
+        &mut io.writers(),
+    )
+    .await;
+
+    assert!(
+        matches!(result, Err(crate::error::BzrError::Auth(message)) if message.contains("requires an API key"))
+    );
+}
