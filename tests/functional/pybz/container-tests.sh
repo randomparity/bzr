@@ -3312,6 +3312,7 @@ run_rhbz_extensions_fixture() (
     }
     resource_bzr() {
         local name="$1" api="$2" expected_transport="$3"
+        shift 3
 
         case "$name:$api:$expected_transport" in
             rhbz-component-array-rest:rest:REST | rhbz-component-array-xmlrpc:xmlrpc:XMLRPC) ;;
@@ -3320,10 +3321,12 @@ run_rhbz_extensions_fixture() (
         esac
         case "$name" in
             rhbz-component-array-*)
+                [[ $* == 'bug view 101 --fields id,component' ]] || return 1
                 printf '%s\n' '{"component":["TestComponent"]}' \
                     >"$COMPARE_EXCHANGE_DIR/${name}.bzr.stdout.json"
                 ;;
             rhbz-version-*)
+                [[ $* == 'bug view 101 --fields id,version' ]] || return 1
                 printf '%s\n' "$RHBZ_VERSION_RESPONSE" \
                     >"$COMPARE_EXCHANGE_DIR/${name}.bzr.stdout.json"
                 ;;
@@ -3335,6 +3338,12 @@ run_rhbz_extensions_fixture() (
     source "$phase" >/dev/null
     assert_equals 3 "$PASS_COUNT" "RHBZ extension smoke pass count"
     assert_equals 0 "$FAIL_COUNT" "RHBZ extension smoke fail count"
+
+    if resource_bzr rhbz-version-rest rest REST bug view 101 --fields id,component; then
+        printf 'RHBZ version fixture accepted the wrong field projection\n' >&2
+        return 1
+    fi
+    printf 'controlled red: RHBZ version wrong field projection\n'
 
     PASS_COUNT=0
     FAIL_COUNT=0
