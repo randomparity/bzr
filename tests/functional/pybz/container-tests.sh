@@ -3377,7 +3377,7 @@ run_rhbz_comparison_target_fixture() {
     local recipe
 
     if ! grep -Fqx \
-        'functional-compare-rhbz: release ## Run the isolated RHBZ extension smoke comparison' \
+        'functional-compare-rhbz: release ## Run the isolated RHBZ core comparison' \
         "$makefile"; then
         printf 'RHBZ comparison target must build the release binary first\n' >&2
         return 1
@@ -3395,11 +3395,121 @@ run_rhbz_comparison_target_fixture() {
     # shellcheck disable=SC2016 # This is the literal runner fallback contract.
     if ! grep -Fq 'export BZR_BIN="${BZR_COMPARE_BIN:-$REPO_ROOT/target/release/bzr}"' \
         "$runner" ||
-        ! grep -Fq 'RHBZ comparison binary: %s' "$runner"; then
+        ! grep -Fq 'RHBZ comparison binary: %s' "$runner" ||
+        ! grep -Fq 'RHBZ server source revision: %s' "$runner" ||
+        ! grep -Fq 'RHBZ binary source revision: %s' "$runner" ||
+        ! grep -Fq 'RHBZ binary SHA-256: %s' "$runner" ||
+        ! grep -Fq 'CURRENT_TEST_GROUP=10-rhbz-core' "$runner" ||
+        ! grep -Fq 'compare/rhbz/10-rhbz-core.sh' "$runner"; then
         printf 'RHBZ runner did not retain and identify the selected binary\n' >&2
         return 1
     fi
+
+    local workflow="$PYBZ_DIR/../../.github/workflows/functional-tests.yml"
+    if ! awk '/^  rhbz-core-comparison:/,/^  [a-z].*:/' "$workflow" |
+        grep -Fq 'name: RHBZ core comparison' ||
+        ! awk '/^  rhbz-core-comparison:/,/^  [a-z].*:/' "$workflow" |
+            grep -Fq 'run: make functional-compare-rhbz' ||
+        ! awk '/^  rhbz-core-comparison:/,/^  [a-z].*:/' "$workflow" |
+            grep -Fq 'if: always()' ||
+        ! awk '/^  rhbz-core-comparison:/,/^  [a-z].*:/' "$workflow" |
+            grep -Fq 'BZR_BZ_VERSION=rhbz tests/functional/setup-bugzilla.sh stop'; then
+        printf 'dedicated RHBZ workflow job or cleanup contract is absent\n' >&2
+        return 1
+    fi
 }
+
+run_rhbz_core_fixture() (
+    local phase="$PYBZ_DIR/../compare/rhbz/10-rhbz-core.sh"
+    local entrypoint="$PYBZ_DIR/../versions/rhbz/entrypoint.sh"
+
+    local containerfile="$PYBZ_DIR/../versions/rhbz/Containerfile"
+    if ! grep -Fq 'long_query_timeout} = "60"' "$entrypoint" ||
+        ! grep -Fq 's/SET STATEMENT_TIMEOUT TO /SET max_statement_time = /' "$containerfile" ||
+        ! grep -Fq 's/SET STATEMENT_TIMEOUT TO 0/SET max_statement_time = 0/' "$containerfile"; then
+        printf 'RHBZ fixture must use a MariaDB-compatible core search timeout\n' >&2
+        return 1
+    fi
+
+    COMPARE_EXCHANGE_DIR=$(mktemp -d)
+    trap 'rm -rf "$COMPARE_EXCHANGE_DIR"' EXIT
+    BZR_COMPARE_API_KEY=fixture-secret
+    COMPARE_ADMIN_EMAIL=admin@test.bzr
+    RHBZ_FIELDS_BZR_SUB_COMPONENT=fixture-sub-component
+    TEST_ID_PREFIX=compare
+    CURRENT_TEST_GROUP=10-rhbz-core
+    PASS_COUNT=0
+    FAIL_COUNT=0
+    SKIP_COUNT=0
+    GAP_COUNT=0
+    SEEN_TEST_IDS=$'\n'
+
+    resource_bzr() {
+        local name="$1" api="$2" transport="$3" summary
+        shift 3
+
+        case "$name:$api:$transport" in
+            rhbz-core-create:rest:REST | rhbz-core-view-rest:rest:REST | \
+            rhbz-core-view-xmlrpc:xmlrpc:XMLRPC | rhbz-core-search-rest:rest:REST | \
+            rhbz-core-search-xmlrpc:xmlrpc:XMLRPC | rhbz-core-update-rest:rest:REST | \
+            rhbz-core-readback-rest:rest:REST | rhbz-core-readback-xmlrpc:xmlrpc:XMLRPC | \
+            rhbz-core-whoami:rest:REST) ;;
+            *) return 1 ;;
+        esac
+        if [[ ${RHBZ_CORE_FIXTURE_FAIL:-} == "$name" ]]; then
+            return 1
+        fi
+        case "$name" in
+            rhbz-core-create)
+                [[ $* == *'bug create'* && $* == *'--field-json -'* ]] || return 1
+                ;;
+            rhbz-core-view-* | rhbz-core-readback-*)
+                [[ $* == 'bug view 101 --fields id,summary' ]] || return 1
+                ;;
+            rhbz-core-search-*)
+                [[ $* == 'bug list --id 101 --fields id,summary' ]] || return 1
+                ;;
+            rhbz-core-update-rest)
+                [[ $* == *'bug update 101 --summary '* ]] || return 1
+                ;;
+            rhbz-core-whoami) [[ $* == whoami ]] || return 1 ;;
+        esac
+        case "$name" in
+            rhbz-core-create) printf '%s\n' '{"id":101}' ;;
+            rhbz-core-update-rest) printf '%s\n' '{"updated":true}' ;;
+            rhbz-core-whoami) printf '%s\n' '{"login":"admin@test.bzr"}' ;;
+            *)
+                summary=$RHBZ_CORE_SUMMARY
+                [[ $name == rhbz-core-readback-* ]] && summary=$RHBZ_CORE_UPDATED_SUMMARY
+                if [[ $name == rhbz-core-search-* ]]; then
+                    jq -cn --arg summary "$summary" '[{id:101,summary:$summary}]'
+                else
+                    jq -cn --arg summary "$summary" '{id:101,summary:$summary}'
+                fi
+                ;;
+        esac >"$COMPARE_EXCHANGE_DIR/${name}.bzr.stdout.json"
+    }
+
+    source "$phase" >/dev/null
+    assert_equals 4 "$PASS_COUNT" "RHBZ core pass count"
+    assert_equals 0 "$FAIL_COUNT" "RHBZ core fail count"
+    for test_id in create view-search update-readback named-identity; do
+        if [[ $SEEN_TEST_IDS != *$'\ncompare/10-rhbz-core/'"$test_id"$'\n'* ]]; then
+            printf 'RHBZ core fixture did not run %s\n' "$test_id" >&2
+            return 1
+        fi
+    done
+
+    PASS_COUNT=0
+    FAIL_COUNT=0
+    SEEN_TEST_IDS=$'\n'
+    RHBZ_CORE_FIXTURE_FAIL=rhbz-core-search-xmlrpc
+    source "$phase" >/dev/null
+    unset RHBZ_CORE_FIXTURE_FAIL
+    assert_equals 3 "$PASS_COUNT" "RHBZ core transport fault pass count"
+    assert_equals 1 "$FAIL_COUNT" "RHBZ core transport fault fail count"
+    printf 'controlled red: RHBZ core XML-RPC search failure\n'
+)
 
 run_rhbz_fields_fixture() (
     local phase="$PYBZ_DIR/../compare/rhbz/09-rhbz-fields.sh"
@@ -3896,6 +4006,7 @@ run_membership_cleanup_fixture
 run_product_component_phase_fixture
 run_rhbz_extensions_fixture
 run_rhbz_comparison_target_fixture
+run_rhbz_core_fixture
 run_rhbz_fields_fixture
 run_rhbz_externalbugs_fixture
 run_pybz_fixture_source_volume_fixture

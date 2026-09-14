@@ -239,7 +239,7 @@ functional-compare-all: release ## Compare bzr and python-bugzilla on all versio
 	bash tests/functional/pybz/container-tests.sh
 	BZR_COMPARE_BIN="$(BZR_COMPARE_BIN)" tests/functional/run-compare-all.sh
 
-functional-compare-rhbz: release ## Run the isolated RHBZ extension smoke comparison
+functional-compare-rhbz: release ## Run the isolated RHBZ core comparison
 	@status=0; \
 	BZR_BZ_VERSION=rhbz tests/functional/setup-bugzilla.sh reset || status=1; \
 	if [ $$status -eq 0 ]; then \

@@ -46,6 +46,12 @@ RUN sed -i '/^1;$/i sub all_components { return [$_[0]->component]; }\nsub all_c
 RUN sed -i '/^1;$/i sub rule_group { return undef; }' \
         /var/www/html/bugzilla/Bugzilla/Product.pm
 
+# The pinned RHBZ fork issues PostgreSQL's statement-timeout command, while
+# this disposable fixture uses MariaDB. Preserve the timeout behavior with
+# MariaDB's equivalent session setting so bounded RHBZ searches can run.
+RUN sed -i 's/SET STATEMENT_TIMEOUT TO /SET max_statement_time = /; s/(\$timeout \* 1000)/\$timeout/; s/SET STATEMENT_TIMEOUT TO 0/SET max_statement_time = 0/' \
+        /var/www/html/bugzilla/Bugzilla/DB.pm
+
 # RedHat's schema explicitly reads AgileTools tables. Keep that companion with
 # the three extensions this lifecycle verifies. Its group setup also uses
 # SecureMail's `secure_mail` option.
