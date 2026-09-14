@@ -1166,9 +1166,9 @@ run_parity_report_fixture() {
         '| RHBZ fixed-in | `bzr bug update --field cf_fixed_in=...` | expected gap (#775) | `compare/09-rhbz-fields/fixed-in` |'
         '| RHBZ whiteboards | `bzr bug update --field cf_devel_whiteboard=...` | expected gap (#775) | `compare/09-rhbz-fields/whiteboards` |'
         '| API-key placement by server version | `bzr whoami` | bz50/bz52: both query; bz53: bzr header, python-bugzilla query | `compare/06-auth-config-tls/api-key-placement` |'
-        '| Restricted password login | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/restricted-login` |'
-        '| Cached login token reuse | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/cached-token` |'
-        '| Logout token invalidation | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/logout` |'
+        '| Restricted password login | `bzr auth login --restrict-login` | parity | `compare/06-auth-config-tls/restricted-login` |'
+        '| Cached login token reuse | persisted `token` configuration | parity | `compare/06-auth-config-tls/cached-token` |'
+        '| Logout token invalidation | `bzr auth logout` | parity | `compare/06-auth-config-tls/logout` |'
         '| bugzillarc three-file precedence | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/bugzillarc-precedence` |'
         '| bugzillarc default URL | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/bugzillarc-default-url` |'
         '| bugzillarc URL-substring section | no equivalent | python-bugzilla only | `compare/06-auth-config-tls/bugzillarc-substring-section` |'
@@ -3251,6 +3251,8 @@ run_product_component_phase_fixture() (
 run_rhbz_extensions_fixture() (
     local phase="$PYBZ_DIR/../compare/rhbz/07-rhbz-smoke.sh"
 
+    COMPARE_EXCHANGE_DIR=$(mktemp -d)
+    trap 'rm -rf "$COMPARE_EXCHANGE_DIR"' EXIT
     BZ_URL=http://127.0.0.1
     TEST_ID_PREFIX=compare
     CURRENT_TEST_GROUP=07-rhbz-smoke
@@ -3304,8 +3306,8 @@ run_rhbz_fields_fixture() (
     SKIP_COUNT=0
     GAP_COUNT=0
     SEEN_TEST_IDS=$'\n'
-    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n4\n11\n12'
-    RHBZ_FIELDS_FIXTURE_BZR_FAIL=0
+    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n4\n11\n12\n13'
+    RHBZ_FIELDS_FIXTURE_BZR_FAIL=''
 
     run_bugzilla_sql_file() {
         case "$1" in
@@ -3332,7 +3334,7 @@ run_rhbz_fields_fixture() (
         local argument
 
         for argument in "$@"; do
-            if [[ $argument == */rest/field ]]; then
+            if [[ $argument == */rest/field/bug ]]; then
                 jq -cn '{fields:[
                     {name:"rh_sub_components"},{name:"target_release"},{name:"cf_fixed_in"},
                     {name:"cf_devel_whiteboard"},{name:"cf_internal_whiteboard"},{name:"cf_qa_whiteboard"}
@@ -3355,7 +3357,9 @@ run_rhbz_fields_fixture() (
         BZR_STDOUT="$COMPARE_EXCHANGE_DIR/bzr.stdout"
         BZR_STDOUT_RAW="$COMPARE_EXCHANGE_DIR/bzr.raw"
         BZR_STDERR="$COMPARE_EXCHANGE_DIR/bzr.stderr"
-        if [[ $RHBZ_FIELDS_FIXTURE_BZR_FAIL -eq 1 ]]; then
+        if [[ $RHBZ_FIELDS_FIXTURE_BZR_FAIL == all ]] ||
+            [[ $RHBZ_FIELDS_FIXTURE_BZR_FAIL == sub-components &&
+                " $* " == *' --field rh_sub_components='* ]]; then
             BZR_EXIT=4
             : >"$BZR_STDOUT"
             : >"$BZR_STDOUT_RAW"
@@ -3404,7 +3408,7 @@ run_rhbz_fields_fixture() (
     GAP_COUNT=0
     SEEN_TEST_IDS=$'\n'
     RHBZ_FIELDS_READY=0
-    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n3\n11\n12'
+    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n3\n11\n12\n13'
     source "$phase" >"$COMPARE_EXCHANGE_DIR/missing-controls.out"
     assert_equals 4 "$FAIL_COUNT" "RHBZ fields missing-controls fail count"
     assert_equals 0 "$GAP_COUNT" "RHBZ fields missing-controls gap count"
@@ -3420,11 +3424,24 @@ run_rhbz_fields_fixture() (
     GAP_COUNT=0
     SEEN_TEST_IDS=$'\n'
     RHBZ_FIELDS_READY=0
-    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n4\n11\n12'
-    RHBZ_FIELDS_FIXTURE_BZR_FAIL=1
+    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n4\n11\n12\n13'
+    RHBZ_FIELDS_FIXTURE_BZR_FAIL=sub-components
     source "$phase" >/dev/null
-    assert_equals 0 "$FAIL_COUNT" "RHBZ fields bzr-diagnostic fail count"
-    assert_equals 4 "$GAP_COUNT" "RHBZ fields bzr-diagnostic gap count"
+    assert_equals 3 "$PASS_COUNT" "RHBZ fields supported gap pass count"
+    assert_equals 0 "$FAIL_COUNT" "RHBZ fields supported gap fail count"
+    assert_equals 1 "$GAP_COUNT" "RHBZ fields supported gap count"
+
+    PASS_COUNT=0
+    FAIL_COUNT=0
+    SKIP_COUNT=0
+    GAP_COUNT=0
+    SEEN_TEST_IDS=$'\n'
+    RHBZ_FIELDS_READY=0
+    RHBZ_FIELDS_FIXTURE_BZR_FAIL=all
+    source "$phase" >/dev/null
+    assert_equals 0 "$PASS_COUNT" "RHBZ fields unexpected-error pass count"
+    assert_equals 4 "$FAIL_COUNT" "RHBZ fields unexpected-error fail count"
+    assert_equals 0 "$GAP_COUNT" "RHBZ fields unexpected-error gap count"
 )
 
 run_rhbz_externalbugs_fixture() (
