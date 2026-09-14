@@ -192,7 +192,7 @@ if [[ -n "$BUG1" ]]; then
         run_bzr --server "$_TAG_TOKEN_SERVER" auth login --email "$ADMIN_EMAIL" --password "$ADMIN_PASSWORD"
         if assert_success; then
             run_bzr --server "$_TAG_TOKEN_SERVER" bug tag "$BUG1" --add token-rejected
-            if assert_exit_code 3 && assert_stderr_contains "requires an API key"; then test_pass; fi
+            if assert_exit_code 9 && assert_stderr_contains "requires an API key"; then test_pass; fi
         fi
     fi
     unset _TAG_TOKEN_SERVER
