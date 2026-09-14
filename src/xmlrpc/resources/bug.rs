@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 
 use crate::error::{BzrError, Result};
 use crate::types::bug::{
-    partition_filters, Bug, SearchParams, BUG_SEARCH_DEFAULT_FIELDS, FIELD_MAPPINGS,
+    partition_filters, Bug, ExternalBugMutation, SearchParams, BUG_SEARCH_DEFAULT_FIELDS,
+    FIELD_MAPPINGS,
 };
 use crate::xmlrpc::protocol::Value;
 use crate::xmlrpc::protocol::XmlRpcClient;
@@ -13,6 +14,73 @@ use crate::xmlrpc::resources::mappers::{
 };
 
 impl XmlRpcClient {
+    pub async fn add_external_bug(&self, mutation: ExternalBugMutation<'_>) -> Result<()> {
+        let status = mutation
+            .status
+            .ok_or_else(|| BzrError::input("ExternalBugs add requires a status".into()))?;
+        let description = mutation
+            .description
+            .ok_or_else(|| BzrError::input("ExternalBugs add requires a description".into()))?;
+        let mut external_bug = BTreeMap::new();
+        external_bug.insert(
+            "ext_type_id".into(),
+            xmlrpc_id(mutation.tracker_id, "external tracker ID")?,
+        );
+        external_bug.insert("ext_bz_bug_id".into(), Value::from(mutation.external_id));
+        external_bug.insert("ext_status".into(), Value::from(status));
+        external_bug.insert("ext_description".into(), Value::from(description));
+        let mut params = BTreeMap::new();
+        params.insert(
+            "bug_ids".into(),
+            Value::Array(vec![xmlrpc_id(mutation.bug_id, "bug ID")?]),
+        );
+        params.insert(
+            "external_bugs".into(),
+            Value::Array(vec![Value::Struct(external_bug)]),
+        );
+        self.call("ExternalBugs.add_external_bug", params).await?;
+        Ok(())
+    }
+
+    pub async fn update_external_bug(&self, mutation: ExternalBugMutation<'_>) -> Result<()> {
+        self.mutate_external_bug("ExternalBugs.update_external_bug", mutation)
+            .await
+    }
+
+    pub async fn remove_external_bug(&self, mutation: ExternalBugMutation<'_>) -> Result<()> {
+        self.mutate_external_bug("ExternalBugs.remove_external_bug", mutation)
+            .await
+    }
+
+    async fn mutate_external_bug(
+        &self,
+        method: &str,
+        mutation: ExternalBugMutation<'_>,
+    ) -> Result<()> {
+        let mut params = BTreeMap::new();
+        params.insert(
+            "bug_ids".into(),
+            Value::Array(vec![xmlrpc_id(mutation.bug_id, "bug ID")?]),
+        );
+        params.insert(
+            "ext_type_id".into(),
+            xmlrpc_id(mutation.tracker_id, "external tracker ID")?,
+        );
+        params.insert(
+            "ext_bz_bug_id".into(),
+            Value::Array(vec![Value::from(mutation.external_id)]),
+        );
+        if let Some(status) = mutation.status {
+            let description = mutation.description.ok_or_else(|| {
+                BzrError::input("ExternalBugs update requires a description".into())
+            })?;
+            params.insert("ext_status".into(), Value::from(status));
+            params.insert("ext_description".into(), Value::from(description));
+        }
+        self.call(method, params).await?;
+        Ok(())
+    }
+
     pub async fn update_bug_tags(&self, id: u64, add: &[String], remove: &[String]) -> Result<()> {
         let mut params = BTreeMap::new();
         params.insert("ids".into(), Value::Array(vec![xmlrpc_id(id, "bug ID")?]));

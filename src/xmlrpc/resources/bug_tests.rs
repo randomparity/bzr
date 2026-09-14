@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use super::{add_vec_filters, extract_bugs, value_to_bug};
 use crate::error::BzrError;
 use crate::test_helpers::xmlrpc_bug_response;
+use crate::types::bug::ExternalBugMutation;
 use crate::types::SearchParams;
 use crate::xmlrpc::protocol::Value;
 use crate::xmlrpc::protocol::XmlRpcClient;
@@ -13,6 +14,15 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn test_http_client() -> reqwest::Client {
     reqwest::Client::new()
+}
+
+fn xml_fault_response(code: i64, message: &str) -> String {
+    format!(
+        r#"<?xml version="1.0"?><methodResponse><fault><value><struct>
+        <member><name>faultCode</name><value><int>{code}</int></value></member>
+        <member><name>faultString</name><value><string>{message}</string></value></member>
+        </struct></value></fault></methodResponse>"#
+    )
 }
 
 #[tokio::test]
@@ -31,6 +41,138 @@ async fn update_bug_tags_uses_xmlrpc_method_and_tag_arrays() {
         .update_bug_tags(42, &["triage".into()], &["old".into()])
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn external_bug_methods_use_proven_extension_payloads() {
+    let mock = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<methodName>ExternalBugs.add_external_bug</methodName>"))
+        .and(body_string_contains("<name>external_bugs</name>"))
+        .and(body_string_contains("<name>ext_type_id</name>"))
+        .and(body_string_contains("<name>ext_bz_bug_id</name>"))
+        .and(body_string_contains("<string>EXT-1</string>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(r#"<?xml version="1.0"?><methodResponse><params><param><value><struct/></value></param></params></methodResponse>"#))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<methodName>ExternalBugs.update_external_bug</methodName>"))
+        .and(body_string_contains("<name>bug_ids</name>"))
+        .and(body_string_contains("<name>ext_status</name>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(r#"<?xml version="1.0"?><methodResponse><params><param><value><struct/></value></param></params></methodResponse>"#))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/xmlrpc.cgi"))
+        .and(body_string_contains("<methodName>ExternalBugs.remove_external_bug</methodName>"))
+        .and(body_string_contains("<name>ext_bz_bug_id</name>"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(r#"<?xml version="1.0"?><methodResponse><params><param><value><struct/></value></param></params></methodResponse>"#))
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
+    client
+        .add_external_bug(ExternalBugMutation {
+            bug_id: 42,
+            tracker_id: 7,
+            external_id: "EXT-1",
+            status: Some("NEW"),
+            description: Some("created"),
+        })
+        .await
+        .unwrap();
+    client
+        .update_external_bug(ExternalBugMutation {
+            bug_id: 42,
+            tracker_id: 7,
+            external_id: "EXT-1",
+            status: Some("ASSIGNED"),
+            description: Some("updated"),
+        })
+        .await
+        .unwrap();
+    client
+        .remove_external_bug(ExternalBugMutation {
+            bug_id: 42,
+            tracker_id: 7,
+            external_id: "EXT-1",
+            status: None,
+            description: None,
+        })
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn external_bug_methods_preserve_server_faults() {
+    let mock = MockServer::start().await;
+    for (method_name, code, message) in [
+        (
+            "ExternalBugs.add_external_bug",
+            51,
+            "unknown external tracker",
+        ),
+        (
+            "ExternalBugs.update_external_bug",
+            102,
+            "external link not found",
+        ),
+        ("ExternalBugs.remove_external_bug", 403, "permission denied"),
+    ] {
+        Mock::given(method("POST"))
+            .and(path("/xmlrpc.cgi"))
+            .and(body_string_contains(format!(
+                "<methodName>{method_name}</methodName>"
+            )))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_string(xml_fault_response(code, message)),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+    }
+    let client = XmlRpcClient::new(test_http_client(), &mock.uri(), Some("test-key"));
+    let add = ExternalBugMutation {
+        bug_id: 42,
+        tracker_id: 7,
+        external_id: "EXT-1",
+        status: Some("NEW"),
+        description: Some("created"),
+    };
+    let update = ExternalBugMutation {
+        bug_id: 42,
+        tracker_id: 7,
+        external_id: "EXT-1",
+        status: Some("ASSIGNED"),
+        description: Some("updated"),
+    };
+    let remove = ExternalBugMutation {
+        bug_id: 42,
+        tracker_id: 7,
+        external_id: "EXT-1",
+        status: None,
+        description: None,
+    };
+    for (error, expected) in [
+        (
+            client.add_external_bug(add).await.unwrap_err(),
+            "unknown external tracker",
+        ),
+        (
+            client.update_external_bug(update).await.unwrap_err(),
+            "external link not found",
+        ),
+        (
+            client.remove_external_bug(remove).await.unwrap_err(),
+            "permission denied",
+        ),
+    ] {
+        assert!(error.to_string().contains(expected), "{error}");
+    }
 }
 
 #[tokio::test]

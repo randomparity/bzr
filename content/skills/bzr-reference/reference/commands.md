@@ -18,6 +18,9 @@ Operate on bugs.
     (fetch all pages), `--count` (return just the match count).
   - Extra filters: `--resolution --version --op-sys --platform --whiteboard
     --target-milestone --qa-contact --url --tag --created-since --changed-since`.
+  - Match-type modifiers: `--status-whiteboard-type`, `--url-type`, and
+    `--email-type` select the boolean-chart operator for whiteboard, URL, and
+    role filters respectively; use a negating operator instead of `!value`.
 - `bzr bug view 12345 [--json] [--web]`   # `--web` opens the bug in a browser
   - Comments are not included — use `bzr comment list <id>` for those.
 - `bzr bug tag 12345 --add triage [--remove stale]`
@@ -155,6 +158,10 @@ Operate on bugs.
     `--obsolete`/`--no-obsolete` (omit both forms to leave a property unchanged).
 
 ## config
+- `bzr config import-bugzillarc [--path <file>]`
+  - Imports python-bugzilla server URLs and API keys locally; it never contacts
+    an imported server. Username/password and client-certificate entries are
+    reported unsupported rather than stored.
 - `bzr config set-server my-bz --url https://bugzilla.example.com --api-key-env BZR_API_KEY`
 - `bzr config set-server public-bz --url https://bugzilla.example.com`
   - Omit `--api-key*` for public read-only servers.
@@ -165,6 +172,13 @@ Operate on bugs.
 - `bzr config set-keyring my-bz` / `bzr config unset-keyring my-bz`
 - `bzr config migrate-to-keyring my-bz --yes`
 - `bzr config remove-server my-bz` / `bzr config rename-server old new`
+
+## auth
+- `bzr --server my-bz auth login --email alice@example.com [--password <password>] [--restrict-login]`
+  - Without `--password`, prompts with hidden input and saves the issued token
+    in the named server configuration. Inline servers cannot retain login tokens.
+- `bzr --server my-bz auth logout`
+  - Invalidates the remote token before removing the local credential.
 
 ## product
 - `bzr product list [--json]`
@@ -207,6 +221,7 @@ Operate on bugs.
 - `bzr component list --product Fedora [--json]`        # components of a product
 - `bzr component view Fedora kernel [--json]`           # one component's detail
 - `bzr component create ...` (admin only)
+- `bzr component update --product <P> --component <C> ...` (RHBZ XML-RPC only)
 - `bzr product view <product>` also lists components inline.
 
 ## template

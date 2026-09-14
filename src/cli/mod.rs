@@ -20,8 +20,10 @@ pub(crate) use auth::AuthAction;
 #[cfg(test)]
 pub(crate) use bug::MatchTypeArgs;
 pub(crate) use bug::{
-    AdjacencyArgs, CloneArgs, CloseArgs, CreateArgs, DupArgs, HistoryArgs, LinksArgs, ListArgs,
-    MyArgs, ReopenArgs, ResolveArgs, SearchArgs, TagArgs, UpdateArgs, ViewArgs,
+    AddExternalBugArgs, AdjacencyArgs, CloneArgs, CloseArgs, CreateArgs, DupArgs,
+    ExternalBugAction, ExternalBugArgs, HistoryArgs, LinksArgs, ListArgs, MyArgs,
+    RemoveExternalBugArgs, ReopenArgs, ResolveArgs, SearchArgs, TagArgs, UpdateArgs,
+    UpdateExternalBugArgs, ViewArgs,
 };
 pub(crate) use bug::{
     BugAction, BugActorFilterArgs, BugFilterArgs, CommentArgs, FieldArgs, PageArgs, SortArgs,
@@ -638,11 +640,12 @@ pub(crate) enum Commands {
         action: ClassificationAction,
     },
 
-    /// List, view, and create components within a Bugzilla product.
+    /// List, view, create, and (on RHBZ) update components within a Bugzilla product.
     ///
     /// Creating a component requires Bugzilla admin permissions on the
     /// target product. Components belong to exactly one product. Use
     /// `bzr product view <name>` to list a product's existing components.
+    /// Component update requires RHBZ's advertised `RedHat` extension.
     ///
     /// Examples:
     ///

@@ -1,10 +1,12 @@
 #!/bin/bash
+# shellcheck disable=SC2016 # jq filters intentionally retain variable syntax.
 # Real-server catalogue for RHBZ ExternalBugs and Component.update.
 
 RHBZ_TOKEN=$(unique_name rhbz-ext)
 RHBZ_PRODUCT=TestProduct
 RHBZ_COMPONENT=TestComponent
 RHBZ_EXTERNAL_ID="${RHBZ_TOKEN}-link"
+RHBZ_BZR_EXTERNAL_ID="${RHBZ_TOKEN}-bzr-link"
 RHBZ_TRACKER="${RHBZ_TOKEN}-tracker"
 
 rhbz_controls_ready() {
@@ -44,6 +46,17 @@ rhbz_expect_gap() {
     resource_expect_gap 774
 }
 
+rhbz_bzr_external_mutation() {
+    local name="$1" expected_state="$2"
+    shift 2
+    RUST_LOG=bzr=debug run_bzr --server "$RESOURCE_SERVER" --api xmlrpc "$@"
+    resource_capture_bzr "rhbz-externalbugs-${name}"
+    [[ $BZR_EXIT -eq 0 ]] && jq -e . "$BZR_STDOUT" >/dev/null &&
+        observe_bzr_transport && [[ $BZR_TRANSPORT == XMLRPC ]] &&
+        rhbz_external_state && jq -e --arg external "$RHBZ_BZR_EXTERNAL_ID" --argjson tracker "$RHBZ_TRACKER_ID" \
+            "$expected_state" "$COMPARE_EXCHANGE_DIR/rhbz-external-state.json" >/dev/null
+}
+
 rhbz_external_bug_fixture_sql() {
     printf '%s\n' \
         "INSERT INTO bugs (assigned_to, bug_severity, bug_status, creation_ts, delta_ts, short_desc, op_sys, priority, product_id, rep_platform, reporter, version, component_id, everconfirmed) VALUES (1, 'normal', 'NEW', NOW(), NOW(), '$RHBZ_TOKEN ExternalBugs comparison bug', 'Linux', 'Normal', $RHBZ_PRODUCT_ID, 'PC', 1, 'unspecified', $RHBZ_COMPONENT_ID, 1);" \
@@ -55,7 +68,6 @@ rhbz_external_bug_fixture_sql() {
 }
 
 test_begin "add" "ExternalBugs add persists a configured tracker link"
-resource_gap_reset
 if rhbz_controls_ready &&
     rhbz_external_bug_fixture_sql >"$COMPARE_EXCHANGE_DIR/rhbz-bug.sql" &&
     RHBZ_BUG_ID=$(run_bugzilla_sql_file "$COMPARE_EXCHANGE_DIR/rhbz-bug.sql" | tail -n1) &&
@@ -71,14 +83,19 @@ if rhbz_controls_ready &&
     jq -e --arg external "$RHBZ_EXTERNAL_ID" --argjson tracker "$RHBZ_TRACKER_ID" \
         '.bugs[0].external_bugs | any(.[]; .ext_bz_bug_id == $external and .type.id == $tracker)' \
         "$COMPARE_EXCHANGE_DIR/rhbz-external-state.json" >/dev/null; then
-    rhbz_expect_gap add "error: unrecognized subcommand 'external-bug'" \
-        'Usage: bzr bug [OPTIONS] <COMMAND>' bug external-bug add "$RHBZ_BUG_ID"
+    if rhbz_bzr_external_mutation add \
+        '.bugs[0].external_bugs | any(.[]; .ext_bz_bug_id == $external and .type.id == $tracker)' \
+        bug external-bug add "$RHBZ_BUG_ID" --tracker "$RHBZ_TRACKER_ID" \
+        --external-id "$RHBZ_BZR_EXTERNAL_ID" --status NEW --description created; then
+        test_pass
+    else
+        test_fail 'bzr ExternalBugs add did not persist its link'
+    fi
 elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail 'ExternalBugs add positive control failed'
 fi
 
 test_begin "update" "ExternalBugs update persists changed fields"
-resource_gap_reset
 if [[ -n ${RHBZ_BUG_ID:-} && -n ${RHBZ_TRACKER_ID:-} ]] &&
     resource_pybz rhbz-update externalbugs_update \
     "$(jq -cn --argjson bug_id "$RHBZ_BUG_ID" --argjson tracker_id "$RHBZ_TRACKER_ID" \
@@ -87,14 +104,19 @@ if [[ -n ${RHBZ_BUG_ID:-} && -n ${RHBZ_TRACKER_ID:-} ]] &&
     jq -e --arg external "$RHBZ_EXTERNAL_ID" \
         '.bugs[0].external_bugs | any(.[]; .ext_bz_bug_id == $external and .ext_status == "ASSIGNED" and .ext_description == "updated")' \
         "$COMPARE_EXCHANGE_DIR/rhbz-external-state.json" >/dev/null; then
-    rhbz_expect_gap update "error: unrecognized subcommand 'external-bug'" \
-        'Usage: bzr bug [OPTIONS] <COMMAND>' bug external-bug update "$RHBZ_BUG_ID"
+    if rhbz_bzr_external_mutation update \
+        '.bugs[0].external_bugs | any(.[]; .ext_bz_bug_id == $external and .ext_status == "ASSIGNED" and .ext_description == "updated")' \
+        bug external-bug update "$RHBZ_BUG_ID" --tracker "$RHBZ_TRACKER_ID" \
+        --external-id "$RHBZ_BZR_EXTERNAL_ID" --status ASSIGNED --description updated; then
+        test_pass
+    else
+        test_fail 'bzr ExternalBugs update did not persist its link'
+    fi
 elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail 'ExternalBugs update positive control failed'
 fi
 
 test_begin "remove" "ExternalBugs remove deletes the persisted link"
-resource_gap_reset
 if [[ -n ${RHBZ_BUG_ID:-} && -n ${RHBZ_TRACKER_ID:-} ]] &&
     resource_pybz rhbz-remove externalbugs_remove \
     "$(jq -cn --argjson bug_id "$RHBZ_BUG_ID" --argjson tracker_id "$RHBZ_TRACKER_ID" \
@@ -103,14 +125,19 @@ if [[ -n ${RHBZ_BUG_ID:-} && -n ${RHBZ_TRACKER_ID:-} ]] &&
     jq -e --arg external "$RHBZ_EXTERNAL_ID" \
         '.bugs[0].external_bugs | all(.[]; .ext_bz_bug_id != $external)' \
         "$COMPARE_EXCHANGE_DIR/rhbz-external-state.json" >/dev/null; then
-    rhbz_expect_gap remove "error: unrecognized subcommand 'external-bug'" \
-        'Usage: bzr bug [OPTIONS] <COMMAND>' bug external-bug remove "$RHBZ_BUG_ID"
+    if rhbz_bzr_external_mutation remove \
+        '.bugs[0].external_bugs | all(.[]; .ext_bz_bug_id != $external)' \
+        bug external-bug remove "$RHBZ_BUG_ID" --tracker "$RHBZ_TRACKER_ID" \
+        --external-id "$RHBZ_BZR_EXTERNAL_ID"; then
+        test_pass
+    else
+        test_fail 'bzr ExternalBugs remove did not remove its link'
+    fi
 elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail 'ExternalBugs remove positive control failed'
 fi
 
 test_begin "component-update" "Component.update persists the changed component"
-resource_gap_reset
 if rhbz_controls_ready &&
     resource_pybz rhbz-component-update component_update \
     "$(jq -cn --arg product "$RHBZ_PRODUCT" --arg component "$RHBZ_COMPONENT" --arg owner "$COMPARE_ADMIN_EMAIL" \
@@ -121,8 +148,23 @@ if rhbz_controls_ready &&
     jq -e --arg component "$RHBZ_COMPONENT" \
         '.products[0].components[] | select(.name == $component) | .description == "updated RHBZ component" and .is_active == false' \
         "$COMPARE_EXCHANGE_DIR/rhbz-component-view.json" >/dev/null; then
-    rhbz_expect_gap component-update "error: unrecognized subcommand 'update'" \
-        'Usage: bzr component [OPTIONS] <COMMAND>' component update
+    RUST_LOG=bzr=debug run_bzr --server "$RESOURCE_SERVER" --api xmlrpc component update \
+        --product "$RHBZ_PRODUCT" --component "$RHBZ_COMPONENT" \
+        --description "updated by bzr" --default-assignee "$COMPARE_ADMIN_EMAIL" --is-active true
+    resource_capture_bzr rhbz-component-update
+    if [[ $BZR_EXIT -eq 0 ]] && jq -e . "$BZR_STDOUT" >/dev/null &&
+        observe_bzr_transport && [[ $BZR_TRANSPORT == XMLRPC ]] &&
+        curl -fsS --get "$BZ_URL/rest/product" \
+            --data-urlencode "names=$RHBZ_PRODUCT" \
+            --data-urlencode "Bugzilla_api_key=$BZR_COMPARE_API_KEY" \
+            >"$COMPARE_EXCHANGE_DIR/rhbz-component-bzr-view.json" &&
+        jq -e --arg component "$RHBZ_COMPONENT" \
+            '.products[0].components[] | select(.name == $component) | .description == "updated by bzr" and .is_active == true' \
+            "$COMPARE_EXCHANGE_DIR/rhbz-component-bzr-view.json" >/dev/null; then
+        test_pass
+    else
+        test_fail 'bzr Component.update did not persist its component changes'
+    fi
 elif [[ $TEST_RESULT_PENDING -eq 0 ]]; then
     test_fail 'Component.update positive control failed'
 fi

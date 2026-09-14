@@ -1160,7 +1160,10 @@ run_parity_report_fixture() {
         '| Membership add and remove | `bzr group add-user/remove-user`, `bzr user search` | parity | `compare/04-users-groups/membership-add-remove` |'
         '| Product catalogues | `bzr product list --type` | parity | `compare/05-products-components/product-catalogues` |'
         '| Component create | `bzr component create`, `bzr component view` | parity | `compare/05-products-components/component-create` |'
-        '| RHBZ component update | `bzr component update` | expected gap (#774) | `compare/08-rhbz-externalbugs/component-update` |'
+        '| RHBZ ExternalBugs add | `bzr bug external-bug add` | RHBZ XML-RPC parity | `compare/08-rhbz-externalbugs/add` |'
+        '| RHBZ ExternalBugs update | `bzr bug external-bug update` | RHBZ XML-RPC parity | `compare/08-rhbz-externalbugs/update` |'
+        '| RHBZ ExternalBugs remove | `bzr bug external-bug remove` | RHBZ XML-RPC parity | `compare/08-rhbz-externalbugs/remove` |'
+        '| RHBZ component update | `bzr component update --product <P> --component <C>` | parity | `compare/08-rhbz-externalbugs/component-update` |'
         '| RHBZ sub-components | `bzr bug update --field-json -` with `rh_sub_components` | parity | `compare/09-rhbz-fields/sub-components` |'
         '| RHBZ target release | `bzr bug update --field target_release=...` | parity | `compare/09-rhbz-fields/target-release` |'
         '| RHBZ fixed-in | `bzr bug update --field cf_fixed_in=...` | parity | `compare/09-rhbz-fields/fixed-in` |'
@@ -1176,7 +1179,7 @@ run_parity_report_fixture() {
         '| Login-token request transport | persisted `token` configuration | parity | `compare/06-auth-config-tls/token-transport-gap` |'
         '| Login and logout commands | `bzr auth login`, `bzr auth logout` | parity | `compare/06-auth-config-tls/login-command-gap` |'
         '| bugzillarc API-key import | `bzr config import-bugzillarc` | parity; username/password and client certificates are reported unsupported | `compare/06-auth-config-tls/bugzillarc-import` |'
-        '| Client certificate configuration | no equivalent | surface gap (#677) | `compare/06-auth-config-tls/client-certificate-surface-gap` |'
+        '| Client certificate configuration | no equivalent | deliberate non-goal; #677 closed NOT_PLANNED | `compare/06-auth-config-tls/client-certificate-surface-gap` |'
         '| Red Hat Bearer API-key transport | automatic REST transport for `bugzilla.redhat.com` | parity | `compare/06-auth-config-tls/bearer-gap` |'
     )
 
@@ -1215,10 +1218,49 @@ run_parity_report_fixture() {
             return 1
         fi
     done
+    # shellcheck disable=SC2016 # Markdown code spans are literal fixture data.
+    local -a classification_fragments=(
+        'RHBZ sub-components and target release are proven writable and readable through `bzr bug view`;'
+        'URL/whiteboard/email match types are parity.'
+        'RHBZ whiteboard/fixed-in writes are parity.'
+        'RHBZ component update is capability-gated XML-RPC parity.'
+        'RHBZ `ExternalBugs` mutations are parity through `bzr bug external-bug`.'
+    )
+    for row in "${classification_fragments[@]}"; do
+        if [[ $(grep -Fc "$row" "$report") -ne 1 ]]; then
+            printf 'missing or duplicate parity classification: %s\n' "$row" >&2
+            return 1
+        fi
+    done
     if grep -Eiq '^\|.*\|[^|]*\bunknown\b[^|]*\|' "$report"; then
         printf 'parity report contains an unclassified unknown row\n' >&2
         return 1
     fi
+
+    local cli_doc="$PYBZ_DIR/../../../docs/bzr-cli.md"
+    local commands="$PYBZ_DIR/../../../content/skills/bzr-reference/reference/commands.md"
+    local cli_config="$PYBZ_DIR/../../../src/cli/config.rs"
+    local cli_auth="$PYBZ_DIR/../../../src/cli/auth.rs"
+    local cli_bug="$PYBZ_DIR/../../../src/cli/bug/mod.rs"
+    local -a mappings=(
+        "$cli_config|ImportBugzillarc|$cli_doc|│   ├── import-bugzillarc [--path <FILE>]"
+        "$cli_config|ImportBugzillarc|$commands|bzr config import-bugzillarc [--path <file>]"
+        "$cli_auth|AuthAction|$commands|## auth"
+        "$cli_auth|restrict_login|$commands|--restrict-login"
+        "$cli_bug|status-whiteboard-type|$commands|--status-whiteboard-type"
+        "$cli_bug|url-type|$commands|--url-type"
+        "$cli_bug|email-type|$commands|--email-type"
+    )
+    local mapping source source_term reference reference_term
+    for mapping in "${mappings[@]}"; do
+        IFS='|' read -r source source_term reference reference_term <<<"$mapping"
+        if ! grep -Fq -- "$source_term" "$source" ||
+            ! grep -Fq -- "$reference_term" "$reference"; then
+            printf 'CLI reference mapping is missing: %s -> %s\n' \
+                "$source_term" "$reference_term" >&2
+            return 1
+        fi
+    done
 }
 
 run_sidecar_stop_failure_fixture() (
@@ -3320,6 +3362,36 @@ run_rhbz_extensions_fixture() (
     done
 )
 
+run_rhbz_comparison_target_fixture() {
+    local makefile="$PYBZ_DIR/../../Makefile"
+    local runner="$PYBZ_DIR/../run-rhbz-compare.sh"
+    local recipe
+
+    if ! grep -Fqx \
+        'functional-compare-rhbz: release ## Run the isolated RHBZ extension smoke comparison' \
+        "$makefile"; then
+        printf 'RHBZ comparison target must build the release binary first\n' >&2
+        return 1
+    fi
+
+    recipe=$(sed -n '/^functional-compare-rhbz:/,/^$/p' "$makefile")
+    # shellcheck disable=SC2016 # This is the literal Make recipe contract.
+    if ! grep -Fq \
+        'BZR_BZ_VERSION=rhbz BZR_COMPARE_BIN="$(BZR_COMPARE_BIN)" tests/functional/run-rhbz-compare.sh' \
+        <<<"$recipe"; then
+        printf 'RHBZ comparison target did not forward BZR_COMPARE_BIN\n' >&2
+        return 1
+    fi
+
+    # shellcheck disable=SC2016 # This is the literal runner fallback contract.
+    if ! grep -Fq 'export BZR_BIN="${BZR_COMPARE_BIN:-$REPO_ROOT/target/release/bzr}"' \
+        "$runner" ||
+        ! grep -Fq 'RHBZ comparison binary: %s' "$runner"; then
+        printf 'RHBZ runner did not retain and identify the selected binary\n' >&2
+        return 1
+    fi
+}
+
 run_rhbz_fields_fixture() (
     local phase="$PYBZ_DIR/../compare/rhbz/09-rhbz-fields.sh"
     local runner="$PYBZ_DIR/../run-rhbz-compare.sh"
@@ -3471,6 +3543,8 @@ run_rhbz_fields_fixture() (
     fi
     assert_equals 0 "$FAIL_COUNT" "RHBZ fields fail count"
     assert_equals 0 "$GAP_COUNT" "RHBZ fields gap count"
+    assert_equals 12 "$RHBZ_FIELDS_SUB_COMPONENT_ID" \
+        "RHBZ fields primary sub-component ID"
     for test_id in sub-components target-release fixed-in whiteboards; do
         if [[ $SEEN_TEST_IDS != *$'\ncompare/09-rhbz-fields/'"$test_id"$'\n'* ]]; then
             printf 'RHBZ fields fixture did not run %s\n' "$test_id" >&2
@@ -3593,6 +3667,11 @@ run_rhbz_externalbugs_fixture() (
                     '{bugs:[{external_bugs:[{ext_bz_bug_id:$external,type:{id:7},ext_status:"ASSIGNED",ext_description:"updated"}]}]}'
                 ;;
             remove) printf '%s\n' '{"bugs":[{"external_bugs":[]}]}' ;;
+            bzr-add) jq -cn --arg external "$RHBZ_FIXTURE_BZR_EXTERNAL" \
+                '{bugs:[{external_bugs:[{ext_bz_bug_id:$external,type:{id:7},ext_status:"NEW",ext_description:"created"}]}]}' ;;
+            bzr-update) jq -cn --arg external "$RHBZ_FIXTURE_BZR_EXTERNAL" \
+                '{bugs:[{external_bugs:[{ext_bz_bug_id:$external,type:{id:7},ext_status:"ASSIGNED",ext_description:"updated"}]}]}' ;;
+            bzr-remove) printf '%s\n' '{"bugs":[{"external_bugs":[]}]}' ;;
             component-update)
                 printf '%s\n' '{"products":[{"components":[{"name":"TestComponent","description":"updated RHBZ component","is_active":false}]}]}'
                 ;;
@@ -3603,7 +3682,25 @@ run_rhbz_externalbugs_fixture() (
         BZR_STDOUT="$COMPARE_EXCHANGE_DIR/bzr.stdout"
         BZR_STDERR="$COMPARE_EXCHANGE_DIR/bzr.stderr"
         : >"$BZR_STDOUT"
-        if [[ " $* " == *' component update '* ]]; then
+        if [[ " $* " == *' external-bug add '* ]]; then
+            BZR_EXIT=0
+            RHBZ_FIXTURE_STATE=bzr-add
+            RHBZ_FIXTURE_BZR_EXTERNAL=$(awk '/--external-id/{getline; print; exit}' < <(printf '%s\n' "$@"))
+            printf '{}\n' >"$BZR_STDOUT"
+            printf '%s\n' 'DEBUG bzr::xmlrpc::protocol::client: XML-RPC call' >"$BZR_STDERR"
+        elif [[ " $* " == *' external-bug update '* ]]; then
+            BZR_EXIT=0
+            RHBZ_FIXTURE_STATE=bzr-update
+            RHBZ_FIXTURE_BZR_EXTERNAL=$(awk '/--external-id/{getline; print; exit}' < <(printf '%s\n' "$@"))
+            printf '{}\n' >"$BZR_STDOUT"
+            printf '%s\n' 'DEBUG bzr::xmlrpc::protocol::client: XML-RPC call' >"$BZR_STDERR"
+        elif [[ " $* " == *' external-bug remove '* ]]; then
+            BZR_EXIT=0
+            RHBZ_FIXTURE_STATE=bzr-remove
+            RHBZ_FIXTURE_BZR_EXTERNAL=$(awk '/--external-id/{getline; print; exit}' < <(printf '%s\n' "$@"))
+            printf '{}\n' >"$BZR_STDOUT"
+            printf '%s\n' 'DEBUG bzr::xmlrpc::protocol::client: XML-RPC call' >"$BZR_STDERR"
+        elif [[ " $* " == *' component update '* ]]; then
             printf '%s\n%s\n' "error: unrecognized subcommand 'update'" \
                 'Usage: bzr component [OPTIONS] <COMMAND>' >"$BZR_STDERR"
         else
@@ -3613,9 +3710,9 @@ run_rhbz_externalbugs_fixture() (
     }
 
     source "$phase" >/dev/null
-    assert_equals 0 "$PASS_COUNT" "RHBZ ExternalBugs pass count"
+    assert_equals 3 "$PASS_COUNT" "RHBZ ExternalBugs pass count"
     assert_equals 0 "$FAIL_COUNT" "RHBZ ExternalBugs fail count"
-    assert_equals 4 "$GAP_COUNT" "RHBZ ExternalBugs gap count"
+    assert_equals 1 "$GAP_COUNT" "RHBZ ExternalBugs gap count"
     for test_id in add update remove component-update; do
         if [[ $SEEN_TEST_IDS != *$'\ncompare/08-rhbz-externalbugs/'"$test_id"$'\n'* ]]; then
             printf 'RHBZ ExternalBugs fixture did not run %s\n' "$test_id" >&2
@@ -3789,6 +3886,7 @@ run_user_group_phase_fixture
 run_membership_cleanup_fixture
 run_product_component_phase_fixture
 run_rhbz_extensions_fixture
+run_rhbz_comparison_target_fixture
 run_rhbz_fields_fixture
 run_rhbz_externalbugs_fixture
 run_pybz_fixture_source_volume_fixture

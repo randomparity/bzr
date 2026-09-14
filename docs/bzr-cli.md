@@ -53,7 +53,7 @@ For installation and quick start, see [README.md](../README.md).
 | `--timeout <SECS>` | Per-request timeout in seconds (default 30). Takes precedence over `BZR_TIMEOUT`. The 10s connect timeout is unaffected. |
 | `--retry <N>` | Retry transient failures up to N times with exponential backoff honoring `Retry-After`. 429 and connect failures are retried for any operation; 5xx and read timeouts only for safe reads (GET/HEAD), never for writes (create, update, comment) where a replay could duplicate the effect. Default 0 (disabled); max 10. Exhausted retries exit 5. |
 | `--progress <FORMAT>` | Emit structured progress events on stderr for long operations. `ndjson` streams newline-delimited JSON (`page`/`batch`/`done`, and `error` on failure) during `bug list`/`search --paginate`, `query run --paginate`, and `bug create`/`update --from-json` array form. stdout is unaffected; absent the flag stderr stays silent (or `-v` logs). Only `ndjson` is supported. Intended for non-verbose runs, since `-v` log lines interleave on the same stream. |
-| `--dry-run` | Preview a supported mutation without writing. Resolves and validates the request, then prints the would-be payload and affected IDs as `{"resource":"bug","action":"dry-run","ids":[...],"changes":{...}}` instead of calling the write API. Exits 0 on a valid request. Supported for `bug create`, `update`, `clone`, `resolve`, `close`, `reopen`, `dup`; `product`, `user`, and `group` `create` and `update`; and `component create`. On any other command it exits 7. `bug clone` still reads the source bug to build the preview. |
+| `--dry-run` | Preview a supported mutation without writing. Resolves and validates the request, then prints the would-be payload and affected IDs as `{"resource":"bug","action":"dry-run","ids":[...],"changes":{...}}` instead of calling the write API. Exits 0 on a valid request. Supported for `bug create`, `update`, `clone`, `resolve`, `close`, `reopen`, `dup`; `product`, `user`, and `group` `create` and `update`; and `component create` and `update`. On any other command it exits 7. `bug clone` still reads the source bug to build the preview. |
 | `-y, --yes` | Skip the confirmation prompt for a large batch mutation. A `bug update`/`resolve`/`close`/`reopen` or `attachment upload` targeting more than 10 bugs prompts for confirmation at an interactive terminal; `--yes` bypasses it. Non-interactive runs (piped stdin, agents) never prompt, so this is only needed in an interactive session. |
 | `-v, --verbose` | Increase log verbosity (`-v`=info, `-vv`=debug, `-vvv`=trace; `RUST_LOG` overrides) |
 | `-h, --help` | Print help |
@@ -256,8 +256,10 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 ├── component
 │   ├── list --product <P> [--fields <F>] [--exclude-fields <F>]
 │   ├── view <PRODUCT> <COMPONENT> [--fields <F>] [--exclude-fields <F>]
-│   └── create [--from-json <PATH>] [--product <P>] [--name <N>] [--description <D>] [--default-assignee <E>]
+│   ├── create [--from-json <PATH>] [--product <P>] [--name <N>] [--description <D>] [--default-assignee <E>]
+│   └── update --product <P> --component <C> [--description <D>] [--default-assignee <E>] [--is-active <BOOL>]
 ├── config
+│   ├── import-bugzillarc [--path <FILE>]
 │   ├── set-server <NAME> --url <URL> [--api-key <KEY> | --api-key-env <ENV_VAR>] [--email <EMAIL>] [--auth-method <METHOD>]
 │   │                     [--tls-insecure] [--tls-ca-cert <PATH>] [--tls-pin-sha256 <PIN>] [--tls-pin-now] [--tls-pin-clear]
 │   ├── set-keyring <NAME> [--service <S>] [--account <A>]
@@ -750,6 +752,22 @@ bzr --api xmlrpc bug tag 12345 --add needs-review --remove stale
 The command requires an API key and does not fall back to REST; REST-only login
 tokens are not supported. Use
 `bzr --api xmlrpc bug list --tag <TAG>` to find tagged bugs.
+
+### `bzr bug external-bug`
+
+Manage configured RHBZ ExternalBugs links through the `ExternalBugs` XML-RPC
+extension. Every operation requires an API key and a server advertising that
+extension; stock Bugzilla is refused with exit 15 before a mutation request.
+
+```bash
+bzr bug external-bug add 12345 --tracker 7 --external-id EXT-1 --status NEW --description created
+bzr bug external-bug update 12345 --tracker 7 --external-id EXT-1 --status ASSIGNED --description updated
+bzr bug external-bug remove 12345 --tracker 7 --external-id EXT-1
+```
+
+`--tracker` is the configured external-tracker ID, while `--external-id` is
+the linked issue identifier. Add and update require non-empty `--status` and
+`--description`; remove targets the same `(bug, tracker, external-id)` link.
 
 ### `bzr bug my`
 
@@ -2052,6 +2070,27 @@ bzr --dry-run component create --product Fedora --name "new-component" \
 
 Agent note: this is safer after confirming the product exists with `bzr --json product view <product>` and that the assignee is valid with `bzr --json user search "<email-or-name>"`.
 
+### `bzr component update`
+
+Update a component through Red Hat Bugzilla's XML-RPC `Component.update`
+capability. Stock Bugzilla is refused before a mutation request is sent. The
+command requires an API key rather than a REST login token.
+
+```bash
+bzr component update --product Fedora --component kernel \
+  --description "Kernel team component" --is-active true
+bzr --dry-run component update --product Fedora --component kernel \
+  --default-assignee maintainer@example.com
+```
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `--product <P>` | Yes | Product containing the component |
+| `--component <C>` | Yes | Current component name |
+| `--description <D>` | One mutable field | New description |
+| `--default-assignee <E>` | One mutable field | New default assignee |
+| `--is-active <BOOL>` | One mutable field | New active state |
+
 ## `bzr config` -- Configuration Management
 
 Configuration is stored in `~/.config/bzr/config.toml`. Multiple servers can be configured and switched between using aliases.
@@ -2067,6 +2106,13 @@ local-only and does not contact imported servers.
 unsupported and are not stored: python-bugzilla login credentials are not interchangeable with
 an already-issued Bugzilla login token. Existing bzr server aliases with the same URL are updated;
 otherwise bzr derives an alias from the URL host.
+
+When `[DEFAULT]` contains `url`, that URL is imported with its existing exact-authority section
+override behavior. A file without `DEFAULT.url` may instead contain one or more sections named by
+full HTTP(S) URLs; each such section becomes a server using only that section's import settings.
+Other section names are not URL targets in this mode. Settings in `DEFAULT` do not become credentials
+for section-only targets, so credentials are never routed by a substring match or shared default.
+A malformed URL section is rejected before bzr writes configuration.
 
 ```bash
 bzr config import-bugzillarc

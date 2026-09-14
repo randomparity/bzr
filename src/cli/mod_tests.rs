@@ -836,6 +836,38 @@ fn parse_bug_update_with_flags() {
 }
 
 #[test]
+fn parse_bug_external_bug_add() {
+    let cli = Cli::try_parse_from([
+        "bzr",
+        "bug",
+        "external-bug",
+        "add",
+        "42",
+        "--tracker",
+        "7",
+        "--external-id",
+        "EXT-1",
+        "--status",
+        "NEW",
+        "--description",
+        "created",
+    ])
+    .unwrap();
+    let Commands::Bug { action } = cli.command else {
+        panic!("expected bug command");
+    };
+    let BugAction::ExternalBug(super::ExternalBugArgs {
+        action: super::ExternalBugAction::Add(args),
+    }) = action
+    else {
+        panic!("expected external bug add");
+    };
+    assert_eq!(args.id, 42);
+    assert_eq!(args.tracker, 7);
+    assert_eq!(args.external_id, "EXT-1");
+}
+
+#[test]
 fn parse_bug_update_with_dupe_of() {
     let cli = Cli::try_parse_from(["bzr", "bug", "update", "42", "--dupe-of", "99"]).unwrap();
     match cli.command {

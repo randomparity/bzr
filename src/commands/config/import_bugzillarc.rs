@@ -24,7 +24,8 @@ pub(super) fn handle(path: Option<&Path>, ctx: &CommandContext, w: &mut Writers<
     let imported = resolved_servers(&read_sections(path)?)?;
     if imported.is_empty() {
         return Err(BzrError::input(
-            "bugzillarc defines no URL to import".into(),
+            "bugzillarc defines no URL to import; add DEFAULT.url or an explicit HTTP(S) URL section"
+                .into(),
         ));
     }
     let unsupported_password_credentials = imported
@@ -180,24 +181,54 @@ fn merge_sections(target: &mut Sections, source: Sections) {
 fn resolved_servers(sections: &Sections) -> Result<Vec<ImportedServer>> {
     let defaults = sections.get("DEFAULT").cloned().unwrap_or_default();
     let Some(url) = defaults.get("url").filter(|url| !url.is_empty()).cloned() else {
-        return Ok(Vec::new());
+        return resolved_explicit_url_sections(sections);
     };
     url::Url::parse(&url)
         .map_err(|error| BzrError::input(format!("bugzillarc DEFAULT url is invalid: {error}")))?;
     let authority = raw_authority(&url);
     let mut values = defaults;
     for (section, override_values) in sections {
-        let matches_url = if section.contains('/') {
-            url.contains(section)
-        } else {
-            section == authority
-        };
-        if section != "DEFAULT" && matches_url {
+        if section != "DEFAULT" && section == authority {
             values.extend(override_values.clone());
             break;
         }
     }
-    Ok(vec![ImportedServer {
+    Ok(vec![imported_server(url, &values)])
+}
+
+fn resolved_explicit_url_sections(sections: &Sections) -> Result<Vec<ImportedServer>> {
+    sections
+        .iter()
+        .filter(|(section, _)| section.as_str() != "DEFAULT")
+        .filter_map(|(section, values)| match explicit_section_url(section) {
+            Ok(Some(url)) => Some(Ok(imported_server(url, values))),
+            Ok(None) => None,
+            Err(error) => Some(Err(error)),
+        })
+        .collect()
+}
+
+fn explicit_section_url(section: &str) -> Result<Option<String>> {
+    if !section.contains("://") && !section.starts_with("http:") && !section.starts_with("https:") {
+        return Ok(None);
+    }
+    let parsed = url::Url::parse(section)
+        .map_err(|error| BzrError::input(format!("bugzillarc section URL is invalid: {error}")))?;
+    if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
+        return Err(BzrError::input(
+            "bugzillarc section URL must be an absolute HTTP(S) URL".into(),
+        ));
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err(BzrError::input(
+            "bugzillarc section URL must not contain credentials".into(),
+        ));
+    }
+    Ok(Some(section.into()))
+}
+
+fn imported_server(url: String, values: &BTreeMap<String, String>) -> ImportedServer {
+    ImportedServer {
         url,
         api_key: values
             .get("api_key")
@@ -211,7 +242,7 @@ fn resolved_servers(sections: &Sections) -> Result<Vec<ImportedServer>> {
             .get("cert")
             .filter(|value| !value.is_empty())
             .cloned(),
-    }])
+    }
 }
 
 fn raw_authority(url: &str) -> &str {
