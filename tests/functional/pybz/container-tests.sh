@@ -3426,6 +3426,9 @@ run_rhbz_core_fixture() (
     local containerfile="$PYBZ_DIR/../versions/rhbz/Containerfile"
     if ! grep -Fq 'long_query_timeout} = "60"' "$entrypoint" ||
         ! grep -Fq 'exec /usr/bin/tar "$@" --no-same-owner' "$containerfile" ||
+        ! grep -Fq 'Cpanel-JSON-XS-4.42.tar.gz' "$containerfile" ||
+        ! grep -Fq 'e1ac2fab1e3a6d2d998d3440c600067365bdc7dbf0c8f2b2059cbce4b4c83173' "$containerfile" ||
+        ! grep -Fq 'sha256sum --check --strict' "$containerfile" ||
         ! grep -Fq 's/SET STATEMENT_TIMEOUT TO /SET max_statement_time = /' "$containerfile" ||
         ! grep -Fq 's/SET STATEMENT_TIMEOUT TO 0/SET max_statement_time = 0/' "$containerfile"; then
         printf 'RHBZ fixture must use a MariaDB-compatible core search timeout\n' >&2

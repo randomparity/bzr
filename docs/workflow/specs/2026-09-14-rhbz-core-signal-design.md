@@ -55,3 +55,9 @@ Fresh rootless CI image builds also need a Containerfile-local `tar
 the runner and otherwise make the image build fail before the RHBZ phase. The
 operator separately authorized that wrapper; it applies only while preparing
 this disposable RHBZ image.
+
+Fedora 39's Cpanel::JSON::XS is 4.37, below the RHBZ dependency's 4.38
+minimum. The operator authorized a replacement limited to the fixture: install
+the pinned 4.42 archive from the CPAN MetaCPAN mirror only after its CPAN
+published SHA-256 is verified. This stops the later unpinned CPAN resolution
+from fetching that module while retaining ordinary dependency installation.
