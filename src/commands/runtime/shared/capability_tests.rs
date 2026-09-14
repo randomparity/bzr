@@ -3,7 +3,7 @@
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
-use super::{require_server_capability, RED_HAT_EXTENSION};
+use super::{require_server_capability, EXTERNAL_BUGS_EXTENSION, RED_HAT_EXTENSION};
 use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::shared::connect_and_configure;
 use crate::error::{CAPABILITY_ABSENT, CAPABILITY_UNDETERMINED};
@@ -70,6 +70,31 @@ async fn absent_capability_is_refused_with_exit_15() {
         message.contains("'test'"),
         "must name the server: {message}"
     );
+}
+
+#[tokio::test]
+async fn absent_externalbugs_capability_is_refused_with_exit_15() {
+    let (_lock, mock, _tmp) = setup_test_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/extensions"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({"extensions": {}})),
+        )
+        .expect(1)
+        .mount(&mock)
+        .await;
+    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let client = connect_and_configure(&ctx).await.unwrap();
+    let error = require_server_capability(
+        &ctx,
+        &client,
+        EXTERNAL_BUGS_EXTENSION,
+        "ExternalBugs mutation",
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(error.exit_code(), 15);
+    assert_eq!(error.error_type(), "unsupported_server_capability");
 }
 
 /// An empty extension map is a real answer, not a failed probe: the server
@@ -183,7 +208,10 @@ async fn inline_server_neither_reads_nor_writes_the_cache() {
         if let Some(srv) = config.servers.get_mut("test") {
             srv.server_extensions = Some(vec![RED_HAT_EXTENSION.to_string()]);
             srv.server_extensions_url = Some(srv.url.clone());
-            srv.server_extensions_known = Some(vec![RED_HAT_EXTENSION.to_string()]);
+            srv.server_extensions_known = Some(vec![
+                EXTERNAL_BUGS_EXTENSION.to_string(),
+                RED_HAT_EXTENSION.to_string(),
+            ]);
         }
         Ok(())
     })
@@ -237,7 +265,10 @@ async fn cache_probed_from_a_different_url_is_not_trusted() {
         if let Some(srv) = config.servers.get_mut("test") {
             srv.server_extensions = Some(vec![RED_HAT_EXTENSION.to_string()]);
             srv.server_extensions_url = Some("https://elsewhere.example".to_string());
-            srv.server_extensions_known = Some(vec![RED_HAT_EXTENSION.to_string()]);
+            srv.server_extensions_known = Some(vec![
+                EXTERNAL_BUGS_EXTENSION.to_string(),
+                RED_HAT_EXTENSION.to_string(),
+            ]);
         }
         Ok(())
     })
@@ -258,7 +289,13 @@ async fn cache_probed_from_a_different_url_is_not_trusted() {
     assert_eq!(srv.server_extensions_url.as_deref(), Some(&*mock.uri()));
     assert_eq!(
         srv.server_extensions_known.as_deref(),
-        Some([RED_HAT_EXTENSION.to_string()].as_slice())
+        Some(
+            [
+                EXTERNAL_BUGS_EXTENSION.to_string(),
+                RED_HAT_EXTENSION.to_string()
+            ]
+            .as_slice()
+        )
     );
 }
 
@@ -272,7 +309,10 @@ async fn cached_empty_list_is_a_hit_and_refuses_without_probing() {
         if let Some(srv) = config.servers.get_mut("test") {
             srv.server_extensions = Some(vec![]);
             srv.server_extensions_url = Some(srv.url.clone());
-            srv.server_extensions_known = Some(vec![RED_HAT_EXTENSION.to_string()]);
+            srv.server_extensions_known = Some(vec![
+                EXTERNAL_BUGS_EXTENSION.to_string(),
+                RED_HAT_EXTENSION.to_string(),
+            ]);
         }
         Ok(())
     })

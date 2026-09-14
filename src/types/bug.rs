@@ -37,6 +37,16 @@ pub(crate) fn is_dynamic_bug_field(name: &str) -> bool {
     name.starts_with("cf_") || matches!(name, "target_release" | "sub_components")
 }
 
+/// One RHBZ `ExternalBugs` mutation target and its optional mutable fields.
+#[derive(Debug, Clone, Copy)]
+pub struct ExternalBugMutation<'a> {
+    pub bug_id: u64,
+    pub tracker_id: u64,
+    pub external_id: &'a str,
+    pub status: Option<&'a str>,
+    pub description: Option<&'a str>,
+}
+
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct Bug {

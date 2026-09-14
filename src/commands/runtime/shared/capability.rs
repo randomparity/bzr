@@ -19,12 +19,14 @@ use crate::error::{BzrError, Result, CAPABILITY_ABSENT, CAPABILITY_UNDETERMINED}
 /// Bugzilla. Presence of this extension is a *proxy* for a patched
 /// `Bug.search`, not proof of one — see ADR-0052's consequences.
 pub(crate) const RED_HAT_EXTENSION: &str = "RedHat";
+/// Vendor extension that owns external tracker mutations on RHBZ.
+pub(crate) const EXTERNAL_BUGS_EXTENSION: &str = "ExternalBugs";
 
 /// Capabilities bzr can act on. Only these are cached: the probe response is
 /// server-controlled and unbounded, and persisting the whole advertised list
 /// would write arbitrary server text into the user's config for no gain — the
 /// only consumer is a membership test against this table.
-const KNOWN_CAPABILITIES: &[&str] = &[RED_HAT_EXTENSION];
+const KNOWN_CAPABILITIES: &[&str] = &[EXTERNAL_BUGS_EXTENSION, RED_HAT_EXTENSION];
 
 /// Label for a server whose configuration could not be read at message time.
 const UNKNOWN_SERVER_LABEL: &str = "(unresolved server)";

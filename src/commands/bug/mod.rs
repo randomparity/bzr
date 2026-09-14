@@ -15,6 +15,7 @@ mod clone;
 mod compound;
 mod create;
 mod create_json;
+mod external_bug;
 mod history;
 mod links;
 mod list;
@@ -56,6 +57,7 @@ pub(crate) fn capabilities(action: &BugAction) -> CommandCapabilities {
         BugAction::Clone(_) => CommandCapabilities::dry_run_mutation("bug clone"),
         BugAction::Update(_) => CommandCapabilities::dry_run_mutation("bug update"),
         BugAction::Tag(_) => CommandCapabilities::authenticated("bug tag"),
+        BugAction::ExternalBug(_) => CommandCapabilities::dry_run_mutation("bug external-bug"),
         BugAction::Resolve(_) => CommandCapabilities::dry_run_mutation("bug resolve"),
         BugAction::Close(_) => CommandCapabilities::dry_run_mutation("bug close"),
         BugAction::Reopen(_) => CommandCapabilities::dry_run_mutation("bug reopen"),
@@ -131,6 +133,7 @@ pub(crate) async fn execute(
         BugAction::Clone(args) => clone::handle(args, ctx, w).await,
         BugAction::Update(args) => update::handle(args, ctx, w).await,
         BugAction::Tag(args) => tag::handle(args, ctx, w).await,
+        BugAction::ExternalBug(args) => external_bug::handle(args, ctx, w).await,
         BugAction::Resolve(a) => verbs::resolve(a, ctx, w).await,
         BugAction::Close(a) => verbs::close(a, ctx, w).await,
         BugAction::Reopen(a) => verbs::reopen(a, ctx, w).await,

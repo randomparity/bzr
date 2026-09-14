@@ -11,7 +11,9 @@ pub(crate) use body_source::{
     materialize_optional_comment_body, read_file_with_context, read_stdin_to_string,
     CommentBodyRequirement,
 };
-pub(crate) use capability::{require_server_capability, RED_HAT_EXTENSION};
+pub(crate) use capability::{
+    require_server_capability, EXTERNAL_BUGS_EXTENSION, RED_HAT_EXTENSION,
+};
 pub(crate) use connection::connect_and_configure;
 pub(crate) use field_catalogue::{
     accepted_bug_fields, connect_and_validate_bug_fields, validate_bug_fields,

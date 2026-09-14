@@ -1160,9 +1160,9 @@ run_parity_report_fixture() {
         '| Membership add and remove | `bzr group add-user/remove-user`, `bzr user search` | parity | `compare/04-users-groups/membership-add-remove` |'
         '| Product catalogues | `bzr product list --type` | parity | `compare/05-products-components/product-catalogues` |'
         '| Component create | `bzr component create`, `bzr component view` | parity | `compare/05-products-components/component-create` |'
-        '| RHBZ ExternalBugs add | no equivalent | expected gap (#801) | `compare/08-rhbz-externalbugs/add` |'
-        '| RHBZ ExternalBugs update | no equivalent | expected gap (#801) | `compare/08-rhbz-externalbugs/update` |'
-        '| RHBZ ExternalBugs remove | no equivalent | expected gap (#801) | `compare/08-rhbz-externalbugs/remove` |'
+        '| RHBZ ExternalBugs add | `bzr bug external-bug add` | RHBZ XML-RPC parity | `compare/08-rhbz-externalbugs/add` |'
+        '| RHBZ ExternalBugs update | `bzr bug external-bug update` | RHBZ XML-RPC parity | `compare/08-rhbz-externalbugs/update` |'
+        '| RHBZ ExternalBugs remove | `bzr bug external-bug remove` | RHBZ XML-RPC parity | `compare/08-rhbz-externalbugs/remove` |'
         '| RHBZ component update | no equivalent | expected gap (#802) | `compare/08-rhbz-externalbugs/component-update` |'
         '| RHBZ sub-components | `bzr bug update --field-json -` with `rh_sub_components` | parity | `compare/09-rhbz-fields/sub-components` |'
         '| RHBZ target release | `bzr bug update --field target_release=...` | parity | `compare/09-rhbz-fields/target-release` |'
@@ -1224,7 +1224,7 @@ run_parity_report_fixture() {
         'URL/whiteboard/email match types are parity.'
         'RHBZ whiteboard/fixed-in writes are parity.'
         'RHBZ component update is the open #802 gap.'
-        'RHBZ `ExternalBugs` methods are owned by open #801.'
+        'RHBZ `ExternalBugs` mutations are parity through `bzr bug external-bug`.'
     )
     for row in "${classification_fragments[@]}"; do
         if [[ $(grep -Fc "$row" "$report") -ne 1 ]]; then
@@ -3645,6 +3645,11 @@ run_rhbz_externalbugs_fixture() (
                     '{bugs:[{external_bugs:[{ext_bz_bug_id:$external,type:{id:7},ext_status:"ASSIGNED",ext_description:"updated"}]}]}'
                 ;;
             remove) printf '%s\n' '{"bugs":[{"external_bugs":[]}]}' ;;
+            bzr-add) jq -cn --arg external "$RHBZ_FIXTURE_BZR_EXTERNAL" \
+                '{bugs:[{external_bugs:[{ext_bz_bug_id:$external,type:{id:7},ext_status:"NEW",ext_description:"created"}]}]}' ;;
+            bzr-update) jq -cn --arg external "$RHBZ_FIXTURE_BZR_EXTERNAL" \
+                '{bugs:[{external_bugs:[{ext_bz_bug_id:$external,type:{id:7},ext_status:"ASSIGNED",ext_description:"updated"}]}]}' ;;
+            bzr-remove) printf '%s\n' '{"bugs":[{"external_bugs":[]}]}' ;;
             component-update)
                 printf '%s\n' '{"products":[{"components":[{"name":"TestComponent","description":"updated RHBZ component","is_active":false}]}]}'
                 ;;
@@ -3655,7 +3660,25 @@ run_rhbz_externalbugs_fixture() (
         BZR_STDOUT="$COMPARE_EXCHANGE_DIR/bzr.stdout"
         BZR_STDERR="$COMPARE_EXCHANGE_DIR/bzr.stderr"
         : >"$BZR_STDOUT"
-        if [[ " $* " == *' component update '* ]]; then
+        if [[ " $* " == *' external-bug add '* ]]; then
+            BZR_EXIT=0
+            RHBZ_FIXTURE_STATE=bzr-add
+            RHBZ_FIXTURE_BZR_EXTERNAL=$(awk '/--external-id/{getline; print; exit}' < <(printf '%s\n' "$@"))
+            printf '{}\n' >"$BZR_STDOUT"
+            : >"$BZR_STDERR"
+        elif [[ " $* " == *' external-bug update '* ]]; then
+            BZR_EXIT=0
+            RHBZ_FIXTURE_STATE=bzr-update
+            RHBZ_FIXTURE_BZR_EXTERNAL=$(awk '/--external-id/{getline; print; exit}' < <(printf '%s\n' "$@"))
+            printf '{}\n' >"$BZR_STDOUT"
+            : >"$BZR_STDERR"
+        elif [[ " $* " == *' external-bug remove '* ]]; then
+            BZR_EXIT=0
+            RHBZ_FIXTURE_STATE=bzr-remove
+            RHBZ_FIXTURE_BZR_EXTERNAL=$(awk '/--external-id/{getline; print; exit}' < <(printf '%s\n' "$@"))
+            printf '{}\n' >"$BZR_STDOUT"
+            : >"$BZR_STDERR"
+        elif [[ " $* " == *' component update '* ]]; then
             printf '%s\n%s\n' "error: unrecognized subcommand 'update'" \
                 'Usage: bzr component [OPTIONS] <COMMAND>' >"$BZR_STDERR"
         else
@@ -3665,9 +3688,9 @@ run_rhbz_externalbugs_fixture() (
     }
 
     source "$phase" >/dev/null
-    assert_equals 0 "$PASS_COUNT" "RHBZ ExternalBugs pass count"
+    assert_equals 3 "$PASS_COUNT" "RHBZ ExternalBugs pass count"
     assert_equals 0 "$FAIL_COUNT" "RHBZ ExternalBugs fail count"
-    assert_equals 4 "$GAP_COUNT" "RHBZ ExternalBugs gap count"
+    assert_equals 1 "$GAP_COUNT" "RHBZ ExternalBugs gap count"
     for test_id in add update remove component-update; do
         if [[ $SEEN_TEST_IDS != *$'\ncompare/08-rhbz-externalbugs/'"$test_id"$'\n'* ]]; then
             printf 'RHBZ ExternalBugs fixture did not run %s\n' "$test_id" >&2
