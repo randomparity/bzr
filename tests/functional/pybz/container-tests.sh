@@ -1261,6 +1261,18 @@ run_auth_config_tls_phase_fixture() (
         return 1
     fi
     TEST_ID_PREFIX=compare CURRENT_TEST_GROUP=06-auth-config-tls BZ_VERSION=bz50
+    COMPARE_ADMIN_EMAIL=admin@test.bzr
+    COMPARE_ADMIN_PASSWORD=test-password
+    BZ_URL=http://127.0.0.1:8080
+    XDG_CONFIG_HOME="$COMPARE_EXCHANGE_DIR/xdg"
+    BZR_STDOUT="$COMPARE_EXCHANGE_DIR/bzr.stdout"
+    BZR_STDERR="$COMPARE_EXCHANGE_DIR/bzr.stderr"
+    BZR_STDOUT_RAW="$COMPARE_EXCHANGE_DIR/bzr.stdout.raw"
+    mkdir -p "$XDG_CONFIG_HOME/bzr"
+    : >"$XDG_CONFIG_HOME/bzr/config.toml"
+    : >"$BZR_STDOUT"
+    : >"$BZR_STDERR"
+    : >"$BZR_STDOUT_RAW"
     r11_api_key_control() { return 0; }
     r11_login_control() { return 0; }
     r11_cached_control() { [[ ${R11_FIXTURE_CACHED_FAIL:-0} -eq 0 ]]; }
@@ -1271,6 +1283,17 @@ run_auth_config_tls_phase_fixture() (
     r11_certificate_control() { return 0; }
     r11_bearer_control() { return 0; }
     r11_parser_gap() { return 0; }
+    curl() { printf '{"token":"fixture-token"}\n'; }
+    run_bzr() {
+        BZR_EXIT=0
+        case "${R11_FIXTURE_BZR_FAIL:-}:$*" in
+        setup:*'config set-server r11-login '*) BZR_EXIT=9 ;;
+        login:*'--server r11-login auth login '*) BZR_EXIT=9 ;;
+        whoami:*'--server r11-login whoami'*) BZR_EXIT=9 ;;
+        bug-my:*'--server r11-login bug my --limit 1'*) BZR_EXIT=9 ;;
+        logout:*'--server r11-login auth logout'*) BZR_EXIT=9 ;;
+        esac
+    }
     reset_r11_fixture() {
         PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 GAP_COUNT=0
         SEEN_TEST_IDS=$'\n' TEST_RESULT_PENDING=0
@@ -1282,9 +1305,9 @@ run_auth_config_tls_phase_fixture() (
     assert_equals query "$(r11_expected_bzr_auth_kind bz50)" "bz50 auth kind"
     assert_equals query "$(r11_expected_bzr_auth_kind bz52)" "bz52 auth kind"
     assert_equals header "$(r11_expected_bzr_auth_kind bz53)" "bz53 auth kind"
-    assert_equals 9 "$PASS_COUNT" "auth/config/TLS pass count"
+    assert_equals 14 "$PASS_COUNT" "auth/config/TLS pass count"
     assert_equals 0 "$FAIL_COUNT" "auth/config/TLS failure count"
-    assert_equals 4 "$GAP_COUNT" "auth/config/TLS gap count"
+    assert_equals 1 "$GAP_COUNT" "auth/config/TLS gap count"
     (
         unset -f r11_tls_control
         tls_fixture_start() { return 0; }
@@ -1305,6 +1328,23 @@ run_auth_config_tls_phase_fixture() (
         printf 'cached-token positive-control failure became gap #676\n' >&2
         return 1
     fi
+    for step in setup login whoami bug-my logout; do
+        reset_r11_fixture
+        R11_FIXTURE_BZR_FAIL="$step"
+        source "$phase" >"$fixture_output"
+        _render_test_result >>"$fixture_output"
+        unset R11_FIXTURE_BZR_FAIL
+        assert_equals 13 "$PASS_COUNT" "login-command-identity $step pass count"
+        assert_equals 1 "$FAIL_COUNT" "login-command-identity $step failure count"
+        if ! grep -Fq '[compare/06-auth-config-tls/login-command-identity]' "$fixture_output"; then
+            printf 'login-command-identity %s fault omitted its stable ID\n' "$step" >&2
+            return 1
+        fi
+        if test_summary >/dev/null; then
+            printf 'login-command-identity %s fault produced a successful summary\n' "$step" >&2
+            return 1
+        fi
+    done
 )
 run_namespace_proxy_helper_fixture() (
     local fixture_root staged log_path error_output
