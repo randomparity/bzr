@@ -3265,10 +3265,23 @@ run_rhbz_extensions_fixture() (
     curl() {
         printf '%s\n' "${RHBZ_EXTENSIONS_RESPONSE}"
     }
+    run_bugzilla_sql_file() {
+        printf '101\n'
+    }
+    resource_bzr() {
+        local name="$1" api="$2" expected_transport="$3"
+
+        case "$name:$api:$expected_transport" in
+            rhbz-component-array-rest:rest:REST | rhbz-component-array-xmlrpc:xmlrpc:XMLRPC) ;;
+            *) return 1 ;;
+        esac
+        printf '%s\n' '{"component":["TestComponent"]}' \
+            >"$COMPARE_EXCHANGE_DIR/${name}.bzr.stdout.json"
+    }
 
     RHBZ_EXTENSIONS_RESPONSE='{"extensions":{"ExternalBugs":{},"SubComponents":{},"RedHat":{}}}'
     source "$phase" >/dev/null
-    assert_equals 1 "$PASS_COUNT" "RHBZ extension smoke pass count"
+    assert_equals 2 "$PASS_COUNT" "RHBZ extension smoke pass count"
     assert_equals 0 "$FAIL_COUNT" "RHBZ extension smoke fail count"
 
     for missing_extension in ExternalBugs SubComponents RedHat; do
@@ -3281,7 +3294,7 @@ run_rhbz_extensions_fixture() (
             RedHat) RHBZ_EXTENSIONS_RESPONSE='{"extensions":{"ExternalBugs":{},"SubComponents":{}}}' ;;
         esac
         source "$phase" >/dev/null
-        assert_equals 0 "$PASS_COUNT" "incomplete RHBZ extension smoke pass count"
+        assert_equals 1 "$PASS_COUNT" "incomplete RHBZ extension smoke pass count"
         assert_equals 1 "$FAIL_COUNT" "incomplete RHBZ extension smoke fail count"
         printf 'controlled red: RHBZ extension smoke missing %s\n' "$missing_extension"
     done
@@ -3312,7 +3325,12 @@ run_rhbz_fields_fixture() (
     run_bugzilla_sql_file() {
         case "$1" in
             *rhbz-fields-controls.sql) printf '%s\n' "$RHBZ_FIELDS_FIXTURE_CONTROLS" ;;
-            *rhbz-fields-*.sql) printf '101\n' ;;
+            *rhbz-fields-*.sql)
+                local label=${1##*rhbz-fields-}
+
+                printf '%s\n' "${label%.sql}" >"$COMPARE_EXCHANGE_DIR/rhbz-fields-label"
+                printf '101\n'
+                ;;
         esac
     }
     resource_pybz() {
@@ -3352,7 +3370,7 @@ run_rhbz_fields_fixture() (
             '{bugs:[{sub_components:{TestComponent:[$sub]},target_release:[$release],cf_fixed_in:$fixed,cf_devel_whiteboard:$devel,cf_internal_whiteboard:$internal,cf_qa_whiteboard:$qa}]}'
     }
     run_bzr() {
-        local argument field value
+        local argument field value label
 
         BZR_STDOUT="$COMPARE_EXCHANGE_DIR/bzr.stdout"
         BZR_STDOUT_RAW="$COMPARE_EXCHANGE_DIR/bzr.raw"
@@ -3367,7 +3385,33 @@ run_rhbz_fields_fixture() (
             return 0
         fi
         BZR_EXIT=0
-        printf '{}\n' >"$BZR_STDOUT"
+        label=$(<"$COMPARE_EXCHANGE_DIR/rhbz-fields-label")
+        if [[ " $* " == *' bug view '* ]]; then
+            if [[ $label == sub-components ]]; then
+                jq -cn \
+                    --arg sub "${RHBZ_FIELDS_FIXTURE_SUB:-}" \
+                    --arg release "$RHBZ_FIELDS_RELEASE" \
+                    --arg second "$RHBZ_FIELDS_SECOND_RELEASE" \
+                    --arg fixed "${RHBZ_FIELDS_FIXTURE_FIXED:-}" \
+                    --arg devel "${RHBZ_FIELDS_FIXTURE_DEVEL:-}" \
+                    --arg internal "${RHBZ_FIELDS_FIXTURE_INTERNAL:-}" \
+                    --arg qa "${RHBZ_FIELDS_FIXTURE_QA:-}" \
+                    '{sub_components:{TestComponent:[$sub]},target_release:[$release,$second],cf_fixed_in:$fixed,cf_devel_whiteboard:$devel,cf_internal_whiteboard:$internal,cf_qa_whiteboard:$qa}' \
+                    >"$BZR_STDOUT"
+            else
+                jq -cn \
+                    --arg sub "${RHBZ_FIELDS_FIXTURE_SUB:-}" \
+                    --arg release "${RHBZ_FIELDS_FIXTURE_RELEASE:-}" \
+                    --arg fixed "${RHBZ_FIELDS_FIXTURE_FIXED:-}" \
+                    --arg devel "${RHBZ_FIELDS_FIXTURE_DEVEL:-}" \
+                    --arg internal "${RHBZ_FIELDS_FIXTURE_INTERNAL:-}" \
+                    --arg qa "${RHBZ_FIELDS_FIXTURE_QA:-}" \
+                    '{sub_components:{TestComponent:[$sub]},target_release:(if $release == "" then [] else [$release] end),cf_fixed_in:$fixed,cf_devel_whiteboard:$devel,cf_internal_whiteboard:$internal,cf_qa_whiteboard:$qa}' \
+                    >"$BZR_STDOUT"
+            fi
+        else
+            printf '{}\n' >"$BZR_STDOUT"
+        fi
         cp "$BZR_STDOUT" "$BZR_STDOUT_RAW"
         printf 'DEBUG bzr::client::transport: API response\n' >"$BZR_STDERR"
         for argument in "$@"; do
@@ -3382,9 +3426,15 @@ run_rhbz_fields_fixture() (
             esac
         done
     }
+    run_bzr_raw() {
+        run_bzr "$@"
+    }
 
-    source "$phase" >/dev/null
-    assert_equals 4 "$PASS_COUNT" "RHBZ fields pass count"
+    source "$phase" >"$COMPARE_EXCHANGE_DIR/positive-controls.out"
+    if ! assert_equals 4 "$PASS_COUNT" "RHBZ fields pass count"; then
+        cat "$COMPARE_EXCHANGE_DIR/positive-controls.out" >&2
+        return 1
+    fi
     assert_equals 0 "$FAIL_COUNT" "RHBZ fields fail count"
     assert_equals 0 "$GAP_COUNT" "RHBZ fields gap count"
     for test_id in sub-components target-release fixed-in whiteboards; do
