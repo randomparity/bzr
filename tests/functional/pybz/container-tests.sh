@@ -3349,7 +3349,7 @@ run_rhbz_extensions_fixture() (
 )
 
 run_rhbz_comparison_target_fixture() {
-    local makefile="$PYBZ_DIR/../../Makefile"
+    local makefile="$PYBZ_DIR/../../../Makefile"
     local runner="$PYBZ_DIR/../run-rhbz-compare.sh"
     local recipe
 
@@ -3382,15 +3382,18 @@ run_rhbz_comparison_target_fixture() {
         return 1
     fi
 
-    local workflow="$PYBZ_DIR/../../.github/workflows/functional-tests.yml"
-    if ! awk '/^  rhbz-core-comparison:/,/^  [a-z].*:/' "$workflow" |
-        grep -Fq 'name: RHBZ core comparison' ||
-        ! awk '/^  rhbz-core-comparison:/,/^  [a-z].*:/' "$workflow" |
-            grep -Fq 'run: make functional-compare-rhbz' ||
-        ! awk '/^  rhbz-core-comparison:/,/^  [a-z].*:/' "$workflow" |
-            grep -Fq 'if: always()' ||
-        ! awk '/^  rhbz-core-comparison:/,/^  [a-z].*:/' "$workflow" |
-            grep -Fq 'BZR_BZ_VERSION=rhbz tests/functional/setup-bugzilla.sh stop'; then
+    local workflow="$PYBZ_DIR/../../../.github/workflows/functional-tests.yml"
+    local workflow_job
+    workflow_job=$(awk '
+        /^  rhbz-core-comparison:/ { in_job = 1 }
+        in_job && /^  [a-z].*:/ && $0 !~ /^  rhbz-core-comparison:/ { exit }
+        in_job { print }
+    ' "$workflow")
+    if ! grep -Fq 'name: RHBZ core comparison' <<<"$workflow_job" ||
+        ! grep -Fq 'run: make functional-compare-rhbz' <<<"$workflow_job" ||
+        ! grep -Fq 'if: always()' <<<"$workflow_job" ||
+        ! grep -Fq 'BZR_BZ_VERSION=rhbz tests/functional/setup-bugzilla.sh stop' \
+            <<<"$workflow_job"; then
         printf 'dedicated RHBZ workflow job or cleanup contract is absent\n' >&2
         return 1
     fi
