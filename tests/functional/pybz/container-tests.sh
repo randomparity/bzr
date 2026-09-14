@@ -3300,6 +3300,34 @@ run_rhbz_extensions_fixture() (
     done
 )
 
+run_rhbz_comparison_target_fixture() {
+    local makefile="$PYBZ_DIR/../../Makefile"
+    local runner="$PYBZ_DIR/../run-rhbz-compare.sh"
+    local recipe
+
+    if ! grep -Fqx \
+        'functional-compare-rhbz: release ## Run the isolated RHBZ extension smoke comparison' \
+        "$makefile"; then
+        printf 'RHBZ comparison target must build the release binary first\n' >&2
+        return 1
+    fi
+
+    recipe=$(sed -n '/^functional-compare-rhbz:/,/^$/p' "$makefile")
+    if ! grep -Fq \
+        'BZR_BZ_VERSION=rhbz BZR_COMPARE_BIN="$(BZR_COMPARE_BIN)" tests/functional/run-rhbz-compare.sh' \
+        <<<"$recipe"; then
+        printf 'RHBZ comparison target did not forward BZR_COMPARE_BIN\n' >&2
+        return 1
+    fi
+
+    if ! grep -Fq 'export BZR_BIN="${BZR_COMPARE_BIN:-$REPO_ROOT/target/release/bzr}"' \
+        "$runner" ||
+        ! grep -Fq 'RHBZ comparison binary: %s' "$runner"; then
+        printf 'RHBZ runner did not retain and identify the selected binary\n' >&2
+        return 1
+    fi
+}
+
 run_rhbz_fields_fixture() (
     local phase="$PYBZ_DIR/../compare/rhbz/09-rhbz-fields.sh"
     local runner="$PYBZ_DIR/../run-rhbz-compare.sh"
@@ -3769,6 +3797,7 @@ run_user_group_phase_fixture
 run_membership_cleanup_fixture
 run_product_component_phase_fixture
 run_rhbz_extensions_fixture
+run_rhbz_comparison_target_fixture
 run_rhbz_fields_fixture
 run_rhbz_externalbugs_fixture
 run_pybz_fixture_source_volume_fixture

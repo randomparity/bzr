@@ -11,6 +11,7 @@ port=$(bugzilla_container_port "$runtime" "$container")
 export BZ_URL="http://127.0.0.1:${port}"
 export BZR_BIN="${BZR_COMPARE_BIN:-$REPO_ROOT/target/release/bzr}"
 [[ -x $BZR_BIN ]] || { echo "ERROR: bzr comparison binary is not executable: $BZR_BIN" >&2; exit 1; }
+printf 'RHBZ comparison binary: %s\n' "$BZR_BIN"
 TEST_ID_PREFIX=compare
 umask 077
 FUNC_CONFIG_DIR=$(mktemp -d /tmp/bzr-rhbz-compare-config.XXXXXX)
