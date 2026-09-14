@@ -33,20 +33,23 @@ rhbz_fields_prepare() {
         "INSERT INTO releases (product_id, value, sortkey, isactive) SELECT p.id, '$RHBZ_FIELDS_BZR_RELEASE', 0, 1 FROM products p WHERE p.name = '$RHBZ_FIELDS_PRODUCT' AND NOT EXISTS (SELECT 1 FROM releases r WHERE r.product_id = p.id AND r.value = '$RHBZ_FIELDS_BZR_RELEASE');" \
         "INSERT INTO rh_sub_components (name, component_id, initialowner, description, isactive, sortkey, level, full_name) SELECT '$RHBZ_FIELDS_SUB_COMPONENT', c.id, p.userid, '$RHBZ_FIELDS_TOKEN RHBZ comparison sub-component', 1, 0, 0, '$RHBZ_FIELDS_SUB_COMPONENT' FROM components c JOIN products product ON product.id = c.product_id JOIN profiles p ON p.login_name = '$COMPARE_ADMIN_EMAIL' WHERE product.name = '$RHBZ_FIELDS_PRODUCT' AND c.name = '$RHBZ_FIELDS_COMPONENT' AND NOT EXISTS (SELECT 1 FROM rh_sub_components sc WHERE sc.component_id = c.id AND sc.name = '$RHBZ_FIELDS_SUB_COMPONENT' AND sc.parent_id IS NULL);" \
         "INSERT INTO rh_sub_components (name, component_id, initialowner, description, isactive, sortkey, level, full_name) SELECT '$RHBZ_FIELDS_SECOND_SUB_COMPONENT', c.id, p.userid, '$RHBZ_FIELDS_TOKEN second RHBZ comparison sub-component', 1, 0, 0, '$RHBZ_FIELDS_SECOND_SUB_COMPONENT' FROM components c JOIN products product ON product.id = c.product_id JOIN profiles p ON p.login_name = '$COMPARE_ADMIN_EMAIL' WHERE product.name = '$RHBZ_FIELDS_PRODUCT' AND c.name = '$RHBZ_FIELDS_COMPONENT' AND NOT EXISTS (SELECT 1 FROM rh_sub_components sc WHERE sc.component_id = c.id AND sc.name = '$RHBZ_FIELDS_SECOND_SUB_COMPONENT' AND sc.parent_id IS NULL);" \
+        "INSERT INTO rh_sub_components (name, component_id, initialowner, description, isactive, sortkey, level, full_name) SELECT '$RHBZ_FIELDS_BZR_SUB_COMPONENT', c.id, p.userid, '$RHBZ_FIELDS_TOKEN bzr RHBZ comparison sub-component', 1, 0, 0, '$RHBZ_FIELDS_BZR_SUB_COMPONENT' FROM components c JOIN products product ON product.id = c.product_id JOIN profiles p ON p.login_name = '$COMPARE_ADMIN_EMAIL' WHERE product.name = '$RHBZ_FIELDS_PRODUCT' AND c.name = '$RHBZ_FIELDS_COMPONENT' AND NOT EXISTS (SELECT 1 FROM rh_sub_components sc WHERE sc.component_id = c.id AND sc.name = '$RHBZ_FIELDS_BZR_SUB_COMPONENT' AND sc.parent_id IS NULL);" \
         "SELECT id FROM releases WHERE value = '$RHBZ_FIELDS_RELEASE' LIMIT 1;" \
         "SELECT id FROM releases WHERE value = '$RHBZ_FIELDS_BZR_RELEASE' LIMIT 1;" \
         "SELECT id FROM rh_sub_components WHERE name = '$RHBZ_FIELDS_SUB_COMPONENT' LIMIT 1;" \
         "SELECT id FROM rh_sub_components WHERE name = '$RHBZ_FIELDS_SECOND_SUB_COMPONENT' LIMIT 1;" \
+        "SELECT id FROM rh_sub_components WHERE name = '$RHBZ_FIELDS_BZR_SUB_COMPONENT' LIMIT 1;" \
         >"$controls_file"
     mapfile -t controls < <(run_bugzilla_sql_file "$controls_file" | awk '/^[0-9]+$/')
     [[ ${controls[0]:-} =~ ^[1-9][0-9]*$ && ${controls[1]:-} =~ ^[1-9][0-9]*$ &&
         ${controls[2]:-} == 4 && ${controls[3]:-} =~ ^[1-9][0-9]*$ &&
         ${controls[4]:-} =~ ^[1-9][0-9]*$ && ${controls[5]:-} =~ ^[1-9][0-9]*$ &&
-        ${controls[6]:-} =~ ^[1-9][0-9]*$ ]] || return 1
+        ${controls[6]:-} =~ ^[1-9][0-9]*$ && ${controls[7]:-} =~ ^[1-9][0-9]*$ ]] || return 1
     RHBZ_FIELDS_PRODUCT_ID=${controls[0]}
     RHBZ_FIELDS_COMPONENT_ID=${controls[1]}
     RHBZ_FIELDS_SUB_COMPONENT_ID=${controls[5]}
     RHBZ_FIELDS_SECOND_SUB_COMPONENT_ID=${controls[6]}
+    RHBZ_FIELDS_BZR_SUB_COMPONENT_ID=${controls[7]}
     RHBZ_FIELDS_READY=1
 }
 

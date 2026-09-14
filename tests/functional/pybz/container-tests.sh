@@ -3319,7 +3319,7 @@ run_rhbz_fields_fixture() (
     SKIP_COUNT=0
     GAP_COUNT=0
     SEEN_TEST_IDS=$'\n'
-    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n4\n10\n11\n12\n13'
+    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n4\n10\n11\n12\n13\n14'
     RHBZ_FIELDS_FIXTURE_BZR_FAIL=''
     RHBZ_FIELDS_FIXTURE_BZR_NOOP=0
 
@@ -3472,7 +3472,7 @@ run_rhbz_fields_fixture() (
     GAP_COUNT=0
     SEEN_TEST_IDS=$'\n'
     RHBZ_FIELDS_READY=0
-    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n3\n10\n11\n12\n13'
+    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n3\n10\n11\n12\n13\n14'
     source "$phase" >"$COMPARE_EXCHANGE_DIR/missing-controls.out"
     assert_equals 4 "$FAIL_COUNT" "RHBZ fields missing-controls fail count"
     assert_equals 0 "$GAP_COUNT" "RHBZ fields missing-controls gap count"
@@ -3488,7 +3488,7 @@ run_rhbz_fields_fixture() (
     GAP_COUNT=0
     SEEN_TEST_IDS=$'\n'
     RHBZ_FIELDS_READY=0
-    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n4\n10\n11\n12\n13'
+    RHBZ_FIELDS_FIXTURE_CONTROLS=$'1\n1\n4\n10\n11\n12\n13\n14'
     RHBZ_FIELDS_FIXTURE_BZR_FAIL=sub-components
     source "$phase" >/dev/null
     assert_equals 3 "$PASS_COUNT" "RHBZ fields supported gap pass count"

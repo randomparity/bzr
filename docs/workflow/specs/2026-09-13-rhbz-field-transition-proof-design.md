@@ -20,9 +20,10 @@ input.
 Each of the four stable phase IDs keeps one disposable bug. Its values form a
 three-state sequence: fixture before value, python-bugzilla reference value,
 and a distinct bzr value. The phase reads each state from RHBZ before advancing.
-For target release, the SQL fixture provisions and reads back the three distinct
-run-token release rows before the bug is created, so each transition writes a
-valid configured value rather than reusing a single release.
+For target release, the bug starts empty and the SQL fixture provisions and
+reads the distinct reference and bzr run-token release rows before either write.
+For sub-components, the fixture likewise provisions and reads reference, before,
+and bzr names under `TestComponent` before either client writes one.
 The sub-component bzr arm supplies
 `{"rh_sub_components":{"TestComponent":["<subcomponent>"]}}` through
 `--field-json -`, then reads response field `sub_components`; the source write
