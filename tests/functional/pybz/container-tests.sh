@@ -3789,6 +3789,9 @@ run_rhbz_externalbugs_fixture() (
             component-update)
                 printf '%s\n' '{"products":[{"components":[{"name":"TestComponent","description":"updated RHBZ component","is_active":false}]}]}'
                 ;;
+            component-update-bzr)
+                printf '%s\n' '{"products":[{"components":[{"name":"TestComponent","description":"updated by bzr","is_active":true}]}]}'
+                ;;
         esac
     }
     run_bzr() {
@@ -3815,8 +3818,10 @@ run_rhbz_externalbugs_fixture() (
             printf '{}\n' >"$BZR_STDOUT"
             printf '%s\n' 'DEBUG bzr::xmlrpc::protocol::client: XML-RPC call' >"$BZR_STDERR"
         elif [[ " $* " == *' component update '* ]]; then
-            printf '%s\n%s\n' "error: unrecognized subcommand 'update'" \
-                'Usage: bzr component [OPTIONS] <COMMAND>' >"$BZR_STDERR"
+            BZR_EXIT=0
+            RHBZ_FIXTURE_STATE=component-update-bzr
+            printf '{}\n' >"$BZR_STDOUT"
+            printf '%s\n' 'DEBUG bzr::xmlrpc::protocol::client: XML-RPC call' >"$BZR_STDERR"
         else
             printf '%s\n%s\n' "error: unrecognized subcommand 'external-bug'" \
                 'Usage: bzr bug [OPTIONS] <COMMAND>' >"$BZR_STDERR"
@@ -3824,9 +3829,9 @@ run_rhbz_externalbugs_fixture() (
     }
 
     source "$phase" >/dev/null
-    assert_equals 3 "$PASS_COUNT" "RHBZ ExternalBugs pass count"
+    assert_equals 4 "$PASS_COUNT" "RHBZ ExternalBugs pass count"
     assert_equals 0 "$FAIL_COUNT" "RHBZ ExternalBugs fail count"
-    assert_equals 1 "$GAP_COUNT" "RHBZ ExternalBugs gap count"
+    assert_equals 0 "$GAP_COUNT" "RHBZ ExternalBugs gap count"
     for test_id in add update remove component-update; do
         if [[ $SEEN_TEST_IDS != *$'\ncompare/08-rhbz-externalbugs/'"$test_id"$'\n'* ]]; then
             printf 'RHBZ ExternalBugs fixture did not run %s\n' "$test_id" >&2
