@@ -56,6 +56,31 @@ fi
 rm -rf "$_IMPORT_DIR"
 unset _IMPORT_DIR _IMPORT_RC _IMPORT_CONFIG
 
+_SECTION_IMPORT_DIR=$(mktemp -d /tmp/bzr-func-bugzillarc-sections.XXXXXX)
+_SECTION_IMPORT_RC="$_SECTION_IMPORT_DIR/bugzillarc"
+_SECTION_IMPORT_CONFIG="$_SECTION_IMPORT_DIR/config.toml"
+printf '[DEFAULT]\napi_key=shared-key\nuser=fixture-user\npassword=fixture-password\n[%s]\napi_key=%s\n[http://second.invalid]\n' \
+    "$BZ_URL" "$API_KEY" >"$_SECTION_IMPORT_RC"
+
+test_begin "config-import-bugzillarc-url-sections" "config import-bugzillarc imports explicit URL sections"
+run_bzr --config "$_SECTION_IMPORT_CONFIG" config import-bugzillarc --path "$_SECTION_IMPORT_RC"
+if assert_success && assert_json '.imported' '2' &&
+    assert_json '.unsupported_password_credentials' '0'; then
+    run_bzr --config "$_SECTION_IMPORT_CONFIG" config show
+    if assert_success &&
+        jq -e --arg first "$BZ_URL" '[.servers[] | select(.url == $first)][0].api_key_source == "inline"' \
+            "$BZR_STDOUT" >/dev/null &&
+        jq -e '[.servers[] | select(.url == "http://second.invalid")][0].api_key_source == "none"' \
+            "$BZR_STDOUT" >/dev/null &&
+        ! grep -Fq 'shared-key' "$_SECTION_IMPORT_CONFIG" &&
+        ! grep -Fq 'fixture-user' "$_SECTION_IMPORT_CONFIG" &&
+        ! grep -Fq 'fixture-password' "$_SECTION_IMPORT_CONFIG"; then
+        test_pass
+    fi
+fi
+rm -rf "$_SECTION_IMPORT_DIR"
+unset _SECTION_IMPORT_DIR _SECTION_IMPORT_RC _SECTION_IMPORT_CONFIG
+
 test_begin "config-set-default-alt" "config set-default alt"
 run_bzr config set-default alt
 if assert_success; then test_pass; fi

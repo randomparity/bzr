@@ -102,6 +102,72 @@ fn api_key_from_matching_section_is_imported() {
 }
 
 #[test]
+fn explicit_url_sections_import_without_a_default_url() {
+    let sections = parse_sections(
+        "[DEFAULT]\napi_key=default-key\n[https://bugs.example.test/rest]\napi_key=first\n[https://second.example.test]\napi_key=second\n",
+        Path::new("fixture"),
+    )
+    .unwrap();
+
+    let servers = resolved_servers(&sections).unwrap();
+
+    assert_eq!(servers.len(), 2);
+    assert_eq!(servers[0].url, "https://bugs.example.test/rest");
+    assert_eq!(servers[0].api_key.as_deref(), Some("first"));
+    assert_eq!(servers[1].url, "https://second.example.test");
+    assert_eq!(servers[1].api_key.as_deref(), Some("second"));
+}
+
+#[test]
+fn section_only_import_does_not_inherit_default_credentials() {
+    let sections = parse_sections(
+        "[DEFAULT]\napi_key=shared\nuser=fixture-user\npassword=fixture-password\n[https://bugs.example.test]\n[https://second.example.test]\napi_key=second\n",
+        Path::new("fixture"),
+    )
+    .unwrap();
+
+    let servers = resolved_servers(&sections).unwrap();
+
+    assert_eq!(servers.len(), 2);
+    assert!(servers[0].api_key.is_none());
+    assert!(!servers[0].has_password_credentials);
+    assert_eq!(servers[1].api_key.as_deref(), Some("second"));
+}
+
+#[test]
+fn section_only_import_ignores_non_url_section_names() {
+    let sections = parse_sections(
+        "[bugs.example.test]\napi_key=wrong\n[https://bugs.example.test]\napi_key=right\n",
+        Path::new("fixture"),
+    )
+    .unwrap();
+
+    let servers = resolved_servers(&sections).unwrap();
+
+    assert_eq!(servers.len(), 1);
+    assert_eq!(servers[0].api_key.as_deref(), Some("right"));
+}
+
+#[test]
+fn section_only_import_reports_how_to_resolve_non_url_sections() {
+    let sections =
+        parse_sections("[bugs.example.test]\napi_key=key\n", Path::new("fixture")).unwrap();
+
+    assert!(resolved_servers(&sections).unwrap().is_empty());
+}
+
+#[test]
+fn section_only_import_rejects_malformed_explicit_url_sections() {
+    let sections =
+        parse_sections("[https://bad host]\napi_key=key\n", Path::new("fixture")).unwrap();
+
+    assert!(resolved_servers(&sections)
+        .unwrap_err()
+        .to_string()
+        .contains("section URL is invalid"));
+}
+
+#[test]
 fn hostname_sections_do_not_match_a_host_substring() {
     let sections = parse_sections(
         "[DEFAULT]\nurl=https://evil-bugzilla.redhat.com/rest\n[bugzilla.redhat.com]\napi_key=wrong\n[evil-bugzilla.redhat.com]\napi_key=right\n",
@@ -212,7 +278,7 @@ fn hostname_sections_preserve_ipv6_brackets() {
 }
 
 #[test]
-fn first_sorted_matching_section_wins() {
+fn default_url_import_uses_only_its_exact_authority_section() {
     let sections = parse_sections(
         "[DEFAULT]\nurl=https://bugs.example.test/rest\n[/rest]\napi_key=first\n[bugs.example.test]\napi_key=second\n",
         Path::new("fixture"),
@@ -221,7 +287,7 @@ fn first_sorted_matching_section_wins() {
 
     let servers = resolved_servers(&sections).unwrap();
 
-    assert_eq!(servers[0].api_key.as_deref(), Some("first"));
+    assert_eq!(servers[0].api_key.as_deref(), Some("second"));
 }
 
 #[test]
