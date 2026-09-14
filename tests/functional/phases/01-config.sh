@@ -81,6 +81,20 @@ fi
 rm -rf "$_SECTION_IMPORT_DIR"
 unset _SECTION_IMPORT_DIR _SECTION_IMPORT_RC _SECTION_IMPORT_CONFIG
 
+_SECTION_CREDENTIAL_DIR=$(mktemp -d /tmp/bzr-func-bugzillarc-section-credentials.XXXXXX)
+_SECTION_CREDENTIAL_RC="$_SECTION_CREDENTIAL_DIR/bugzillarc"
+_SECTION_CREDENTIAL_CONFIG="$_SECTION_CREDENTIAL_DIR/config.toml"
+printf '[https://user:password@third.invalid]\napi_key=ignored\n' >"$_SECTION_CREDENTIAL_RC"
+
+test_begin "config-import-bugzillarc-url-section-credentials" "config import-bugzillarc rejects URL credentials"
+run_bzr --config "$_SECTION_CREDENTIAL_CONFIG" config import-bugzillarc --path "$_SECTION_CREDENTIAL_RC"
+if assert_failure && assert_stderr_contains "must not contain credentials" &&
+    [ ! -e "$_SECTION_CREDENTIAL_CONFIG" ]; then
+    test_pass
+fi
+rm -rf "$_SECTION_CREDENTIAL_DIR"
+unset _SECTION_CREDENTIAL_DIR _SECTION_CREDENTIAL_RC _SECTION_CREDENTIAL_CONFIG
+
 test_begin "config-set-default-alt" "config set-default alt"
 run_bzr config set-default alt
 if assert_success; then test_pass; fi
