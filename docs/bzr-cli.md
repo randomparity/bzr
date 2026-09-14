@@ -2085,6 +2085,13 @@ unsupported and are not stored: python-bugzilla login credentials are not interc
 an already-issued Bugzilla login token. Existing bzr server aliases with the same URL are updated;
 otherwise bzr derives an alias from the URL host.
 
+When `[DEFAULT]` contains `url`, that URL is imported with its existing exact-authority section
+override behavior. A file without `DEFAULT.url` may instead contain one or more sections named by
+full HTTP(S) URLs; each such section becomes a server using only that section's import settings.
+Other section names are not URL targets in this mode. Settings in `DEFAULT` do not become credentials
+for section-only targets, so credentials are never routed by a substring match or shared default.
+A malformed URL section is rejected before bzr writes configuration.
+
 ```bash
 bzr config import-bugzillarc
 bzr --json config import-bugzillarc --path ~/.bugzillarc
