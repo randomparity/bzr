@@ -24,6 +24,9 @@ make functional-test
 # Run the same suite across all supported Bugzilla versions
 make functional-test-all
 
+# Run the isolated RHBZ catalogue and core-behavior comparison.
+make functional-compare-rhbz
+
 # Reclaim a container the runner did not: one started by hand, one kept with
 # BZR_FUNC_KEEP, or one left by make functional-compare
 make functional-stop
@@ -140,6 +143,15 @@ Clap-level mutual-exclusion and require-`--server-url` validation lives in
 ## Config Isolation
 
 Tests set `XDG_CONFIG_HOME` to a temp directory, so they never touch `~/.config/bzr/config.toml`.
+
+## RHBZ Core Comparison
+
+`make functional-compare-rhbz` builds the pinned RHBZ image, runs the isolated
+extension catalogue and core journey, then stops the RHBZ container even when a
+phase fails. It is intentionally outside the stock bz50/bz52/bz53 arrays.
+The runner prints the RHBZ server source revision plus the current binary source
+revision and SHA-256 before its stable `compare/` test IDs; retain that output
+when diagnosing a scheduled RHBZ job.
 
 ## Troubleshooting
 

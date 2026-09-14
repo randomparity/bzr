@@ -32,6 +32,18 @@ cleanup() {
 trap cleanup EXIT
 pybz_sidecar_start "$runtime" "$container"
 resource_init
+server_revision=$("$runtime" exec "$container" git -C /var/www/html/bugzilla rev-parse HEAD)
+binary_revision=$(git -C "$REPO_ROOT" rev-parse HEAD)
+binary_checksum=$(sha256sum "$BZR_BIN" | awk '{print $1}')
+if [[ ! $server_revision =~ ^[0-9a-f]{40}$ ]] ||
+    [[ ! $binary_revision =~ ^[0-9a-f]{40}$ ]] ||
+    [[ ! $binary_checksum =~ ^[0-9a-f]{64}$ ]]; then
+    echo "ERROR: RHBZ comparison provenance is malformed" >&2
+    exit 1
+fi
+printf 'RHBZ server source revision: %s\n' "$server_revision"
+printf 'RHBZ binary source revision: %s\n' "$binary_revision"
+printf 'RHBZ binary SHA-256: %s\n' "$binary_checksum"
 CURRENT_TEST_GROUP=07-rhbz-smoke
 source "$SCRIPT_DIR/compare/rhbz/07-rhbz-smoke.sh"
 _render_test_result
@@ -40,5 +52,8 @@ source "$SCRIPT_DIR/compare/rhbz/09-rhbz-fields.sh"
 _render_test_result
 CURRENT_TEST_GROUP=08-rhbz-externalbugs
 source "$SCRIPT_DIR/compare/rhbz/08-rhbz-externalbugs.sh"
+_render_test_result
+CURRENT_TEST_GROUP=10-rhbz-core
+source "$SCRIPT_DIR/compare/rhbz/10-rhbz-core.sh"
 _render_test_result
 test_summary

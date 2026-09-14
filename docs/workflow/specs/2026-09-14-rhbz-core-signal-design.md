@@ -40,3 +40,12 @@ version arrays do not change.
   RHBZ target with unconditional cleanup.
 - focused-test: `make lint` and `make test` cover syntax and fixtures.
 - live-test: `make functional-compare-rhbz` proves the real RHBZ path.
+
+## Authorized fixture compatibility
+
+The pinned RHBZ source uses PostgreSQL-only `SET STATEMENT_TIMEOUT`, while the
+disposable RHBZ fixture uses MariaDB. The operator authorized a narrow
+Containerfile substitution to MariaDB `max_statement_time`, including reset,
+solely to make the bounded live search proof executable. The fixture retains a
+60-second RHBZ query limit. No stock image, version array, or application code
+is changed.
