@@ -125,7 +125,7 @@ async fn external_bug_methods_preserve_server_faults() {
     ] {
         Mock::given(method("POST"))
             .and(path("/xmlrpc.cgi"))
-            .and(body_string_contains(&format!(
+            .and(body_string_contains(format!(
                 "<methodName>{method_name}</methodName>"
             )))
             .respond_with(
