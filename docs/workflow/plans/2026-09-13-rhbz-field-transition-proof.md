@@ -53,9 +53,11 @@ stable IDs and their observed classification for Task 3.
 **Steps.**
 
 1. Add per-arm before/reference/bzr values generated from the run token. For
-   target release, insert and read back three distinct configured release rows
-   before creating the bug; initialize its bug with the before row, then assert
-   REST state after the python-bugzilla reference operation.
+   target release, start the bug empty and insert/read back distinct configured
+   reference and bzr release rows before either write, then assert REST state
+   after the python-bugzilla reference operation. For sub-components,
+   insert and read back the three names under `TestComponent` before selecting
+   the before name for the disposable bug.
 2. Split bzr probing by field shape: feed stdin from a jq-built
    `{"rh_sub_components":{"TestComponent":["<subcomponent>"]}}` object to
    `--field-json -`, retain scalar `--field` for the remaining fields, and
@@ -64,7 +66,7 @@ stable IDs and their observed classification for Task 3.
    make whiteboard bzr updates and filters cover each named whiteboard.
 
 **Acceptance:** no successful bzr no-op can satisfy a phase ID; each target
-release transition writes one of the three SQL-verified configured values; an
+release write uses a SQL-verified configured value; an
 expected gap is emitted only after the structured sub-component path has been
 tried.
 
