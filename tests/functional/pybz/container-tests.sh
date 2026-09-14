@@ -3313,6 +3313,7 @@ run_rhbz_comparison_target_fixture() {
     fi
 
     recipe=$(sed -n '/^functional-compare-rhbz:/,/^$/p' "$makefile")
+    # shellcheck disable=SC2016 # This is the literal Make recipe contract.
     if ! grep -Fq \
         'BZR_BZ_VERSION=rhbz BZR_COMPARE_BIN="$(BZR_COMPARE_BIN)" tests/functional/run-rhbz-compare.sh' \
         <<<"$recipe"; then
@@ -3320,6 +3321,7 @@ run_rhbz_comparison_target_fixture() {
         return 1
     fi
 
+    # shellcheck disable=SC2016 # This is the literal runner fallback contract.
     if ! grep -Fq 'export BZR_BIN="${BZR_COMPARE_BIN:-$REPO_ROOT/target/release/bzr}"' \
         "$runner" ||
         ! grep -Fq 'RHBZ comparison binary: %s' "$runner"; then
