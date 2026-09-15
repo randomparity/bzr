@@ -5,6 +5,222 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] - 2026-09-15
+
+### Security
+
+Security assessment: No publicly identified runtime vulnerabilities in bzr were fixed in this release.
+
+### Added
+
+- Carry terminal width with writers
+- Add explicit table width control
+- Accept multiple bug ids in comment list
+- Report how many bugs were skipped under --permissive
+- Carry tags through comment responses
+- Show tags in list output
+- Add unsupported-server-capability error at exit 15
+- Detect saved-search extension before dispatch
+- Add --minor-update and --comment-tag flags
+- Warn instead of erroring below --minor-update's version floor
+- Add server field-catalogue lookup for --field validation
+- Accept --field and --field-json on create and update
+- Publish the field-name output shape
+- Add a no-argument form to bzr field list
+- Skip obsolete attachments on bulk download
+- Upload one file to several bugs
+- Publish the attachment download batch result schema
+- Re-detect an auth_method cached before the differential probe
+- Gate the auth-method stamp on the probe outcome
+- Surface the auth-method provenance in config show
+- Stream authenticated download payloads
+- Add isolated rhbz smoke lifecycle
+- Support persisted login tokens
+- Use Bearer for Red Hat REST
+- Add match-type filter modifiers
+- Add personal bug tag support
+- Import API keys from bugzillarc
+- Add login and logout commands
+- Add RHBZ external tracker mutations
+- Add RHBZ XML-RPC updates
+
+### Changed
+
+- Share wrapping across bug tables
+- Fit comparison scope budget
+- Clarify comparison helpers
+- Resolve the configured server once per capability check
+- Dedupe the comment-tag-failure warning text
+- Sharpen the empty --field-json diagnostics
+- Build the anonymous probe request once and share the decline tail
+- Share the projection and connect between both list forms
+- Name the extension-name preview bound
+- Count failed upload targets over a bug-ID set
+- Widen and rename the terminal-escaping predicate
+- Tighten two comments the fixes made stale
+- Expose escape_terminal_controls for command layer and binary
+- Cache rhbz perl build layer
+- Remove dead rhbz config
+
+### Fixed
+
+- Tolerate Red Hat cc objects in bug view (closes #661)
+- Close comparison harness review findings
+- Isolate comparison harness
+- Harden comparison lifecycle
+- Cover shellcheck variants
+- Serialize XML-RPC dates in comparison adapter
+- Observe lifecycle comparison transports
+- Close transport evidence gaps
+- Bind transport logs to targets
+- Adapt XML-RPC parser to quick-xml 0.42 (closes #684)
+- Correct bug view, comment list, group view help drift
+- Drop remaining false CC-list claim from bug view help
+- Fill absent bug_id, replacing null in JSON output
+- Treat a missing XML-RPC bugs key as not found
+- Match the REST bugs envelope key to the requested bug
+- Keep a malformed bugs envelope a parse error
+- Correct the deserialize exit code in the records
+- Escape controls in table tags
+- Correct auth and TLS comparison probes
+- Close comparison cleanup gaps
+- Prove auth lifecycle outcomes
+- Verify proxy launch identity
+- Isolate comparison token cache
+- Clear comparison auth residue
+- Reject --sharer alongside a conflicting query source
+- Reject empty saved-search names and sharpen the refusal
+- Bind the capability cache to its probed URL
+- Publish exit 15 across the error contract surfaces
+- Bind the capability cache write to the probed client URL
+- Tag create's description comment as a post-create sub-step
+- Tag update's comment via a follow-up call, not comment_tags
+- Tag by comment recency, distinguish tag-only update failures
+- Accept the REST field names bzr models in --field validation
+- Name the single-stdin-read conflict on an empty --field-json
+- Reject --field-json - against a competing stdin reader
+- Keep the field-name cache from failing or bloating a write
+- Point the undeclared-field message at a command that exists
+- Bind the field-name cache to the URL it was probed from
+- Report the retry's refusal, not the original 401
+- Relayed per-resource code makes --permissive exit 0 not 4
+- A bare 401 with an envelope-carrying retry now exits 4 not 5
+- A relayed refusal can make --permissive exit 4 not 0
+- Detected auth becomes query-param on stock Bugzilla servers
+- Redact the API key from header-auth probe transport errors
+- Re-observe the anonymous probe response before preferring header
+- Route every auth probe transport error through one redaction seam
+- Redact traced probe bodies and require JSON on credentialed legs
+- Redact the API key from the version-probe failure log
+- Move the trace-preview cut before any API key it would split
+- Suppress tracing ANSI when stderr is not a terminal
+- Note that CLICOLOR_FORCE outranks NO_COLOR on stdout
+- Bug links reports a restricted root as exit 4 not exit 2
+- Keep the 100500 search fallback on the links root read
+- Probe vendor extensions over the transport in use
+- Warn rather than inform when the REST extensions probe fails
+- Bound server-controlled text in the XML-RPC probe's errors
+- Move every pinned schema_version to 3.0.3
+- Bind the listing's catalogue fetch to the validator's
+- Escape control characters in the field-name table cell
+- Reject an empty upload bug-ID list in validate_action
+- Gate and bound the multi-bug upload fan-out
+- Escape every table cell at the shared table seam
+- Escape the detail-row seam and the bug writer's own lines
+- Escape server text in the bespoke writer lines
+- Discover all dependency-analysis test modules in run.sh
+- Accept same-major schema_version drift in collect.py
+- Bound every response-body read at 64 MiB
+- Carry the refused status through a tested seam
+- Stop the credentialed version probe swallowing a refusal
+- Show the refused response status outside JSON too
+- Refuse an over-limit error body instead of reclassifying it
+- Make the response-limit refusal actionable and publish it
+- Stamp auth_method only when detection reached the server
+- Reject --tls-pin-clear combined with flags it cannot honour
+- Clear a stale auth-method stamp on an unprobed persist
+- Escape terminal controls in the batch stderr failure line
+- Escape terminal controls in the batch stderr failure line
+- Escape terminal controls in the process-exit error line
+- Escape the exit error line per line, not as one string
+- Escape server text composed into write_result messages
+- Escape server errors in the remaining stderr sites
+- Bind XML payloads to validated member names
+- Share XML member-name interpretation
+- Preserve XML metadata size refusal
+- Validate XML-RPC member ownership
+- Escape bidi controls in JSON and NDJSON
+- Satisfy rhbz entrypoint shell lint
+- Install rhbz safe module
+- Install rhbz memoize module
+- Install rhbz required modules
+- Install rhbz native build prerequisites
+- Isolate rhbz smoke phase
+- Provide rhbz installer lookup tool
+- Install rhbz regex module
+- Install rhbz yaml module
+- Install rhbz list utility module
+- Install rhbz graph module
+- Install rhbz extension modules
+- Use fedora ldap package name
+- Install rhbz json adapter
+- Isolate rhbz smoke extensions
+- Complete rhbz setup initialization
+- Converge rhbz setup configuration
+- Configure rhbz external logins
+- Bootstrap rhbz extension schema
+- Initialize rhbz extension logs
+- Create rhbz log directories
+- Use absolute rhbz log paths
+- Prepare rhbz logs before setup
+- Follow rhbz setup ordering
+- Generate rhbz local configuration
+- Initialize rhbz schema explicitly
+- Complete rhbz base migrations
+- Bootstrap rhbz group category
+- Load rhbz extensions during setup
+- Retry rhbz native schema migration
+- Align rhbz report foreign key type
+- Align rhbz group foreign key type
+- Match rhbz report foreign key signedness
+- Retain rhbz rule engine schema
+- Isolate rhbz smoke schema
+- Seed rhbz bootstrap group
+- Seed rhbz custom-field groups
+- Seed rhbz custom field acl groups
+- Bootstrap pinned rhbz image
+- Use RHBZ field metadata names
+- Enable RHBZ update converters
+- Request REST RHBZ field updates
+- Read RHBZ sub-component state
+- Accept RHBZ sub-component readback
+- Seed required RHBZ sub-components
+- Seed RHBZ external-bug fixture
+- Probe configured RHBZ field values
+- Use bzr REST mode syntax
+- Keep token clients on REST
+- Enforce token REST boundary
+- Validate token credential proofs
+- Persist personal tag filters
+- Forward bug view field lists
+- Redact login credentials on failures
+- Document token command behavior
+- Support hidden prompts without keyring
+- Retain concurrent login token on logout
+- Honor the saved API transport
+- Match bugzillarc sections safely
+- Preserve bugzillarc ports
+- Preserve bugzillarc authority
+- Preserve raw bugzillarc authority
+- Accept uppercase bugzillarc schemes
+- Persist login email with token
+- Preserve multi-value bug fields
+- Retain named RHBZ output fields
+- Reject login tokens for personal tags
+- Build current RHBZ comparison binary
+- Seed external bug sub-component
+- Import explicit bugzillarc URL sections
+- Reject bugzillarc URL credentials
 ## [0.9.0] - 2026-09-03
 
 ### Security
