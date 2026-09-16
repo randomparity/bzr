@@ -1,19 +1,14 @@
 #![expect(clippy::unwrap_used)]
 
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::cli::{TemplateAction, TemplateFields};
 use crate::config::Config;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
-fn current_config_path() -> PathBuf {
-    Config::path_at(None).unwrap()
-}
-
-fn load_config() -> Config {
-    let path = current_config_path();
-    Config::load_at(Some(&path)).unwrap()
+fn load_config(config_path: &Path) -> Config {
+    Config::load_at(Some(config_path)).unwrap()
 }
 
 fn save_action(name: &str) -> TemplateAction {
@@ -30,13 +25,14 @@ fn save_action(name: &str) -> TemplateAction {
 
 #[tokio::test]
 async fn template_list_empty() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = TemplateAction::List;
     let mut __io_a3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a3.writers(),
     )
     .await;
@@ -46,12 +42,13 @@ async fn template_list_empty() {
 
 #[tokio::test]
 async fn template_list_renders_saved_template() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let mut save_io = crate::test_helpers::CapturedIo::new();
     crate::commands::template::execute(
         &save_action("alpha"),
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut save_io.writers(),
     )
     .await
@@ -60,7 +57,8 @@ async fn template_list_renders_saved_template() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &TemplateAction::List,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -76,7 +74,7 @@ async fn template_list_renders_saved_template() {
 
 #[tokio::test]
 async fn template_list_table_sorts_entries_by_name() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     for name in ["zzz", "aaa"] {
         let mut __io7 = crate::test_helpers::CapturedIo::new();
@@ -86,7 +84,8 @@ async fn template_list_table_sorts_entries_by_name() {
                 None,
                 OutputFormat::Json,
                 None,
-            ),
+            )
+            .with_config_path_override(Some(config_path.clone())),
             &mut __io7.writers(),
         )
         .await;
@@ -98,7 +97,8 @@ async fn template_list_table_sorts_entries_by_name() {
 
     let result = crate::commands::template::execute(
         &TemplateAction::List,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io8.writers(),
     )
     .await;
@@ -107,7 +107,7 @@ async fn template_list_table_sorts_entries_by_name() {
     assert!(result.is_ok());
     assert!(output.is_empty() || output.contains("product="));
 
-    let config = load_config();
+    let config = load_config(&config_path);
     let mut names: Vec<&str> = config.templates.keys().map(String::as_str).collect();
     names.sort_unstable();
     assert_eq!(names, vec!["aaa", "zzz"]);

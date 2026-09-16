@@ -1,19 +1,14 @@
 #![expect(clippy::unwrap_used)]
 
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::cli::{TemplateAction, TemplateFields};
 use crate::config::Config;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
-fn current_config_path() -> PathBuf {
-    Config::path_at(None).unwrap()
-}
-
-fn load_config() -> Config {
-    let path = current_config_path();
-    Config::load_at(Some(&path)).unwrap()
+fn load_config(config_path: &Path) -> Config {
+    Config::load_at(Some(config_path)).unwrap()
 }
 
 fn save_action(name: &str) -> TemplateAction {
@@ -31,14 +26,15 @@ fn save_action(name: &str) -> TemplateAction {
 #[tokio::test]
 async fn template_delete_unknown_errors() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = TemplateAction::Delete {
         name: "nonexistent".into(),
     };
     let result = crate::commands::template::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -52,13 +48,14 @@ async fn template_delete_unknown_errors() {
 
 #[tokio::test]
 async fn template_delete_existing_removes_entry() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let mut __io3 = crate::test_helpers::CapturedIo::new();
 
     let result = crate::commands::template::execute(
         &save_action("delete-me"),
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io3.writers(),
     )
     .await;
@@ -72,7 +69,8 @@ async fn template_delete_existing_removes_entry() {
         &TemplateAction::Delete {
             name: "delete-me".into(),
         },
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io4.writers(),
     )
     .await;
@@ -83,17 +81,20 @@ async fn template_delete_existing_removes_entry() {
     let parsed = crate::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "delete-me");
     assert_eq!(parsed["action"], "deleted");
-    assert!(!load_config().templates.contains_key("delete-me"));
+    assert!(!load_config(&config_path)
+        .templates
+        .contains_key("delete-me"));
 }
 
 #[tokio::test]
 async fn template_delete_json_matches_domain_mutation_output() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let mut save_io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &save_action("delete-json-shape"),
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut save_io.writers(),
     )
     .await;
@@ -105,7 +106,8 @@ async fn template_delete_json_matches_domain_mutation_output() {
         &TemplateAction::Delete {
             name: "delete-json-shape".into(),
         },
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut delete_io.writers(),
     )
     .await;
@@ -120,13 +122,14 @@ async fn template_delete_json_matches_domain_mutation_output() {
 
 #[tokio::test]
 async fn template_delete_table_prints_deleted_message() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let mut __io5 = crate::test_helpers::CapturedIo::new();
 
     let result = crate::commands::template::execute(
         &save_action("table-delete"),
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io5.writers(),
     )
     .await;
@@ -140,12 +143,15 @@ async fn template_delete_table_prints_deleted_message() {
         &TemplateAction::Delete {
             name: "table-delete".into(),
         },
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io6.writers(),
     )
     .await;
 
     let _output = __io6.out_str().to_string();
     assert!(result.is_ok());
-    assert!(!load_config().templates.contains_key("table-delete"));
+    assert!(!load_config(&config_path)
+        .templates
+        .contains_key("table-delete"));
 }

@@ -1,19 +1,14 @@
 #![expect(clippy::unwrap_used)]
 
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::cli::{TemplateAction, TemplateFields};
 use crate::config::Config;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
-fn current_config_path() -> PathBuf {
-    Config::path_at(None).unwrap()
-}
-
-fn load_config() -> Config {
-    let path = current_config_path();
-    Config::load_at(Some(&path)).unwrap()
+fn load_config(config_path: &Path) -> Config {
+    Config::load_at(Some(config_path)).unwrap()
 }
 
 fn save_action(name: &str) -> TemplateAction {
@@ -30,14 +25,15 @@ fn save_action(name: &str) -> TemplateAction {
 
 #[tokio::test]
 async fn template_save_and_show() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     // Save a template
     let action = save_action("test-tmpl");
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a1.writers(),
     )
     .await;
@@ -51,7 +47,8 @@ async fn template_save_and_show() {
     let mut __io_a2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a2.writers(),
     )
     .await;
@@ -66,7 +63,7 @@ async fn template_save_and_show() {
 #[tokio::test]
 async fn template_save_requires_field() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = TemplateAction::Save {
         name: "empty-tmpl".into(),
@@ -74,7 +71,8 @@ async fn template_save_requires_field() {
     };
     let result = crate::commands::template::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -90,7 +88,7 @@ async fn template_save_requires_field() {
 async fn template_save_with_single_field_succeeds() {
     // A single non-None field is enough to satisfy the
     // "at least one field required" validator.
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = TemplateAction::Save {
         name: "version-only".into(),
@@ -102,7 +100,8 @@ async fn template_save_with_single_field_succeeds() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -115,7 +114,7 @@ async fn template_save_with_single_field_succeeds() {
 
 #[tokio::test]
 async fn template_save_and_show_create_metadata_fields() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = TemplateAction::Save {
         name: "routing".into(),
@@ -134,7 +133,8 @@ async fn template_save_and_show_create_metadata_fields() {
     let mut save_io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut save_io.writers(),
     )
     .await;
@@ -146,7 +146,8 @@ async fn template_save_and_show_create_metadata_fields() {
         &TemplateAction::Show {
             name: "routing".into(),
         },
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut show_io.writers(),
     )
     .await;
@@ -165,7 +166,7 @@ async fn template_save_and_show_create_metadata_fields() {
 #[tokio::test]
 async fn template_save_rejects_malformed_deadline() {
     let mut cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = TemplateAction::Save {
         name: "bad-deadline".into(),
@@ -177,7 +178,8 @@ async fn template_save_rejects_malformed_deadline() {
     };
     let err = crate::commands::template::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut cap_io.writers(),
     )
     .await
@@ -188,13 +190,14 @@ async fn template_save_rejects_malformed_deadline() {
 
 #[tokio::test]
 async fn template_save_existing_entry_reports_updated_and_replaces_fields() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let mut __io2 = crate::test_helpers::CapturedIo::new();
 
     let result = crate::commands::template::execute(
         &save_action("existing"),
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io2.writers(),
     )
     .await;
@@ -215,7 +218,8 @@ async fn template_save_existing_entry_reports_updated_and_replaces_fields() {
     let mut __io_a4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &update,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a4.writers(),
     )
     .await;
@@ -226,7 +230,7 @@ async fn template_save_existing_entry_reports_updated_and_replaces_fields() {
     assert_eq!(parsed["name"], "existing");
     assert_eq!(parsed["action"], "updated");
 
-    let config = load_config();
+    let config = load_config(&config_path);
     let saved = &config.templates["existing"];
     assert_eq!(saved.product, None);
     assert_eq!(saved.component.as_deref(), Some("Updated"));
