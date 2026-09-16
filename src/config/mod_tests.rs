@@ -53,16 +53,17 @@ fn test_config_path(tmp: &tempfile::TempDir) -> PathBuf {
     tmp.path().join("bzr").join("config.toml")
 }
 
-/// Combined test for operations that require `env::set_var`.
-/// Grouped in a single test to avoid env var race conditions with
-/// parallel test execution.
+/// One pass over the config file lifecycle: load-when-absent, save/load
+/// roundtrip, and re-save permissions.
+///
+/// These steps were originally combined to share a single `env::set_var`
+/// critical section. That reason is gone — the test now selects its config by
+/// explicit path (ADR-0002) and takes no lock — but the steps are kept together
+/// because each builds on the file the previous one left on disk.
 #[test]
 fn config_file_io_operations() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::tempdir().unwrap();
     let config_path = test_config_path(&tmp);
-    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
-    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     // 1. Load returns default when no file exists
     let config = Config::load_at(Some(&config_path)).unwrap();
@@ -102,7 +103,6 @@ fn config_file_io_operations() {
 
 #[test]
 fn config_load_read_error_names_operation_and_path() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::tempdir().unwrap();
     let config_path = tmp.path().join("config.toml");
     fs::create_dir_all(&config_path).unwrap();
@@ -122,7 +122,6 @@ fn config_load_read_error_names_operation_and_path() {
 
 #[test]
 fn config_load_parse_error_names_operation_and_path() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::tempdir().unwrap();
     let config_path = tmp.path().join("config.toml");
     fs::write(&config_path, "default_server = [").unwrap();
@@ -143,7 +142,6 @@ fn config_load_parse_error_names_operation_and_path() {
 #[cfg(unix)]
 #[test]
 fn update_locked_lock_open_error_names_lock_path() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::tempdir().unwrap();
     let config_dir = tmp.path().join("bzr");
     fs::create_dir_all(&config_dir).unwrap();
@@ -165,7 +163,6 @@ fn update_locked_lock_open_error_names_lock_path() {
 #[cfg(unix)]
 #[test]
 fn config_save_rename_error_names_temp_and_target_paths() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::tempdir().unwrap();
     let config_dir = tmp.path().join("bzr");
     fs::create_dir_all(&config_dir).unwrap();
@@ -298,11 +295,8 @@ fn api_mode_display_formatting() {
 
 #[test]
 fn config_roundtrips_saved_queries() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::tempdir().unwrap();
     let config_path = test_config_path(&tmp);
-    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
-    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let mut config = make_config_with_server();
     let query = crate::types::SavedQuery {
@@ -334,7 +328,6 @@ fn config_empty_queries_not_serialized() {
 
 #[test]
 fn config_load_rejects_multiple_api_key_sources() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::tempdir().unwrap();
     let config_dir = tmp.path().join("bzr");
     fs::create_dir_all(&config_dir).unwrap();
@@ -359,8 +352,6 @@ api_key_env = "BZR_TEST_API_KEY"
         )
         .unwrap();
     }
-    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
-    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let config_path = config_dir.join("config.toml");
     let err = Config::load_at(Some(&config_path)).unwrap_err();
@@ -794,11 +785,8 @@ fn validate_tls_no_conflicts_passes() {
 #[cfg(unix)]
 #[test]
 fn config_save_hardens_permissions_for_new_paths() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::tempdir().unwrap();
     let config_path = test_config_path(&tmp);
-    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
-    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let config = make_config_with_server();
     config.save_at(&config_path).unwrap();
@@ -813,11 +801,8 @@ fn config_save_hardens_permissions_for_new_paths() {
 #[cfg(unix)]
 #[test]
 fn save_credential_less_server_hardens_recreated_file() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::tempdir().unwrap();
     let config_path = test_config_path(&tmp);
-    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
-    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     // A server left without any credential source (the unset-keyring state) is
     // structurally valid — missing credentials are only an error at
@@ -849,10 +834,8 @@ fn save_credential_less_server_hardens_recreated_file() {
 
 #[test]
 fn failed_write_leaves_previous_config_intact() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::TempDir::new().unwrap();
     let config_path = test_config_path(&tmp);
-    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     // Seed v1.
     let mut v1 = Config::default();
@@ -895,10 +878,8 @@ fn failed_write_leaves_previous_config_intact() {
 
 #[test]
 fn save_leaves_no_temp_files_and_writes_complete_content() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::TempDir::new().unwrap();
     let config_path = test_config_path(&tmp);
-    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let mut config = Config::default();
     config
@@ -931,10 +912,8 @@ fn save_leaves_no_temp_files_and_writes_complete_content() {
 
 #[test]
 fn overwrite_replaces_content_wholesale() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::TempDir::new().unwrap();
     let config_path = test_config_path(&tmp);
-    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let mut config = Config::default();
     config
@@ -956,10 +935,8 @@ fn overwrite_replaces_content_wholesale() {
 #[cfg(unix)]
 #[test]
 fn saved_config_file_is_0600() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::TempDir::new().unwrap();
     let config_path = test_config_path(&tmp);
-    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let mut config = Config::default();
     config
@@ -979,10 +956,8 @@ fn saved_config_file_is_0600() {
 fn save_reaps_old_crash_orphaned_temp_files() {
     use std::time::{Duration, SystemTime};
 
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::TempDir::new().unwrap();
     let config_path = test_config_path(&tmp);
-    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let dir = tmp.path().join("bzr");
     std::fs::create_dir_all(&dir).unwrap();
@@ -1010,10 +985,8 @@ fn save_reaps_old_crash_orphaned_temp_files() {
 
 #[test]
 fn save_preserves_fresh_temp_files_of_concurrent_writers() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::TempDir::new().unwrap();
     let config_path = test_config_path(&tmp);
-    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let dir = tmp.path().join("bzr");
     std::fs::create_dir_all(&dir).unwrap();
@@ -1039,10 +1012,8 @@ fn save_preserves_fresh_temp_files_of_concurrent_writers() {
 fn save_reap_requires_both_config_prefix_and_tmp_suffix() {
     use std::time::{Duration, SystemTime};
 
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::TempDir::new().unwrap();
     let config_path = test_config_path(&tmp);
-    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let dir = tmp.path().join("bzr");
     std::fs::create_dir_all(&dir).unwrap();
@@ -1099,10 +1070,8 @@ fn fsync_parent_dir_errors_when_parent_cannot_be_opened() {
 
 #[test]
 fn update_locked_preserves_disjoint_concurrent_edits() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::TempDir::new().unwrap();
     let config_path = test_config_path(&tmp);
-    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     // Seed a server with neither pin nor auth_method set.
     let mut base = Config::default();
@@ -1144,11 +1113,8 @@ fn update_locked_preserves_disjoint_concurrent_edits() {
 
 #[test]
 fn update_locked_rejects_reentrant_call() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::TempDir::new().unwrap();
     let config_path = test_config_path(&tmp);
-    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
-    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let result = Config::update_locked_at(Some(&config_path), |_outer| {
         // A nested write from inside a closure must be rejected, not deadlock.
@@ -1166,11 +1132,8 @@ fn update_locked_rejects_reentrant_call() {
 
 #[test]
 fn update_locked_can_create_a_server_not_yet_persisted() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::TempDir::new().unwrap();
     let config_path = test_config_path(&tmp);
-    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
-    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     // No prior save — disk has no config at all.
     Config::update_locked_at(Some(&config_path), |config| {
@@ -1197,11 +1160,8 @@ fn update_locked_can_create_a_server_not_yet_persisted() {
 /// would exercise nothing. See the credential-less variant below.
 #[test]
 fn update_locked_reload_is_unvalidated_so_a_mutation_can_heal_an_invalid_config() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::TempDir::new().unwrap();
     let config_path = test_config_path(&tmp);
-    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
-    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let mut base = Config::default();
     base.servers
@@ -1237,11 +1197,8 @@ fn update_locked_reload_is_unvalidated_so_a_mutation_can_heal_an_invalid_config(
 
 #[test]
 fn update_locked_accepts_a_credential_less_config_and_can_recredential_it() {
-    let _lock = crate::ENV_LOCK.blocking_lock();
     let tmp = tempfile::TempDir::new().unwrap();
     let config_path = test_config_path(&tmp);
-    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
-    unsafe { env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     // Seed a server, then strip its credential source (mirrors `bzr config unset-keyring`).
     // update_locked now accepts this incomplete state (credential-less is not a
@@ -1277,13 +1234,29 @@ fn update_locked_accepts_a_credential_less_config_and_can_recredential_it() {
 }
 
 /// `Config::path_at()` precedence (#304): `--config` override > `BZR_CONFIG`
-/// env > `$XDG_CONFIG_HOME/bzr/config.toml`. Combined into one test under
-/// `ENV_LOCK` to avoid env races, and cleans up the env so later tests see
-/// default resolution.
+/// env > `$XDG_CONFIG_HOME/bzr/config.toml`.
+///
+/// The last `ENV_LOCK`-holding test in this file (ADR-0002). Environment-based
+/// path resolution *is* the subject here — it asserts on `path_at(None)` — so
+/// unlike the rest of the file it has no explicit-path form. Every other test
+/// here selects its config by passing a path to `load_at` / `save_at` /
+/// `update_locked_at`, which `path_at` honours before reading any variable.
+///
+/// This test deliberately leaves `XDG_CONFIG_HOME` pointing at an absolute
+/// throwaway path on exit, restoring only `BZR_CONFIG`. That residue is
+/// load-bearing, not an oversight to tidy: it is one of the things keeping a
+/// later `path_at(None)` reader in this binary off the developer's real config
+/// (`~/Library/Application Support/bzr/config.toml` on macOS). Restoring it to
+/// unset would make the suite less safe, not more.
 #[test]
 fn config_path_resolution_precedence() {
+    // Orders this test against the other ENV_LOCK participants. It does not
+    // order it against a lock-free parallel test, and does not need to: these
+    // writes reach every `std::env` reader through std's own env lock.
     let _lock = crate::ENV_LOCK.blocking_lock();
-    // SAFETY: serialized via ENV_LOCK; no other thread reads these concurrently.
+    // SAFETY: ordered against the other ENV_LOCK participants by the guard
+    // above, and against every `std::env` reader by std's own env lock. No
+    // libc-side reader of these two variables runs in this process.
     unsafe {
         env::remove_var("BZR_CONFIG");
         env::set_var("XDG_CONFIG_HOME", "/tmp/bzr-xdg-test-home");
