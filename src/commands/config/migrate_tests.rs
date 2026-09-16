@@ -8,9 +8,28 @@ use crate::commands::runtime::invocation::CommandContext;
 use crate::config::ServerConfig;
 use crate::error::BzrError;
 use crate::test_helpers::{
-    seed_inline_server, setup_empty_config_env, update_config_without_validation, CapturedIo,
+    seed_inline_server_at, setup_empty_isolated_env, update_config_without_validation_at,
+    CapturedIo,
 };
 use crate::types::output::OutputFormat;
+
+use std::path::Path;
+
+/// A command context pinned to an explicit config path, so config resolution
+/// never consults `XDG_CONFIG_HOME` and the test needs no `ENV_LOCK`
+/// (ADR-0002).
+fn ctx_at(config_path: &Path, format: OutputFormat) -> CommandContext {
+    CommandContext::new(None, format, None)
+        .with_config_path_override(Some(config_path.to_path_buf()))
+}
+
+// The other migrate tests keep the default `"bzr"` service: their server names
+// ("migrate-inline", "mig", "migrate-env") are unique across the suite, so the
+// `(service, account)` keys of the shared test store stay disjoint without help.
+// This one seeds through `seed_keyring_secret_at`, which requires an explicit
+// service.
+#[cfg(feature = "keyring")]
+const MIGRATE_ALREADY_KEYRING_SERVICE: &str = "bzr-834-migrate-already-keyring";
 
 /// Build a `MigrateToKeyring` action with default service/account and the
 /// given confirmation flag.
@@ -25,13 +44,13 @@ fn migrate_action(name: &str, yes: bool) -> ConfigAction {
 
 #[tokio::test]
 async fn migrate_to_keyring_without_yes_errors() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    seed_inline_server("noyes", "https://noyes.example.com", "secret").await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    seed_inline_server_at(&config_path, "noyes", "https://noyes.example.com", "secret").await;
 
     let mut io = CapturedIo::new();
     let result = execute(
         &migrate_action("noyes", false),
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;
@@ -43,13 +62,13 @@ async fn migrate_to_keyring_without_yes_errors() {
 
 #[tokio::test]
 async fn migrate_to_keyring_missing_server_errors() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    seed_inline_server("real", "https://real.example.com", "secret").await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    seed_inline_server_at(&config_path, "real", "https://real.example.com", "secret").await;
 
     let mut io = CapturedIo::new();
     let result = execute(
         &migrate_action("ghost", true),
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;
@@ -61,8 +80,8 @@ async fn migrate_to_keyring_missing_server_errors() {
 
 #[tokio::test]
 async fn migrate_to_keyring_without_api_key_source_errors() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    update_config_without_validation(|config| {
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    update_config_without_validation_at(&config_path, |config| {
         config.servers.insert(
             "public".into(),
             ServerConfig {
@@ -78,7 +97,7 @@ async fn migrate_to_keyring_without_api_key_source_errors() {
     let mut io = CapturedIo::new();
     let result = execute(
         &migrate_action("public", true),
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;
@@ -91,8 +110,8 @@ async fn migrate_to_keyring_without_api_key_source_errors() {
 
 #[tokio::test]
 async fn migrate_to_keyring_rejects_login_tokens() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    update_config_without_validation(|config| {
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    update_config_without_validation_at(&config_path, |config| {
         config.servers.insert(
             "token".into(),
             ServerConfig {
@@ -108,7 +127,7 @@ async fn migrate_to_keyring_rejects_login_tokens() {
 
     let result = execute(
         &migrate_action("token", true),
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await;
@@ -122,11 +141,12 @@ async fn migrate_to_keyring_rejects_login_tokens() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn migrate_to_keyring_from_inline_rewrites_config() {
-    use crate::test_helpers::load_config;
+    use crate::test_helpers::load_config_at;
 
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     crate::credentials::keyring::install_test_store();
-    seed_inline_server(
+    seed_inline_server_at(
+        &config_path,
         "migrate-inline",
         "https://migrate-inline.example.com",
         "inline-secret-value",
@@ -135,13 +155,13 @@ async fn migrate_to_keyring_from_inline_rewrites_config() {
 
     execute(
         &migrate_action("migrate-inline", true),
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await
     .unwrap();
 
-    let config = load_config();
+    let config = load_config_at(&config_path);
     let server = &config.servers["migrate-inline"];
     assert!(server.api_key.is_none(), "inline key should be cleared");
     assert!(server.api_key_keyring.is_some());
@@ -155,14 +175,20 @@ async fn migrate_to_keyring_from_inline_rewrites_config() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn migrate_to_keyring_inline_table_output_reports_human_summary() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     crate::credentials::keyring::install_test_store();
-    seed_inline_server("mig", "https://mig.example.com", "inline-secret-value").await;
+    seed_inline_server_at(
+        &config_path,
+        "mig",
+        "https://mig.example.com",
+        "inline-secret-value",
+    )
+    .await;
 
     let mut io = CapturedIo::new();
     execute(
         &migrate_action("mig", true),
-        &CommandContext::new(None, OutputFormat::Table, None),
+        &ctx_at(&config_path, OutputFormat::Table),
         &mut io.writers(),
     )
     .await
@@ -177,12 +203,17 @@ async fn migrate_to_keyring_inline_table_output_reports_human_summary() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn migrate_to_keyring_from_env_preserves_config() {
-    use crate::test_helpers::load_config;
+    use crate::test_helpers::load_config_at;
 
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    // Retains ENV_LOCK: this test mutates the process-global
+    // BZR_MIGRATE_TEST_KEY that `api_key_env` resolution reads, which is the
+    // category ADR-0002 keeps the lock for. Config is still selected by
+    // explicit path, so no XDG_CONFIG_HOME mutation is involved.
+    let _lock = crate::ENV_LOCK.lock().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     crate::credentials::keyring::install_test_store();
 
-    // SAFETY: Serialized via ENV_LOCK through setup_empty_config_env.
+    // SAFETY: Serialized via the ENV_LOCK guard held above.
     unsafe { std::env::set_var("BZR_MIGRATE_TEST_KEY", "env-secret-value") };
     execute(
         &ConfigAction::SetServer {
@@ -198,7 +229,7 @@ async fn migrate_to_keyring_from_env_preserves_config() {
             tls_pin_now: false,
             tls_pin_clear: false,
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await
@@ -206,15 +237,15 @@ async fn migrate_to_keyring_from_env_preserves_config() {
 
     execute(
         &migrate_action("migrate-env", true),
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await
     .unwrap();
-    // SAFETY: Serialized via ENV_LOCK through setup_empty_config_env.
+    // SAFETY: Serialized via the ENV_LOCK guard held above.
     unsafe { std::env::remove_var("BZR_MIGRATE_TEST_KEY") };
 
-    let config = load_config();
+    let config = load_config_at(&config_path);
     let server = &config.servers["migrate-env"];
     // Env source preserved — config.toml is NOT rewritten.
     assert_eq!(server.api_key_env.as_deref(), Some("BZR_MIGRATE_TEST_KEY"));
@@ -229,14 +260,26 @@ async fn migrate_to_keyring_from_env_preserves_config() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn migrate_to_keyring_from_keyring_errors_before_storing() {
-    use crate::test_helpers::seed_keyring_secret;
+    use crate::test_helpers::seed_keyring_secret_at;
 
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     crate::credentials::keyring::install_test_store();
 
     // Set up a keyring-backed server.
-    seed_inline_server("migrate-already-kr", "https://example.com", "init").await;
-    seed_keyring_secret("migrate-already-kr", "original-secret").await;
+    seed_inline_server_at(
+        &config_path,
+        "migrate-already-kr",
+        "https://example.com",
+        "init",
+    )
+    .await;
+    seed_keyring_secret_at(
+        &config_path,
+        "migrate-already-kr",
+        "original-secret",
+        MIGRATE_ALREADY_KEYRING_SERVICE,
+    )
+    .await;
 
     // Attempt to migrate with a DIFFERENT service. Must error, and must NOT
     // have written anything to the new service.
@@ -247,7 +290,7 @@ async fn migrate_to_keyring_from_keyring_errors_before_storing() {
             account: None,
             yes: true,
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await;
@@ -259,5 +302,6 @@ async fn migrate_to_keyring_from_keyring_errors_before_storing() {
         lookup.is_err(),
         "no entry should have been stored at the different-service location"
     );
-    crate::credentials::keyring::delete("bzr", "migrate-already-kr").unwrap();
+    crate::credentials::keyring::delete(MIGRATE_ALREADY_KEYRING_SERVICE, "migrate-already-kr")
+        .unwrap();
 }

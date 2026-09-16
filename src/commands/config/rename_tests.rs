@@ -7,26 +7,58 @@ use crate::commands::config::execute;
 use crate::commands::runtime::invocation::CommandContext;
 use crate::error::BzrError;
 use crate::test_helpers::{
-    load_config_unvalidated, run_config_action_json, seed_inline_server, setup_empty_config_env,
-    CapturedIo,
+    load_config_unvalidated_at, run_config_action_json_at, seed_inline_server_at,
+    setup_empty_isolated_env, CapturedIo,
 };
 use crate::types::output::OutputFormat;
 
+use std::path::Path;
+
+/// A command context pinned to an explicit config path, so config resolution
+/// never consults `XDG_CONFIG_HOME` and the test needs no `ENV_LOCK`
+/// (ADR-0002).
+fn ctx_at(config_path: &Path, format: OutputFormat) -> CommandContext {
+    CommandContext::new(None, format, None)
+        .with_config_path_override(Some(config_path.to_path_buf()))
+}
+
+// One keychain `service` per keyring-touching test. `install_test_store`
+// memoizes a single process-global store keyed on `(service, account)`, and
+// server names are load-bearing assertions that repeat across these suites
+// ("keepme" is also used by the remove tests). With `ENV_LOCK` no longer
+// serializing whole test bodies, a unique service is what keeps the keys
+// disjoint.
+#[cfg(feature = "keyring")]
+const RENAME_MOVES_SERVICE: &str = "bzr-834-rename-moves";
+#[cfg(feature = "keyring")]
+const RENAME_EXPLICIT_SERVICE: &str = "bzr-834-rename-explicit-acct";
+#[cfg(feature = "keyring")]
+const RENAME_CRED_LESS_SERVICE: &str = "bzr-834-rename-cred-less";
+
 #[tokio::test]
 async fn rename_server_preserves_inline_credentials() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    seed_inline_server("stage", "https://stage.example.com", "secret-key").await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    seed_inline_server_at(
+        &config_path,
+        "stage",
+        "https://stage.example.com",
+        "secret-key",
+    )
+    .await;
 
-    let json = run_config_action_json(ConfigAction::RenameServer {
-        old: "stage".into(),
-        new: "staging".into(),
-    })
+    let json = run_config_action_json_at(
+        &config_path,
+        ConfigAction::RenameServer {
+            old: "stage".into(),
+            new: "staging".into(),
+        },
+    )
     .await;
     assert_eq!(json["action"], "renamed");
     assert_eq!(json["name"], "staging");
     assert_eq!(json["previous_name"], "stage");
 
-    let config = load_config_unvalidated();
+    let config = load_config_unvalidated_at(&config_path);
     assert!(!config.servers.contains_key("stage"));
     let server = &config.servers["staging"];
     assert_eq!(server.url, "https://stage.example.com");
@@ -37,16 +69,19 @@ async fn rename_server_preserves_inline_credentials() {
 
 #[tokio::test]
 async fn rename_server_updates_default_pointer() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    seed_inline_server("a", "https://a.example.com", "x").await;
-    seed_inline_server("b", "https://b.example.com", "y").await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    seed_inline_server_at(&config_path, "a", "https://a.example.com", "x").await;
+    seed_inline_server_at(&config_path, "b", "https://b.example.com", "y").await;
     // "a" is default; rename it and confirm the pointer follows.
-    run_config_action_json(ConfigAction::RenameServer {
-        old: "a".into(),
-        new: "a2".into(),
-    })
+    run_config_action_json_at(
+        &config_path,
+        ConfigAction::RenameServer {
+            old: "a".into(),
+            new: "a2".into(),
+        },
+    )
     .await;
-    let config = load_config_unvalidated();
+    let config = load_config_unvalidated_at(&config_path);
     assert_eq!(config.default_server.as_deref(), Some("a2"));
     assert!(config.servers.contains_key("a2"));
     assert!(config.servers.contains_key("b"));
@@ -54,15 +89,15 @@ async fn rename_server_updates_default_pointer() {
 
 #[tokio::test]
 async fn rename_server_old_missing_errors() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    seed_inline_server("real", "https://real.example.com", "x").await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    seed_inline_server_at(&config_path, "real", "https://real.example.com", "x").await;
     let mut io = CapturedIo::new();
     let result = execute(
         &ConfigAction::RenameServer {
             old: "ghost".into(),
             new: "new".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;
@@ -71,16 +106,16 @@ async fn rename_server_old_missing_errors() {
 
 #[tokio::test]
 async fn rename_server_new_exists_errors() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    seed_inline_server("a", "https://a.example.com", "x").await;
-    seed_inline_server("b", "https://b.example.com", "y").await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    seed_inline_server_at(&config_path, "a", "https://a.example.com", "x").await;
+    seed_inline_server_at(&config_path, "b", "https://b.example.com", "y").await;
     let mut io = CapturedIo::new();
     let result = execute(
         &ConfigAction::RenameServer {
             old: "a".into(),
             new: "b".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;
@@ -93,15 +128,15 @@ async fn rename_server_new_exists_errors() {
 
 #[tokio::test]
 async fn rename_server_same_name_errors() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    seed_inline_server("same", "https://same.example.com", "x").await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    seed_inline_server_at(&config_path, "same", "https://same.example.com", "x").await;
     let mut io = CapturedIo::new();
     let result = execute(
         &ConfigAction::RenameServer {
             old: "same".into(),
             new: "same".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;
@@ -109,13 +144,15 @@ async fn rename_server_same_name_errors() {
     assert!(matches!(err, BzrError::Config(_)));
     assert!(err.to_string().contains("must differ"));
     // The server is untouched.
-    assert!(load_config_unvalidated().servers.contains_key("same"));
+    assert!(load_config_unvalidated_at(&config_path)
+        .servers
+        .contains_key("same"));
 }
 
 #[tokio::test]
 async fn rename_server_table_output_reports_human_summary() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    seed_inline_server("stage", "https://stage.example.com", "x").await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    seed_inline_server_at(&config_path, "stage", "https://stage.example.com", "x").await;
 
     let mut io = CapturedIo::new();
     execute(
@@ -123,7 +160,7 @@ async fn rename_server_table_output_reports_human_summary() {
             old: "stage".into(),
             new: "staging".into(),
         },
-        &CommandContext::new(None, OutputFormat::Table, None),
+        &ctx_at(&config_path, OutputFormat::Table),
         &mut io.writers(),
     )
     .await
@@ -137,28 +174,31 @@ async fn rename_server_table_output_reports_human_summary() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn rename_server_moves_keyring_secret() {
-    use crate::test_helpers::seed_keyring_secret;
+    use crate::test_helpers::seed_keyring_secret_at;
 
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     crate::credentials::keyring::install_test_store();
-    seed_inline_server("oldname", "https://kr.example.com", "inline").await;
-    seed_keyring_secret("oldname", "kr-secret").await;
+    seed_inline_server_at(&config_path, "oldname", "https://kr.example.com", "inline").await;
+    seed_keyring_secret_at(&config_path, "oldname", "kr-secret", RENAME_MOVES_SERVICE).await;
 
-    run_config_action_json(ConfigAction::RenameServer {
-        old: "oldname".into(),
-        new: "newname".into(),
-    })
+    run_config_action_json_at(
+        &config_path,
+        ConfigAction::RenameServer {
+            old: "oldname".into(),
+            new: "newname".into(),
+        },
+    )
     .await;
 
-    let config = load_config_unvalidated();
+    let config = load_config_unvalidated_at(&config_path);
     assert!(config.servers.contains_key("newname"));
     assert!(config.servers["newname"].api_key_keyring.is_some());
     // Secret reachable under the new default account, gone under the old.
     assert_eq!(
-        crate::credentials::keyring::retrieve("bzr", "newname").unwrap(),
+        crate::credentials::keyring::retrieve(RENAME_MOVES_SERVICE, "newname").unwrap(),
         "kr-secret"
     );
-    assert!(crate::credentials::keyring::retrieve("bzr", "oldname").is_err());
+    assert!(crate::credentials::keyring::retrieve(RENAME_MOVES_SERVICE, "oldname").is_err());
 }
 
 /// Kill `kr.account.is_none() → true` mutant (rename.rs:39): when the
@@ -169,20 +209,20 @@ async fn rename_server_moves_keyring_secret() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn rename_server_does_not_move_explicitly_accounted_keyring_secret() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     crate::credentials::keyring::install_test_store();
 
     // Seed a server with an inline key first, then manually swap it for a
     // keyring entry with an explicit account so the rename guard condition
     // is `account.is_some()` (guard should be false → no move).
-    seed_inline_server("svc", "https://svc.example.com", "dummy").await;
+    seed_inline_server_at(&config_path, "svc", "https://svc.example.com", "dummy").await;
 
     // Replace the inline key with a keyring ref that has an explicit account.
-    crate::test_helpers::update_config_without_validation(|config| {
+    crate::test_helpers::update_config_without_validation_at(&config_path, |config| {
         let srv = config.servers.get_mut("svc").unwrap();
         srv.api_key = None;
         srv.api_key_keyring = Some(crate::config::KeyringRef {
-            service: Some("bzr".into()),
+            service: Some(RENAME_EXPLICIT_SERVICE.into()),
             account: Some("explicit-acct".into()),
         });
         Ok(())
@@ -191,25 +231,29 @@ async fn rename_server_does_not_move_explicitly_accounted_keyring_secret() {
 
     // Store the real secret under the explicit account so we can verify
     // it is not disturbed.
-    crate::credentials::keyring::store("bzr", "explicit-acct", "explicit-secret").unwrap();
+    crate::credentials::keyring::store(RENAME_EXPLICIT_SERVICE, "explicit-acct", "explicit-secret")
+        .unwrap();
 
     // Rename — must succeed and must NOT touch the keyring entry.
-    let json = run_config_action_json(ConfigAction::RenameServer {
-        old: "svc".into(),
-        new: "svc2".into(),
-    })
+    let json = run_config_action_json_at(
+        &config_path,
+        ConfigAction::RenameServer {
+            old: "svc".into(),
+            new: "svc2".into(),
+        },
+    )
     .await;
     assert_eq!(json["action"], "renamed");
 
     // The secret must still be reachable under the original explicit account.
     assert_eq!(
-        crate::credentials::keyring::retrieve("bzr", "explicit-acct").unwrap(),
+        crate::credentials::keyring::retrieve(RENAME_EXPLICIT_SERVICE, "explicit-acct").unwrap(),
         "explicit-secret",
         "rename must not move a keyring entry that uses an explicit account"
     );
     // And must NOT have been mirrored to the new server name.
     assert!(
-        crate::credentials::keyring::retrieve("bzr", "svc2").is_err(),
+        crate::credentials::keyring::retrieve(RENAME_EXPLICIT_SERVICE, "svc2").is_err(),
         "rename must not create a server-name entry when account is explicit"
     );
 }
@@ -220,18 +264,18 @@ async fn rename_server_does_not_move_explicitly_accounted_keyring_secret() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn rename_server_succeeds_with_other_credential_less_server() {
-    use crate::test_helpers::seed_keyring_secret;
+    use crate::test_helpers::seed_keyring_secret_at;
 
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     crate::credentials::keyring::install_test_store();
-    seed_inline_server("keepme", "https://keep.example.com", "k").await;
-    seed_inline_server("rename-me", "https://r.example.com", "r").await;
-    seed_keyring_secret("keepme", "s").await;
+    seed_inline_server_at(&config_path, "keepme", "https://keep.example.com", "k").await;
+    seed_inline_server_at(&config_path, "rename-me", "https://r.example.com", "r").await;
+    seed_keyring_secret_at(&config_path, "keepme", "s", RENAME_CRED_LESS_SERVICE).await;
     execute(
         &ConfigAction::UnsetKeyring {
             name: "keepme".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await
@@ -243,7 +287,7 @@ async fn rename_server_succeeds_with_other_credential_less_server() {
             old: "rename-me".into(),
             new: "renamed".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;
@@ -251,7 +295,7 @@ async fn rename_server_succeeds_with_other_credential_less_server() {
         result.is_ok(),
         "rename must not fail because an unrelated server is credential-less: {result:?}"
     );
-    let config = load_config_unvalidated();
+    let config = load_config_unvalidated_at(&config_path);
     assert!(config.servers.contains_key("renamed"));
     assert!(!config.servers.contains_key("rename-me"));
 }
@@ -262,12 +306,12 @@ async fn rename_server_succeeds_with_other_credential_less_server() {
 /// credential-less sibling test does not cover this.
 #[tokio::test]
 async fn rename_server_succeeds_with_other_structurally_invalid_server() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    seed_inline_server("broken", "https://broken.example.com", "b").await;
-    seed_inline_server("rename-me", "https://rename.example.com", "r").await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    seed_inline_server_at(&config_path, "broken", "https://broken.example.com", "b").await;
+    seed_inline_server_at(&config_path, "rename-me", "https://rename.example.com", "r").await;
 
     // Hand-edited state: two credential sources on one server.
-    crate::test_helpers::update_config_without_validation(|config| {
+    crate::test_helpers::update_config_without_validation_at(&config_path, |config| {
         config.servers.get_mut("broken").unwrap().api_key_env = Some("BROKEN_KEY".into());
         Ok(())
     })
@@ -279,7 +323,7 @@ async fn rename_server_succeeds_with_other_structurally_invalid_server() {
             old: "rename-me".into(),
             new: "renamed".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;
@@ -288,7 +332,7 @@ async fn rename_server_succeeds_with_other_structurally_invalid_server() {
         "rename must not be blocked by an unrelated invalid server: {result:?}"
     );
 
-    let config = load_config_unvalidated();
+    let config = load_config_unvalidated_at(&config_path);
     assert!(config.servers.contains_key("renamed"));
     assert!(!config.servers.contains_key("rename-me"));
     assert!(config.servers.contains_key("broken"));
