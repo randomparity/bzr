@@ -9,7 +9,9 @@
 
 #![expect(clippy::unwrap_used, clippy::expect_used)]
 
-use bzr::test_helpers::{setup_isolated_env, write_config_to, HasBooleanChartTriples};
+use bzr::test_helpers::{
+    setup_empty_isolated_env, setup_isolated_env, write_config_to, HasBooleanChartTriples,
+};
 use bzr::ENV_LOCK;
 
 use clap::Parser;
@@ -567,10 +569,9 @@ async fn attachment_list_integration() {
 
 #[tokio::test]
 async fn config_show_integration() {
-    let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
 
-    write_config_to(
+    let config_path = write_config_to(
         &tmp,
         r#"
 default_server = "local"
@@ -580,9 +581,8 @@ url = "https://bugzilla.local"
 api_key = "key-1234567890"
 "#,
     );
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
-    let result = dispatch_cli(None, &["bzr", "config", "show"]).await;
+    let result = dispatch_cli(Some(&config_path), &["bzr", "config", "show"]).await;
     assert!(result.is_ok(), "config show should succeed: {result:?}");
 }
 
@@ -1575,17 +1575,15 @@ async fn group_list_users_integration() {
 
 #[tokio::test]
 async fn config_set_server_integration() {
-    let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
 
-    write_config_to(
+    let config_path = write_config_to(
         &tmp,
         "default_server = \"local\"\n\n[servers.local]\nurl = \"https://bugzilla.local\"\napi_key = \"key-1234567890\"\n",
     );
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "config",
@@ -1606,16 +1604,18 @@ async fn config_set_server_integration() {
 
 #[tokio::test]
 async fn config_set_default_integration() {
-    let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
 
-    write_config_to(
+    let config_path = write_config_to(
         &tmp,
         "default_server = \"local\"\n\n[servers.local]\nurl = \"https://bugzilla.local\"\napi_key = \"key-1234567890\"\n\n[servers.staging]\nurl = \"https://staging.example\"\napi_key = \"staging-key\"\n",
     );
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
-    let result = dispatch_cli(None, &["bzr", "config", "set-default", "staging"]).await;
+    let result = dispatch_cli(
+        Some(&config_path),
+        &["bzr", "config", "set-default", "staging"],
+    )
+    .await;
     assert!(
         result.is_ok(),
         "config set-default should succeed: {result:?}"
@@ -1771,13 +1771,18 @@ async fn e2e_whoami_via_cli_args() {
 /// config file on disk, driven through the real CLI parse + dispatch path.
 #[tokio::test]
 async fn e2e_inline_server_bug_view_without_config() {
+    // Retains ENV_LOCK (ADR-0002) for `BZR_E2E_INLINE_KEY` alone: it is the
+    // variable `--server-api-key-env` names, so the command under test must
+    // observe it and there is no explicit-path form. The config side no longer
+    // needs the lock — `--config` points at a path inside an isolated temp root
+    // where no file exists, which is the same "no config on disk" premise the
+    // old empty-XDG root established.
     let _lock = ENV_LOCK.lock().await;
     let mock = wiremock::MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    // Empty XDG dir — no bzr/config.toml exists.
-    // SAFETY: tests are serialized via ENV_LOCK.
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    // SAFETY: ordered against the other ENV_LOCK participants by the guard
+    // above, and against every `std::env` reader by std's own env lock.
     unsafe {
-        std::env::set_var("XDG_CONFIG_HOME", tmp.path());
         std::env::set_var("BZR_E2E_INLINE_KEY", "secret");
     }
 
@@ -1803,7 +1808,7 @@ async fn e2e_inline_server_bug_view_without_config() {
         .await;
 
     let (result, output) = dispatch_cli_with_output(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "--server-url",
@@ -1823,7 +1828,7 @@ async fn e2e_inline_server_bug_view_without_config() {
     assert_eq!(parsed["id"], 42);
     assert_eq!(parsed["summary"], "Inline view");
     assert!(
-        !tmp.path().join("bzr").join("config.toml").exists(),
+        !config_path.exists(),
         "inline invocation must not write the config file"
     );
 }
@@ -1838,7 +1843,6 @@ async fn e2e_config_show_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_skills_install_ignores_malformed_config_and_needs_no_server() {
-    let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
     let project = tmp.path().join("project");
     std::fs::create_dir(&project).unwrap();
