@@ -245,3 +245,123 @@ It **does not**:
   buys, and it does not address `getaddrinfo` either.
 - **Keep `ENV_LOCK` and document the gap only.** Declined: it leaves in place
   writers whose only effect is to widen the surface being documented.
+
+## Amendment — 2026-09-16 (issue #857)
+
+### Category 3 is retired, not emptied
+
+Retained categories, superseding the three the 2026-09-15 amendment listed:
+
+- a test that mutates a process-global variable **the command under test must
+  observe** — an API-key variable named by `api_key_env` /
+  `--server-api-key-env`, a `BZR_*_TEST_*` hook, `EDITOR`;
+- a test whose subject **is** environment-based resolution — the
+  `Config::path_at` precedence tests, the `DISPLAY`/`WAYLAND_DISPLAY` test.
+
+The third category that amendment listed — a test that triggers **libc name
+resolution** of a hostname — has no members and is **retired**. Both self-signed
+TLS test servers bound a v4-only listener and were reached at
+`https://localhost:{port}` to match a `localhost` cert SAN. #857 moved the SAN
+and the URL to `127.0.0.1`, matching the bind, so both take the numeric fast
+path and call no resolver.
+
+Retiring it rather than recording it as empty is deliberate. An empty category
+invites the next hostname-resolving test to file itself under it and take the
+lock, which is the pairing the 2026-09-15 residual risks called enforced by
+nothing. With the category gone there is nothing for such a test to claim.
+
+The re-derivation rule above is unchanged except in arithmetic: classify every
+hit against **two** categories, not three. A hit matching neither is still a
+defect rather than a retention.
+
+### What this cost, recorded rather than repaired
+
+`rcgen` (0.14.10, per `Cargo.lock`; the dev-dependency is the caret range
+`0.14`, not an exact pin) encodes an IP-shaped SAN as `SanType::IpAddress`, so
+the one connected test that verifies a server name — the
+`--server-tls-ca-cert` case — now exercises rustls's IP-address branch instead
+of its DNS-name branch.
+
+**After this change no test at any tier exercises rustls DNS-name
+verification**, which production connections to a real Bugzilla host take.
+Nothing else covers it: `src/tls/verifier_tests.rs` and `src/tls/tofu_tests.rs`
+do build `localhost` certificates and call `verify_server_cert` directly, but
+`PinnedCertVerifier` and the TOFU verifier both bind `_server_name` and never
+read it (`src/tls/verifier.rs`, `src/tls/tofu.rs` — the `self.server_name` uses
+are the configured display string for error messages, not the presented name),
+so those tests prove pin matching, issuer pinning and signature-scheme
+advertisement and nothing about names. The three other inline-TLS modes are
+unaffected only because they never checked a name at all.
+
+**Accepted inside the cargo test binaries; deferred outside them.** It cannot
+be closed *there* without reaching a server by name — this client offers no
+name-to-address override — which puts back into a process holding the retained
+`set_var` writers exactly the resolver this amendment removed. That is the
+trade, on its real terms: a total loss of coverage on a branch production
+takes, accepted to keep that process free of the resolver.
+
+The functional tier is outside that scope, per the note below, and closing the
+gap there is **deferred work rather than impossible work**. It spawns the real
+binary per invocation, so a `getaddrinfo` races nothing; its TLS fixture leaf
+already carries a `DNS:localhost` SAN signed by the CA the TLS phase passes to
+`--server-tls-ca-cert`; and the only thing stopping that phase exercising the
+DNS branch is its hardcoded numeric URL. #857 left it undone rather than ruling
+it out. An offline sibling of `src/tls/verifier_tests.rs` would also work and
+needs no socket, but it proves less about this crate's own code.
+
+### Residual risks, replacing the `getaddrinfo` pairing bullet
+
+The 2026-09-15 bullet said the `getaddrinfo` pairing was enforced by nothing.
+That pairing no longer exists — no test in the cargo test binaries resolves a
+hostname, so there is no lock-ordered C-side env read left to get wrong. What is
+unenforced now is the **precondition**, and it is worse covered than the pairing
+was:
+
+- Nothing detects a new test that reaches a server by hostname instead of a
+  numeric address. Such a test reintroduces the unordered libc `getenv` in one
+  line.
+- **The re-derivation rule does not catch it either.** That rule greps for
+  `ENV_LOCK` acquisitions, so its domain is lock *holders*. It would flag a
+  hostname test that takes the lock — the ordered, safe variant — and is blind
+  to a hostname test that takes none, which is the dangerous one. Nothing at
+  all detects that case: not the rule, not a lint, not CI.
+
+Scope note: "no test resolves a hostname" is a claim about the cargo test
+binaries. The shell-driven functional tier under `tests/functional/` runs the
+real binary against containers and is outside it.
+
+Three URL-shaped `localhost` strings survive in the cargo tree, and because the
+prose above is the only control, each is named here with the reason it resolves
+nothing — so the next `rg -n 'localhost' src/ tests/` does not read as a
+contradiction. (The `localhost` SANs and `ServerName` values in
+`src/tls/verifier_tests.rs` and `src/tls/tofu_tests.rs` are offline certificate
+tests, covered above, and are not connect targets at all.)
+
+- `src/tls/mod_tests.rs` — a redirect `Location` pointing at
+  `http://localhost:{port}` in the cross-host redirect pair. **Structural:**
+  `same_host_redirect_policy` in `src/tls/mod.rs` compares the redirect
+  target's host against the origin host and errors the attempt on a mismatch,
+  so reqwest abandons the request before any name is looked up. The hostname is
+  the discriminator the test asserts on — normalising it to `127.0.0.1` would
+  turn a cross-host credential-leak regression test into a same-host one that
+  can no longer fail. Leave it alone.
+- `src/commands/bug/search_tests.rs` — a configured server URL, written into a
+  config file and reused as the imported `buglist.cgi` URL. **Behavioural, and
+  this is the weak one:** it resolves nothing only because inline-server
+  precedence routes the request to the inline mock instead, which the test
+  asserts directly by requiring the configured mock to have received nothing.
+  That test holds no `ENV_LOCK`, so a regression in inline precedence would put
+  the resolver back into this process — the outcome this amendment exists to
+  prevent — and nothing above would detect it.
+- `src/bugzilla_auth_tests.rs` — a string literal passed to the API-key
+  redaction helper. Never a connect target.
+
+`getaddrinfo` is also the only libc-side env reader **identified** here, not a
+proven complete list — "What `ENV_LOCK` does and does not do" above says such a
+claim is a bet re-validated by reading the dependency tree, and #857 did not
+read it. One unexamined candidate now runs off the lock: `build_ca_cert_config`
+calls `rustls_native_certs::load_native_certs()`, which on macOS reaches
+Security.framework and CoreFoundation — C that may call `getenv` without
+advertising it. No such call was constructed, and none is asserted; it is named
+so the next person adding a `set_var` writer does not read the sentence above
+as a guarantee that no unordered reader exists.

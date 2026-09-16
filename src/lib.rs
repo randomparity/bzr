@@ -268,16 +268,22 @@ fn command_capabilities(
 
 /// Shared mutex for the tests that ADR-0002 retains on process-global
 /// environment mutation: a variable the command under test must observe (an
-/// `api_key_env` key, a `BZR_*_TEST_*` hook, `EDITOR`), a test whose subject
-/// *is* environment-based resolution, or a test that triggers libc name
-/// resolution.
+/// `api_key_env` key, a `BZR_*_TEST_*` hook, `EDITOR`), or a test whose subject
+/// *is* environment-based resolution.
 ///
 /// It orders those tests against each other. It does **not** order them against
 /// a test that takes no lock, and does not need to: a lock-free test reaches
 /// the environment through `std::env`, which carries its own reader/writer
-/// ordering. The one reader that bypasses that ordering is libc `getaddrinfo`,
-/// which is why a test resolving a hostname must take this lock. Selecting a
-/// config is not on that list — pass an explicit path instead.
+/// ordering. Selecting a config is not on that list — pass an explicit path
+/// instead.
+///
+/// The reader that bypasses `std::env`'s ordering — the only one this
+/// repository has identified, not a proven complete list — is libc
+/// `getaddrinfo`, and ADR-0002 once retained a third category for it. No test
+/// resolves a hostname any more (#857), so that category is retired rather
+/// than empty: connect to a numeric address and this lock is irrelevant to
+/// you. A new test that resolves a hostname has no category to claim, which
+/// ADR-0002 makes a defect rather than a reason to take this lock.
 #[cfg(any(test, feature = "test-helpers"))]
 pub static ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 

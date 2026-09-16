@@ -43,8 +43,18 @@ async fn probe_transport_error_does_not_leak_the_api_key() {
     );
 }
 
+/// Both callers assert `is_tls_cert_error`, so the connection must reach this
+/// server and fail on the certificate — a refused connect surfaces a different
+/// error and fails the assertion.
+///
+/// Keep the SAN and the returned URL on the same numeric address the listener
+/// binds. A hostname would still connect — it resolves to `127.0.0.1` as well
+/// as `::1`, and the client falls through to the address that answers — but it
+/// runs libc `getaddrinfo`, which reads the environment outside std's env lock.
+/// That read is the one ADR-0002 retained `ENV_LOCK` for, and pinning the
+/// address is what lets this test hold no lock.
 fn spawn_self_signed_https_server() -> (String, std::thread::JoinHandle<()>) {
-    let params = rcgen::CertificateParams::new(vec!["localhost".to_owned()]).unwrap();
+    let params = rcgen::CertificateParams::new(vec!["127.0.0.1".to_owned()]).unwrap();
     let key_pair = rcgen::KeyPair::generate().unwrap();
     let cert = params.self_signed(&key_pair).unwrap();
     let cert_der = rustls::pki_types::CertificateDer::from(cert.der().to_vec());
@@ -69,7 +79,7 @@ fn spawn_self_signed_https_server() -> (String, std::thread::JoinHandle<()>) {
         let _ = stream.read(&mut [0_u8; 1]);
     });
 
-    (format!("https://localhost:{port}"), handle)
+    (format!("https://127.0.0.1:{port}"), handle)
 }
 
 #[test]
