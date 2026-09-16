@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::{ProjectionArgs, UserAction};
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 async fn mount_one_user(mock: &wiremock::MockServer) {
@@ -33,7 +33,7 @@ fn search_with(details: bool, projection: ProjectionArgs) -> UserAction {
 
 #[tokio::test]
 async fn user_search_returns_results() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/user"))
@@ -55,7 +55,8 @@ async fn user_search_returns_results() {
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a1.writers(),
     )
     .await;
@@ -69,7 +70,7 @@ async fn user_search_returns_results() {
 #[tokio::test]
 async fn user_search_http_500_returns_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/user"))
@@ -84,7 +85,8 @@ async fn user_search_http_500_returns_error() {
     };
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -99,7 +101,7 @@ async fn user_search_http_500_returns_error() {
 #[tokio::test]
 async fn user_search_malformed_json_returns_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/user"))
@@ -114,7 +116,8 @@ async fn user_search_malformed_json_returns_error() {
     };
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -123,7 +126,7 @@ async fn user_search_malformed_json_returns_error() {
 
 #[tokio::test]
 async fn user_search_json_fields_projects_to_named_keys() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_one_user(&mock).await;
 
     let action = search_with(
@@ -136,7 +139,8 @@ async fn user_search_json_fields_projects_to_named_keys() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -148,7 +152,7 @@ async fn user_search_json_fields_projects_to_named_keys() {
 
 #[tokio::test]
 async fn user_search_details_json_fields_still_projects() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_one_user(&mock).await;
 
     let action = search_with(
@@ -161,7 +165,8 @@ async fn user_search_details_json_fields_still_projects() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -173,7 +178,7 @@ async fn user_search_details_json_fields_still_projects() {
 
 #[tokio::test]
 async fn user_search_ndjson_fields_projects_each_line() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_one_user(&mock).await;
 
     let action = search_with(
@@ -190,7 +195,8 @@ async fn user_search_ndjson_fields_projects_each_line() {
             None,
             OutputFormat::Ndjson,
             None,
-        ),
+        )
+        .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -200,7 +206,7 @@ async fn user_search_ndjson_fields_projects_each_line() {
 
 #[tokio::test]
 async fn user_search_json_unknown_field_exits_7() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = search_with(
         false,
@@ -212,7 +218,8 @@ async fn user_search_json_unknown_field_exits_7() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -222,7 +229,7 @@ async fn user_search_json_unknown_field_exits_7() {
 
 #[tokio::test]
 async fn user_search_table_fields_is_noop_with_warning() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_one_user(&mock).await;
 
     let action = search_with(
@@ -235,7 +242,8 @@ async fn user_search_table_fields_is_noop_with_warning() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
