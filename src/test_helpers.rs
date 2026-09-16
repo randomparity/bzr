@@ -170,6 +170,29 @@ pub async fn setup_empty_config_env() -> (tokio::sync::MutexGuard<'static, ()>, 
     (lock, tmp)
 }
 
+/// Lock-free analogue of [`setup_empty_config_env`]: create an isolated temp
+/// root and return the config path *inside* it without writing the file. The
+/// returned path is exactly what `Config::path_at(None)` would resolve to with
+/// `XDG_CONFIG_HOME` pointed at that root, so the "config is missing" premise
+/// the locking helper establishes is unchanged — only the selection mechanism
+/// differs (ADR-0002). Pass the path to
+/// `CommandContext::with_config_path_override` (or `--config`); the test
+/// mutates no process environment, acquires no `ENV_LOCK`, and runs in
+/// parallel.
+///
+/// Keep the returned `TempDir` alive for the test: dropping it removes the
+/// root out from under the path.
+///
+/// # Panics
+///
+/// Panics if the temp directory cannot be created.
+#[expect(clippy::unwrap_used)]
+pub fn setup_empty_isolated_env() -> (tempfile::TempDir, std::path::PathBuf) {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = tmp.path().join("bzr").join("config.toml");
+    (tmp, config_path)
+}
+
 // ── Config command test support ──────────────────────────────────────
 //
 // Shared by the per-leaf `config/*_tests.rs` siblings. Config commands are
@@ -178,6 +201,12 @@ pub async fn setup_empty_config_env() -> (tokio::sync::MutexGuard<'static, ()>, 
 // temp dir by `setup_empty_config_env`.
 
 /// Path to the config file under the active XDG test root.
+///
+/// This helper has no `_at` companion, deliberately: `Config::path_at(Some(p))`
+/// returns `p` unchanged, so an explicit-path form would be the identity
+/// function. A test on the explicit-path side already holds its config path —
+/// the one [`setup_empty_isolated_env`] or [`setup_isolated_env`] returned —
+/// and passes that where an ambient-root test calls this.
 ///
 /// # Panics
 ///
@@ -192,9 +221,19 @@ pub fn config_path() -> std::path::PathBuf {
 /// # Panics
 ///
 /// Panics if the config cannot be loaded or fails validation.
-#[expect(clippy::unwrap_used)]
 pub fn load_config() -> crate::config::Config {
-    crate::config::Config::load_at(Some(&config_path())).unwrap()
+    load_config_at(&config_path())
+}
+
+/// Load and validate the config at an explicit path (ADR-0002). Consults no
+/// environment variable, so the caller needs no `ENV_LOCK`.
+///
+/// # Panics
+///
+/// Panics if the config cannot be loaded or fails validation.
+#[expect(clippy::unwrap_used)]
+pub fn load_config_at(config_path: &std::path::Path) -> crate::config::Config {
+    crate::config::Config::load_at(Some(config_path)).unwrap()
 }
 
 /// Load the config *without* validation — for asserting on-disk states the
@@ -204,9 +243,18 @@ pub fn load_config() -> crate::config::Config {
 /// # Panics
 ///
 /// Panics if the config file cannot be read or parsed.
-#[expect(clippy::unwrap_used)]
 pub fn load_config_unvalidated() -> crate::config::Config {
-    let content = std::fs::read_to_string(config_path()).unwrap();
+    load_config_unvalidated_at(&config_path())
+}
+
+/// Load the config at an explicit path *without* validation (ADR-0002).
+///
+/// # Panics
+///
+/// Panics if the config file cannot be read or parsed.
+#[expect(clippy::unwrap_used)]
+pub fn load_config_unvalidated_at(config_path: &std::path::Path) -> crate::config::Config {
+    let content = std::fs::read_to_string(config_path).unwrap();
     toml::from_str(&content).unwrap()
 }
 
@@ -214,14 +262,31 @@ pub fn load_config_unvalidated() -> crate::config::Config {
 pub fn update_config(
     mutator: impl FnOnce(&mut crate::config::Config) -> crate::error::Result<()>,
 ) -> crate::error::Result<crate::config::Config> {
-    crate::config::Config::update_locked_at(Some(&config_path()), mutator)
+    update_config_at(&config_path(), mutator)
+}
+
+/// Apply a validated mutation to the config at an explicit path (ADR-0002).
+pub fn update_config_at(
+    config_path: &std::path::Path,
+    mutator: impl FnOnce(&mut crate::config::Config) -> crate::error::Result<()>,
+) -> crate::error::Result<crate::config::Config> {
+    crate::config::Config::update_locked_at(Some(config_path), mutator)
 }
 
 /// Apply a mutation *without* whole-config validation.
 pub fn update_config_without_validation(
     mutator: impl FnOnce(&mut crate::config::Config) -> crate::error::Result<()>,
 ) -> crate::error::Result<crate::config::Config> {
-    crate::config::Config::update_locked_without_validation_at(Some(&config_path()), mutator)
+    update_config_without_validation_at(&config_path(), mutator)
+}
+
+/// Apply a mutation at an explicit path *without* whole-config validation
+/// (ADR-0002).
+pub fn update_config_without_validation_at(
+    config_path: &std::path::Path,
+    mutator: impl FnOnce(&mut crate::config::Config) -> crate::error::Result<()>,
+) -> crate::error::Result<crate::config::Config> {
+    crate::config::Config::update_locked_without_validation_at(Some(config_path), mutator)
 }
 
 /// Seed an inline-API-key server via `config set-server`.
@@ -229,8 +294,24 @@ pub fn update_config_without_validation(
 /// # Panics
 ///
 /// Panics if the `set-server` command returns an error.
-#[expect(clippy::unwrap_used)]
 pub async fn seed_inline_server(name: &str, url: &str, api_key: &str) {
+    seed_inline_server_at(&config_path(), name, url, api_key).await;
+}
+
+/// Seed an inline-API-key server via `config set-server` against an explicit
+/// config path (ADR-0002). Consults no environment variable, so the caller
+/// needs no `ENV_LOCK`.
+///
+/// # Panics
+///
+/// Panics if the `set-server` command returns an error.
+#[expect(clippy::unwrap_used)]
+pub async fn seed_inline_server_at(
+    config_path: &std::path::Path,
+    name: &str,
+    url: &str,
+    api_key: &str,
+) {
     let mut io = CapturedIo::new();
     crate::commands::config::execute(
         &crate::cli::ConfigAction::SetServer {
@@ -246,15 +327,27 @@ pub async fn seed_inline_server(name: &str, url: &str, api_key: &str) {
             tls_pin_now: false,
             tls_pin_clear: false,
         },
-        &crate::commands::runtime::invocation::CommandContext::new(
-            None,
-            crate::types::output::OutputFormat::Json,
-            None,
-        ),
+        &json_context(config_path),
         &mut io.writers(),
     )
     .await
     .unwrap();
+}
+
+/// A `--json` [`CommandContext`] whose config resolution is pinned to
+/// `config_path`, bypassing `BZR_CONFIG` and `XDG_CONFIG_HOME` entirely
+/// (ADR-0002).
+///
+/// [`CommandContext`]: crate::commands::runtime::invocation::CommandContext
+fn json_context(
+    config_path: &std::path::Path,
+) -> crate::commands::runtime::invocation::CommandContext {
+    crate::commands::runtime::invocation::CommandContext::new(
+        None,
+        crate::types::output::OutputFormat::Json,
+        None,
+    )
+    .with_config_path_override(Some(config_path.to_path_buf()))
 }
 
 /// Run a `ConfigAction`, capture stdout, and parse it as JSON.
@@ -267,54 +360,127 @@ pub async fn seed_inline_server(name: &str, url: &str, api_key: &str) {
 ///
 /// Panics if the command errors or its stdout is not valid JSON.
 #[cfg(test)]
-#[expect(clippy::unwrap_used)]
 pub(crate) async fn run_config_action_json(action: crate::cli::ConfigAction) -> serde_json::Value {
+    run_config_action_json_at(&config_path(), action).await
+}
+
+/// Run a `ConfigAction` against an explicit config path (ADR-0002), capture
+/// stdout, and parse it as JSON. Consults no environment variable, so the
+/// caller needs no `ENV_LOCK`.
+///
+/// Gated to `cfg(test)` for the same reason as [`run_config_action_json`].
+///
+/// # Panics
+///
+/// Panics if the command errors or its stdout is not valid JSON.
+#[cfg(test)]
+#[expect(clippy::unwrap_used)]
+pub(crate) async fn run_config_action_json_at(
+    config_path: &std::path::Path,
+    action: crate::cli::ConfigAction,
+) -> serde_json::Value {
     let mut io = CapturedIo::new();
-    crate::commands::config::execute(
-        &action,
-        &crate::commands::runtime::invocation::CommandContext::new(
-            None,
-            crate::types::output::OutputFormat::Json,
-            None,
-        ),
-        &mut io.writers(),
-    )
-    .await
-    .unwrap();
+    crate::commands::config::execute(&action, &json_context(config_path), &mut io.writers())
+        .await
+        .unwrap();
     json_envelope_data(io.out_str())
 }
 
 /// Seed a keyring-backed secret for `server` by priming the
 /// `BZR_KEYRING_TEST_SECRET` test hook and running `set-keyring`. The caller
 /// must already hold `ENV_LOCK` (via `setup_empty_config_env`) and have
-/// installed the test store with `keyring::install_test_store()`.
+/// installed the test store with `keyring::install_test_store()`. A test that
+/// selects its config by explicit path uses [`seed_keyring_secret_at`] instead.
+///
+/// # Panics
+///
+/// Panics if the `set-keyring` command returns an error.
+#[cfg(feature = "keyring")]
+pub async fn seed_keyring_secret(server: &str, secret: &str) {
+    seed_keyring_secret_inner(&config_path(), server, secret, None).await;
+}
+
+/// Seed a keyring-backed secret for `server` against an explicit config path
+/// (ADR-0002), storing it under the caller-supplied keychain `service`.
+///
+/// # The `install_test_store` seam
+///
+/// Two process-global facts sit under this helper, and the explicit config path
+/// removes neither. They are settled here so the migrations that consume this
+/// helper do not each re-decide them:
+///
+/// 1. **The secret arrives through a process-global env var.** The
+///    `BZR_KEYRING_TEST_SECRET` hook in `config::keyring` is the only
+///    non-interactive way to feed `set-keyring` a secret, so seeding *is* env
+///    mutation — exactly the category ADR-0002 retains `ENV_LOCK` for. This
+///    helper therefore takes `ENV_LOCK` itself, for the set/run/unset window
+///    only, instead of asking a lock-free caller to hold it across its awaits.
+///    **Do not call this from a test that already holds `ENV_LOCK`** (that is,
+///    one set up by [`setup_empty_config_env`] or [`setup_test_env`]):
+///    `ENV_LOCK` is not reentrant and the test would deadlock. Such a test
+///    calls [`seed_keyring_secret`] instead.
+///
+/// 2. **The test credential store is shared and never reset.**
+///    `keyring::install_test_store` memoizes one `OnceLock` store for the whole
+///    process, backed by a map keyed on `(service, account)` — where `service`
+///    defaults to `"bzr"` and `account` to the server name. Server names are
+///    load-bearing assertions and are *not* unique across test files
+///    (`"keepme"` appears in both the rename and remove suites, each of which
+///    then deletes that key), so once `ENV_LOCK` stops serializing whole tests
+///    the account half cannot keep the keys disjoint. `service` is therefore a
+///    required parameter here rather than an `Option`: each call site picks a
+///    value unique to its test, and `ConfigAction::SetKeyring`'s existing
+///    `service` field carries it to both the store and the persisted
+///    `KeyringRef` with no production change.
+///
+/// # Panics
+///
+/// Panics if the `set-keyring` command returns an error.
+#[cfg(feature = "keyring")]
+pub async fn seed_keyring_secret_at(
+    config_path: &std::path::Path,
+    server: &str,
+    secret: &str,
+    service: &str,
+) {
+    let _lock = super::ENV_LOCK.lock().await;
+    seed_keyring_secret_inner(config_path, server, secret, Some(service)).await;
+}
+
+/// The body shared by [`seed_keyring_secret`] and [`seed_keyring_secret_at`].
+/// Mutates `BZR_KEYRING_TEST_SECRET` and does **not** lock: the caller owns
+/// `ENV_LOCK`, whether it holds it (the ambient form) or takes it (the
+/// explicit-path form).
 ///
 /// # Panics
 ///
 /// Panics if the `set-keyring` command returns an error.
 #[cfg(feature = "keyring")]
 #[expect(clippy::unwrap_used)]
-pub async fn seed_keyring_secret(server: &str, secret: &str) {
+async fn seed_keyring_secret_inner(
+    config_path: &std::path::Path,
+    server: &str,
+    secret: &str,
+    service: Option<&str>,
+) {
     let mut io = CapturedIo::new();
-    // SAFETY: Serialized via ENV_LOCK held by the caller's setup.
+    // SAFETY: Serialized via ENV_LOCK, held by the caller's setup or taken by
+    // `seed_keyring_secret_at`.
     unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", secret) };
-    crate::commands::config::execute(
+    let result = crate::commands::config::execute(
         &crate::cli::ConfigAction::SetKeyring {
             name: server.into(),
-            service: None,
+            service: service.map(str::to_owned),
             account: None,
         },
-        &crate::commands::runtime::invocation::CommandContext::new(
-            None,
-            crate::types::output::OutputFormat::Json,
-            None,
-        ),
+        &json_context(config_path),
         &mut io.writers(),
     )
-    .await
-    .unwrap();
-    // SAFETY: Serialized via ENV_LOCK held by the caller's setup.
+    .await;
+    // SAFETY: as above. Unset before unwrapping, so a failing command cannot
+    // leak the hook into whichever test next acquires ENV_LOCK.
     unsafe { std::env::remove_var("BZR_KEYRING_TEST_SECRET") };
+    result.unwrap();
 }
 
 /// Parse the captured stdout of a `--json` command, assert it carries the
