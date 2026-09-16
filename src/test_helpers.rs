@@ -99,9 +99,9 @@ pub async fn setup_test_env() -> (
     wiremock::MockServer,
     tempfile::TempDir,
 ) {
+    init_temp_root();
     let lock = super::ENV_LOCK.lock().await;
     let mock = wiremock::MockServer::start().await;
-    init_temp_root();
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
     (lock, mock, tmp)
@@ -177,8 +177,8 @@ pub fn setup_config(tmp: &tempfile::TempDir, server_url: &str) {
 /// Panics if the temp directory cannot be created.
 #[expect(clippy::unwrap_used)]
 pub async fn setup_isolated_env() -> (wiremock::MockServer, tempfile::TempDir, std::path::PathBuf) {
-    let mock = wiremock::MockServer::start().await;
     init_temp_root();
+    let mock = wiremock::MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
     let config_path = write_config_to(&tmp, &default_test_config(&mock.uri()));
     (mock, tmp, config_path)
@@ -195,8 +195,8 @@ pub async fn setup_isolated_env() -> (wiremock::MockServer, tempfile::TempDir, s
 /// Panics if the temp directory cannot be created.
 #[expect(clippy::unwrap_used)]
 pub async fn setup_empty_config_env() -> (tokio::sync::MutexGuard<'static, ()>, tempfile::TempDir) {
-    let lock = super::ENV_LOCK.lock().await;
     init_temp_root();
+    let lock = super::ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
     // SAFETY: Tests that mutate process environment hold ENV_LOCK.
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
