@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::{ClassificationAction, ProjectionArgs};
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 const DISABLED_NOTE: &str = "Note: only the default 'Unclassified' classification exists; this server likely has classifications disabled.";
@@ -78,7 +78,7 @@ async fn mount_classification_list_error(mock: &wiremock::MockServer, code: i64)
 
 #[tokio::test]
 async fn classification_view_returns_data() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/classification/Unclassified"))
@@ -100,7 +100,8 @@ async fn classification_view_returns_data() {
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a1.writers(),
     )
     .await;
@@ -114,7 +115,7 @@ async fn classification_view_returns_data() {
 #[tokio::test]
 async fn classification_view_http_500_returns_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/classification/Missing"))
@@ -128,7 +129,8 @@ async fn classification_view_http_500_returns_error() {
     };
     let result = super::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -137,7 +139,7 @@ async fn classification_view_http_500_returns_error() {
 
 #[tokio::test]
 async fn classification_list_returns_sorted_json() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/field/bug/classification"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -169,7 +171,8 @@ async fn classification_list_returns_sorted_json() {
         &ClassificationAction::List {
             projection: ProjectionArgs::default(),
         },
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -183,7 +186,7 @@ async fn classification_list_returns_sorted_json() {
 
 #[tokio::test]
 async fn classification_list_preserves_case_insensitive_unclassified_with_note() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/field/bug/classification"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -204,7 +207,8 @@ async fn classification_list_preserves_case_insensitive_unclassified_with_note()
         &ClassificationAction::List {
             projection: ProjectionArgs::default(),
         },
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -215,13 +219,14 @@ async fn classification_list_preserves_case_insensitive_unclassified_with_note()
 
 #[tokio::test]
 async fn classification_list_api_900_writes_disabled_note_to_table_stdout() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_classification_list_error(&mock, 900).await;
 
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &list_with(ProjectionArgs::default()),
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -233,13 +238,14 @@ async fn classification_list_api_900_writes_disabled_note_to_table_stdout() {
 
 #[tokio::test]
 async fn classification_list_api_900_writes_empty_json_and_stderr_note() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_classification_list_error(&mock, 900).await;
 
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &list_with(ProjectionArgs::default()),
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -254,7 +260,7 @@ async fn classification_list_api_900_writes_empty_json_and_stderr_note() {
 
 #[tokio::test]
 async fn classification_list_api_900_writes_no_ndjson_records_and_stderr_note() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_classification_list_error(&mock, 900).await;
 
     let mut io = crate::test_helpers::CapturedIo::new();
@@ -264,7 +270,8 @@ async fn classification_list_api_900_writes_no_ndjson_records_and_stderr_note() 
             None,
             OutputFormat::Ndjson,
             None,
-        ),
+        )
+        .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -276,13 +283,14 @@ async fn classification_list_api_900_writes_no_ndjson_records_and_stderr_note() 
 
 #[tokio::test]
 async fn classification_list_propagates_unrelated_api_error() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_classification_list_error(&mock, 901).await;
 
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &list_with(ProjectionArgs::default()),
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -297,7 +305,7 @@ async fn classification_list_propagates_unrelated_api_error() {
 
 #[tokio::test]
 async fn classification_list_json_fields_projects_to_named_keys() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_two_classifications(&mock).await;
 
     let action = list_with(ProjectionArgs {
@@ -307,7 +315,8 @@ async fn classification_list_json_fields_projects_to_named_keys() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -319,7 +328,7 @@ async fn classification_list_json_fields_projects_to_named_keys() {
 
 #[tokio::test]
 async fn classification_list_ndjson_fields_projects_each_line() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_two_classifications(&mock).await;
 
     let action = list_with(ProjectionArgs {
@@ -333,7 +342,8 @@ async fn classification_list_ndjson_fields_projects_each_line() {
             None,
             OutputFormat::Ndjson,
             None,
-        ),
+        )
+        .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -346,7 +356,7 @@ async fn classification_list_ndjson_fields_projects_each_line() {
 
 #[tokio::test]
 async fn classification_list_json_unknown_field_exits_7() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = list_with(ProjectionArgs {
         fields: Some("nam".into()),
@@ -355,7 +365,8 @@ async fn classification_list_json_unknown_field_exits_7() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -365,7 +376,7 @@ async fn classification_list_json_unknown_field_exits_7() {
 
 #[tokio::test]
 async fn classification_list_table_fields_is_noop_with_warning() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_two_classifications(&mock).await;
 
     let action = list_with(ProjectionArgs {
@@ -375,7 +386,8 @@ async fn classification_list_table_fields_is_noop_with_warning() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -388,7 +400,7 @@ async fn classification_list_table_fields_is_noop_with_warning() {
 
 #[tokio::test]
 async fn classification_view_json_fields_projects_to_named_keys() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_one_classification(&mock).await;
 
     let action = view_with(
@@ -401,7 +413,8 @@ async fn classification_view_json_fields_projects_to_named_keys() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -413,7 +426,7 @@ async fn classification_view_json_fields_projects_to_named_keys() {
 
 #[tokio::test]
 async fn classification_view_json_unknown_field_exits_7() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = view_with(
         "Unclassified",
@@ -425,7 +438,8 @@ async fn classification_view_json_unknown_field_exits_7() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
