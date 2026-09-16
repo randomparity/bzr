@@ -250,7 +250,7 @@ It **does not**:
 
 ### Category 3 is retired, not emptied
 
-Retained categories, superseding the two the 2026-09-15 amendment listed:
+Retained categories, superseding the three the 2026-09-15 amendment listed:
 
 - a test that mutates a process-global variable **the command under test must
   observe** — an API-key variable named by `api_key_env` /
@@ -283,20 +283,28 @@ connected test covers DNS-name verification any more.** Production connections
 to a real Bugzilla host take the DNS branch, so this is a real reduction in
 end-to-end coverage, and it is not repaired here.
 
-What remains is offline and direct: `src/tls/verifier_tests.rs` and
-`src/tls/tofu_tests.rs` build `localhost` certificates and call
-`verify_server_cert` without going through the client stack.
+**The gap is total, and nothing offline covers it.** `src/tls/verifier_tests.rs`
+and `src/tls/tofu_tests.rs` do build `localhost` certificates and call
+`verify_server_cert` directly, but they prove nothing about name verification:
+`PinnedCertVerifier` and the TOFU verifier both bind `_server_name` and never
+read it (`src/tls/verifier.rs`, `src/tls/tofu.rs` — the `self.server_name` uses
+are the configured display string for error messages, not the presented name).
+Those tests cover pin matching, issuer pinning and signature-scheme
+advertisement. The functional tier does not close it either: its leaf carries
+`subjectAltName=IP:127.0.0.1,DNS:localhost`, but the TLS phase connects at
+`127.0.0.1`, and the one functional `localhost` host is plain HTTP.
 
-**The project accepts having no end-to-end DNS-SAN test.** Restoring one would
-mean reaching a server by name — this client offers no name-to-address
-override — which reintroduces the resolver this amendment just removed, to cover
-a branch already covered offline. That trade is not worth it. Recording the gap
-is the remedy; a reader deciding otherwise later should reopen this section
-rather than quietly adding a hostname test.
+So after this change **no test at any tier exercises rustls DNS-name
+verification.** The three other inline-TLS modes are unaffected only because
+they never checked a name at all.
 
-The three other inline-TLS modes were never affected: `PinnedCertVerifier`
-binds `_server_name` and ignores it, so `--server-tls-pin-sha256`,
-`--server-tls-pin-now` and `--server-tls-insecure` never checked a name at all.
+**The project accepts that gap.** Closing it would mean reaching a server by
+name — this client offers no name-to-address override — which reintroduces the
+resolver this amendment exists to remove. That is the trade, stated on its real
+terms rather than as a cheap one: a total loss of coverage on a branch
+production takes, accepted to keep the test process free of the resolver.
+Recording it is the remedy; a reader who judges otherwise should reopen this
+section rather than quietly adding a hostname test.
 
 ### Residual risks, replacing the `getaddrinfo` pairing bullet
 
