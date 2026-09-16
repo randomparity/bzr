@@ -58,10 +58,91 @@ purely additional traceability and breaks no automation, since
 
 Before pushing the tag, review the canonical
 [GitHub Security Advisories](https://github.com/randomparity/bzr/security/advisories)
-inventory. The generated release section carries the following whole-line marker,
+inventory. That inventory is authoritative for the project-vulnerability marker below,
+but it is not the only advisory surface, and none of the three surfaces in
+[Advisory surfaces to review](#advisory-surfaces-to-review) subsumes another — read
+all three. The generated release section carries the following whole-line marker,
 which is validated before publication. A dependency update
 belongs under a separate dependency heading or explicitly says it is
 dependency-only; it never replaces the project-vulnerability assessment.
+
+### Advisory surfaces to review
+
+Three surfaces answer three different questions, and each misses what the other two
+see. The "does not cover" line on each is the reason no one of them is sufficient
+alone. Run `cargo deny` from a checkout of the release commit; the two `gh` queries
+are repository-level and do not depend on the checkout.
+
+**1. GitHub Security Advisories — vulnerabilities in `bzr` itself.**
+
+```bash
+gh api repos/randomparity/bzr/security-advisories \
+  --jq '.[] | "\(.ghsa_id)\t\(.state)\t\(.summary)"'
+```
+
+This is the canonical inventory for the `Security assessment:` marker: it lists the
+advisories this project has published about `bzr`. Empty output is the normal case and
+is what supports the no-vulnerability template.
+
+*Does not cover:* dependencies, in any ecosystem. It also does not cover a `bzr`
+vulnerability that is known but not yet published, so an empty list is evidence about
+disclosure, not about whether a fix in this range was security relevant. The
+generator's commit-subject check (`fix(security)`, `feat(security)`, `RUSTSEC-`,
+`CVE-`) is the backstop for that case.
+
+**2. Dependabot alerts — GitHub Advisory Database, every ecosystem.**
+
+```bash
+gh api --paginate 'repos/randomparity/bzr/dependabot/alerts?state=open&per_page=100' \
+  --jq '.[] | "\(.security_advisory.severity)\t\(.dependency.package.ecosystem)\t\(.dependency.package.name)\t\(.dependency.manifest_path)\t\(.security_advisory.ghsa_id)"'
+```
+
+This is the only surface that sees the `github-actions` ecosystem, the only one that
+reads `fuzz/Cargo.lock` (the `fuzz/` package is excluded from the cargo workspace), and
+the only one carrying GitHub Advisory Database entries that have no RustSec equivalent.
+
+*Does not cover:* reachability. Alerts match lockfile entries, not the resolved build
+graph, so a crate that `Cargo.lock` pins but that no feature activates on any target
+still alerts. Before treating an alert as a release blocker, confirm the crate is
+actually built:
+
+```bash
+cargo tree --target all -i CRATE-NAME
+```
+
+A printed tree means the crate ships. `warning: nothing to print.` with no tree means
+it is in no dependency graph on any target, so the shipped binary does not contain it;
+the alert is still worth clearing, but it does not block the tag. Note that this
+command exits 0 either way, so read its output rather than its exit status.
+
+If the alerts query returns `403` with `Dependabot alerts are disabled for this
+repository`, the repository setting is off — this is not a token-scope failure, and
+re-running with a broader token will not help. Confirm the setting directly:
+
+```bash
+gh api repos/randomparity/bzr/vulnerability-alerts
+```
+
+`204 No Content` means alerts are enabled; `404` means they are disabled. Enabling them
+is a repository-settings change that needs admin on the repo and cannot be done from a
+pull request. The advisory review is not complete while this surface is unreadable.
+
+**3. `cargo deny check advisories` — RustSec, Cargo tree only.**
+
+```bash
+cargo deny check advisories
+```
+
+Checks the resolved Cargo dependency graph against the RustSec advisory database.
+`dependency-policy.yml` already runs `cargo deny check` on every push and pull request
+to `main`; running it here confirms the release commit specifically.
+
+*Does not cover:* anything outside this workspace's Cargo graph. The `github-actions`
+ecosystem is invisible to it, `fuzz/` is excluded from the workspace, and an Advisory
+Database entry with no RustSec ID has nothing to match against. Because it resolves the
+graph instead of reading the lockfile, it can exit 0 while surface 2 has an open alert
+naming a crate in `Cargo.lock`. That disagreement is expected rather than a fault in
+either tool, and `cargo tree --target all -i` above is what resolves it.
 
 Use this template when no publicly identified runtime vulnerability in `bzr`
 was fixed:
@@ -197,8 +278,9 @@ git pull --ff-only origin main
 git tag -a vX.Y.Z -m "bzr vX.Y.Z"
 ```
 
-9. Refresh the advisory inventory, then run the generated-note and
-    security-assessment validation command above.
+9. Refresh the advisory inventory — re-run all three surfaces in
+    [Advisory surfaces to review](#advisory-surfaces-to-review) — then run the
+    generated-note and security-assessment validation command above.
     Resolve any result before continuing. If correcting the release-preparation
     changes moves the release commit, delete the unpublished local tag and create
     it again on the corrected merge commit.
@@ -290,8 +372,9 @@ Create the token from crates.io and store it in GitHub Actions secrets as:
 1. Open and merge the `release/vX.Y.Z-prep` PR to `main`
 2. Run the `Functional Tests` workflow on `main` and wait for success
 3. Pull `main` locally and tag the merge commit (`git tag -a vX.Y.Z -m "bzr vX.Y.Z"`)
-4. Refresh the advisory inventory and run the generated-note and security-assessment
-   validation command above.
+4. Refresh the advisory inventory (all three surfaces in
+   [Advisory surfaces to review](#advisory-surfaces-to-review)) and run the
+   generated-note and security-assessment validation command above.
 5. Push the validated tag (`git push origin vX.Y.Z`)
 6. Confirm `release.yml` succeeds (preflight → manpages → build → release → installer-smoke → homebrew)
 7. Confirm `publish-crates.yml` succeeds (stable tags only)
