@@ -84,16 +84,14 @@ This is the canonical inventory for the `Security assessment:` marker: it lists 
 advisories this project has recorded about `bzr`. Empty output is the normal case and
 is what supports the no-vulnerability template.
 
-*Does not cover:* dependencies, in any ecosystem. It also does not cover a `bzr`
-vulnerability that nobody has entered here, so an empty list is evidence about what has
-been recorded, not about whether a fix in this range was security relevant. Read the
-second column rather than assuming every row is published. It also does not cover what
-your credentials cannot see: the endpoint returns what your access permits, and a
-permission-limited read is indistinguishable from a genuinely empty inventory, so confirm
-you are reading it as an account that can see this repository's advisories before taking
-empty as evidence. The generator's commit-subject check (`fix(security)`,
-`feat(security)`, `RUSTSEC-`, `CVE-`) is the backstop for a fix that never became an
-advisory.
+*Does not cover:* dependencies, in any ecosystem; a `bzr` vulnerability nobody has
+entered here; or anything your credentials cannot see. An empty list is therefore
+evidence about what has been recorded and read, not about whether a fix in this range was
+security relevant — a permission-limited read is indistinguishable from a genuinely empty
+inventory, so confirm you are reading it as an account that can see this repository's
+advisories, and read the second column rather than assuming every row is published. The
+generator's commit-subject check (`fix(security)`, `feat(security)`, `RUSTSEC-`, `CVE-`)
+is the backstop for a fix that never became an advisory.
 
 **2. Dependabot alerts — GitHub Advisory Database, every ecosystem.**
 
@@ -134,8 +132,8 @@ status you need to read never appears. A **`204 No Content`** status means alert
 enabled — the `HTTP/2.0` or `HTTP/1.1` prefix is the negotiated protocol version and means
 nothing here. A `404` means **either** that they are disabled **or** that your token lacks
 admin on the repository — this endpoint requires admin, so a 404 alone does not say
-which. If you
-do not hold admin, ask someone who does rather than treating the review as blocked.
+which. If you do not hold admin, ask someone who does rather than treating the review as
+blocked.
 Enabling alerts is a repository-settings change that needs admin and cannot be done from a
 pull request. The advisory review is not complete while this surface is genuinely
 unreadable.
