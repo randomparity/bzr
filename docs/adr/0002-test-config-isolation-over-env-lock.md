@@ -277,49 +277,37 @@ defect rather than a retention.
 ### What this cost, recorded rather than repaired
 
 `rcgen` (0.14.10, per `Cargo.lock`; the dev-dependency is the caret range
-`0.14`, not an exact pin) encodes an IP-shaped SAN as
-`SanType::IpAddress`, so the one connected
-test that verifies a server name — the `--server-tls-ca-cert` case — now
-exercises rustls's IP-address branch instead of its DNS-name branch. **No
-connected test covers DNS-name verification any more.** Production connections
-to a real Bugzilla host take the DNS branch, so this is a real reduction in
-end-to-end coverage, and it is not repaired here.
+`0.14`, not an exact pin) encodes an IP-shaped SAN as `SanType::IpAddress`, so
+the one connected test that verifies a server name — the
+`--server-tls-ca-cert` case — now exercises rustls's IP-address branch instead
+of its DNS-name branch.
 
-**The gap is total, and nothing offline covers it.** `src/tls/verifier_tests.rs`
-and `src/tls/tofu_tests.rs` do build `localhost` certificates and call
-`verify_server_cert` directly, but they prove nothing about name verification:
+**After this change no test at any tier exercises rustls DNS-name
+verification**, which production connections to a real Bugzilla host take.
+Nothing else covers it: `src/tls/verifier_tests.rs` and `src/tls/tofu_tests.rs`
+do build `localhost` certificates and call `verify_server_cert` directly, but
 `PinnedCertVerifier` and the TOFU verifier both bind `_server_name` and never
 read it (`src/tls/verifier.rs`, `src/tls/tofu.rs` — the `self.server_name` uses
-are the configured display string for error messages, not the presented name).
-Those tests cover pin matching, issuer pinning and signature-scheme
-advertisement. The functional tier does not close it either: its leaf carries
-`subjectAltName=IP:127.0.0.1,DNS:localhost`, but the TLS phase connects at
-`127.0.0.1`, and the one functional `localhost` host is plain HTTP.
+are the configured display string for error messages, not the presented name),
+so those tests prove pin matching, issuer pinning and signature-scheme
+advertisement and nothing about names. The three other inline-TLS modes are
+unaffected only because they never checked a name at all.
 
-So after this change **no test at any tier exercises rustls DNS-name
-verification.** The three other inline-TLS modes are unaffected only because
-they never checked a name at all.
+**Accepted inside the cargo test binaries; deferred outside them.** It cannot
+be closed *there* without reaching a server by name — this client offers no
+name-to-address override — which puts back into a process holding the retained
+`set_var` writers exactly the resolver this amendment removed. That is the
+trade, on its real terms: a total loss of coverage on a branch production
+takes, accepted to keep that process free of the resolver.
 
-**The gap is accepted inside the cargo test binaries, and deferred outside
-them.** It cannot be closed *there* without reaching a server by name — this
-client offers no name-to-address override — which reintroduces into a process
-holding 20-odd `set_var` writers exactly the resolver this amendment removed.
-That is the trade, on its real terms: a total loss of coverage on a branch
-production takes, accepted to keep that process free of the resolver.
-
-The functional tier is a different matter and the scope note below is why. It
-spawns the real binary per invocation, so a `getaddrinfo` there races nothing,
-and its TLS fixture leaf already carries `subjectAltName=IP:127.0.0.1,DNS:
-localhost` signed by the CA the TLS phase passes to `--server-tls-ca-cert`. The
-only reason that phase does not exercise the DNS branch is that it hardcodes a
-numeric URL. Closing the gap there is **deferred work, not impossible work**,
-and #857 left it undone rather than ruling it out.
-
-An offline sibling of `src/tls/verifier_tests.rs` asserting that a
-`localhost`-SAN certificate verifies for `ServerName::try_from("localhost")` is
-also available, and needs no socket; it proves less about this crate's own code
-than the functional route, which is why the functional route is the one named
-above.
+The functional tier is outside that scope, per the note below, and closing the
+gap there is **deferred work rather than impossible work**. It spawns the real
+binary per invocation, so a `getaddrinfo` races nothing; its TLS fixture leaf
+already carries a `DNS:localhost` SAN signed by the CA the TLS phase passes to
+`--server-tls-ca-cert`; and the only thing stopping that phase exercising the
+DNS branch is its hardcoded numeric URL. #857 left it undone rather than ruling
+it out. An offline sibling of `src/tls/verifier_tests.rs` would also work and
+needs no socket, but it proves less about this crate's own code.
 
 ### Residual risks, replacing the `getaddrinfo` pairing bullet
 
