@@ -342,17 +342,31 @@ Scope note: "no test resolves a hostname" is a claim about the cargo test
 binaries. The shell-driven functional tier under `tests/functional/` runs the
 real binary against containers and is outside it.
 
-One `localhost` URL survives in the cargo tree, and because the prose above is
-the only control, it is named here so the next `rg -n 'localhost' src/ tests/`
-does not read as a contradiction. `src/tls/mod_tests.rs` builds a redirect
-`Location` pointing at `http://localhost:{port}` in its cross-host redirect
-pair. **It resolves nothing:** `same_host_redirect_policy` in `src/tls/mod.rs`
-compares the redirect target's host against the origin host and errors the
-attempt on a mismatch, so reqwest abandons the request before any name is
-looked up. The hostname is a string discriminator, and it is the property the
-test asserts — normalising it to `127.0.0.1` would turn a cross-host
-credential-leak regression test into a same-host one that can no longer fail.
-Leave it alone.
+Three URL-shaped `localhost` strings survive in the cargo tree, and because the
+prose above is the only control, each is named here with the reason it resolves
+nothing — so the next `rg -n 'localhost' src/ tests/` does not read as a
+contradiction. (The `localhost` SANs and `ServerName` values in
+`src/tls/verifier_tests.rs` and `src/tls/tofu_tests.rs` are offline certificate
+tests, covered above, and are not connect targets at all.)
+
+- `src/tls/mod_tests.rs` — a redirect `Location` pointing at
+  `http://localhost:{port}` in the cross-host redirect pair. **Structural:**
+  `same_host_redirect_policy` in `src/tls/mod.rs` compares the redirect
+  target's host against the origin host and errors the attempt on a mismatch,
+  so reqwest abandons the request before any name is looked up. The hostname is
+  the discriminator the test asserts on — normalising it to `127.0.0.1` would
+  turn a cross-host credential-leak regression test into a same-host one that
+  can no longer fail. Leave it alone.
+- `src/commands/bug/search_tests.rs` — a configured server URL, written into a
+  config file and reused as the imported `buglist.cgi` URL. **Behavioural, and
+  this is the weak one:** it resolves nothing only because inline-server
+  precedence routes the request to the inline mock instead, which the test
+  asserts directly by requiring the configured mock to have received nothing.
+  That test holds no `ENV_LOCK`, so a regression in inline precedence would put
+  the resolver back into this process — the outcome this amendment exists to
+  prevent — and nothing above would detect it.
+- `src/bugzilla_auth_tests.rs` — a string literal passed to the API-key
+  redaction helper. Never a connect target.
 
 `getaddrinfo` is also the only libc-side env reader **identified** here, not a
 proven complete list — "What `ENV_LOCK` does and does not do" above says such a
