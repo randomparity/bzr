@@ -1631,9 +1631,10 @@ async fn config_set_default_integration() {
 /// `config_path` is the throwaway config this invocation reads and writes. It
 /// is injected as the `--config` global flag, which `Config::path_at` honours
 /// ahead of `BZR_CONFIG` and `XDG_CONFIG_HOME`, so the test mutates no process
-/// environment and needs no `ENV_LOCK` (ADR-0002). The few tests that
-/// deliberately exercise environment-based resolution pass `None` and point
-/// `XDG_CONFIG_HOME` at their own temp root.
+/// environment and needs no `ENV_LOCK` (ADR-0002). The few tests that select
+/// their config some other way pass `None`: either they point
+/// `XDG_CONFIG_HOME` at their own temp root to exercise environment-based
+/// resolution, or they supply a `--config` argument of their own.
 async fn dispatch_cli(
     config_path: Option<&std::path::Path>,
     args: &[&str],
