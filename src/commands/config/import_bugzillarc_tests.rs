@@ -7,14 +7,22 @@ use crate::cli::ConfigAction;
 use crate::commands::config::execute;
 use crate::commands::runtime::invocation::CommandContext;
 use crate::config::{Config, KeyringRef, ServerConfig};
-use crate::test_helpers::{load_config_unvalidated, setup_empty_config_env, CapturedIo};
+use crate::test_helpers::{load_config_unvalidated_at, setup_empty_isolated_env, CapturedIo};
 use crate::types::output::OutputFormat;
 
 use super::{default_paths, parse_sections, read_sections, resolved_servers, server_name};
 
+/// A command context pinned to an explicit config path, so config resolution
+/// never consults `XDG_CONFIG_HOME` and the test needs no `ENV_LOCK`
+/// (ADR-0002).
+fn ctx_at(config_path: &Path, format: OutputFormat) -> CommandContext {
+    CommandContext::new(None, format, None)
+        .with_config_path_override(Some(config_path.to_path_buf()))
+}
+
 #[tokio::test]
 async fn import_command_persists_api_key_and_reports_unsupported_credentials() {
-    let (_lock, temp) = setup_empty_config_env().await;
+    let (temp, config_path) = setup_empty_isolated_env();
     let path = temp.path().join("bugzillarc");
     fs::write(
         &path,
@@ -25,7 +33,7 @@ async fn import_command_persists_api_key_and_reports_unsupported_credentials() {
 
     execute(
         &ConfigAction::ImportBugzillarc { path: Some(path) },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await
@@ -36,7 +44,7 @@ async fn import_command_persists_api_key_and_reports_unsupported_credentials() {
         .out_str()
         .contains("\"unsupported_password_credentials\": 1"));
     assert!(io.out_str().contains("\"unsupported_certificates\": 1"));
-    let config = load_config_unvalidated();
+    let config = load_config_unvalidated_at(&config_path);
     let server = &config.servers["bugs-example-test"];
     assert_eq!(server.url, "https://bugs.example.test/rest");
     assert_eq!(server.api_key.as_deref(), Some("key"));
@@ -46,14 +54,14 @@ async fn import_command_persists_api_key_and_reports_unsupported_credentials() {
 
 #[tokio::test]
 async fn import_command_rejects_a_file_without_a_url() {
-    let (_lock, temp) = setup_empty_config_env().await;
+    let (temp, config_path) = setup_empty_isolated_env();
     let path = temp.path().join("bugzillarc");
     fs::write(&path, "[DEFAULT]\napi_key=key\n").unwrap();
     let mut io = CapturedIo::new();
 
     let result = execute(
         &ConfigAction::ImportBugzillarc { path: Some(path) },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;

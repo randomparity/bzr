@@ -7,27 +7,53 @@ use crate::commands::config::execute;
 use crate::commands::runtime::invocation::CommandContext;
 use crate::error::BzrError;
 use crate::test_helpers::{
-    load_config_unvalidated, run_config_action_json, seed_inline_server, setup_empty_config_env,
-    CapturedIo,
+    load_config_unvalidated_at, run_config_action_json_at, seed_inline_server_at,
+    setup_empty_isolated_env, CapturedIo,
 };
 use crate::types::output::OutputFormat;
 
+use std::path::Path;
+
+/// A command context pinned to an explicit config path, so config resolution
+/// never consults `XDG_CONFIG_HOME` and the test needs no `ENV_LOCK`
+/// (ADR-0002).
+fn ctx_at(config_path: &Path, format: OutputFormat) -> CommandContext {
+    CommandContext::new(None, format, None)
+        .with_config_path_override(Some(config_path.to_path_buf()))
+}
+
+// One keychain `service` per keyring-touching test; see the note in
+// `rename_tests.rs`. `remove_server_deletes_the_entry_named_by_the_removed_server`
+// deliberately keeps the DEFAULT service for its decoy — proving the command
+// reads the entry's explicit coordinates instead of falling back to defaults is
+// the property under test — so the sibling that also used ("bzr", "dropme")
+// moves here instead.
+#[cfg(feature = "keyring")]
+const REMOVE_DELETES_ENTRY_SERVICE: &str = "bzr-834-remove-deletes-entry";
+#[cfg(feature = "keyring")]
+const REMOVE_CRED_LESS_SERVICE: &str = "bzr-834-remove-cred-less";
+#[cfg(all(unix, feature = "keyring"))]
+const REMOVE_WRITE_FAILS_SERVICE: &str = "bzr-834-remove-write-fails";
+
 #[tokio::test]
 async fn remove_server_deletes_non_default_entry() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    seed_inline_server("keep", "https://keep.example.com", "k").await;
-    seed_inline_server("drop", "https://drop.example.com", "d").await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    seed_inline_server_at(&config_path, "keep", "https://keep.example.com", "k").await;
+    seed_inline_server_at(&config_path, "drop", "https://drop.example.com", "d").await;
     // "keep" is the default (first added).
 
-    let json = run_config_action_json(ConfigAction::RemoveServer {
-        name: "drop".into(),
-    })
+    let json = run_config_action_json_at(
+        &config_path,
+        ConfigAction::RemoveServer {
+            name: "drop".into(),
+        },
+    )
     .await;
     assert_eq!(json["action"], "removed");
     assert_eq!(json["name"], "drop");
     assert_eq!(json["resource"], "server");
 
-    let config = load_config_unvalidated();
+    let config = load_config_unvalidated_at(&config_path);
     assert!(!config.servers.contains_key("drop"));
     assert!(config.servers.contains_key("keep"));
     assert_eq!(config.default_server.as_deref(), Some("keep"));
@@ -35,15 +61,15 @@ async fn remove_server_deletes_non_default_entry() {
 
 #[tokio::test]
 async fn remove_server_missing_errors() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    seed_inline_server("only", "https://only.example.com", "x").await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    seed_inline_server_at(&config_path, "only", "https://only.example.com", "x").await;
 
     let mut io = CapturedIo::new();
     let result = execute(
         &ConfigAction::RemoveServer {
             name: "ghost".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;
@@ -52,50 +78,55 @@ async fn remove_server_missing_errors() {
 
 #[tokio::test]
 async fn remove_server_default_with_others_refuses() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    seed_inline_server("a", "https://a.example.com", "x").await;
-    seed_inline_server("b", "https://b.example.com", "y").await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    seed_inline_server_at(&config_path, "a", "https://a.example.com", "x").await;
+    seed_inline_server_at(&config_path, "b", "https://b.example.com", "y").await;
     // "a" is the default (first added); removing it while "b" remains is refused.
 
     let mut io = CapturedIo::new();
     let result = execute(
         &ConfigAction::RemoveServer { name: "a".into() },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;
     assert!(matches!(result, Err(BzrError::Config(_))));
     // Nothing was removed.
-    assert!(load_config_unvalidated().servers.contains_key("a"));
+    assert!(load_config_unvalidated_at(&config_path)
+        .servers
+        .contains_key("a"));
 }
 
 #[tokio::test]
 async fn remove_server_only_server_clears_default() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    seed_inline_server("solo", "https://solo.example.com", "x").await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    seed_inline_server_at(&config_path, "solo", "https://solo.example.com", "x").await;
 
-    let json = run_config_action_json(ConfigAction::RemoveServer {
-        name: "solo".into(),
-    })
+    let json = run_config_action_json_at(
+        &config_path,
+        ConfigAction::RemoveServer {
+            name: "solo".into(),
+        },
+    )
     .await;
     assert_eq!(json["action"], "removed");
 
-    let config = load_config_unvalidated();
+    let config = load_config_unvalidated_at(&config_path);
     assert!(config.servers.is_empty());
     assert!(config.default_server.is_none());
 }
 
 #[tokio::test]
 async fn remove_server_table_output_reports_human_summary() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    seed_inline_server("solo", "https://solo.example.com", "x").await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    seed_inline_server_at(&config_path, "solo", "https://solo.example.com", "x").await;
 
     let mut io = CapturedIo::new();
     execute(
         &ConfigAction::RemoveServer {
             name: "solo".into(),
         },
-        &CommandContext::new(None, OutputFormat::Table, None),
+        &ctx_at(&config_path, OutputFormat::Table),
         &mut io.writers(),
     )
     .await
@@ -109,24 +140,34 @@ async fn remove_server_table_output_reports_human_summary() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn remove_server_deletes_keyring_entry() {
-    use crate::test_helpers::seed_keyring_secret;
+    use crate::test_helpers::seed_keyring_secret_at;
 
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     crate::credentials::keyring::install_test_store();
-    seed_inline_server("kr", "https://kr.example.com", "inline").await;
-    seed_keyring_secret("kr", "kr-secret").await;
+    seed_inline_server_at(&config_path, "kr", "https://kr.example.com", "inline").await;
+    seed_keyring_secret_at(
+        &config_path,
+        "kr",
+        "kr-secret",
+        REMOVE_DELETES_ENTRY_SERVICE,
+    )
+    .await;
     // Confirm the secret is present before removal.
     assert_eq!(
-        crate::credentials::keyring::retrieve("bzr", "kr").unwrap(),
+        crate::credentials::keyring::retrieve(REMOVE_DELETES_ENTRY_SERVICE, "kr").unwrap(),
         "kr-secret"
     );
 
-    run_config_action_json(ConfigAction::RemoveServer { name: "kr".into() }).await;
+    run_config_action_json_at(
+        &config_path,
+        ConfigAction::RemoveServer { name: "kr".into() },
+    )
+    .await;
 
-    let config = load_config_unvalidated();
+    let config = load_config_unvalidated_at(&config_path);
     assert!(!config.servers.contains_key("kr"));
     // Keychain entry is gone — retrieve now fails.
-    assert!(crate::credentials::keyring::retrieve("bzr", "kr").is_err());
+    assert!(crate::credentials::keyring::retrieve(REMOVE_DELETES_ENTRY_SERVICE, "kr").is_err());
 }
 
 /// Regression (#300): managing one server must succeed even when an
@@ -136,19 +177,19 @@ async fn remove_server_deletes_keyring_entry() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn remove_server_succeeds_with_other_credential_less_server() {
-    use crate::test_helpers::seed_keyring_secret;
+    use crate::test_helpers::seed_keyring_secret_at;
 
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     crate::credentials::keyring::install_test_store();
-    seed_inline_server("keepme", "https://keep.example.com", "k").await;
-    seed_inline_server("dropme", "https://drop.example.com", "d").await;
+    seed_inline_server_at(&config_path, "keepme", "https://keep.example.com", "k").await;
+    seed_inline_server_at(&config_path, "dropme", "https://drop.example.com", "d").await;
     // Make "keepme" credential-less via unset-keyring after moving it to keyring.
-    seed_keyring_secret("keepme", "s").await;
+    seed_keyring_secret_at(&config_path, "keepme", "s", REMOVE_CRED_LESS_SERVICE).await;
     execute(
         &ConfigAction::UnsetKeyring {
             name: "keepme".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await
@@ -159,7 +200,7 @@ async fn remove_server_succeeds_with_other_credential_less_server() {
         &ConfigAction::RemoveServer {
             name: "dropme".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;
@@ -167,7 +208,7 @@ async fn remove_server_succeeds_with_other_credential_less_server() {
         result.is_ok(),
         "remove must not fail because an unrelated server is credential-less: {result:?}"
     );
-    let config = load_config_unvalidated();
+    let config = load_config_unvalidated_at(&config_path);
     assert!(!config.servers.contains_key("dropme"));
     assert!(config.servers.contains_key("keepme"));
 }
@@ -185,12 +226,12 @@ async fn remove_server_succeeds_with_other_credential_less_server() {
 /// test passes on the validating path too.
 #[tokio::test]
 async fn remove_server_succeeds_with_other_structurally_invalid_server() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    seed_inline_server("broken", "https://broken.example.com", "b").await;
-    seed_inline_server("dropme", "https://drop.example.com", "d").await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    seed_inline_server_at(&config_path, "broken", "https://broken.example.com", "b").await;
+    seed_inline_server_at(&config_path, "dropme", "https://drop.example.com", "d").await;
 
     // Hand-edited state: two credential sources on one server.
-    crate::test_helpers::update_config_without_validation(|config| {
+    crate::test_helpers::update_config_without_validation_at(&config_path, |config| {
         config.servers.get_mut("broken").unwrap().api_key_env = Some("BROKEN_KEY".into());
         Ok(())
     })
@@ -201,7 +242,7 @@ async fn remove_server_succeeds_with_other_structurally_invalid_server() {
         &ConfigAction::RemoveServer {
             name: "dropme".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;
@@ -210,7 +251,7 @@ async fn remove_server_succeeds_with_other_structurally_invalid_server() {
         "remove must not be blocked by an unrelated invalid server: {result:?}"
     );
 
-    let config = load_config_unvalidated();
+    let config = load_config_unvalidated_at(&config_path);
     assert!(!config.servers.contains_key("dropme"));
     assert!(config.servers.contains_key("broken"));
 }
@@ -223,17 +264,23 @@ async fn remove_server_succeeds_with_other_structurally_invalid_server() {
 #[cfg(all(unix, feature = "keyring"))]
 #[tokio::test]
 async fn remove_server_keeps_the_secret_when_the_config_write_fails() {
-    use crate::test_helpers::{config_path, seed_keyring_secret};
+    use crate::test_helpers::seed_keyring_secret_at;
     use std::os::unix::fs::PermissionsExt as _;
 
     crate::credentials::keyring::install_test_store();
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
 
-    seed_inline_server("dropme", "https://drop.example.com", "d").await;
-    seed_keyring_secret("dropme", "drop-secret").await;
+    seed_inline_server_at(&config_path, "dropme", "https://drop.example.com", "d").await;
+    seed_keyring_secret_at(
+        &config_path,
+        "dropme",
+        "drop-secret",
+        REMOVE_WRITE_FAILS_SERVICE,
+    )
+    .await;
 
     // Make the config directory read-only so the locked write cannot proceed.
-    let dir = config_path().parent().unwrap().to_path_buf();
+    let dir = config_path.parent().unwrap().to_path_buf();
     let original = std::fs::metadata(&dir).unwrap().permissions();
     std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
 
@@ -241,7 +288,7 @@ async fn remove_server_keeps_the_secret_when_the_config_write_fails() {
         &ConfigAction::RemoveServer {
             name: "dropme".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None).with_assume_yes(true),
+        &ctx_at(&config_path, OutputFormat::Json).with_assume_yes(true),
         &mut CapturedIo::new().writers(),
     )
     .await;
@@ -251,10 +298,10 @@ async fn remove_server_keeps_the_secret_when_the_config_write_fails() {
 
     // The server is still configured, so its secret must still be retrievable.
     assert_eq!(
-        crate::credentials::keyring::retrieve("bzr", "dropme").unwrap(),
+        crate::credentials::keyring::retrieve(REMOVE_WRITE_FAILS_SERVICE, "dropme").unwrap(),
         "drop-secret"
     );
-    crate::credentials::keyring::delete("bzr", "dropme").unwrap();
+    crate::credentials::keyring::delete(REMOVE_WRITE_FAILS_SERVICE, "dropme").unwrap();
 }
 
 /// The keychain coordinates come from the server entry being removed, resolved
@@ -273,11 +320,18 @@ async fn remove_server_keeps_the_secret_when_the_config_write_fails() {
 #[tokio::test]
 async fn remove_server_deletes_the_entry_named_by_the_removed_server() {
     crate::credentials::keyring::install_test_store();
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    // Retains ENV_LOCK: this test mutates the process-global
+    // BZR_KEYRING_TEST_SECRET that `set-keyring` reads, which is the category
+    // ADR-0002 keeps the lock for. It cannot delegate to `seed_keyring_secret_at`
+    // (which takes the lock itself) because it needs an explicit `account`, so it
+    // takes the lock directly. Config is still selected by explicit path, so no
+    // XDG_CONFIG_HOME mutation is involved.
+    let _lock = crate::ENV_LOCK.lock().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
 
-    seed_inline_server("dropme", "https://drop.example.com", "d").await;
+    seed_inline_server_at(&config_path, "dropme", "https://drop.example.com", "d").await;
 
-    // SAFETY: Serialized via ENV_LOCK held by setup_empty_config_env.
+    // SAFETY: Serialized via the ENV_LOCK guard held above.
     unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", "real-secret") };
     execute(
         &ConfigAction::SetKeyring {
@@ -285,12 +339,12 @@ async fn remove_server_deletes_the_entry_named_by_the_removed_server() {
             service: Some("custom-svc".into()),
             account: Some("custom-acct".into()),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await
     .unwrap();
-    // SAFETY: Serialized via ENV_LOCK held by setup_empty_config_env.
+    // SAFETY: Serialized via the ENV_LOCK guard held above.
     unsafe { std::env::remove_var("BZR_KEYRING_TEST_SECRET") };
 
     crate::credentials::keyring::store("bzr", "dropme", "decoy").unwrap();
@@ -299,7 +353,7 @@ async fn remove_server_deletes_the_entry_named_by_the_removed_server() {
         &ConfigAction::RemoveServer {
             name: "dropme".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None).with_assume_yes(true),
+        &ctx_at(&config_path, OutputFormat::Json).with_assume_yes(true),
         &mut CapturedIo::new().writers(),
     )
     .await

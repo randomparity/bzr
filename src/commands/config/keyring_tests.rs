@@ -9,12 +9,54 @@ use crate::cli::ConfigAction;
 use crate::commands::config::execute;
 use crate::commands::runtime::invocation::CommandContext;
 use crate::error::BzrError;
-use crate::test_helpers::{seed_inline_server, setup_empty_config_env, CapturedIo};
+use crate::test_helpers::{seed_inline_server_at, setup_empty_isolated_env, CapturedIo};
 use crate::types::output::OutputFormat;
+
+use std::path::Path;
+
+/// A command context pinned to an explicit config path, so config resolution
+/// never consults `XDG_CONFIG_HOME` and the test needs no `ENV_LOCK`
+/// (ADR-0002).
+fn ctx_at(config_path: &Path, format: OutputFormat) -> CommandContext {
+    CommandContext::new(None, format, None)
+        .with_config_path_override(Some(config_path.to_path_buf()))
+}
+
+// One keychain `service` per keyring-touching test. `install_test_store`
+// memoizes a single process-global store keyed on `(service, account)`, and
+// these suites reuse server names ("prod" and "target" each appear twice here).
+// With `ENV_LOCK` no longer serializing whole test bodies, a unique service is
+// what keeps the keys disjoint.
+//
+// `unset_keyring_deletes_the_entry_named_by_the_server` is the deliberate
+// exception: it plants a decoy at the DEFAULT coordinates to prove the command
+// reads the entry's explicit service/account rather than falling back, so
+// changing its service would delete the property under test. Its account
+// ("named") is unique crate-wide, so it needs no help.
+#[cfg(feature = "keyring")]
+const STORES_REWRITES_SERVICE: &str = "bzr-834-keyring-stores-rewrites";
+#[cfg(feature = "keyring")]
+const TABLE_OUTPUT_SERVICE: &str = "bzr-834-keyring-table-output";
+#[cfg(feature = "keyring")]
+const UNSET_CLEARS_SERVICE: &str = "bzr-834-keyring-unset-clears";
+#[cfg(feature = "keyring")]
+const ROUNDTRIP_SERVICE: &str = "bzr-834-keyring-roundtrip";
+#[cfg(feature = "keyring")]
+const SET_DEFAULT_SERVICE: &str = "bzr-834-keyring-set-default";
+#[cfg(feature = "keyring")]
+const BLOCKED_INVALID_SERVICE: &str = "bzr-834-keyring-blocked-invalid";
+#[cfg(feature = "keyring")]
+const REPAIRS_DUAL_SERVICE: &str = "bzr-834-keyring-repairs-dual";
+#[cfg(feature = "keyring")]
+const UNSET_OTHER_INVALID_SERVICE: &str = "bzr-834-keyring-unset-other-invalid";
+#[cfg(feature = "keyring")]
+const RECRED_SERVICE: &str = "bzr-834-keyring-recred";
+#[cfg(all(unix, feature = "keyring"))]
+const WRITE_FAILS_SERVICE: &str = "bzr-834-keyring-write-fails";
 
 #[tokio::test]
 async fn set_keyring_missing_server_errors_before_keychain() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     let mut io = CapturedIo::new();
     let result = execute(
         &ConfigAction::SetKeyring {
@@ -22,7 +64,7 @@ async fn set_keyring_missing_server_errors_before_keychain() {
             service: None,
             account: None,
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;
@@ -35,13 +77,13 @@ async fn set_keyring_missing_server_errors_before_keychain() {
 
 #[tokio::test]
 async fn unset_keyring_missing_server_errors() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     let mut io = CapturedIo::new();
     let result = execute(
         &ConfigAction::UnsetKeyring {
             name: "ghost".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;
@@ -53,16 +95,22 @@ async fn unset_keyring_missing_server_errors() {
 
 #[tokio::test]
 async fn unset_keyring_without_keyring_credential_errors() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     // Inline-only server: there is no keychain credential to unset.
-    seed_inline_server("inline-only", "https://inline.example.com", "secret").await;
+    seed_inline_server_at(
+        &config_path,
+        "inline-only",
+        "https://inline.example.com",
+        "secret",
+    )
+    .await;
 
     let mut io = CapturedIo::new();
     let result = execute(
         &ConfigAction::UnsetKeyring {
             name: "inline-only".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;
@@ -75,17 +123,29 @@ async fn unset_keyring_without_keyring_credential_errors() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn set_keyring_stores_secret_and_rewrites_config() {
-    use crate::test_helpers::{load_config, seed_keyring_secret};
+    use crate::test_helpers::{load_config_at, seed_keyring_secret_at};
 
     crate::credentials::keyring::install_test_store();
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
 
     // Create an inline server first, then move it to the keychain.
-    seed_inline_server("prod", "https://prod.example.com", "old-inline-value").await;
-    seed_keyring_secret("prod", "new-keyring-value").await;
+    seed_inline_server_at(
+        &config_path,
+        "prod",
+        "https://prod.example.com",
+        "old-inline-value",
+    )
+    .await;
+    seed_keyring_secret_at(
+        &config_path,
+        "prod",
+        "new-keyring-value",
+        STORES_REWRITES_SERVICE,
+    )
+    .await;
 
     // Config rewritten: inline cleared, api_key_keyring set.
-    let config = load_config();
+    let config = load_config_at(&config_path);
     let server = &config.servers["prod"];
     assert!(server.api_key.is_none());
     assert!(server.api_key_env.is_none());
@@ -96,55 +156,80 @@ async fn set_keyring_stores_secret_and_rewrites_config() {
         crate::credentials::resolve_api_key(server, "prod").unwrap(),
         "new-keyring-value"
     );
-    crate::credentials::keyring::delete("bzr", "prod").unwrap();
+    crate::credentials::keyring::delete(STORES_REWRITES_SERVICE, "prod").unwrap();
 }
 
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn set_keyring_table_output_reports_human_summary() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    // Retains ENV_LOCK: this test mutates the process-global
+    // BZR_KEYRING_TEST_SECRET that `set-keyring` reads, which is the category
+    // ADR-0002 keeps the lock for. It cannot delegate to `seed_keyring_secret_at`
+    // (which takes the lock itself) because it asserts on *table* output and the
+    // seeder runs `--json`, so it takes the lock directly. Config is still
+    // selected by explicit path, so no XDG_CONFIG_HOME mutation is involved.
+    let _lock = crate::ENV_LOCK.lock().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     crate::credentials::keyring::install_test_store();
-    seed_inline_server("prod", "https://prod.example.com", "old-inline-value").await;
+    seed_inline_server_at(
+        &config_path,
+        "prod",
+        "https://prod.example.com",
+        "old-inline-value",
+    )
+    .await;
 
     let mut io = CapturedIo::new();
-    // SAFETY: Serialized via ENV_LOCK through setup_empty_config_env.
+    // SAFETY: Serialized via the ENV_LOCK guard held above.
     unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", "new-keyring-value") };
     execute(
         &ConfigAction::SetKeyring {
             name: "prod".into(),
-            service: None,
+            service: Some(TABLE_OUTPUT_SERVICE.into()),
             account: None,
         },
-        &CommandContext::new(None, OutputFormat::Table, None),
+        &ctx_at(&config_path, OutputFormat::Table),
         &mut io.writers(),
     )
     .await
     .unwrap();
-    // SAFETY: Serialized via ENV_LOCK through setup_empty_config_env.
+    // SAFETY: Serialized via the ENV_LOCK guard held above.
     unsafe { std::env::remove_var("BZR_KEYRING_TEST_SECRET") };
 
     let out = io.out_str();
     assert!(out.contains("Stored API key for server 'prod' in OS keychain"));
     assert!(out.contains("Config file:"));
-    crate::credentials::keyring::delete("bzr", "prod").unwrap();
+    crate::credentials::keyring::delete(TABLE_OUTPUT_SERVICE, "prod").unwrap();
 }
 
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn unset_keyring_removes_secret_and_clears_config() {
-    use crate::test_helpers::{load_config, seed_keyring_secret};
+    use crate::test_helpers::{load_config_at, seed_keyring_secret_at};
 
     crate::credentials::keyring::install_test_store();
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
 
-    seed_inline_server("unset-test", "https://unset-test.example.com", "tmp").await;
-    seed_keyring_secret("unset-test", "unset-test-secret").await;
+    seed_inline_server_at(
+        &config_path,
+        "unset-test",
+        "https://unset-test.example.com",
+        "tmp",
+    )
+    .await;
+    seed_keyring_secret_at(
+        &config_path,
+        "unset-test",
+        "unset-test-secret",
+        UNSET_CLEARS_SERVICE,
+    )
+    .await;
 
     execute(
         &ConfigAction::UnsetKeyring {
             name: "unset-test".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await
@@ -153,14 +238,14 @@ async fn unset_keyring_removes_secret_and_clears_config() {
     // The validating loader accepts the credential-less server `unset-keyring`
     // leaves behind: missing credentials are an authentication-time error, not
     // a structural one.
-    let config = load_config();
+    let config = load_config_at(&config_path);
     let server = &config.servers["unset-test"];
     assert!(server.api_key_keyring.is_none());
     assert!(server.api_key.is_none());
     assert!(server.api_key_env.is_none());
 
     // Keychain entry is gone (idempotent delete returns Ok).
-    crate::credentials::keyring::delete("bzr", "unset-test").unwrap();
+    crate::credentials::keyring::delete(UNSET_CLEARS_SERVICE, "unset-test").unwrap();
 }
 
 // ── Regression: config stays editable after `unset-keyring` (issue #278) ──
@@ -174,19 +259,25 @@ async fn unset_keyring_removes_secret_and_clears_config() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn unset_keyring_then_set_keyring_round_trips() {
-    use crate::test_helpers::{load_config, seed_keyring_secret};
+    use crate::test_helpers::{load_config_at, seed_keyring_secret_at};
 
     crate::credentials::keyring::install_test_store();
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
 
-    seed_inline_server("roundtrip", "https://roundtrip.example.com", "init").await;
-    seed_keyring_secret("roundtrip", "first-secret").await;
+    seed_inline_server_at(
+        &config_path,
+        "roundtrip",
+        "https://roundtrip.example.com",
+        "init",
+    )
+    .await;
+    seed_keyring_secret_at(&config_path, "roundtrip", "first-secret", ROUNDTRIP_SERVICE).await;
 
     execute(
         &ConfigAction::UnsetKeyring {
             name: "roundtrip".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await
@@ -194,9 +285,15 @@ async fn unset_keyring_then_set_keyring_round_trips() {
 
     // `seed_keyring_secret` runs `set-keyring` and panics on error, so reaching
     // the assertions below is itself the "did not wedge" check.
-    seed_keyring_secret("roundtrip", "second-secret").await;
+    seed_keyring_secret_at(
+        &config_path,
+        "roundtrip",
+        "second-secret",
+        ROUNDTRIP_SERVICE,
+    )
+    .await;
 
-    let config = load_config();
+    let config = load_config_at(&config_path);
     let server = &config.servers["roundtrip"];
     assert!(
         server.api_key_keyring.is_some(),
@@ -207,7 +304,7 @@ async fn unset_keyring_then_set_keyring_round_trips() {
         "second-secret"
     );
 
-    crate::credentials::keyring::delete("bzr", "roundtrip").unwrap();
+    crate::credentials::keyring::delete(ROUNDTRIP_SERVICE, "roundtrip").unwrap();
 }
 
 /// `set-default` must succeed while an *unrelated* server is credential-less.
@@ -216,20 +313,26 @@ async fn unset_keyring_then_set_keyring_round_trips() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn unset_keyring_then_set_default_succeeds() {
-    use crate::test_helpers::seed_keyring_secret;
+    use crate::test_helpers::seed_keyring_secret_at;
 
     crate::credentials::keyring::install_test_store();
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
 
-    seed_inline_server("alpha", "https://alpha.example.com", "alpha-key").await;
-    seed_inline_server("beta", "https://beta.example.com", "beta-tmp").await;
-    seed_keyring_secret("beta", "beta-secret").await;
+    seed_inline_server_at(
+        &config_path,
+        "alpha",
+        "https://alpha.example.com",
+        "alpha-key",
+    )
+    .await;
+    seed_inline_server_at(&config_path, "beta", "https://beta.example.com", "beta-tmp").await;
+    seed_keyring_secret_at(&config_path, "beta", "beta-secret", SET_DEFAULT_SERVICE).await;
 
     execute(
         &ConfigAction::UnsetKeyring {
             name: "beta".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await
@@ -239,7 +342,7 @@ async fn unset_keyring_then_set_default_succeeds() {
         &ConfigAction::SetDefault {
             name: "alpha".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await;
@@ -251,11 +354,13 @@ async fn unset_keyring_then_set_default_succeeds() {
     // Assert the effect, not just the exit status: a silently no-op
     // `set-default` would also return Ok.
     assert_eq!(
-        crate::test_helpers::load_config().default_server.as_deref(),
+        crate::test_helpers::load_config_at(&config_path)
+            .default_server
+            .as_deref(),
         Some("alpha")
     );
 
-    crate::credentials::keyring::delete("bzr", "beta").unwrap();
+    crate::credentials::keyring::delete(SET_DEFAULT_SERVICE, "beta").unwrap();
 }
 
 /// `set-keyring` deliberately does *not* share `unset-keyring`'s bypass: adding
@@ -268,30 +373,37 @@ async fn unset_keyring_then_set_default_succeeds() {
 #[tokio::test]
 async fn set_keyring_is_blocked_by_other_structurally_invalid_server() {
     crate::credentials::keyring::install_test_store();
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    // Retains ENV_LOCK: this test mutates the process-global
+    // BZR_KEYRING_TEST_SECRET that `set-keyring` reads, which is the category
+    // ADR-0002 keeps the lock for. It cannot delegate to `seed_keyring_secret_at`
+    // (which takes the lock itself) because it asserts on the returned `Err` and
+    // the seeder panics on error, so it takes the lock directly. Config is still
+    // selected by explicit path, so no XDG_CONFIG_HOME mutation is involved.
+    let _lock = crate::ENV_LOCK.lock().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
 
-    seed_inline_server("broken", "https://broken.example.com", "b").await;
-    seed_inline_server("target", "https://target.example.com", "t").await;
+    seed_inline_server_at(&config_path, "broken", "https://broken.example.com", "b").await;
+    seed_inline_server_at(&config_path, "target", "https://target.example.com", "t").await;
 
-    crate::test_helpers::update_config_without_validation(|config| {
+    crate::test_helpers::update_config_without_validation_at(&config_path, |config| {
         config.servers.get_mut("broken").unwrap().api_key_env = Some("BROKEN_KEY".into());
         Ok(())
     })
     .unwrap();
 
-    // SAFETY: Serialized via ENV_LOCK held by setup_empty_config_env.
+    // SAFETY: Serialized via the ENV_LOCK guard held above.
     unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", "s") };
     let result = execute(
         &ConfigAction::SetKeyring {
             name: "target".into(),
-            service: None,
+            service: Some(BLOCKED_INVALID_SERVICE.into()),
             account: None,
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await;
-    // SAFETY: Serialized via ENV_LOCK held by setup_empty_config_env.
+    // SAFETY: Serialized via the ENV_LOCK guard held above.
     unsafe { std::env::remove_var("BZR_KEYRING_TEST_SECRET") };
 
     let err = result.unwrap_err();
@@ -308,17 +420,17 @@ async fn set_keyring_is_blocked_by_other_structurally_invalid_server() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn unset_keyring_repairs_a_target_with_conflicting_sources() {
-    use crate::test_helpers::{load_config_unvalidated, seed_keyring_secret};
+    use crate::test_helpers::{load_config_unvalidated_at, seed_keyring_secret_at};
 
     crate::credentials::keyring::install_test_store();
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
 
-    seed_inline_server("dual", "https://dual.example.com", "d").await;
-    seed_keyring_secret("dual", "dual-secret").await;
+    seed_inline_server_at(&config_path, "dual", "https://dual.example.com", "d").await;
+    seed_keyring_secret_at(&config_path, "dual", "dual-secret", REPAIRS_DUAL_SERVICE).await;
 
     // set-keyring clears the other sources; put one back so the target itself
     // carries two credential sources.
-    crate::test_helpers::update_config_without_validation(|config| {
+    crate::test_helpers::update_config_without_validation_at(&config_path, |config| {
         config.servers.get_mut("dual").unwrap().api_key_env = Some("DUAL_KEY".into());
         Ok(())
     })
@@ -328,7 +440,7 @@ async fn unset_keyring_repairs_a_target_with_conflicting_sources() {
         &ConfigAction::UnsetKeyring {
             name: "dual".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await;
@@ -338,10 +450,10 @@ async fn unset_keyring_repairs_a_target_with_conflicting_sources() {
     );
 
     // Net effect is repair: the conflict is gone and the config loads again.
-    let server = &load_config_unvalidated().servers["dual"];
+    let server = &load_config_unvalidated_at(&config_path).servers["dual"];
     assert!(server.api_key_keyring.is_none());
     assert_eq!(server.api_key_env.as_deref(), Some("DUAL_KEY"));
-    crate::test_helpers::load_config();
+    crate::test_helpers::load_config_at(&config_path);
 }
 
 /// `unset-keyring` must still work when an unrelated server is *structurally
@@ -350,17 +462,23 @@ async fn unset_keyring_repairs_a_target_with_conflicting_sources() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn unset_keyring_succeeds_with_other_structurally_invalid_server() {
-    use crate::test_helpers::{load_config_unvalidated, seed_keyring_secret};
+    use crate::test_helpers::{load_config_unvalidated_at, seed_keyring_secret_at};
 
     crate::credentials::keyring::install_test_store();
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
 
-    seed_inline_server("broken", "https://broken.example.com", "b").await;
-    seed_inline_server("target", "https://target.example.com", "t").await;
-    seed_keyring_secret("target", "target-secret").await;
+    seed_inline_server_at(&config_path, "broken", "https://broken.example.com", "b").await;
+    seed_inline_server_at(&config_path, "target", "https://target.example.com", "t").await;
+    seed_keyring_secret_at(
+        &config_path,
+        "target",
+        "target-secret",
+        UNSET_OTHER_INVALID_SERVICE,
+    )
+    .await;
 
     // Hand-edited state: two credential sources on one server.
-    crate::test_helpers::update_config_without_validation(|config| {
+    crate::test_helpers::update_config_without_validation_at(&config_path, |config| {
         config.servers.get_mut("broken").unwrap().api_key_env = Some("BROKEN_KEY".into());
         Ok(())
     })
@@ -370,7 +488,7 @@ async fn unset_keyring_succeeds_with_other_structurally_invalid_server() {
         &ConfigAction::UnsetKeyring {
             name: "target".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await;
@@ -379,7 +497,7 @@ async fn unset_keyring_succeeds_with_other_structurally_invalid_server() {
         "unset-keyring must not be blocked by an unrelated invalid server: {result:?}"
     );
 
-    let config = load_config_unvalidated();
+    let config = load_config_unvalidated_at(&config_path);
     assert!(config.servers["target"].api_key_keyring.is_none());
     assert!(config.servers.contains_key("broken"));
 }
@@ -388,19 +506,19 @@ async fn unset_keyring_succeeds_with_other_structurally_invalid_server() {
 #[cfg(feature = "keyring")]
 #[tokio::test]
 async fn unset_keyring_then_set_server_recredentials_successfully() {
-    use crate::test_helpers::{load_config, seed_keyring_secret};
+    use crate::test_helpers::{load_config_at, seed_keyring_secret_at};
 
     crate::credentials::keyring::install_test_store();
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
 
-    seed_inline_server("recred", "https://recred.example.com", "init").await;
-    seed_keyring_secret("recred", "kr-secret").await;
+    seed_inline_server_at(&config_path, "recred", "https://recred.example.com", "init").await;
+    seed_keyring_secret_at(&config_path, "recred", "kr-secret", RECRED_SERVICE).await;
 
     execute(
         &ConfigAction::UnsetKeyring {
             name: "recred".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await
@@ -420,7 +538,7 @@ async fn unset_keyring_then_set_server_recredentials_successfully() {
             tls_pin_now: false,
             tls_pin_clear: false,
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await;
@@ -430,7 +548,7 @@ async fn unset_keyring_then_set_server_recredentials_successfully() {
         result.unwrap_err()
     );
 
-    let config = load_config();
+    let config = load_config_at(&config_path);
     assert_eq!(
         config.servers["recred"].api_key_env.as_deref(),
         Some("RECRED_API_KEY")
@@ -447,17 +565,17 @@ async fn unset_keyring_then_set_server_recredentials_successfully() {
 #[cfg(all(unix, feature = "keyring"))]
 #[tokio::test]
 async fn unset_keyring_keeps_the_secret_when_the_config_write_fails() {
-    use crate::test_helpers::{config_path, load_config_unvalidated, seed_keyring_secret};
+    use crate::test_helpers::{load_config_unvalidated_at, seed_keyring_secret_at};
     use std::os::unix::fs::PermissionsExt as _;
 
     crate::credentials::keyring::install_test_store();
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
 
-    seed_inline_server("wfail", "https://wfail.example.com", "w").await;
-    seed_keyring_secret("wfail", "wfail-secret").await;
+    seed_inline_server_at(&config_path, "wfail", "https://wfail.example.com", "w").await;
+    seed_keyring_secret_at(&config_path, "wfail", "wfail-secret", WRITE_FAILS_SERVICE).await;
 
     // Make the config directory read-only so the locked write cannot proceed.
-    let dir = config_path().parent().unwrap().to_path_buf();
+    let dir = config_path.parent().unwrap().to_path_buf();
     let original = std::fs::metadata(&dir).unwrap().permissions();
     std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
 
@@ -465,7 +583,7 @@ async fn unset_keyring_keeps_the_secret_when_the_config_write_fails() {
         &ConfigAction::UnsetKeyring {
             name: "wfail".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await;
@@ -474,14 +592,14 @@ async fn unset_keyring_keeps_the_secret_when_the_config_write_fails() {
     assert!(result.is_err(), "precondition: the config write must fail");
 
     // The config still references the keyring entry, so the secret must remain.
-    assert!(load_config_unvalidated().servers["wfail"]
+    assert!(load_config_unvalidated_at(&config_path).servers["wfail"]
         .api_key_keyring
         .is_some());
     assert_eq!(
-        crate::credentials::keyring::retrieve("bzr", "wfail").unwrap(),
+        crate::credentials::keyring::retrieve(WRITE_FAILS_SERVICE, "wfail").unwrap(),
         "wfail-secret"
     );
-    crate::credentials::keyring::delete("bzr", "wfail").unwrap();
+    crate::credentials::keyring::delete(WRITE_FAILS_SERVICE, "wfail").unwrap();
 }
 
 /// The keychain coordinates come from the server entry, resolved from the
@@ -496,11 +614,18 @@ async fn unset_keyring_keeps_the_secret_when_the_config_write_fails() {
 #[tokio::test]
 async fn unset_keyring_deletes_the_entry_named_by_the_server() {
     crate::credentials::keyring::install_test_store();
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    // Retains ENV_LOCK: this test mutates the process-global
+    // BZR_KEYRING_TEST_SECRET that `set-keyring` reads, which is the category
+    // ADR-0002 keeps the lock for. It cannot delegate to `seed_keyring_secret_at`
+    // (which takes the lock itself) because it needs an explicit `account`, so it
+    // takes the lock directly. Config is still selected by explicit path, so no
+    // XDG_CONFIG_HOME mutation is involved.
+    let _lock = crate::ENV_LOCK.lock().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
 
-    seed_inline_server("named", "https://named.example.com", "n").await;
+    seed_inline_server_at(&config_path, "named", "https://named.example.com", "n").await;
 
-    // SAFETY: Serialized via ENV_LOCK held by setup_empty_config_env.
+    // SAFETY: Serialized via the ENV_LOCK guard held above.
     unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", "real-secret") };
     execute(
         &ConfigAction::SetKeyring {
@@ -508,12 +633,12 @@ async fn unset_keyring_deletes_the_entry_named_by_the_server() {
             service: Some("named-svc".into()),
             account: Some("named-acct".into()),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await
     .unwrap();
-    // SAFETY: Serialized via ENV_LOCK held by setup_empty_config_env.
+    // SAFETY: Serialized via the ENV_LOCK guard held above.
     unsafe { std::env::remove_var("BZR_KEYRING_TEST_SECRET") };
 
     crate::credentials::keyring::store("bzr", "named", "decoy").unwrap();
@@ -522,7 +647,7 @@ async fn unset_keyring_deletes_the_entry_named_by_the_server() {
         &ConfigAction::UnsetKeyring {
             name: "named".into(),
         },
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut CapturedIo::new().writers(),
     )
     .await
