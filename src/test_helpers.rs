@@ -360,25 +360,13 @@ fn json_context(
     .with_config_path_override(Some(config_path.to_path_buf()))
 }
 
-/// Run a `ConfigAction`, capture stdout, and parse it as JSON.
-///
-/// Gated to `cfg(test)`: it takes the crate-internal `ConfigAction`, so only
-/// in-crate unit tests can call it (integration tests drive config through
-/// `dispatch`).
-///
-/// # Panics
-///
-/// Panics if the command errors or its stdout is not valid JSON.
-#[cfg(test)]
-pub(crate) async fn run_config_action_json(action: crate::cli::ConfigAction) -> serde_json::Value {
-    run_config_action_json_at(&config_path(), action).await
-}
-
 /// Run a `ConfigAction` against an explicit config path (ADR-0002), capture
 /// stdout, and parse it as JSON. Consults no environment variable, so the
 /// caller needs no `ENV_LOCK`.
 ///
-/// Gated to `cfg(test)` for the same reason as [`run_config_action_json`].
+/// Gated to `cfg(test)`: it takes the crate-internal `ConfigAction`, so only
+/// in-crate unit tests can call it (integration tests drive config through
+/// `dispatch`).
 ///
 /// # Panics
 ///
