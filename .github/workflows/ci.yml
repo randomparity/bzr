@@ -60,6 +60,25 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6  # v2
       - run: cargo clippy --locked --all-targets --features test-helpers -- -D warnings
 
+  # The crate advertises a no-keyring build (`default = ["keyring"]`), but no
+  # other job compiled its test targets that way, so issue #856's unused
+  # import sat in a `#[cfg(test)]` module nothing built. This job is the
+  # `-D warnings` gate for that configuration. No libdbus-1-dev step: only the
+  # keyring backends this job switches off need that system library, and the
+  # manpages job already builds a keyring-off bzr library on ubuntu-latest
+  # without it, so installing it here would hide a regression that
+  # reintroduced the dependency.
+  clippy-no-default-features:
+    name: Clippy (no-default-features)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6e  # stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6  # v2
+      - run: cargo clippy --locked --no-default-features --all-targets --features test-helpers -- -D warnings
+
   test:
     name: Test
     runs-on: ubuntu-latest
