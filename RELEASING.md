@@ -103,68 +103,77 @@ reads `fuzz/Cargo.lock` (the `fuzz/` package is excluded from the cargo workspac
 the only one carrying GitHub Advisory Database entries that have no RustSec equivalent.
 
 *Does not cover:* reachability. Alerts match lockfile entries, not the resolved build
-graph, so a crate that `Cargo.lock` pins but that no feature activates on any target
-still alerts. For a Cargo-ecosystem alert against the root `Cargo.lock`, establish what
-the crate actually reaches before treating it as a release blocker. That takes both
-commands, because they answer different questions:
+graph, so a crate that `Cargo.lock` pins but that nothing activates on any target still
+alerts. For a Cargo-ecosystem alert against the root `Cargo.lock`, establish what the
+crate actually reaches before deciding whether it blocks the tag. Run three probes:
 
 ```bash
-cargo tree --target all --edges normal -i CRATE-NAME  # linked into the binary?
-cargo tree --target all -i CRATE-NAME                 # present at all, by which edge?
+cargo tree --workspace --target all --edges normal,build -i CRATE-NAME  # A
+cargo tree --workspace --target all -i CRATE-NAME                       # B
+grep -q '^name = "CRATE-NAME"$' Cargo.lock                              # L
 ```
 
-Read them together:
+**Judge A and B by whether they printed anything on stdout, never by their exit status.**
+Cargo writes `warning: nothing to print.` to *stderr*, so an empty result still looks
+like success; and the exit code answers a different question than the one being asked
+here. Read the three together:
 
-- **A tree from the first** — the crate is linked into a released binary. Blocks the tag.
-- **Nothing from the first, a tree under `[build-dependencies]` in the second** — the
-  crate runs on the release runner and can compile its own output into the binary, so
-  treat it as blocking unless you establish otherwise. `cc` reaches the release exactly
-  this way, as a build-dependency of `ring`, which `bzr` links through `rustls` and
-  `reqwest`.
-- **Nothing from the first, a tree only under `[dev-dependencies]` in the second** —
-  test-only, and no released artifact contains it.
-- **Nothing from either** — not in this workspace's graph at all. Read the two boundaries
-  below before concluding anything from that.
+| A | B | L | What it means | Tag |
+|---|---|---|---|---|
+| tree | — | — | Reaches a released artifact | **Blocks** |
+| empty | tree | — | Dev-only; nothing released contains it | Does not block |
+| empty | empty | yes | Pinned in `Cargo.lock`, activated by nothing | Does not block |
+| empty | empty | no | Not in the lockfile at all | Not applicable |
 
-`--edges normal` is what separates the first question from the second: on its own
-`cargo tree` also prints dev- and build-dependency edges, so a test-only crate reads as
-shipping. It does not follow that everything `--edges normal` hides is absent from the
-release — that is the build-dependency case above, and it is why the second command is
-not optional.
+`--workspace` is not optional. Without it `cargo tree -i` resolves only the root package
+`bzr`, so a crate reached solely through `xtask` — `roff` and `clap_mangen` today — is
+reported as an unknown package specification rather than as a dependency. `xtask`
+generates the man pages on the release runner (`release.yml`) and those pages are copied
+into the published archives, so its dependencies reach the release and belong in row one.
 
-Two inputs make these commands say nothing useful, and neither is evidence the crate is
-absent:
+`--edges normal,build` keeps build-dependencies while excluding dev-dependencies. That
+distinction is the point of row one: `cc` is linked into nothing, but it is a
+build-dependency of `ring`, which `bzr` links through `rustls` and `reqwest`, so it
+compiles its own output into every released binary and runs on the release runner. Do not
+narrow this to `--edges normal`, which hides exactly that case.
 
-- **A name that is not in the root `Cargo.lock`** — including every `github-actions`
-  package and any crate that exists only in `fuzz/Cargo.lock`. Cargo errors with
-  `package ID specification ... did not match any packages` and **exits 101**, printing
-  nothing on stdout. For a crate that *is* in `Cargo.lock` both commands exit 0 whether
-  or not they print a tree, so read their output rather than their exit status — but do
-  not read that 101 as an empty result.
-- **A `github-actions` alert**, which has no `cargo tree` equivalent at all. Judge it by
-  whether the workflow runs in the release path (`release.yml`, `publish-crates.yml`) or
-  only in CI.
+Row two is decided by A and B, not by reading edge-group headers. One `cargo tree -i`
+output can carry several headers at different depths — `wiremock` prints an unlabeled
+(normal) group *and* a `[dev-dependencies]` group, because its normal edge is reachable
+only through the dev path that activates `test-helpers` — so "the tree mentions
+`[dev-dependencies]`" proves nothing on its own.
 
-A `fuzz/Cargo.lock` alert never blocks a tag because fuzz targets are not released
-artifacts — not because the command found nothing. Do not reach for
-`--manifest-path fuzz/Cargo.toml` to confirm it: `fuzz/Cargo.lock` is tracked and stale,
-so cargo either refuses under `--locked` or rewrites it, dirtying the checkout you are
-about to tag.
+Row four is where the remaining two boundaries live:
+
+- **A `github-actions` alert** has no `cargo tree` equivalent at all. Judge it by whether
+  the workflow runs in the release path (`release.yml`, `publish-crates.yml`) or only in
+  CI.
+- **A `fuzz/Cargo.lock` alert** never blocks a tag, because fuzz targets are not released
+  artifacts — not because the probes found nothing. Do not reach for
+  `--manifest-path fuzz/Cargo.toml` to confirm it: `fuzz/Cargo.lock` is tracked and stale,
+  so cargo either refuses under `--locked` or rewrites it, dirtying the checkout you are
+  about to tag.
+
+A row-three result still needs a recorded disposition, not silence: the crate is pinned in
+the lockfile and a reader of `Cargo.lock` can see it, so say in the release notes that it
+is unreachable rather than leaving the alert unexplained.
 
 If the alerts query returns `403` with `Dependabot alerts are disabled for this
 repository` — GitHub's message for a repository with the setting off — confirm the
 setting directly:
 
 ```bash
-gh api repos/randomparity/bzr/vulnerability-alerts
+gh api repos/randomparity/bzr/vulnerability-alerts -i | head -1
 ```
 
-`204 No Content` means alerts are enabled. A `404` means **either** that they are disabled
-**or** that your token lacks admin on the repository: this endpoint requires admin, so a
-404 on its own does not say which. If you do not hold admin, ask someone who does rather
-than treating the review as blocked. Enabling alerts is a repository-settings change that
-needs admin and cannot be done from a pull request. The advisory review is not complete
-while this surface is genuinely unreadable.
+The `-i` is required: without it this endpoint prints nothing at all on success, and the
+status you need to read never appears. `HTTP/2.0 204 No Content` means alerts are enabled.
+A `404` means **either** that they are disabled **or** that your token lacks admin on the
+repository — this endpoint requires admin, so a 404 on its own does not say which. If you
+do not hold admin, ask someone who does rather than treating the review as blocked.
+Enabling alerts is a repository-settings change that needs admin and cannot be done from a
+pull request. The advisory review is not complete while this surface is genuinely
+unreadable.
 
 **3. `cargo deny check advisories` — RustSec, Cargo tree only.**
 
@@ -187,6 +196,8 @@ pull it is never activated. The advisory can be in RustSec and cargo-deny still 
 silent, so read this as a graph-versus-lockfile difference rather than a
 database-coverage gap. The disagreement is expected rather than a fault in either tool,
 and the two `cargo tree` commands above are what resolve it.
+
+### Release-body assessment
 
 Use this template when no publicly identified runtime vulnerability in `bzr`
 was fixed:
