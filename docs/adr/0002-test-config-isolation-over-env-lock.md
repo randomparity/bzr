@@ -276,7 +276,9 @@ defect rather than a retention.
 
 ### What this cost, recorded rather than repaired
 
-`rcgen` encodes an IP-shaped SAN as `SanType::IpAddress`, so the one connected
+`rcgen` (0.14.10, per `Cargo.lock`; the dev-dependency is the caret range
+`0.14`, not an exact pin) encodes an IP-shaped SAN as
+`SanType::IpAddress`, so the one connected
 test that verifies a server name — the `--server-tls-ca-cert` case — now
 exercises rustls's IP-address branch instead of its DNS-name branch. **No
 connected test covers DNS-name verification any more.** Production connections
@@ -298,13 +300,26 @@ So after this change **no test at any tier exercises rustls DNS-name
 verification.** The three other inline-TLS modes are unaffected only because
 they never checked a name at all.
 
-**The project accepts that gap.** Closing it would mean reaching a server by
-name — this client offers no name-to-address override — which reintroduces the
-resolver this amendment exists to remove. That is the trade, stated on its real
-terms rather than as a cheap one: a total loss of coverage on a branch
-production takes, accepted to keep the test process free of the resolver.
-Recording it is the remedy; a reader who judges otherwise should reopen this
-section rather than quietly adding a hostname test.
+**The gap is accepted inside the cargo test binaries, and deferred outside
+them.** It cannot be closed *there* without reaching a server by name — this
+client offers no name-to-address override — which reintroduces into a process
+holding 20-odd `set_var` writers exactly the resolver this amendment removed.
+That is the trade, on its real terms: a total loss of coverage on a branch
+production takes, accepted to keep that process free of the resolver.
+
+The functional tier is a different matter and the scope note below is why. It
+spawns the real binary per invocation, so a `getaddrinfo` there races nothing,
+and its TLS fixture leaf already carries `subjectAltName=IP:127.0.0.1,DNS:
+localhost` signed by the CA the TLS phase passes to `--server-tls-ca-cert`. The
+only reason that phase does not exercise the DNS branch is that it hardcodes a
+numeric URL. Closing the gap there is **deferred work, not impossible work**,
+and #857 left it undone rather than ruling it out.
+
+An offline sibling of `src/tls/verifier_tests.rs` asserting that a
+`localhost`-SAN certificate verifies for `ServerName::try_from("localhost")` is
+also available, and needs no socket; it proves less about this crate's own code
+than the functional route, which is why the functional route is the one named
+above.
 
 ### Residual risks, replacing the `getaddrinfo` pairing bullet
 
@@ -326,3 +341,25 @@ was:
 Scope note: "no test resolves a hostname" is a claim about the cargo test
 binaries. The shell-driven functional tier under `tests/functional/` runs the
 real binary against containers and is outside it.
+
+One `localhost` URL survives in the cargo tree, and because the prose above is
+the only control, it is named here so the next `rg -n 'localhost' src/ tests/`
+does not read as a contradiction. `src/tls/mod_tests.rs` builds a redirect
+`Location` pointing at `http://localhost:{port}` in its cross-host redirect
+pair. **It resolves nothing:** `same_host_redirect_policy` in `src/tls/mod.rs`
+compares the redirect target's host against the origin host and errors the
+attempt on a mismatch, so reqwest abandons the request before any name is
+looked up. The hostname is a string discriminator, and it is the property the
+test asserts — normalising it to `127.0.0.1` would turn a cross-host
+credential-leak regression test into a same-host one that can no longer fail.
+Leave it alone.
+
+`getaddrinfo` is also the only libc-side env reader **identified** here, not a
+proven complete list — "What `ENV_LOCK` does and does not do" above says such a
+claim is a bet re-validated by reading the dependency tree, and #857 did not
+read it. One unexamined candidate now runs off the lock: `build_ca_cert_config`
+calls `rustls_native_certs::load_native_certs()`, which on macOS reaches
+Security.framework and CoreFoundation — C that may call `getenv` without
+advertising it. No such call was constructed, and none is asserted; it is named
+so the next person adding a `set_var` writer does not read the sentence above
+as a guarantee that no unordered reader exists.

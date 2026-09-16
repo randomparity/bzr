@@ -398,9 +398,11 @@ pub async fn seed_keyring_secret_at(
     // `std::env::temp_dir` -> `std::env::var_os`, which takes the read half of
     // the same lock `set_var` takes the write half of, so it is ordered. The
     // reads `set_var`'s contract does *not* cover are the ones that bypass
-    // `std::env` entirely — libc `getaddrinfo` being the only one this process
-    // ever performed, and since #857 it performs none: every test server is
-    // reached at a numeric address. See the ADR-0002 amendment.
+    // `std::env` entirely — libc `getaddrinfo` being the only such reader this
+    // repository has identified. Since #857 no test resolves a hostname, so
+    // that one no longer runs at all. This is not a proof that the dependency
+    // tree contains no other; ADR-0002's "`set_var` is not sound in general"
+    // still governs anything else in it. See the ADR-0002 amendments.
     unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", secret) };
     let result = crate::commands::config::execute(
         &crate::cli::ConfigAction::SetKeyring {
