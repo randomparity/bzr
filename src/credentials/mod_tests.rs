@@ -1,6 +1,8 @@
 #![expect(clippy::unwrap_used)]
 
-use crate::config::{KeyringRef, ServerConfig};
+#[cfg(feature = "keyring")]
+use crate::config::KeyringRef;
+use crate::config::ServerConfig;
 
 fn server_with_env(var_name: &str) -> ServerConfig {
     ServerConfig {
