@@ -7,7 +7,7 @@ use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::{BugAction, TemplateAction, TemplateFields};
 use crate::error::BzrError;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 fn create_action() -> BugAction {
@@ -38,7 +38,7 @@ fn create_action() -> BugAction {
 
 #[tokio::test]
 async fn bug_create_sends_post() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/bug"))
@@ -51,7 +51,8 @@ async fn bug_create_sends_post() {
 
     let result = crate::commands::bug::execute(
         &create_action(),
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -65,7 +66,7 @@ async fn bug_create_sends_post() {
 
 #[tokio::test]
 async fn bug_create_dry_run_makes_no_write_and_marks_payload() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     // A create POST must never fire under --dry-run. The connect-time TLS
     // probe is a HEAD, so it won't match this mock.
     Mock::given(method("POST"))
@@ -79,7 +80,8 @@ async fn bug_create_dry_run_makes_no_write_and_marks_payload() {
     let result = crate::commands::bug::execute(
         &create_action(),
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_dry_run(true),
+            .with_dry_run(true)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -97,7 +99,7 @@ async fn bug_create_dry_run_makes_no_write_and_marks_payload() {
 
 #[tokio::test]
 async fn bug_create_sends_parity_fields_in_body() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     // Every parity field must appear in the POST body. A request missing any
     // of these matchers won't match the mock, so the call would 404 and fail.
@@ -160,7 +162,8 @@ async fn bug_create_sends_parity_fields_in_body() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -174,7 +177,7 @@ async fn bug_create_sends_parity_fields_in_body() {
 
 #[tokio::test]
 async fn bug_create_rejects_malformed_deadline() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
@@ -207,7 +210,8 @@ async fn bug_create_rejects_malformed_deadline() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -220,7 +224,7 @@ async fn bug_create_rejects_malformed_deadline() {
 
 #[tokio::test]
 async fn bug_create_missing_product_returns_input_validation() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
@@ -248,7 +252,8 @@ async fn bug_create_missing_product_returns_input_validation() {
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io2.writers(),
     )
     .await;
@@ -262,7 +267,7 @@ async fn bug_create_missing_product_returns_input_validation() {
 
 #[tokio::test]
 async fn bug_create_missing_component_returns_input_validation() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
@@ -290,7 +295,8 @@ async fn bug_create_missing_component_returns_input_validation() {
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io3.writers(),
     )
     .await;
@@ -304,7 +310,7 @@ async fn bug_create_missing_component_returns_input_validation() {
 
 #[tokio::test]
 async fn bug_create_with_unknown_template_errors() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
@@ -332,7 +338,8 @@ async fn bug_create_with_unknown_template_errors() {
     let mut __io4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io4.writers(),
     )
     .await;
@@ -346,7 +353,7 @@ async fn bug_create_with_unknown_template_errors() {
 
 #[tokio::test]
 async fn bug_create_with_template_fills_missing_fields() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     // Pre-populate a template with product/component/version so the
     // bug create command can resolve them from the template.
@@ -364,7 +371,8 @@ async fn bug_create_with_template_fills_missing_fields() {
     let mut __io5 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &save,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io5.writers(),
     )
     .await;
@@ -409,7 +417,8 @@ async fn bug_create_with_template_fills_missing_fields() {
     let mut __io6 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io6.writers(),
     )
     .await;
@@ -425,7 +434,7 @@ async fn bug_create_with_template_fills_missing_fields() {
 
 #[tokio::test]
 async fn bug_create_template_applies_create_metadata_defaults() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let save = TemplateAction::Save {
         name: "routing".into(),
@@ -446,7 +455,8 @@ async fn bug_create_template_applies_create_metadata_defaults() {
     let mut save_io = crate::test_helpers::CapturedIo::new();
     crate::commands::template::execute(
         &save,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut save_io.writers(),
     )
     .await
@@ -480,7 +490,8 @@ async fn bug_create_template_applies_create_metadata_defaults() {
     let result = crate::commands::bug::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_dry_run(true),
+            .with_dry_run(true)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -502,7 +513,7 @@ async fn bug_create_template_applies_create_metadata_defaults() {
 
 #[tokio::test]
 async fn bug_create_cli_create_metadata_overrides_template() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let save = TemplateAction::Save {
         name: "routing".into(),
@@ -523,7 +534,8 @@ async fn bug_create_cli_create_metadata_overrides_template() {
     let mut save_io = crate::test_helpers::CapturedIo::new();
     crate::commands::template::execute(
         &save,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut save_io.writers(),
     )
     .await
@@ -569,7 +581,8 @@ async fn bug_create_cli_create_metadata_overrides_template() {
     let result = crate::commands::bug::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_dry_run(true),
+            .with_dry_run(true)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -590,7 +603,7 @@ async fn bug_create_cli_create_metadata_overrides_template() {
 
 #[tokio::test]
 async fn bug_create_reads_description_from_file() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     let dir = std::env::temp_dir();
     let desc_path = dir.join(format!("bzr-create-desc-{}.txt", std::process::id()));
@@ -630,7 +643,8 @@ async fn bug_create_reads_description_from_file() {
     let mut __io7 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io7.writers(),
     )
     .await;
@@ -641,7 +655,7 @@ async fn bug_create_reads_description_from_file() {
 
 #[tokio::test]
 async fn bug_create_description_file_missing_returns_input_validation() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
@@ -669,7 +683,8 @@ async fn bug_create_description_file_missing_returns_input_validation() {
     let mut __io8 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io8.writers(),
     )
     .await;
@@ -683,7 +698,7 @@ async fn bug_create_description_file_missing_returns_input_validation() {
 
 #[tokio::test]
 async fn bug_create_description_file_non_utf8_returns_input_validation() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let dir = std::env::temp_dir();
     let bad_path = dir.join(format!("bzr-create-bad-utf8-{}.bin", std::process::id()));
@@ -715,7 +730,8 @@ async fn bug_create_description_file_non_utf8_returns_input_validation() {
     let mut __io9 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io9.writers(),
     )
     .await;
@@ -730,7 +746,7 @@ async fn bug_create_description_file_non_utf8_returns_input_validation() {
 
 #[tokio::test]
 async fn bug_create_missing_summary_without_editor_flow_is_rejected() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
@@ -758,7 +774,8 @@ async fn bug_create_missing_summary_without_editor_flow_is_rejected() {
     let mut __io10 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io10.writers(),
     )
     .await;
@@ -965,12 +982,19 @@ async fn bug_create_editor_flow_resolves_via_editor_when_stdin_is_tty() {
         return;
     }
 
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
+
+    // ADR-0002 retains ENV_LOCK for tests that mutate process-global
+    // environment state the command under test must observe. Config selection
+    // is on an explicit path, but `run_editor_flow` reads `EDITOR` through
+    // `std::env::var` (src/commands/runtime/interaction/editor.rs), so the
+    // mutation below is still process-global.
+    let _lock = crate::ENV_LOCK.lock().await;
 
     let script = install_fake_editor();
     let prev = std::env::var("EDITOR").ok();
-    // SAFETY: setup_test_env holds bzr::ENV_LOCK for the duration of
-    // this test, serializing env access across all tests using it.
+    // SAFETY: this test holds ENV_LOCK (acquired above) for its whole body,
+    // serializing this mutation against every other ENV_LOCK holder.
     unsafe { std::env::set_var("EDITOR", &script) };
 
     Mock::given(method("POST"))
@@ -986,15 +1010,15 @@ async fn bug_create_editor_flow_resolves_via_editor_when_stdin_is_tty() {
 
     let result = crate::commands::bug::execute(
         &editor_action_no_summary_no_description(),
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io11.writers(),
     )
     .await;
 
     let _output = __io11.out_str().to_string();
 
-    // SAFETY: setup_test_env holds bzr::ENV_LOCK for the duration of
-    // this test, serializing env access across all tests using it.
+    // SAFETY: still under the ENV_LOCK guard acquired at the top of this test.
     unsafe {
         if let Some(p) = prev {
             std::env::set_var("EDITOR", p);
@@ -1019,12 +1043,19 @@ async fn bug_create_editor_branch_unreachable_when_stdin_piped() {
         return;
     }
 
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
+
+    // ADR-0002 retains ENV_LOCK for tests that mutate process-global
+    // environment state the command under test must observe. Config selection
+    // is on an explicit path, but `run_editor_flow` reads `EDITOR` through
+    // `std::env::var` (src/commands/runtime/interaction/editor.rs), so the
+    // mutation below is still process-global.
+    let _lock = crate::ENV_LOCK.lock().await;
 
     let script = install_fake_editor();
     let prev = std::env::var("EDITOR").ok();
-    // SAFETY: setup_test_env holds bzr::ENV_LOCK for the duration of
-    // this test, serializing env access across all tests using it.
+    // SAFETY: this test holds ENV_LOCK (acquired above) for its whole body,
+    // serializing this mutation against every other ENV_LOCK holder.
     unsafe { std::env::set_var("EDITOR", &script) };
 
     // No HTTP call expected — empty piped stdin must short-circuit
@@ -1040,15 +1071,15 @@ async fn bug_create_editor_branch_unreachable_when_stdin_piped() {
 
     let result = crate::commands::bug::execute(
         &editor_action_no_summary_no_description(),
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io12.writers(),
     )
     .await;
 
     let _output = __io12.out_str().to_string();
 
-    // SAFETY: setup_test_env holds bzr::ENV_LOCK for the duration of
-    // this test, serializing env access across all tests using it.
+    // SAFETY: still under the ENV_LOCK guard acquired at the top of this test.
     unsafe {
         if let Some(p) = prev {
             std::env::set_var("EDITOR", p);
@@ -1067,7 +1098,7 @@ async fn bug_create_editor_branch_unreachable_when_stdin_piped() {
 
 #[tokio::test]
 async fn bug_create_template_description_does_not_fall_back_outside_editor_flow() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     // Pre-populate a template that has a description body.
     let save = TemplateAction::Save {
@@ -1082,7 +1113,8 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
     let mut __io13 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         &save,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io13.writers(),
     )
     .await;
@@ -1119,7 +1151,8 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
     let mut __io14 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io14.writers(),
     )
     .await;
@@ -1220,7 +1253,7 @@ fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
 
 #[tokio::test]
 async fn from_json_explicit_empty_groups_sends_empty_groups() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("POST"))
         .and(path("/rest/bug"))
         .and(body_string_contains("\"groups\":[]"))
@@ -1234,7 +1267,8 @@ async fn from_json_explicit_empty_groups_sends_empty_groups() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -1247,7 +1281,7 @@ async fn from_json_explicit_empty_groups_sends_empty_groups() {
 
 #[tokio::test]
 async fn from_json_single_object_files_a_bug() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("POST"))
         .and(path("/rest/bug"))
         .and(body_string_contains("\"product\":\"P\""))
@@ -1262,7 +1296,8 @@ async fn from_json_single_object_files_a_bug() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -1278,7 +1313,7 @@ async fn from_json_single_object_files_a_bug() {
 
 #[tokio::test]
 async fn from_json_array_batch_creates_one_per_element() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("POST"))
         .and(path("/rest/bug"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 11})))
@@ -1292,7 +1327,8 @@ async fn from_json_array_batch_creates_one_per_element() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -1306,7 +1342,7 @@ async fn from_json_array_batch_creates_one_per_element() {
 
 #[tokio::test]
 async fn from_json_array_partial_failure_exits_11() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     // First create succeeds (id 11); the component endpoint for the second is a
     // 400 with a Bugzilla error body, so it fails.
     Mock::given(method("POST"))
@@ -1330,7 +1366,8 @@ async fn from_json_array_partial_failure_exits_11() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -1354,7 +1391,7 @@ async fn from_json_array_partial_failure_exits_11() {
 
 #[tokio::test]
 async fn from_json_cli_flag_overrides_json_field() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     // The JSON says product "FromJson"; --product "FromCli" must win.
     Mock::given(method("POST"))
         .and(path("/rest/bug"))
@@ -1372,7 +1409,8 @@ async fn from_json_cli_flag_overrides_json_field() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -1384,13 +1422,14 @@ async fn from_json_cli_flag_overrides_json_field() {
 
 #[tokio::test]
 async fn from_json_rejects_unknown_field() {
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_mock, tmp, config_path) = setup_isolated_env().await;
     let json = r#"{"product":"P","component":"C","summary":"S","bogus":1}"#;
     let action = from_json_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await
@@ -1406,14 +1445,15 @@ async fn from_json_rejects_unknown_field() {
 
 #[tokio::test]
 async fn from_json_missing_required_field_errors() {
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_mock, tmp, config_path) = setup_isolated_env().await;
     // No summary in JSON and none on the CLI.
     let json = r#"{"product":"P","component":"C"}"#;
     let action = from_json_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await
@@ -1428,7 +1468,7 @@ async fn from_json_missing_required_field_errors() {
 
 #[tokio::test]
 async fn from_json_single_element_array_returns_batch_shape() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("POST"))
         .and(path("/rest/bug"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 8})))
@@ -1443,7 +1483,8 @@ async fn from_json_single_element_array_returns_batch_shape() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -1460,7 +1501,7 @@ async fn from_json_single_element_array_returns_batch_shape() {
 
 #[tokio::test]
 async fn from_json_batch_dry_run_emits_single_object_and_no_write() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     // No POST must fire under --dry-run.
     Mock::given(method("POST"))
         .and(path("/rest/bug"))
@@ -1476,7 +1517,8 @@ async fn from_json_batch_dry_run_emits_single_object_and_no_write() {
     let result = crate::commands::bug::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_dry_run(true),
+            .with_dry_run(true)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -1532,11 +1574,18 @@ async fn run_editor_flow_returns_parsed_editor_output() {
     // buffer back into (summary, description). The TTY gate that decides
     // *whether* to enter the editor lives a layer up in `handle`, so this
     // function is exercisable directly with a fake editor — no terminal needed.
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, _config_path) = setup_isolated_env().await;
+
+    // ADR-0002 retains ENV_LOCK for tests that mutate process-global
+    // environment state the command under test must observe: `run_editor_flow`
+    // reads `EDITOR` through `std::env::var`
+    // (src/commands/runtime/interaction/editor.rs).
+    let _lock = crate::ENV_LOCK.lock().await;
+
     let script = install_fake_editor();
     let prev = std::env::var("EDITOR").ok();
-    // SAFETY: setup_test_env holds bzr::ENV_LOCK for the test duration,
-    // serializing env access across all tests that use it.
+    // SAFETY: this test holds ENV_LOCK (acquired above) for its whole body,
+    // serializing this mutation against every other ENV_LOCK holder.
     unsafe { std::env::set_var("EDITOR", &script) };
 
     let merged = super::MergedFields {
@@ -1600,7 +1649,7 @@ async fn from_json_cli_description_overrides_json_description() {
     // explicit_description resolves --description for the JSON path; a supplied
     // value must overwrite the JSON `description`. Mutants that always return
     // None / a constant would let the JSON value through (or inject garbage).
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("POST"))
         .and(path("/rest/bug"))
         .and(body_string_contains("\"description\":\"cli-desc\""))
@@ -1617,7 +1666,8 @@ async fn from_json_cli_description_overrides_json_description() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -1632,7 +1682,7 @@ async fn from_json_preserves_blocks_and_depends_on_without_cli_override() {
     // overlay_cli keeps the JSON `blocks`/`depends_on` when no --blocks/
     // --depends-on flag is supplied (the `!is_empty()` guards). The `delete !`
     // mutants invert that, clobbering the JSON arrays with the empty CLI vecs.
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("POST"))
         .and(path("/rest/bug"))
         .and(body_string_contains("\"blocks\":[10,20]"))
@@ -1648,7 +1698,8 @@ async fn from_json_preserves_blocks_and_depends_on_without_cli_override() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -1663,7 +1714,7 @@ async fn from_json_batch_table_lists_created_ids() {
     // The table-mode batch summary prints "Created bugs: …" only when at least
     // one bug was created (`!created.is_empty()`). The `delete !` mutant inverts
     // the guard, suppressing the line on a successful batch.
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("POST"))
         .and(path("/rest/bug"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 11})))
@@ -1677,7 +1728,8 @@ async fn from_json_batch_table_lists_created_ids() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -1774,7 +1826,7 @@ fn build_compound_plan_undescribed_attachment_defaults_summary_to_filename() {
 
 #[tokio::test]
 async fn compound_attachment_500_exits_11_with_id_on_stderr() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     let att = tmp_attachment(".log", b"trace data");
     let file_name = att
         .file_name()
@@ -1795,7 +1847,8 @@ async fn compound_attachment_500_exits_11_with_id_on_stderr() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await

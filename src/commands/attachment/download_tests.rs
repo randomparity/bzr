@@ -5,7 +5,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::AttachmentAction;
-use crate::test_helpers::{make_attachment, setup_empty_config_env, setup_test_env};
+use crate::test_helpers::{make_attachment, setup_empty_isolated_env, setup_isolated_env};
 use crate::types::OutputFormat;
 
 fn b64(bytes: &[u8]) -> String {
@@ -106,7 +106,7 @@ fn xmlrpc_bug_attachments_response(bug_id: u64, entries: &str) -> String {
 #[tokio::test]
 async fn attachment_download_api_error_propagates() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/attachment/404"))
@@ -127,7 +127,8 @@ async fn attachment_download_api_error_propagates() {
     };
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -184,13 +185,14 @@ async fn attachment_download_validation_rejects_out_with_multiple_ids() {
 
 #[tokio::test]
 async fn write_one_attachment_streams_data_with_att_id_prefix() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
         &crate::commands::runtime::invocation::CommandContext::new(
             None,
             crate::types::OutputFormat::Json,
             None,
-        ),
+        )
+        .with_config_path_override(Some(config_path.clone())),
     )
     .await
     .unwrap();
@@ -222,7 +224,7 @@ async fn write_one_attachment_streams_data_with_att_id_prefix() {
 
 #[tokio::test]
 async fn write_one_attachment_fetches_payload_from_metadata() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/attachment/9876"))
@@ -248,7 +250,8 @@ async fn write_one_attachment_fetches_payload_from_metadata() {
             None,
             crate::types::OutputFormat::Json,
             None,
-        ),
+        )
+        .with_config_path_override(Some(config_path.clone())),
     )
     .await
     .unwrap();
@@ -268,13 +271,14 @@ async fn write_one_attachment_fetches_payload_from_metadata() {
 
 #[tokio::test]
 async fn write_one_attachment_overwrites_existing_file() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
         &crate::commands::runtime::invocation::CommandContext::new(
             None,
             crate::types::OutputFormat::Json,
             None,
-        ),
+        )
+        .with_config_path_override(Some(config_path.clone())),
     )
     .await
     .unwrap();
@@ -299,13 +303,14 @@ async fn write_one_attachment_overwrites_existing_file() {
 
 #[tokio::test]
 async fn write_one_attachment_create_dir_error_names_destination() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
         &crate::commands::runtime::invocation::CommandContext::new(
             None,
             crate::types::OutputFormat::Json,
             None,
-        ),
+        )
+        .with_config_path_override(Some(config_path.clone())),
     )
     .await
     .unwrap();
@@ -336,7 +341,7 @@ async fn write_one_attachment_create_dir_error_names_destination() {
 
 #[tokio::test]
 async fn attachment_download_batch_per_bug_writes_per_bug_subdir() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     mount_bug_attachments(
         &mock,
@@ -361,7 +366,8 @@ async fn attachment_download_batch_per_bug_writes_per_bug_subdir() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a4.writers(),
     )
     .await;
@@ -384,7 +390,7 @@ async fn attachment_download_batch_per_bug_writes_per_bug_subdir() {
 
 #[tokio::test]
 async fn attachment_download_batch_hybrid_streams_xmlrpc_without_rest_fallback() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let entries = format!(
         "{}{}",
         xmlrpc_one_att(9876, 12345, "patch.diff", b"alpha"),
@@ -452,7 +458,8 @@ async fn attachment_download_batch_hybrid_streams_xmlrpc_without_rest_fallback()
             None,
             OutputFormat::Json,
             Some(crate::types::ApiMode::Hybrid),
-        ),
+        )
+        .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -470,7 +477,7 @@ async fn attachment_download_batch_hybrid_streams_xmlrpc_without_rest_fallback()
 
 #[tokio::test]
 async fn attachment_download_batch_collision_filenames_resolved_by_att_id_prefix() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     mount_bug_attachments(
         &mock,
@@ -495,7 +502,8 @@ async fn attachment_download_batch_collision_filenames_resolved_by_att_id_prefix
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -511,7 +519,7 @@ async fn attachment_download_batch_collision_filenames_resolved_by_att_id_prefix
 
 #[tokio::test]
 async fn attachment_download_batch_mixed_bug_and_positional_ids() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     mount_bug_attachments(
         &mock,
@@ -543,7 +551,8 @@ async fn attachment_download_batch_mixed_bug_and_positional_ids() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a5.writers(),
     )
     .await;
@@ -563,7 +572,7 @@ async fn attachment_download_batch_mixed_bug_and_positional_ids() {
 
 #[tokio::test]
 async fn attachment_download_batch_empty_bug_zero_files_success() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     mount_bug_attachments(&mock, 12345, &serde_json::json!([])).await;
 
@@ -580,7 +589,8 @@ async fn attachment_download_batch_empty_bug_zero_files_success() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a6.writers(),
     )
     .await;
@@ -595,7 +605,7 @@ async fn attachment_download_batch_empty_bug_zero_files_success() {
 
 #[tokio::test]
 async fn attachment_download_batch_legacy_single_id_unchanged() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/attachment/9876"))
@@ -620,7 +630,8 @@ async fn attachment_download_batch_legacy_single_id_unchanged() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a7.writers(),
     )
     .await;
@@ -639,7 +650,7 @@ async fn attachment_download_batch_legacy_single_id_unchanged() {
 
 #[tokio::test]
 async fn attachment_download_single_out_dash_streams_bytes_without_result() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/attachment/9876"))
@@ -668,7 +679,8 @@ async fn attachment_download_single_out_dash_streams_bytes_without_result() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -693,7 +705,7 @@ async fn attachment_download_single_out_dash_streams_bytes_without_result() {
 
 #[tokio::test]
 async fn attachment_download_batch_bug_not_found_partial_failure() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     mount_bug_attachments(
         &mock,
@@ -725,7 +737,8 @@ async fn attachment_download_batch_bug_not_found_partial_failure() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a8.writers(),
     )
     .await;
@@ -748,7 +761,7 @@ async fn attachment_download_batch_bug_not_found_partial_failure() {
 
 #[tokio::test]
 async fn attachment_download_batch_creates_out_dir_before_connect() {
-    let (_lock, tmp) = setup_empty_config_env().await;
+    let (tmp, config_path) = setup_empty_isolated_env();
     let out_dir = tmp.path().join("downloaded");
     let action = AttachmentAction::Download {
         ids: vec![9876],
@@ -761,7 +774,8 @@ async fn attachment_download_batch_creates_out_dir_before_connect() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -779,7 +793,7 @@ async fn attachment_download_batch_creates_out_dir_before_connect() {
 #[tokio::test]
 async fn attachment_download_batch_all_targets_fail_still_exit_11() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/99999/attachment"))
@@ -801,7 +815,8 @@ async fn attachment_download_batch_all_targets_fail_still_exit_11() {
     };
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -813,7 +828,7 @@ async fn attachment_download_batch_all_targets_fail_still_exit_11() {
 
 #[tokio::test]
 async fn attachment_download_batch_obsolete_attachments_included() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     let mut obsolete = one_att(9876, 12345, "old.patch", b"obsolete content");
     obsolete["is_obsolete"] = serde_json::json!(true);
@@ -832,7 +847,8 @@ async fn attachment_download_batch_obsolete_attachments_included() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io2.writers(),
     )
     .await;
@@ -844,7 +860,7 @@ async fn attachment_download_batch_obsolete_attachments_included() {
 
 #[tokio::test]
 async fn download_bug_ignore_obsolete_skips_obsolete_attachments() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     let mut obsolete = one_att(9876, 12345, "old.patch", b"obsolete content");
     obsolete["is_obsolete"] = serde_json::json!(true);
@@ -864,7 +880,8 @@ async fn download_bug_ignore_obsolete_skips_obsolete_attachments() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -883,7 +900,7 @@ async fn download_bug_ignore_obsolete_skips_obsolete_attachments() {
 
 #[tokio::test]
 async fn download_ignore_obsolete_leaves_positional_ids_alone() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     mount_bug_attachments(
         &mock,
@@ -915,7 +932,8 @@ async fn download_ignore_obsolete_leaves_positional_ids_alone() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -930,7 +948,7 @@ async fn download_ignore_obsolete_leaves_positional_ids_alone() {
 
 #[tokio::test]
 async fn download_bug_ignore_obsolete_keeps_attachment_missing_is_obsolete() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     let mut missing_flag = one_att(9876, 12345, "no-flag.patch", b"no obsolete flag");
     missing_flag.as_object_mut().unwrap().remove("is_obsolete");
@@ -949,7 +967,8 @@ async fn download_bug_ignore_obsolete_keeps_attachment_missing_is_obsolete() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -963,7 +982,7 @@ async fn download_bug_ignore_obsolete_keeps_attachment_missing_is_obsolete() {
 
 #[tokio::test]
 async fn download_bug_all_obsolete_succeeds_with_no_files() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     let mut obsolete = one_att(9876, 12345, "old.patch", b"obsolete content");
     obsolete["is_obsolete"] = serde_json::json!(true);
@@ -982,7 +1001,8 @@ async fn download_bug_all_obsolete_succeeds_with_no_files() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -1009,7 +1029,7 @@ async fn download_bug_all_obsolete_succeeds_with_no_files() {
 
 #[tokio::test]
 async fn attachment_download_batch_data_missing_falls_back_via_get() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     // Listing returns the attachment metadata WITHOUT data.
     let mut att = one_att(9876, 12345, "patch.diff", b"x");
@@ -1041,7 +1061,8 @@ async fn attachment_download_batch_data_missing_falls_back_via_get() {
 
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io3.writers(),
     )
     .await;
@@ -1056,7 +1077,7 @@ async fn attachment_download_batch_data_missing_falls_back_via_get() {
 #[tokio::test]
 async fn attachment_download_batch_top_level_out_dir_unwritable_fails_fast() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     // /dev/null/attachments — create_dir_all on a path under /dev/null
     // (which is a character device, not a directory) → ENOTDIR.
@@ -1069,7 +1090,8 @@ async fn attachment_download_batch_top_level_out_dir_unwritable_fails_fast() {
     };
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -1081,13 +1103,14 @@ async fn attachment_download_batch_top_level_out_dir_unwritable_fails_fast() {
 
 #[tokio::test]
 async fn write_one_attachment_invalid_base64_returns_data_integrity() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
         &crate::commands::runtime::invocation::CommandContext::new(
             None,
             crate::types::OutputFormat::Json,
             None,
-        ),
+        )
+        .with_config_path_override(Some(config_path.clone())),
     )
     .await
     .unwrap();
@@ -1120,13 +1143,14 @@ async fn write_one_attachment_invalid_base64_returns_data_integrity() {
 
 #[tokio::test]
 async fn write_one_attachment_without_bug_id_returns_data_integrity() {
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_mock, tmp, config_path) = setup_isolated_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
         &crate::commands::runtime::invocation::CommandContext::new(
             None,
             crate::types::OutputFormat::Json,
             None,
-        ),
+        )
+        .with_config_path_override(Some(config_path.clone())),
     )
     .await
     .unwrap();
@@ -1151,13 +1175,14 @@ async fn write_one_attachment_without_bug_id_returns_data_integrity() {
 
 #[tokio::test]
 async fn write_one_attachment_without_file_name_returns_data_integrity() {
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_mock, tmp, config_path) = setup_isolated_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
         &crate::commands::runtime::invocation::CommandContext::new(
             None,
             crate::types::OutputFormat::Json,
             None,
-        ),
+        )
+        .with_config_path_override(Some(config_path.clone())),
     )
     .await
     .unwrap();
@@ -1212,13 +1237,14 @@ fn single_download_dest_sanitizes_server_filename_when_no_out() {
 
 #[tokio::test]
 async fn write_one_attachment_sanitizes_server_filename_with_separators() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let client = crate::commands::runtime::shared::connect_and_configure(
         &crate::commands::runtime::invocation::CommandContext::new(
             None,
             crate::types::OutputFormat::Json,
             None,
-        ),
+        )
+        .with_config_path_override(Some(config_path.clone())),
     )
     .await
     .unwrap();
@@ -1242,7 +1268,7 @@ async fn write_one_attachment_sanitizes_server_filename_with_separators() {
 #[cfg(unix)]
 #[tokio::test]
 async fn attachment_download_single_table_escapes_destination_in_message() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/attachment/9876"))
@@ -1270,7 +1296,8 @@ async fn attachment_download_single_table_escapes_destination_in_message() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -1291,7 +1318,7 @@ async fn attachment_download_single_table_escapes_destination_in_message() {
 #[cfg(unix)]
 #[tokio::test]
 async fn attachment_download_single_json_keeps_raw_destination() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/attachment/9876"))
@@ -1317,7 +1344,8 @@ async fn attachment_download_single_json_keeps_raw_destination() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -1333,7 +1361,7 @@ async fn attachment_download_single_json_keeps_raw_destination() {
 
 #[tokio::test]
 async fn attachment_download_truncated_response_preserves_file_and_stdout() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/attachment/9876"))
         .respond_with(ResponseTemplate::new(200).set_body_string(
@@ -1358,7 +1386,8 @@ async fn attachment_download_truncated_response_preserves_file_and_stdout() {
                 None,
                 OutputFormat::Json,
                 None,
-            ),
+            )
+            .with_config_path_override(Some(config_path.clone())),
             &mut io.writers(),
         )
         .await;

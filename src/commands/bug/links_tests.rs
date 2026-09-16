@@ -7,7 +7,7 @@ use wiremock::{Mock, ResponseTemplate};
 use crate::cli::LinksArgs;
 use crate::commands::runtime::invocation::CommandContext;
 use crate::error::BzrError;
-use crate::test_helpers::{setup_test_env, CapturedIo};
+use crate::test_helpers::{setup_isolated_env, CapturedIo};
 use crate::types::bug::LinkRelation;
 use crate::types::OutputFormat;
 
@@ -43,11 +43,13 @@ async fn mount_root(mock: &wiremock::MockServer, id: u64, node: &Value) {
 async fn run(
     action: &crate::cli::BugAction,
     format: OutputFormat,
+    config_path: &std::path::Path,
 ) -> (String, String, crate::error::Result<()>) {
     let mut io = CapturedIo::new();
     let result = crate::commands::bug::execute(
         action,
-        &CommandContext::new(None, format, None),
+        &CommandContext::new(None, format, None)
+            .with_config_path_override(Some(config_path.to_path_buf())),
         &mut io.writers(),
     )
     .await;
@@ -56,7 +58,7 @@ async fn run(
 
 #[tokio::test]
 async fn links_one_hop_emits_single_depth1_record() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_root(
         &mock,
         1,
@@ -72,7 +74,12 @@ async fn links_one_hop_emits_single_depth1_record() {
         .mount(&mock)
         .await;
 
-    let (out, _err, result) = run(&links_action(1, false, 1, None), OutputFormat::Ndjson).await;
+    let (out, _err, result) = run(
+        &links_action(1, false, 1, None),
+        OutputFormat::Ndjson,
+        &config_path,
+    )
+    .await;
     assert!(result.is_ok(), "{:?}", result.err());
     let lines: Vec<&str> = out.lines().collect();
     assert_eq!(lines.len(), 1);
@@ -85,7 +92,7 @@ async fn links_one_hop_emits_single_depth1_record() {
 
 #[tokio::test]
 async fn links_recursive_cycle_visits_each_once_with_depth() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     // 1 -> 2 -> 3 -> 1 (cycle). Root 1 is read directly; 2 and 3 are reached
     // through the batched search read, and 3's edge back to 1 is what the
     // visited set has to absorb.
@@ -106,7 +113,12 @@ async fn links_recursive_cycle_visits_each_once_with_depth() {
             .await;
     }
 
-    let (out, _err, result) = run(&links_action(1, true, 5, None), OutputFormat::Ndjson).await;
+    let (out, _err, result) = run(
+        &links_action(1, true, 5, None),
+        OutputFormat::Ndjson,
+        &config_path,
+    )
+    .await;
     assert!(result.is_ok(), "{:?}", result.err());
     let recs: Vec<Value> = out
         .lines()
@@ -125,7 +137,7 @@ async fn links_recursive_cycle_visits_each_once_with_depth() {
 
 #[tokio::test]
 async fn links_root_not_found_is_notfound_exit_2() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     // ADR 0015's reserved case: the *direct* path answers 200 with an empty
     // result and no error payload, which is the one shape where "no such bug"
     // is what the server actually said.
@@ -135,7 +147,12 @@ async fn links_root_not_found_is_notfound_exit_2() {
         .mount(&mock)
         .await;
 
-    let (_out, _err, result) = run(&links_action(99, false, 1, None), OutputFormat::Ndjson).await;
+    let (_out, _err, result) = run(
+        &links_action(99, false, 1, None),
+        OutputFormat::Ndjson,
+        &config_path,
+    )
+    .await;
     let err = result.unwrap_err();
     assert!(matches!(err, BzrError::NotFound { .. }), "{err:?}");
     assert_eq!(err.exit_code(), 2);
@@ -151,7 +168,7 @@ async fn links_root_not_found_is_notfound_exit_2() {
 // `links_root_not_found_is_notfound_exit_2` above still pins.
 #[tokio::test]
 async fn links_root_permission_denied_is_api_error_not_notfound() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/99"))
         .respond_with(ResponseTemplate::new(401).set_body_json(serde_json::json!({
@@ -171,7 +188,12 @@ async fn links_root_permission_denied_is_api_error_not_notfound() {
         .mount(&mock)
         .await;
 
-    let (_out, _err, result) = run(&links_action(99, false, 1, None), OutputFormat::Ndjson).await;
+    let (_out, _err, result) = run(
+        &links_action(99, false, 1, None),
+        OutputFormat::Ndjson,
+        &config_path,
+    )
+    .await;
     let err = result.unwrap_err();
     assert!(
         matches!(err, BzrError::Api { code: 102, .. }),
@@ -184,7 +206,7 @@ async fn links_root_permission_denied_is_api_error_not_notfound() {
 // endpoint filters out is skipped and the walk still succeeds.
 #[tokio::test]
 async fn links_related_id_omitted_by_search_is_skipped_not_fatal() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_root(
         &mock,
         1,
@@ -202,7 +224,12 @@ async fn links_related_id_omitted_by_search_is_skipped_not_fatal() {
         .mount(&mock)
         .await;
 
-    let (out, _err, result) = run(&links_action(1, false, 1, None), OutputFormat::Ndjson).await;
+    let (out, _err, result) = run(
+        &links_action(1, false, 1, None),
+        OutputFormat::Ndjson,
+        &config_path,
+    )
+    .await;
     assert!(result.is_ok(), "{:?}", result.err());
     let lines: Vec<&str> = out.lines().collect();
     assert_eq!(
@@ -216,7 +243,7 @@ async fn links_related_id_omitted_by_search_is_skipped_not_fatal() {
 
 #[tokio::test]
 async fn links_discovery_order_independent_of_response_array_order() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
         .respond_with(node_body(&serde_json::json!([
@@ -236,7 +263,12 @@ async fn links_discovery_order_independent_of_response_array_order() {
         .mount(&mock)
         .await;
 
-    let (out, _err, result) = run(&links_action(1, false, 1, None), OutputFormat::Ndjson).await;
+    let (out, _err, result) = run(
+        &links_action(1, false, 1, None),
+        OutputFormat::Ndjson,
+        &config_path,
+    )
+    .await;
     assert!(result.is_ok(), "{:?}", result.err());
     let recs: Vec<Value> = out
         .lines()
@@ -252,7 +284,7 @@ async fn links_discovery_order_independent_of_response_array_order() {
 
 #[tokio::test]
 async fn links_relation_filter_restricts_output() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_root(
         &mock,
         1,
@@ -272,7 +304,7 @@ async fn links_relation_filter_restricts_output() {
         .await;
 
     let action = links_action(1, false, 1, Some(LinkRelation::DependsOn));
-    let (out, _err, result) = run(&action, OutputFormat::Ndjson).await;
+    let (out, _err, result) = run(&action, OutputFormat::Ndjson, &config_path).await;
     assert!(result.is_ok(), "{:?}", result.err());
     let recs: Vec<Value> = out
         .lines()
@@ -285,7 +317,7 @@ async fn links_relation_filter_restricts_output() {
 
 #[tokio::test]
 async fn links_no_relations_table_prints_message() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_root(
         &mock,
         5,
@@ -293,7 +325,12 @@ async fn links_no_relations_table_prints_message() {
     )
     .await;
 
-    let (out, _err, result) = run(&links_action(5, false, 1, None), OutputFormat::Table).await;
+    let (out, _err, result) = run(
+        &links_action(5, false, 1, None),
+        OutputFormat::Table,
+        &config_path,
+    )
+    .await;
     assert!(result.is_ok(), "{:?}", result.err());
     assert!(out.contains("No related bugs for #5."), "{out}");
 }

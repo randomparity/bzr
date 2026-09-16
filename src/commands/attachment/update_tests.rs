@@ -4,12 +4,12 @@ use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::{AttachmentAction, AttachmentUpdateArgs};
-use crate::test_helpers::{setup_empty_config_env, setup_test_env};
+use crate::test_helpers::{setup_empty_isolated_env, setup_isolated_env};
 use crate::types::OutputFormat;
 
 #[tokio::test]
 async fn attachment_update_succeeds() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/bug/attachment/99"))
@@ -35,7 +35,8 @@ async fn attachment_update_succeeds() {
     let mut __io_a3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a3.writers(),
     )
     .await;
@@ -48,7 +49,7 @@ async fn attachment_update_succeeds() {
 
 #[tokio::test]
 async fn attachment_update_no_obsolete_sends_false() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     // `--no-obsolete` resolves to is_obsolete: Some(false), which must reach
     // the body as an explicit `false` (not omitted).
     Mock::given(method("PUT"))
@@ -77,7 +78,8 @@ async fn attachment_update_no_obsolete_sends_false() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -86,7 +88,7 @@ async fn attachment_update_no_obsolete_sends_false() {
 
 #[tokio::test]
 async fn attachment_update_unset_bools_are_omitted() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     // With no bool flags the body must carry none of the tri-state keys, so the
     // server leaves those properties unchanged.
     Mock::given(method("PUT"))
@@ -115,7 +117,8 @@ async fn attachment_update_unset_bools_are_omitted() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -130,7 +133,7 @@ async fn attachment_update_unset_bools_are_omitted() {
 
 #[tokio::test]
 async fn attachment_update_without_changes_is_rejected_before_put() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/bug/attachment/8"))
@@ -155,7 +158,8 @@ async fn attachment_update_without_changes_is_rejected_before_put() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -175,7 +179,7 @@ async fn attachment_update_without_changes_is_rejected_before_put() {
 
 #[tokio::test]
 async fn attachment_update_invalid_flag_fails_before_connect() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     let action = AttachmentAction::Update(AttachmentUpdateArgs {
         id: 8,
         summary: Some("new summary".into()),
@@ -193,7 +197,8 @@ async fn attachment_update_invalid_flag_fails_before_connect() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await

@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::BugAction;
-use crate::test_helpers::{setup_test_env, HasBooleanChartTriples};
+use crate::test_helpers::{setup_isolated_env, HasBooleanChartTriples};
 use crate::types::OutputFormat;
 
 fn empty_list_action() -> BugAction {
@@ -16,7 +16,7 @@ fn empty_list_action() -> BugAction {
 
 #[tokio::test]
 async fn bug_list_returns_bugs() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -42,7 +42,8 @@ async fn bug_list_returns_bugs() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -60,7 +61,7 @@ async fn bug_list_passes_every_field_through_to_search_params() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
     // Every CLI field on `bug list` must round-trip into the search
     // query string.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -127,7 +128,8 @@ async fn bug_list_passes_every_field_through_to_search_params() {
     });
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __cap_io.writers(),
     )
     .await;
@@ -143,7 +145,7 @@ async fn bug_list_summary_only_sends_substring_filter() {
     // `--summary` alone must be passed verbatim as the REST `summary`
     // query parameter and must not trigger an XML-RPC fallback even
     // when the result is empty (issue #152).
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -167,7 +169,8 @@ async fn bug_list_summary_only_sends_substring_filter() {
     });
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __cap_io.writers(),
     )
     .await;
@@ -177,7 +180,7 @@ async fn bug_list_summary_only_sends_substring_filter() {
 #[tokio::test]
 async fn bug_list_http_500_returns_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -188,7 +191,8 @@ async fn bug_list_http_500_returns_error() {
     let action = empty_list_action();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __cap_io.writers(),
     )
     .await;
@@ -203,7 +207,7 @@ async fn bug_list_http_500_returns_error() {
 #[tokio::test]
 async fn bug_list_malformed_json_returns_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -214,7 +218,8 @@ async fn bug_list_malformed_json_returns_error() {
     let action = empty_list_action();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __cap_io.writers(),
     )
     .await;
@@ -224,7 +229,7 @@ async fn bug_list_malformed_json_returns_error() {
 #[tokio::test]
 async fn bug_list_rejects_malformed_created_since_with_exit_code_7() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let mut action = empty_list_action();
     if let BugAction::List(crate::cli::ListArgs { created_since, .. }) = &mut action {
@@ -233,7 +238,8 @@ async fn bug_list_rejects_malformed_created_since_with_exit_code_7() {
 
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __cap_io.writers(),
     )
     .await;
@@ -257,7 +263,7 @@ async fn bug_list_rejects_malformed_created_since_with_exit_code_7() {
 #[tokio::test]
 async fn bug_list_rejects_malformed_changed_since_with_exit_code_7() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let mut action = empty_list_action();
     if let BugAction::List(crate::cli::ListArgs { changed_since, .. }) = &mut action {
@@ -266,7 +272,8 @@ async fn bug_list_rejects_malformed_changed_since_with_exit_code_7() {
 
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __cap_io.writers(),
     )
     .await;
@@ -281,7 +288,7 @@ async fn bug_list_mixed_positive_notequals_notsubstring() {
     // End-to-end coverage: --product (positive), --resolution '!FIXED'
     // (notequals), --whiteboard '!wip' (notsubstring) all reach the
     // wire with the right operator.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -308,7 +315,8 @@ async fn bug_list_mixed_positive_notequals_notsubstring() {
     }
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __cap_io.writers(),
     )
     .await;
@@ -321,7 +329,7 @@ async fn bug_list_table_all_unknown_fields_exits_7_before_network() {
     // (exit 7) before any network I/O at all (F2). The validation is
     // hoisted ahead of `connect_and_configure`, so not even the auth/TLS
     // probe round-trip fires — the mock sees zero requests.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     let mut action = empty_list_action();
     let BugAction::List(crate::cli::ListArgs { field_args, .. }) = &mut action else {
@@ -332,7 +340,8 @@ async fn bug_list_table_all_unknown_fields_exits_7_before_network() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -349,7 +358,7 @@ async fn bug_list_json_fields_trims_output() {
     // --json with a field selection trims the output object to the selected
     // fields (gh-style): `--fields summary` yields `{"summary": ...}` only,
     // with id and every other unselected key dropped.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -367,7 +376,8 @@ async fn bug_list_json_fields_trims_output() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -388,7 +398,7 @@ async fn bug_list_json_fields_trims_output() {
 
 #[tokio::test]
 async fn bug_list_json_custom_field_is_requested_and_emitted() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
         .and(query_param("include_fields", "id,cf_release"))
@@ -408,7 +418,8 @@ async fn bug_list_json_custom_field_is_requested_and_emitted() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -425,7 +436,7 @@ async fn bug_list_json_custom_field_is_requested_and_emitted() {
 
 #[tokio::test]
 async fn bug_list_json_custom_only_field_does_not_emit_forced_id() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
         .and(query_param("include_fields", "id,cf_release"))
@@ -445,7 +456,8 @@ async fn bug_list_json_custom_only_field_does_not_emit_forced_id() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -462,7 +474,7 @@ async fn bug_list_json_custom_only_field_does_not_emit_forced_id() {
 
 #[tokio::test]
 async fn bug_list_table_renders_custom_field_column() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
         .and(query_param("include_fields", "id,cf_release"))
@@ -482,7 +494,8 @@ async fn bug_list_table_renders_custom_field_column() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -501,7 +514,7 @@ async fn bug_list_table_renders_custom_field_column() {
 #[tokio::test]
 async fn bug_list_json_without_fields_does_not_warn() {
     // --json with no field selection: full object, no unknown-field warning.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -514,7 +527,8 @@ async fn bug_list_json_without_fields_does_not_warn() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -531,7 +545,7 @@ async fn bug_list_json_all_unknown_fields_exits_7() {
     // --json validation measures emptiness against the full field universe: an
     // all-unknown --fields value exits 7 before any network I/O, mirroring
     // table mode. (`bug view` stays exempt — covered in the integration suite.)
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     let mut action = empty_list_action();
     let BugAction::List(crate::cli::ListArgs { field_args, .. }) = &mut action else {
@@ -542,7 +556,8 @@ async fn bug_list_json_all_unknown_fields_exits_7() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -560,7 +575,7 @@ async fn bug_list_json_all_unknown_fields_exits_7() {
 
 #[tokio::test]
 async fn bug_list_sends_default_bug_id_order() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
         .and(query_param("order", "bug_id"))
@@ -573,7 +588,8 @@ async fn bug_list_sends_default_bug_id_order() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -585,7 +601,7 @@ async fn bug_list_sends_default_bug_id_order() {
 
 #[tokio::test]
 async fn bug_list_sends_explicit_sort_and_order() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
         .and(query_param("order", "last_change_time DESC, bug_id"))
@@ -602,7 +618,8 @@ async fn bug_list_sends_explicit_sort_and_order() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -622,7 +639,7 @@ fn count_list_action() -> BugAction {
 
 #[tokio::test]
 async fn bug_list_count_json_emits_count_object() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     // --count must request id-only fields and lift the limit (limit=0), then
     // report the number of returned ids.
     Mock::given(method("GET"))
@@ -639,7 +656,8 @@ async fn bug_list_count_json_emits_count_object() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &count_list_action(),
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -650,7 +668,7 @@ async fn bug_list_count_json_emits_count_object() {
 
 #[tokio::test]
 async fn bug_list_count_table_prints_integer_only() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -662,7 +680,8 @@ async fn bug_list_count_table_prints_integer_only() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &count_list_action(),
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -688,7 +707,7 @@ fn list_action_paged(limit: u32, offset: Option<u32>, paginate: bool) -> BugActi
 
 #[tokio::test]
 async fn list_offset_reaches_server_and_truncation_footer_prints() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     // limit 2 + offset 10 → over-fetch sends limit=3 & offset=10; 3 returned ⇒
     // truncated, footer printed, surplus row trimmed.
     Mock::given(method("GET"))
@@ -705,7 +724,8 @@ async fn list_offset_reaches_server_and_truncation_footer_prints() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &list_action_paged(2, Some(10), false),
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -721,7 +741,7 @@ async fn list_offset_reaches_server_and_truncation_footer_prints() {
 
 #[tokio::test]
 async fn list_count_with_offset_is_rejected() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
     let mut action = empty_list_action();
     if let BugAction::List(crate::cli::ListArgs {
         count, page_args, ..
@@ -736,7 +756,8 @@ async fn list_count_with_offset_is_rejected() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await
@@ -753,7 +774,7 @@ async fn list_paginate_with_progress_emits_page_then_terminal_done() {
     // #462: `bug list --paginate --progress ndjson` emits a `page` per request
     // and a single terminal `done` (emitted by the command after the write
     // succeeds, not by the fetch loop), with stdout left a clean JSON document.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     // Page size 2: a short page is followed by the empty terminal request.
     for (off, ids) in [("0", vec![1, 2]), ("2", vec![3]), ("3", vec![])] {
         let bugs: Vec<serde_json::Value> =
@@ -771,7 +792,8 @@ async fn list_paginate_with_progress_emits_page_then_terminal_done() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let ctx =
         crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_progress(Some(crate::types::ProgressFormat::Ndjson));
+            .with_progress(Some(crate::types::ProgressFormat::Ndjson))
+            .with_config_path_override(Some(config_path));
     let result =
         crate::commands::bug::execute(&list_action_paged(2, None, true), &ctx, &mut io.writers())
             .await;

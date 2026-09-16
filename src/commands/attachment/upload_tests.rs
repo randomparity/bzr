@@ -4,13 +4,13 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::{AttachmentAction, UploadArgs};
-use crate::test_helpers::{setup_empty_config_env, setup_test_env};
+use crate::test_helpers::{setup_empty_isolated_env, setup_isolated_env};
 use crate::types::OutputFormat;
 
 #[tokio::test]
 async fn attachment_upload_api_error_propagates() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/bug/42/attachment"))
@@ -41,7 +41,8 @@ async fn attachment_upload_api_error_propagates() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -56,7 +57,7 @@ async fn attachment_upload_api_error_propagates() {
 #[tokio::test]
 async fn attachment_upload_missing_source_names_role_and_path() {
     let mut io = crate::test_helpers::CapturedIo::new();
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_mock, tmp, config_path) = setup_isolated_env().await;
     let missing = tmp.path().join("missing-upload.txt");
     let action = AttachmentAction::Upload(UploadArgs {
         bug_ids: vec![42],
@@ -75,7 +76,8 @@ async fn attachment_upload_missing_source_names_role_and_path() {
 
     let err = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await
@@ -91,7 +93,7 @@ async fn attachment_upload_missing_source_names_role_and_path() {
 
 #[tokio::test]
 async fn attachment_upload_missing_source_fails_before_connect() {
-    let (_lock, tmp) = setup_empty_config_env().await;
+    let (tmp, config_path) = setup_empty_isolated_env();
     let missing = tmp.path().join("missing-upload.txt");
     let action = AttachmentAction::Upload(UploadArgs {
         bug_ids: vec![42],
@@ -111,7 +113,8 @@ async fn attachment_upload_missing_source_fails_before_connect() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await
@@ -127,7 +130,7 @@ async fn attachment_upload_missing_source_fails_before_connect() {
 
 #[tokio::test]
 async fn attachment_upload_returns_id() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/bug/42/attachment"))
@@ -155,7 +158,8 @@ async fn attachment_upload_returns_id() {
     let mut __io_a2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a2.writers(),
     )
     .await;
@@ -169,7 +173,7 @@ async fn attachment_upload_returns_id() {
 async fn attachment_upload_with_comment_includes_comment_in_request() {
     use wiremock::matchers::body_string_contains;
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/bug/42/attachment"))
@@ -198,7 +202,8 @@ async fn attachment_upload_with_comment_includes_comment_in_request() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -212,7 +217,7 @@ async fn attachment_upload_with_comment_includes_comment_in_request() {
 async fn attachment_upload_with_comment_file_includes_comment_in_request() {
     use wiremock::matchers::body_string_contains;
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/bug/42/attachment"))
@@ -243,7 +248,8 @@ async fn attachment_upload_with_comment_file_includes_comment_in_request() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -256,7 +262,7 @@ async fn attachment_upload_with_comment_file_includes_comment_in_request() {
 #[tokio::test]
 async fn attachment_upload_rejects_whitespace_comment() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_mock, tmp, config_path) = setup_isolated_env().await;
 
     let upload_file = tmp.path().join("upload.txt");
     std::fs::write(&upload_file, "test content").unwrap();
@@ -277,7 +283,8 @@ async fn attachment_upload_rejects_whitespace_comment() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -290,7 +297,7 @@ async fn attachment_upload_rejects_whitespace_comment() {
 #[tokio::test]
 async fn attachment_upload_rejects_whitespace_comment_file() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_mock, tmp, config_path) = setup_isolated_env().await;
 
     let upload_file = tmp.path().join("upload.txt");
     let comment_file = tmp.path().join("comment.txt");
@@ -313,7 +320,8 @@ async fn attachment_upload_rejects_whitespace_comment_file() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -327,7 +335,7 @@ async fn attachment_upload_rejects_whitespace_comment_file() {
 async fn attachment_upload_with_is_patch_defaults_content_type_to_text_plain() {
     use wiremock::matchers::body_string_contains;
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/bug/42/attachment"))
@@ -357,7 +365,8 @@ async fn attachment_upload_with_is_patch_defaults_content_type_to_text_plain() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -368,7 +377,7 @@ async fn attachment_upload_with_is_patch_defaults_content_type_to_text_plain() {
 async fn attachment_upload_is_patch_with_explicit_content_type_keeps_content_type() {
     use wiremock::matchers::body_string_contains;
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/bug/42/attachment"))
@@ -400,7 +409,8 @@ async fn attachment_upload_is_patch_with_explicit_content_type_keeps_content_typ
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -414,7 +424,7 @@ async fn attachment_upload_is_patch_with_explicit_content_type_keeps_content_typ
 async fn attachment_upload_with_comment_private_flips_privacy() {
     use wiremock::matchers::body_string_contains;
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     let upload_file = tmp.path().join("p.diff");
     std::fs::write(&upload_file, "diff --git a/x b/x").unwrap();
@@ -471,7 +481,8 @@ async fn attachment_upload_with_comment_private_flips_privacy() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -485,7 +496,7 @@ async fn attachment_upload_with_comment_private_flips_privacy() {
 async fn attachment_upload_comment_private_with_comment_file_flips_privacy() {
     use wiremock::matchers::body_string_contains;
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     let upload_file = tmp.path().join("p.diff");
     let comment_file = tmp.path().join("comment.txt");
@@ -540,7 +551,8 @@ async fn attachment_upload_comment_private_with_comment_file_flips_privacy() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -553,7 +565,7 @@ async fn attachment_upload_comment_private_with_comment_file_flips_privacy() {
 #[tokio::test]
 async fn attachment_upload_comment_private_without_comment_is_input_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_mock, tmp, config_path) = setup_isolated_env().await;
     let upload_file = tmp.path().join("p.diff");
     std::fs::write(&upload_file, "x").unwrap();
 
@@ -573,7 +585,8 @@ async fn attachment_upload_comment_private_without_comment_is_input_error() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -586,7 +599,7 @@ async fn attachment_upload_comment_private_without_comment_is_input_error() {
 #[tokio::test]
 async fn attachment_upload_comment_private_partial_failure_propagates_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     let upload_file = tmp.path().join("p.diff");
     std::fs::write(&upload_file, "x").unwrap();
@@ -633,7 +646,8 @@ async fn attachment_upload_comment_private_partial_failure_propagates_error() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -650,7 +664,7 @@ async fn attachment_upload_comment_private_partial_failure_propagates_error() {
 #[tokio::test]
 async fn attachment_upload_comment_private_no_matching_comment_is_data_integrity_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     let upload_file = tmp.path().join("p.diff");
     std::fs::write(&upload_file, "x").unwrap();
@@ -695,7 +709,8 @@ async fn attachment_upload_comment_private_no_matching_comment_is_data_integrity
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -708,7 +723,7 @@ async fn attachment_upload_comment_private_no_matching_comment_is_data_integrity
 #[tokio::test]
 async fn upload_single_bug_keeps_the_upload_result_shape() {
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/bug/1/attachment"))
@@ -735,7 +750,8 @@ async fn upload_single_bug_keeps_the_upload_result_shape() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -755,7 +771,7 @@ async fn upload_single_bug_keeps_the_upload_result_shape() {
 #[tokio::test]
 async fn upload_fans_out_to_every_bug() {
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/bug/1/attachment"))
@@ -787,7 +803,8 @@ async fn upload_fans_out_to_every_bug() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -807,7 +824,7 @@ async fn upload_fans_out_to_every_bug() {
 #[tokio::test]
 async fn upload_partial_failure_records_both_outcomes() {
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/bug/1/attachment"))
@@ -843,7 +860,8 @@ async fn upload_partial_failure_records_both_outcomes() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -869,7 +887,7 @@ async fn upload_partial_failure_records_both_outcomes() {
 #[tokio::test]
 async fn upload_comment_private_failure_is_a_sub_step() {
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     let upload_file = tmp.path().join("p.diff");
     std::fs::write(&upload_file, "diff --git a b").unwrap();
@@ -925,7 +943,8 @@ async fn upload_comment_private_failure_is_a_sub_step() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -967,7 +986,7 @@ async fn upload_comment_private_failure_is_a_sub_step() {
 #[tokio::test]
 async fn upload_batch_stops_after_first_flip_failure_and_marks_the_rest_not_attempted() {
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     let upload_file = tmp.path().join("p.diff");
     std::fs::write(&upload_file, "diff --git a b").unwrap();
@@ -1001,7 +1020,8 @@ async fn upload_batch_stops_after_first_flip_failure_and_marks_the_rest_not_atte
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -1038,7 +1058,7 @@ async fn upload_batch_stops_after_first_flip_failure_and_marks_the_rest_not_atte
 #[tokio::test]
 async fn upload_batch_table_mode_labels_not_attempted_distinctly() {
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     let upload_file = tmp.path().join("p.diff");
     std::fs::write(&upload_file, "diff --git a b").unwrap();
@@ -1070,7 +1090,8 @@ async fn upload_batch_table_mode_labels_not_attempted_distinctly() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -1096,7 +1117,7 @@ async fn upload_batch_table_mode_labels_not_attempted_distinctly() {
 #[tokio::test]
 async fn upload_batch_above_threshold_proceeds_without_a_controlling_tty() {
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     let upload_file = tmp.path().join("upload.txt");
     std::fs::write(&upload_file, "test content").unwrap();
@@ -1128,7 +1149,8 @@ async fn upload_batch_above_threshold_proceeds_without_a_controlling_tty() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -1152,7 +1174,7 @@ async fn upload_batch_above_threshold_proceeds_without_a_controlling_tty() {
 #[tokio::test]
 async fn upload_batch_above_threshold_with_assume_yes_bypasses_the_gate() {
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     let upload_file = tmp.path().join("upload.txt");
     std::fs::write(&upload_file, "test content").unwrap();
@@ -1184,6 +1206,7 @@ async fn upload_batch_above_threshold_with_assume_yes_bypasses_the_gate() {
     });
     let ctx =
         crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone()))
             .with_assume_yes(true);
     let result = crate::commands::attachment::execute(&action, &ctx, &mut __io.writers()).await;
     assert!(
@@ -1198,7 +1221,7 @@ async fn upload_batch_above_threshold_with_assume_yes_bypasses_the_gate() {
 #[tokio::test]
 async fn upload_batch_table_mode_labels_a_sub_step_failure() {
     let mut __io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     let upload_file = tmp.path().join("p.diff");
     std::fs::write(&upload_file, "diff --git a b").unwrap();
@@ -1254,7 +1277,8 @@ async fn upload_batch_table_mode_labels_a_sub_step_failure() {
     });
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;

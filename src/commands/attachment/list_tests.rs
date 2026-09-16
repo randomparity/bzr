@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::{AttachmentAction, ProjectionArgs};
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 async fn mount_one_attachment(mock: &wiremock::MockServer) {
@@ -32,7 +32,7 @@ fn list_with(projection: ProjectionArgs) -> AttachmentAction {
 
 #[tokio::test]
 async fn attachment_list_returns_attachments() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42/attachment"))
@@ -63,7 +63,8 @@ async fn attachment_list_returns_attachments() {
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a1.writers(),
     )
     .await;
@@ -78,7 +79,7 @@ async fn attachment_list_returns_attachments() {
 #[tokio::test]
 async fn attachment_list_api_error_propagates() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/999/attachment"))
@@ -92,7 +93,8 @@ async fn attachment_list_api_error_propagates() {
     };
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -101,7 +103,7 @@ async fn attachment_list_api_error_propagates() {
 
 #[tokio::test]
 async fn attachment_list_json_fields_projects_to_named_keys() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_one_attachment(&mock).await;
 
     let action = list_with(ProjectionArgs {
@@ -111,7 +113,8 @@ async fn attachment_list_json_fields_projects_to_named_keys() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -124,7 +127,7 @@ async fn attachment_list_json_fields_projects_to_named_keys() {
 
 #[tokio::test]
 async fn attachment_list_ndjson_fields_projects_each_line() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_one_attachment(&mock).await;
 
     let action = list_with(ProjectionArgs {
@@ -138,7 +141,8 @@ async fn attachment_list_ndjson_fields_projects_each_line() {
             None,
             OutputFormat::Ndjson,
             None,
-        ),
+        )
+        .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -148,7 +152,7 @@ async fn attachment_list_ndjson_fields_projects_each_line() {
 
 #[tokio::test]
 async fn attachment_list_json_unknown_field_exits_7() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = list_with(ProjectionArgs {
         fields: Some("filename_x".into()),
@@ -157,7 +161,8 @@ async fn attachment_list_json_unknown_field_exits_7() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -167,7 +172,7 @@ async fn attachment_list_json_unknown_field_exits_7() {
 
 #[tokio::test]
 async fn attachment_list_table_fields_is_noop_with_warning() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_one_attachment(&mock).await;
 
     let action = list_with(ProjectionArgs {
@@ -177,7 +182,8 @@ async fn attachment_list_table_fields_is_noop_with_warning() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
