@@ -4,12 +4,12 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::ServerAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 #[tokio::test]
 async fn server_info_returns_version_and_extensions() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/version"))
@@ -31,7 +31,8 @@ async fn server_info_returns_version_and_extensions() {
 
     let result = super::execute(
         &ServerAction::Info,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -44,7 +45,7 @@ async fn server_info_returns_version_and_extensions() {
 
 #[tokio::test]
 async fn server_capabilities_outputs_documented_shape() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/version"))
@@ -71,7 +72,8 @@ async fn server_capabilities_outputs_documented_shape() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = super::execute(
         &ServerAction::Capabilities,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -92,7 +94,7 @@ async fn server_capabilities_outputs_documented_shape() {
 #[tokio::test]
 async fn server_info_http_500_returns_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/version"))
@@ -102,7 +104,8 @@ async fn server_info_http_500_returns_error() {
 
     let result = super::execute(
         &ServerAction::Info,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
