@@ -4,12 +4,12 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::CommentAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 #[tokio::test]
 async fn comment_search_tags_returns_matches() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/comment/tags/need"))
@@ -26,7 +26,8 @@ async fn comment_search_tags_returns_matches() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::comment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -40,7 +41,7 @@ async fn comment_search_tags_returns_matches() {
 
 #[tokio::test]
 async fn comment_search_tags_empty_returns_no_items() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/comment/tags/zzz"))
@@ -55,7 +56,8 @@ async fn comment_search_tags_empty_returns_no_items() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::comment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -67,7 +69,7 @@ async fn comment_search_tags_empty_returns_no_items() {
 #[tokio::test]
 async fn comment_search_tags_api_error_returns_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/comment/tags/boom"))
@@ -80,7 +82,8 @@ async fn comment_search_tags_api_error_returns_error() {
     };
     let result = crate::commands::comment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __cap_io.writers(),
     )
     .await;
@@ -94,7 +97,7 @@ async fn comment_search_tags_api_error_returns_error() {
 
 #[tokio::test]
 async fn comment_search_tags_table_escapes_server_returned_tags() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     // Same seam as `comment tag`: the listing is composed in the command layer and
     // printed verbatim by `write_result`'s table arm, so each tag is escaped on its
@@ -115,7 +118,8 @@ async fn comment_search_tags_table_escapes_server_returned_tags() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::comment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;

@@ -4,12 +4,12 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::CommentAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 #[tokio::test]
 async fn comment_tag_add_updates_tags() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/bug/comment/100/tags"))
@@ -28,7 +28,8 @@ async fn comment_tag_add_updates_tags() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::comment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -42,7 +43,7 @@ async fn comment_tag_add_updates_tags() {
 #[tokio::test]
 async fn comment_tag_without_changes_is_rejected_before_put() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/bug/comment/100/tags"))
@@ -58,7 +59,8 @@ async fn comment_tag_without_changes_is_rejected_before_put() {
     };
     let result = crate::commands::comment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __cap_io.writers(),
     )
     .await;
@@ -78,7 +80,7 @@ async fn comment_tag_without_changes_is_rejected_before_put() {
 
 #[tokio::test]
 async fn comment_tag_table_escapes_server_returned_tags() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     // The server echoes the resulting tag set, and `write_result`'s table arm prints
     // its composed message verbatim, so a hostile tag would otherwise reach the
@@ -101,7 +103,8 @@ async fn comment_tag_table_escapes_server_returned_tags() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::comment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
