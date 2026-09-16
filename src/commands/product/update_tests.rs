@@ -4,7 +4,7 @@ use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::ProductAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
@@ -15,7 +15,7 @@ fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
 
 #[tokio::test]
 async fn product_update_succeeds() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/product/Firefox"))
@@ -35,7 +35,8 @@ async fn product_update_succeeds() {
     let mut __io_a4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a4.writers(),
     )
     .await;
@@ -47,7 +48,7 @@ async fn product_update_succeeds() {
 
 #[tokio::test]
 async fn product_update_dry_run_makes_no_write_and_marks_payload() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/product/Firefox"))
@@ -73,6 +74,7 @@ async fn product_update_dry_run_makes_no_write_and_marks_payload() {
             OutputFormat::Json,
             None,
         )
+        .with_config_path_override(Some(config_path.clone()))
         .with_dry_run(true),
         &mut io.writers(),
     )
@@ -89,7 +91,7 @@ async fn product_update_dry_run_makes_no_write_and_marks_payload() {
 
 #[tokio::test]
 async fn product_update_from_json_uses_json_target() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/product/Firefox"))
@@ -116,7 +118,8 @@ async fn product_update_from_json_uses_json_target() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -129,7 +132,7 @@ async fn product_update_from_json_uses_json_target() {
 
 #[tokio::test]
 async fn product_update_from_json_rejects_positional_and_json_target() {
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_mock, tmp, config_path) = setup_isolated_env().await;
     let json = r#"{"name":"FromJson","description":"Updated"}"#;
     let action = ProductAction::Update {
         from_json: Some(write_json_file(&tmp, json)),
@@ -141,7 +144,8 @@ async fn product_update_from_json_rejects_positional_and_json_target() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -155,7 +159,7 @@ async fn product_update_from_json_rejects_positional_and_json_target() {
 
 #[tokio::test]
 async fn product_update_without_fields_is_rejected() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
     let action = ProductAction::Update {
         from_json: None,
         name: Some("Firefox".to_string()),
@@ -170,7 +174,8 @@ async fn product_update_without_fields_is_rejected() {
             Some("missing"),
             OutputFormat::Json,
             None,
-        ),
+        )
+        .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;

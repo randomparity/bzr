@@ -4,7 +4,7 @@ use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::ProductAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
@@ -15,7 +15,7 @@ fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
 
 #[tokio::test]
 async fn product_create_returns_id() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/product"))
@@ -33,7 +33,8 @@ async fn product_create_returns_id() {
     let mut __io_a3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a3.writers(),
     )
     .await;
@@ -45,7 +46,7 @@ async fn product_create_returns_id() {
 
 #[tokio::test]
 async fn product_create_dry_run_makes_no_write_and_marks_payload() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/product"))
@@ -65,6 +66,7 @@ async fn product_create_dry_run_makes_no_write_and_marks_payload() {
     let result = crate::commands::product::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone()))
             .with_dry_run(true),
         &mut io.writers(),
     )
@@ -80,7 +82,7 @@ async fn product_create_dry_run_makes_no_write_and_marks_payload() {
 
 #[tokio::test]
 async fn product_create_from_json_sends_merged_body() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/product"))
@@ -106,7 +108,8 @@ async fn product_create_from_json_sends_merged_body() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -122,7 +125,7 @@ async fn product_create_from_json_sends_merged_body() {
 
 #[tokio::test]
 async fn product_from_json_rejects_unknown_field() {
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_mock, tmp, config_path) = setup_isolated_env().await;
     let json = r#"{"name":"P","description":"D","bogus":true}"#;
     let action = ProductAction::Create {
         from_json: Some(write_json_file(&tmp, json)),
@@ -138,7 +141,8 @@ async fn product_from_json_rejects_unknown_field() {
             Some("missing"),
             OutputFormat::Json,
             None,
-        ),
+        )
+        .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -152,7 +156,7 @@ async fn product_from_json_rejects_unknown_field() {
 
 #[tokio::test]
 async fn product_from_json_rejects_array_shape() {
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_mock, tmp, config_path) = setup_isolated_env().await;
     let action = ProductAction::Create {
         from_json: Some(write_json_file(&tmp, "[]")),
         name: None,
@@ -163,7 +167,8 @@ async fn product_from_json_rejects_array_shape() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
