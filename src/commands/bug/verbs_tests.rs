@@ -5,7 +5,7 @@ use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::{BugAction, CloseArgs, CommentArgs, DupArgs, ReopenArgs, ResolveArgs};
 use crate::commands::runtime::invocation::inline_server::{InlineServer, InlineTlsOptions};
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 fn ok_put(id: u64) -> ResponseTemplate {
@@ -52,7 +52,7 @@ async fn mount_inline_detection_mocks(mock: &wiremock::MockServer) {
 /// Mount a PUT mock on `/rest/bug/{id}` asserting the exact JSON body, then run
 /// `execute` for `action` and assert success.
 async fn run_verb_expecting_body(action: BugAction, id: u64, body: serde_json::Value) {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("PUT"))
         .and(path(format!("/rest/bug/{id}")))
         .and(body_json(body))
@@ -64,7 +64,8 @@ async fn run_verb_expecting_body(action: BugAction, id: u64, body: serde_json::V
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -74,7 +75,7 @@ async fn run_verb_expecting_body(action: BugAction, id: u64, body: serde_json::V
 /// Like [`run_verb_expecting_body`] but also mounts the status-field mock the
 /// close/reopen validator queries. `statuses` are the server's legal statuses.
 async fn run_status_verb(action: BugAction, id: u64, body: serde_json::Value, statuses: &[&str]) {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_status_field(&mock, statuses).await;
     Mock::given(method("PUT"))
         .and(path(format!("/rest/bug/{id}")))
@@ -87,7 +88,8 @@ async fn run_status_verb(action: BugAction, id: u64, body: serde_json::Value, st
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -95,7 +97,7 @@ async fn run_status_verb(action: BugAction, id: u64, body: serde_json::Value, st
 }
 
 async fn run_verb_collision_expecting_no_write(action: BugAction, id: u64) {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_status_field(&mock, DEFAULT_STATUSES).await;
     Mock::given(method("GET"))
         .and(path(format!("/rest/bug/{id}")))
@@ -114,7 +116,8 @@ async fn run_verb_collision_expecting_no_write(action: BugAction, id: u64) {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -154,7 +157,7 @@ fn reopen_args(ids: Vec<u64>, status: &str) -> ReopenArgs {
 
 #[tokio::test]
 async fn resolve_dry_run_makes_no_write() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     // A verb PUT must never fire under --dry-run; the connect probe is a HEAD.
     Mock::given(method("PUT"))
         .respond_with(ResponseTemplate::new(200))
@@ -173,7 +176,8 @@ async fn resolve_dry_run_makes_no_write() {
     let result = crate::commands::bug::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_dry_run(true),
+            .with_dry_run(true)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -245,7 +249,7 @@ async fn resolve_with_status_override() {
 
 #[tokio::test]
 async fn resolve_unknown_status_is_rejected() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_status_field(&mock, DEFAULT_STATUSES).await;
     Mock::given(method("PUT"))
         .respond_with(ok_put(7))
@@ -263,7 +267,8 @@ async fn resolve_unknown_status_is_rejected() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await
@@ -330,7 +335,7 @@ async fn bug_verbs_expect_unchanged_since_collision_skips_write() {
 #[tokio::test]
 async fn bug_verbs_expect_unchanged_since_match_writes_update() {
     let since = "2026-06-19T12:00:00Z";
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_status_field(&mock, DEFAULT_STATUSES).await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/5"))
@@ -360,7 +365,8 @@ async fn bug_verbs_expect_unchanged_since_match_writes_update() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -383,7 +389,11 @@ async fn close_defaults_to_verified_and_preserves_resolution() {
 
 #[tokio::test]
 async fn close_reuses_status_validation_client_for_update() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    // ADR-0002 retains ENV_LOCK for tests that mutate an API-key environment
+    // variable named by `--server-api-key-env`; config selection is on an
+    // explicit path, but `BZR_INLINE_TEST_KEY` below is still process-global.
+    let _lock = crate::ENV_LOCK.lock().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     // Inline servers are uncached. If close validates with one client and then
     // calls the generic update path that reconnects, auth/version detection
     // will fire twice and violate these expectations.
@@ -397,7 +407,8 @@ async fn close_reuses_status_validation_client_for_update() {
         .mount(&mock)
         .await;
 
-    // SAFETY: setup_test_env holds ENV_LOCK for the duration of this test.
+    // SAFETY: this test holds ENV_LOCK (acquired above) for its whole body,
+    // serializing this mutation against every other ENV_LOCK holder.
     unsafe { std::env::set_var("BZR_INLINE_TEST_KEY", "test-key") };
     let inline = InlineServer {
         url: mock.uri(),
@@ -410,7 +421,8 @@ async fn close_reuses_status_validation_client_for_update() {
     let result = crate::commands::bug::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_inline_server(Some(inline)),
+            .with_inline_server(Some(inline))
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -475,7 +487,7 @@ async fn reopen_status_override_targets_custom_status() {
 /// message naming the bad value and listing valid statuses — and no PUT fires.
 #[tokio::test]
 async fn reopen_unknown_status_is_rejected() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_status_field(&mock, DEFAULT_STATUSES).await;
     Mock::given(method("PUT"))
         .respond_with(ok_put(3))
@@ -487,7 +499,8 @@ async fn reopen_unknown_status_is_rejected() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await
@@ -503,7 +516,7 @@ async fn reopen_unknown_status_is_rejected() {
 /// front rather than passing validation and failing server-side.
 #[tokio::test]
 async fn close_wrong_case_status_is_rejected() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_status_field(&mock, DEFAULT_STATUSES).await;
     Mock::given(method("PUT"))
         .respond_with(ok_put(9))
@@ -515,7 +528,8 @@ async fn close_wrong_case_status_is_rejected() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await
@@ -530,7 +544,7 @@ async fn close_wrong_case_status_is_rejected() {
 /// status that would be sent, even one this server would reject.
 #[tokio::test]
 async fn reopen_dry_run_skips_validation_and_write() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/field/bug/bug%5Fstatus"))
         .respond_with(ResponseTemplate::new(200).set_body_json(status_field_body(DEFAULT_STATUSES)))
@@ -549,7 +563,8 @@ async fn reopen_dry_run_skips_validation_and_write() {
     let result = crate::commands::bug::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_dry_run(true),
+            .with_dry_run(true)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -563,7 +578,7 @@ async fn reopen_dry_run_skips_validation_and_write() {
 
 #[tokio::test]
 async fn close_dry_run_rejects_empty_status_without_network() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/field/bug/bug%5Fstatus"))
         .respond_with(ResponseTemplate::new(200).set_body_json(status_field_body(DEFAULT_STATUSES)))
@@ -581,7 +596,8 @@ async fn close_dry_run_rejects_empty_status_without_network() {
     let err = crate::commands::bug::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_dry_run(true),
+            .with_dry_run(true)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await
@@ -697,7 +713,7 @@ async fn dup_posts_comment_atomically() {
 
 #[tokio::test]
 async fn resolve_batch_updates_each_id() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_status_field(&mock, DEFAULT_STATUSES).await;
     for id in [1_u64, 2] {
         Mock::given(method("PUT"))
@@ -721,7 +737,8 @@ async fn resolve_batch_updates_each_id() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -735,7 +752,7 @@ async fn resolve_batch_updates_each_id() {
 /// so no status-field GET is needed for this rejection.
 #[tokio::test]
 async fn close_private_comment_without_body_is_rejected() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
     let action = BugAction::Close(CloseArgs {
         ids: vec![5],
         status: "VERIFIED".into(),
@@ -750,7 +767,8 @@ async fn close_private_comment_without_body_is_rejected() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;

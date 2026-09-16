@@ -1,5 +1,7 @@
 #![expect(clippy::unwrap_used, clippy::expect_used)]
 
+use std::path::Path;
+
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
@@ -7,11 +9,12 @@ use super::{require_server_capability, EXTERNAL_BUGS_EXTENSION, RED_HAT_EXTENSIO
 use crate::commands::runtime::invocation::CommandContext;
 use crate::commands::runtime::shared::connect_and_configure;
 use crate::error::{CAPABILITY_ABSENT, CAPABILITY_UNDETERMINED};
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::{load_config_at, setup_isolated_env, update_config_at};
 use crate::types::OutputFormat;
 
-fn ctx() -> CommandContext {
+fn ctx(config_path: &Path) -> CommandContext {
     CommandContext::new(None, OutputFormat::Json, None)
+        .with_config_path_override(Some(config_path.to_path_buf()))
 }
 
 /// `{"extensions": {...}}` for the given names.
@@ -34,10 +37,10 @@ async fn mount_extensions(mock: &wiremock::MockServer, names: &[&str], expect: u
 
 #[tokio::test]
 async fn advertised_capability_is_allowed() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_extensions(&mock, &[RED_HAT_EXTENSION, "Voting"], 1).await;
 
-    let ctx = ctx();
+    let ctx = ctx(&config_path);
     let client = connect_and_configure(&ctx).await.unwrap();
     let result = require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search").await;
 
@@ -46,10 +49,10 @@ async fn advertised_capability_is_allowed() {
 
 #[tokio::test]
 async fn absent_capability_is_refused_with_exit_15() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_extensions(&mock, &["Voting"], 1).await;
 
-    let ctx = ctx();
+    let ctx = ctx(&config_path);
     let client = connect_and_configure(&ctx).await.unwrap();
     let err = require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search 'triage'")
         .await
@@ -74,7 +77,7 @@ async fn absent_capability_is_refused_with_exit_15() {
 
 #[tokio::test]
 async fn absent_externalbugs_capability_is_refused_with_exit_15() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/extensions"))
         .respond_with(
@@ -83,7 +86,7 @@ async fn absent_externalbugs_capability_is_refused_with_exit_15() {
         .expect(1)
         .mount(&mock)
         .await;
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = ctx(&config_path);
     let client = connect_and_configure(&ctx).await.unwrap();
     let error = require_server_capability(
         &ctx,
@@ -101,10 +104,10 @@ async fn absent_externalbugs_capability_is_refused_with_exit_15() {
 /// said it has no extensions.
 #[tokio::test]
 async fn empty_extension_map_is_refused_not_undetermined() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_extensions(&mock, &[], 1).await;
 
-    let ctx = ctx();
+    let ctx = ctx(&config_path);
     let client = connect_and_configure(&ctx).await.unwrap();
     let err = require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
         .await
@@ -117,14 +120,14 @@ async fn empty_extension_map_is_refused_not_undetermined() {
 /// turn a transient network fault into a claim about the server.
 #[tokio::test]
 async fn probe_failure_is_undetermined_not_absent() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/extensions"))
         .respond_with(ResponseTemplate::new(503))
         .mount(&mock)
         .await;
 
-    let ctx = ctx();
+    let ctx = ctx(&config_path);
     let client = connect_and_configure(&ctx).await.unwrap();
     let err = require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
         .await
@@ -151,10 +154,10 @@ async fn probe_failure_is_undetermined_not_absent() {
 /// `.expect(1)` on the mount is what proves it.
 #[tokio::test]
 async fn probed_extensions_are_cached_for_the_next_call() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_extensions(&mock, &[RED_HAT_EXTENSION], 1).await;
 
-    let ctx = ctx();
+    let ctx = ctx(&config_path);
     let client = connect_and_configure(&ctx).await.unwrap();
     require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
         .await
@@ -163,7 +166,7 @@ async fn probed_extensions_are_cached_for_the_next_call() {
         .await
         .unwrap();
 
-    let config = crate::config::Config::load_at(ctx.config_path_override()).unwrap();
+    let config = load_config_at(&config_path);
     let (_, srv) = config.resolve_server(None).unwrap();
     assert_eq!(
         srv.server_extensions.as_deref(),
@@ -176,19 +179,19 @@ async fn probed_extensions_are_cached_for_the_next_call() {
 /// arbitrary server text into the user's config for no gain.
 #[tokio::test]
 async fn only_known_capabilities_are_persisted() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     let noise: Vec<String> = (0..50).map(|i| format!("Noise{i}")).collect();
     let mut names: Vec<&str> = noise.iter().map(String::as_str).collect();
     names.push(RED_HAT_EXTENSION);
     mount_extensions(&mock, &names, 1).await;
 
-    let ctx = ctx();
+    let ctx = ctx(&config_path);
     let client = connect_and_configure(&ctx).await.unwrap();
     require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
         .await
         .unwrap();
 
-    let config = crate::config::Config::load_at(ctx.config_path_override()).unwrap();
+    let config = load_config_at(&config_path);
     let (_, srv) = config.resolve_server(None).unwrap();
     assert_eq!(
         srv.server_extensions.as_deref(),
@@ -201,10 +204,9 @@ async fn only_known_capabilities_are_persisted() {
 /// trust nor write the named server's cached answer.
 #[tokio::test]
 async fn inline_server_neither_reads_nor_writes_the_cache() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     // Seed the *named* server's cache as supporting the capability.
-    let config_path = crate::config::Config::path_at(None).unwrap();
-    crate::config::Config::update_locked_at(Some(&config_path), |config| {
+    update_config_at(&config_path, |config| {
         if let Some(srv) = config.servers.get_mut("test") {
             srv.server_extensions = Some(vec![RED_HAT_EXTENSION.to_string()]);
             srv.server_extensions_url = Some(srv.url.clone());
@@ -216,7 +218,6 @@ async fn inline_server_neither_reads_nor_writes_the_cache() {
         Ok(())
     })
     .unwrap();
-    let _ = &tmp;
 
     // The inline server has no config entry, so connect_and_configure detects
     // its API mode rather than reading a cached one. Since the probe now
@@ -233,19 +234,21 @@ async fn inline_server_neither_reads_nor_writes_the_cache() {
         .await;
     // The inline server advertises nothing.
     mount_extensions(&mock, &[], 1).await;
-    let ctx = ctx().with_inline_server(Some(crate::commands::runtime::invocation::InlineServer {
-        url: mock.uri(),
-        api_key_env: None,
-        email: None,
-        tls: crate::commands::runtime::invocation::InlineTlsOptions::default(),
-    }));
+    let ctx = ctx(&config_path).with_inline_server(Some(
+        crate::commands::runtime::invocation::InlineServer {
+            url: mock.uri(),
+            api_key_env: None,
+            email: None,
+            tls: crate::commands::runtime::invocation::InlineTlsOptions::default(),
+        },
+    ));
     let client = connect_and_configure(&ctx).await.unwrap();
     let err = require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
         .await
         .expect_err("the inline server advertises nothing, so it must be refused");
     assert_eq!(err.exit_code(), 15);
 
-    let after = crate::config::Config::load_at(Some(&config_path)).unwrap();
+    let after = load_config_at(&config_path);
     let (_, srv) = after.resolve_server(None).unwrap();
     assert_eq!(
         srv.server_extensions.as_deref(),
@@ -259,9 +262,8 @@ async fn inline_server_neither_reads_nor_writes_the_cache() {
 /// capabilities the new host never advertised.
 #[tokio::test]
 async fn cache_probed_from_a_different_url_is_not_trusted() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
-    let config_path = crate::config::Config::path_at(None).unwrap();
-    crate::config::Config::update_locked_at(Some(&config_path), |config| {
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
+    update_config_at(&config_path, |config| {
         if let Some(srv) = config.servers.get_mut("test") {
             srv.server_extensions = Some(vec![RED_HAT_EXTENSION.to_string()]);
             srv.server_extensions_url = Some("https://elsewhere.example".to_string());
@@ -276,14 +278,14 @@ async fn cache_probed_from_a_different_url_is_not_trusted() {
 
     // The server actually pointed at advertises nothing.
     mount_extensions(&mock, &[], 1).await;
-    let ctx = ctx();
+    let ctx = ctx(&config_path);
     let client = connect_and_configure(&ctx).await.unwrap();
     let err = require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
         .await
         .expect_err("a cache from another URL must not satisfy the gate");
     assert_eq!(err.exit_code(), 15);
 
-    let after = crate::config::Config::load_at(Some(&config_path)).unwrap();
+    let after = load_config_at(&config_path);
     let (_, srv) = after.resolve_server(None).unwrap();
     assert_eq!(srv.server_extensions.as_deref(), Some([].as_slice()));
     assert_eq!(srv.server_extensions_url.as_deref(), Some(&*mock.uri()));
@@ -303,9 +305,8 @@ async fn cache_probed_from_a_different_url_is_not_trusted() {
 /// advertised nothing. `.expect(0)` proves no second probe is issued.
 #[tokio::test]
 async fn cached_empty_list_is_a_hit_and_refuses_without_probing() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
-    let config_path = crate::config::Config::path_at(None).unwrap();
-    crate::config::Config::update_locked_at(Some(&config_path), |config| {
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
+    update_config_at(&config_path, |config| {
         if let Some(srv) = config.servers.get_mut("test") {
             srv.server_extensions = Some(vec![]);
             srv.server_extensions_url = Some(srv.url.clone());
@@ -319,7 +320,7 @@ async fn cached_empty_list_is_a_hit_and_refuses_without_probing() {
     .unwrap();
     mount_extensions(&mock, &[RED_HAT_EXTENSION], 0).await;
 
-    let ctx = ctx();
+    let ctx = ctx(&config_path);
     let client = connect_and_configure(&ctx).await.unwrap();
     let err = require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
         .await
@@ -331,9 +332,8 @@ async fn cached_empty_list_is_a_hit_and_refuses_without_probing() {
 /// a capability added later, so it must be treated as a miss.
 #[tokio::test]
 async fn cache_written_against_a_different_allowlist_is_not_trusted() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
-    let config_path = crate::config::Config::path_at(None).unwrap();
-    crate::config::Config::update_locked_at(Some(&config_path), |config| {
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
+    update_config_at(&config_path, |config| {
         if let Some(srv) = config.servers.get_mut("test") {
             srv.server_extensions = Some(vec![]);
             srv.server_extensions_url = Some(srv.url.clone());
@@ -344,7 +344,7 @@ async fn cache_written_against_a_different_allowlist_is_not_trusted() {
     .unwrap();
     mount_extensions(&mock, &[RED_HAT_EXTENSION], 1).await;
 
-    let ctx = ctx();
+    let ctx = ctx(&config_path);
     let client = connect_and_configure(&ctx).await.unwrap();
     require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
         .await
@@ -369,8 +369,9 @@ const XMLRPC_EMPTY: &str = concat!(
     r"</struct></value></param></params></methodResponse>",
 );
 
-fn ctx_with_api(api: crate::types::ApiMode) -> CommandContext {
+fn ctx_with_api(api: crate::types::ApiMode, config_path: &Path) -> CommandContext {
     CommandContext::new(None, OutputFormat::Json, Some(api))
+        .with_config_path_override(Some(config_path.to_path_buf()))
 }
 
 async fn mount_xmlrpc(mock: &wiremock::MockServer, response: ResponseTemplate) {
@@ -402,7 +403,7 @@ async fn mount_rest_failure(mock: &wiremock::MockServer, status: u16) {
 /// permanently undetermined here.
 #[tokio::test]
 async fn capability_established_over_xmlrpc_when_rest_is_unreachable() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_rest_failure(&mock, 503).await;
     mount_xmlrpc(
         &mock,
@@ -410,7 +411,7 @@ async fn capability_established_over_xmlrpc_when_rest_is_unreachable() {
     )
     .await;
 
-    let ctx = ctx_with_api(crate::types::ApiMode::XmlRpc);
+    let ctx = ctx_with_api(crate::types::ApiMode::XmlRpc, &config_path);
     let client = connect_and_configure(&ctx).await.unwrap();
 
     require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
@@ -420,14 +421,14 @@ async fn capability_established_over_xmlrpc_when_rest_is_unreachable() {
 
 #[tokio::test]
 async fn capability_absent_over_xmlrpc() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_xmlrpc(
         &mock,
         ResponseTemplate::new(200).set_body_string(XMLRPC_EMPTY),
     )
     .await;
 
-    let ctx = ctx_with_api(crate::types::ApiMode::XmlRpc);
+    let ctx = ctx_with_api(crate::types::ApiMode::XmlRpc, &config_path);
     let client = connect_and_configure(&ctx).await.unwrap();
     let err = require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
         .await
@@ -445,10 +446,10 @@ async fn capability_absent_over_xmlrpc() {
 
 #[tokio::test]
 async fn capability_absent_message_does_not_name_rest_path() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_extensions(&mock, &["Voting"], 1).await;
 
-    let ctx = ctx();
+    let ctx = ctx(&config_path);
     let client = connect_and_configure(&ctx).await.unwrap();
     let err = require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
         .await
@@ -460,10 +461,10 @@ async fn capability_absent_message_does_not_name_rest_path() {
 
 #[tokio::test]
 async fn capability_undetermined_message_does_not_name_rest() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_xmlrpc(&mock, ResponseTemplate::new(500)).await;
 
-    let ctx = ctx_with_api(crate::types::ApiMode::XmlRpc);
+    let ctx = ctx_with_api(crate::types::ApiMode::XmlRpc, &config_path);
     let client = connect_and_configure(&ctx).await.unwrap();
     let err = require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
         .await
@@ -486,11 +487,11 @@ async fn capability_undetermined_message_does_not_name_rest() {
 /// reasonably conclude bzr never tried REST.
 #[tokio::test]
 async fn capability_undetermined_in_hybrid_names_both_attempts() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_rest_failure(&mock, 404).await;
     mount_xmlrpc(&mock, ResponseTemplate::new(500)).await;
 
-    let ctx = ctx_with_api(crate::types::ApiMode::Hybrid);
+    let ctx = ctx_with_api(crate::types::ApiMode::Hybrid, &config_path);
     let client = connect_and_configure(&ctx).await.unwrap();
     let err = require_server_capability(&ctx, &client, RED_HAT_EXTENSION, "saved search")
         .await

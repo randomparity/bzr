@@ -4,12 +4,12 @@ use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::{BugAction, TagArgs};
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::{ApiMode, OutputFormat};
 
 #[tokio::test]
 async fn bug_tag_uses_xmlrpc_and_reports_requested_changes() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     let response = r#"<?xml version="1.0"?><methodResponse><params><param><value><struct/></value></param></params></methodResponse>"#;
     Mock::given(method("POST"))
         .and(path("/xmlrpc.cgi"))
@@ -37,7 +37,8 @@ async fn bug_tag_uses_xmlrpc_and_reports_requested_changes() {
             None,
             OutputFormat::Json,
             Some(ApiMode::XmlRpc),
-        ),
+        )
+        .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;

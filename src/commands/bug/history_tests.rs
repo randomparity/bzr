@@ -5,7 +5,7 @@ use wiremock::{Mock, ResponseTemplate};
 
 use super::flatten_history;
 use crate::cli::BugAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::{Comment, FieldChange, HistoryEntry, OutputFormat};
 
 fn entry(who: &str, when: &str, changes: Vec<(&str, &str, &str)>) -> HistoryEntry {
@@ -181,7 +181,7 @@ fn flatten_empty_entries_yield_no_records() {
 
 #[tokio::test]
 async fn bug_history_empty_prints_no_history_message() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42/history"))
@@ -199,7 +199,8 @@ async fn bug_history_empty_prints_no_history_message() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -212,12 +213,17 @@ async fn bug_history_empty_prints_no_history_message() {
 }
 
 /// Drive `bug history` end to end and return (stdout, stderr, ok).
-async fn run_history(id: u64, format: OutputFormat) -> (String, String, bool) {
+async fn run_history(
+    id: u64,
+    format: OutputFormat,
+    config_path: &std::path::Path,
+) -> (String, String, bool) {
     let action = BugAction::History(crate::cli::HistoryArgs { id, since: None });
     let mut io = crate::test_helpers::CapturedIo::new();
     let ok = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, format, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, format, None)
+            .with_config_path_override(Some(config_path.to_path_buf())),
         &mut io.writers(),
     )
     .await
@@ -245,7 +251,7 @@ fn history_mock() -> wiremock::Mock {
 
 #[tokio::test]
 async fn bug_history_json_expands_multi_field_entry_to_multiple_records() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     history_mock().expect(1).mount(&mock).await;
     // A comment at the same who+when correlates a comment_id onto both records.
     Mock::given(method("GET"))
@@ -261,7 +267,7 @@ async fn bug_history_json_expands_multi_field_entry_to_multiple_records() {
         .mount(&mock)
         .await;
 
-    let (out, _err, ok) = run_history(7, OutputFormat::Json).await;
+    let (out, _err, ok) = run_history(7, OutputFormat::Json, &config_path).await;
     assert!(ok, "bug history --json should succeed");
     let data = crate::test_helpers::json_envelope_data(&out);
     let arr = data.as_array().unwrap();
@@ -280,7 +286,7 @@ async fn bug_history_json_expands_multi_field_entry_to_multiple_records() {
 
 #[tokio::test]
 async fn bug_history_ndjson_streams_one_record_per_line() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     history_mock().mount(&mock).await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/7/comment"))
@@ -290,7 +296,7 @@ async fn bug_history_ndjson_streams_one_record_per_line() {
         .mount(&mock)
         .await;
 
-    let (out, _err, ok) = run_history(7, OutputFormat::Ndjson).await;
+    let (out, _err, ok) = run_history(7, OutputFormat::Ndjson, &config_path).await;
     assert!(ok);
     let lines: Vec<&str> = out.lines().collect();
     assert_eq!(lines.len(), 2, "one record per changed field: {out}");
@@ -305,7 +311,7 @@ async fn bug_history_ndjson_streams_one_record_per_line() {
 
 #[tokio::test]
 async fn bug_history_json_empty_emits_empty_array_not_prose() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/7/history"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -323,7 +329,7 @@ async fn bug_history_json_empty_emits_empty_array_not_prose() {
         .mount(&mock)
         .await;
 
-    let (out, _err, ok) = run_history(7, OutputFormat::Json).await;
+    let (out, _err, ok) = run_history(7, OutputFormat::Json, &config_path).await;
     assert!(ok);
     assert!(
         !out.contains("No history"),
@@ -335,7 +341,7 @@ async fn bug_history_json_empty_emits_empty_array_not_prose() {
 
 #[tokio::test]
 async fn bug_history_json_degrades_to_null_comment_id_when_comment_fetch_fails() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     history_mock().mount(&mock).await;
     // Comment fetch fails: correlation degrades to null, command still succeeds.
     Mock::given(method("GET"))
@@ -344,7 +350,7 @@ async fn bug_history_json_degrades_to_null_comment_id_when_comment_fetch_fails()
         .mount(&mock)
         .await;
 
-    let (out, err, ok) = run_history(7, OutputFormat::Json).await;
+    let (out, err, ok) = run_history(7, OutputFormat::Json, &config_path).await;
     assert!(
         ok,
         "history delta is the contract; comment failure is non-fatal"
@@ -364,7 +370,7 @@ async fn bug_history_json_degrades_to_null_comment_id_when_comment_fetch_fails()
 #[tokio::test]
 async fn bug_history_rejects_malformed_since_with_exit_code_7() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = BugAction::History(crate::cli::HistoryArgs {
         id: 42,
@@ -372,7 +378,8 @@ async fn bug_history_rejects_malformed_since_with_exit_code_7() {
     });
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut __cap_io.writers(),
     )
     .await;

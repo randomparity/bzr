@@ -10,7 +10,7 @@ use wiremock::matchers::{body_json, body_partial_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::BugAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 use super::test_helpers::{
@@ -54,7 +54,7 @@ fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
 
 #[tokio::test]
 async fn bug_update_from_json_object_uses_positional_id() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("PUT"))
         .and(path("/rest/bug/42"))
         .and(body_json(serde_json::json!({"status": "ASSIGNED"})))
@@ -71,7 +71,8 @@ async fn bug_update_from_json_object_uses_positional_id() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -87,7 +88,7 @@ async fn bug_update_from_json_object_uses_positional_id() {
 
 #[tokio::test]
 async fn bug_update_from_json_cli_flag_overrides_json_field() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("PUT"))
         .and(path("/rest/bug/42"))
         .and(body_json(serde_json::json!({"status": "ASSIGNED"})))
@@ -107,7 +108,8 @@ async fn bug_update_from_json_cli_flag_overrides_json_field() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -123,7 +125,7 @@ async fn bug_update_from_json_cli_flag_overrides_json_field() {
 
 #[tokio::test]
 async fn bug_update_from_json_cli_list_flag_replaces_json_list_in_put_body() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("PUT"))
         .and(path("/rest/bug/42"))
         .and(body_json(serde_json::json!({
@@ -147,7 +149,8 @@ async fn bug_update_from_json_cli_list_flag_replaces_json_list_in_put_body() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -160,7 +163,7 @@ async fn bug_update_from_json_cli_list_flag_replaces_json_list_in_put_body() {
 
 #[tokio::test]
 async fn bug_update_from_json_list_fields_use_add_remove_shapes() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("PUT"))
         .and(path("/rest/bug/42"))
         .and(body_partial_json(serde_json::json!({
@@ -188,7 +191,8 @@ async fn bug_update_from_json_list_fields_use_add_remove_shapes() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -198,7 +202,7 @@ async fn bug_update_from_json_list_fields_use_add_remove_shapes() {
 
 #[tokio::test]
 async fn bug_update_from_json_array_batches_per_id() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("PUT"))
         .and(path("/rest/bug/1"))
         .and(body_json(serde_json::json!({"status": "ASSIGNED"})))
@@ -225,7 +229,8 @@ async fn bug_update_from_json_array_batches_per_id() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -238,7 +243,7 @@ async fn bug_update_from_json_array_batches_per_id() {
 
 #[tokio::test]
 async fn bug_update_from_json_single_element_array_returns_batch_shape() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("PUT"))
         .and(path("/rest/bug/8"))
         .and(body_json(serde_json::json!({"status": "ASSIGNED"})))
@@ -255,7 +260,8 @@ async fn bug_update_from_json_single_element_array_returns_batch_shape() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -275,7 +281,7 @@ async fn bug_update_from_json_single_element_array_returns_batch_shape() {
 
 #[tokio::test]
 async fn bug_update_from_json_array_dry_run_emits_single_object_and_no_write() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("PUT"))
         .and(path("/rest/bug/1"))
         .respond_with(ResponseTemplate::new(200))
@@ -289,7 +295,8 @@ async fn bug_update_from_json_array_dry_run_emits_single_object_and_no_write() {
     let result = crate::commands::bug::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_dry_run(true),
+            .with_dry_run(true)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -304,7 +311,7 @@ async fn bug_update_from_json_array_dry_run_emits_single_object_and_no_write() {
 
 #[tokio::test]
 async fn bug_update_from_json_array_partial_failure_exits_11() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     mock_put_bug_ok(&mock, 1).await;
     Mock::given(method("PUT"))
         .and(path("/rest/bug/2"))
@@ -318,7 +325,8 @@ async fn bug_update_from_json_array_partial_failure_exits_11() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -338,7 +346,7 @@ async fn bug_update_from_json_array_partial_failure_exits_11() {
 
 #[tokio::test]
 async fn bug_update_from_json_array_guard_failure_prevents_all_writes() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("PUT"))
         .and(path("/rest/bug/1"))
         .respond_with(
@@ -361,7 +369,8 @@ async fn bug_update_from_json_array_guard_failure_prevents_all_writes() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -382,7 +391,7 @@ async fn bug_update_from_json_array_guard_failure_prevents_all_writes() {
 
 #[tokio::test]
 async fn bug_update_from_json_comment_and_expect_guard() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     mock_get_bug_lct(&mock, 42, "2026-06-21T12:00:00Z").await;
     Mock::given(method("PUT"))
         .and(path("/rest/bug/42"))
@@ -412,7 +421,8 @@ async fn bug_update_from_json_comment_and_expect_guard() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -425,13 +435,14 @@ async fn bug_update_from_json_comment_and_expect_guard() {
 
 #[tokio::test]
 async fn bug_update_from_json_rejects_unknown_field() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let json = r#"{"id":42,"status":"ASSIGNED","bogus":true}"#;
     let action = from_json_update_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await
@@ -446,12 +457,13 @@ async fn bug_update_from_json_rejects_unknown_field() {
 
 #[tokio::test]
 async fn bug_update_from_json_rejects_empty_array() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let action = from_json_update_action(&write_json_file(&tmp, "[]"));
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await
@@ -466,13 +478,14 @@ async fn bug_update_from_json_rejects_empty_array() {
 
 #[tokio::test]
 async fn bug_update_from_json_rejects_array_item_without_id() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let json = r#"[{"status":"ASSIGNED"}]"#;
     let action = from_json_update_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await
@@ -487,13 +500,14 @@ async fn bug_update_from_json_rejects_array_item_without_id() {
 
 #[tokio::test]
 async fn bug_update_from_json_rejects_object_without_target_id() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let json = r#"{"status":"ASSIGNED"}"#;
     let action = from_json_update_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await
@@ -508,13 +522,14 @@ async fn bug_update_from_json_rejects_object_without_target_id() {
 
 #[tokio::test]
 async fn bug_update_from_json_rejects_mixed_positional_and_json_id() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let json = r#"{"id":42,"status":"ASSIGNED"}"#;
     let action = from_json_update_action_with_ids(vec![43], &write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await
@@ -529,13 +544,14 @@ async fn bug_update_from_json_rejects_mixed_positional_and_json_id() {
 
 #[tokio::test]
 async fn bug_update_from_json_rejects_dupe_of_with_status() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let json = r#"{"id":42,"dupe_of":99,"status":"RESOLVED"}"#;
     let action = from_json_update_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await
@@ -550,13 +566,14 @@ async fn bug_update_from_json_rejects_dupe_of_with_status() {
 
 #[tokio::test]
 async fn bug_update_from_json_rejects_json_comment_file_stdin() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let json = r#"{"id":42,"status":"ASSIGNED","comment_file":"-"}"#;
     let action = from_json_update_action(&write_json_file(&tmp, json));
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await
@@ -571,7 +588,7 @@ async fn bug_update_from_json_rejects_json_comment_file_stdin() {
 
 #[tokio::test]
 async fn bug_update_from_json_cli_comment_overrides_json_comment_file_stdin() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("PUT"))
         .and(path("/rest/bug/42"))
         .and(body_partial_json(serde_json::json!({
@@ -598,7 +615,8 @@ async fn bug_update_from_json_cli_comment_overrides_json_comment_file_stdin() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -612,14 +630,15 @@ async fn bug_update_from_json_cli_comment_overrides_json_comment_file_stdin() {
 
 #[tokio::test]
 async fn bug_update_sends_put() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mock_put_bug_ok(&mock, 42).await;
 
     let action = make_update_action(vec![42]);
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -632,7 +651,7 @@ async fn bug_update_sends_put() {
 
 #[tokio::test]
 async fn bug_update_alias_multiple_ids_rejected_before_connect() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     let mut action = make_update_action_with_scalar_parity_fields();
     *update_ids_mut(&mut action).expect("expected update action") = vec![42, 43];
@@ -640,7 +659,8 @@ async fn bug_update_alias_multiple_ids_rejected_before_connect() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -659,7 +679,7 @@ async fn bug_update_alias_multiple_ids_rejected_before_connect() {
 
 #[tokio::test]
 async fn bug_update_sends_dupe_of_body() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("PUT"))
         .and(path("/rest/bug/42"))
         .and(body_json(serde_json::json!({"dupe_of": 99})))
@@ -675,7 +695,8 @@ async fn bug_update_sends_dupe_of_body() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -685,7 +706,7 @@ async fn bug_update_sends_dupe_of_body() {
 
 #[tokio::test]
 async fn bug_update_sends_url_and_target_milestone_body() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("PUT"))
         .and(path("/rest/bug/42"))
         .and(body_json(serde_json::json!({
@@ -709,7 +730,8 @@ async fn bug_update_sends_url_and_target_milestone_body() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -719,7 +741,7 @@ async fn bug_update_sends_url_and_target_milestone_body() {
 
 #[tokio::test]
 async fn bug_update_batch_mixed_results() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     // First id succeeds, second id fails — exercises update_batch and
     // print_batch_result, including the BatchPartialFailure path.
@@ -735,7 +757,8 @@ async fn bug_update_batch_mixed_results() {
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io2.writers(),
     )
     .await;
@@ -754,7 +777,7 @@ async fn bug_update_batch_mixed_results() {
 
 #[tokio::test]
 async fn bug_update_batch_table_format_all_succeed() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     // Table format path through print_batch_result with no failures.
     mock_put_bug_ok(&mock, 1).await;
@@ -764,7 +787,8 @@ async fn bug_update_batch_table_format_all_succeed() {
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io3.writers(),
     )
     .await;
@@ -777,14 +801,15 @@ async fn bug_update_batch_table_format_all_succeed() {
 
 #[tokio::test]
 async fn bug_update_table_output_with_comment_single() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mock_put_bug_ok(&mock, 42).await;
 
     let action = make_update_action_with_comment(vec![42], Some("hi"), None, false);
     let mut __io4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io4.writers(),
     )
     .await;
@@ -798,14 +823,15 @@ async fn bug_update_table_output_with_comment_single() {
 
 #[tokio::test]
 async fn bug_update_table_output_no_comment_single() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mock_put_bug_ok(&mock, 42).await;
 
     let action = make_update_action(vec![42]);
     let mut __io5 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io5.writers(),
     )
     .await;
@@ -820,7 +846,7 @@ async fn bug_update_table_output_no_comment_single() {
 
 #[tokio::test]
 async fn bug_update_table_output_with_comment_batch_all_succeed() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mock_put_bug_ok(&mock, 1).await;
     mock_put_bug_ok(&mock, 2).await;
 
@@ -828,7 +854,8 @@ async fn bug_update_table_output_with_comment_batch_all_succeed() {
     let mut __io6 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io6.writers(),
     )
     .await;
@@ -840,14 +867,15 @@ async fn bug_update_table_output_with_comment_batch_all_succeed() {
 
 #[tokio::test]
 async fn bug_update_json_output_unchanged_with_comment() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mock_put_bug_ok(&mock, 42).await;
 
     let action = make_update_action_with_comment(vec![42], Some("hi"), None, false);
     let mut __io7 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io7.writers(),
     )
     .await;
@@ -868,7 +896,7 @@ async fn bug_update_json_output_unchanged_with_comment() {
 async fn bug_update_large_batch_auto_proceeds_when_not_a_tty() {
     // Test stdin is not a TTY, so a >threshold batch must run without blocking
     // on a confirmation prompt — agents and pipes are never gated.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     let ids: Vec<u64> = (1..=11).collect();
     for &id in &ids {
         mock_put_bug_ok(&mock, id).await;
@@ -878,7 +906,8 @@ async fn bug_update_large_batch_auto_proceeds_when_not_a_tty() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -894,7 +923,7 @@ async fn bug_update_large_batch_auto_proceeds_when_not_a_tty() {
 
 #[tokio::test]
 async fn bug_update_expect_unchanged_proceeds_when_timestamp_matches() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mock_get_bug_lct(&mock, 42, "2026-06-19T12:00:00Z").await;
     mock_put_bug_ok(&mock, 42).await;
 
@@ -902,7 +931,8 @@ async fn bug_update_expect_unchanged_proceeds_when_timestamp_matches() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -921,7 +951,7 @@ async fn bug_update_expect_unchanged_proceeds_when_timestamp_matches() {
 async fn bug_update_expect_unchanged_matches_across_timestamp_formats() {
     // The server returns the XML-RPC basic form while the user passes the REST
     // canonical form of the same instant: the guard keys them equal and writes.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mock_get_bug_lct(&mock, 42, "20260619T12:00:00").await;
     mock_put_bug_ok(&mock, 42).await;
 
@@ -929,7 +959,8 @@ async fn bug_update_expect_unchanged_matches_across_timestamp_formats() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -942,7 +973,7 @@ async fn bug_update_expect_unchanged_matches_across_timestamp_formats() {
 
 #[tokio::test]
 async fn bug_update_expect_unchanged_detects_collision_and_skips_write() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mock_get_bug_lct(&mock, 42, "2026-06-19T12:00:00Z").await;
     forbid_put(&mock).await;
 
@@ -951,7 +982,8 @@ async fn bug_update_expect_unchanged_detects_collision_and_skips_write() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -966,7 +998,7 @@ async fn bug_update_expect_unchanged_detects_collision_and_skips_write() {
 
 #[tokio::test]
 async fn bug_update_expect_unchanged_batch_aborts_all_on_any_collision() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mock_get_bug_lct(&mock, 1, "2026-06-19T12:00:00Z").await; // matches
     mock_get_bug_lct(&mock, 2, "2026-06-19T13:00:00Z").await; // differs -> collision
     forbid_put(&mock).await;
@@ -975,7 +1007,8 @@ async fn bug_update_expect_unchanged_batch_aborts_all_on_any_collision() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -991,14 +1024,15 @@ async fn bug_update_expect_unchanged_batch_aborts_all_on_any_collision() {
 async fn bug_update_expect_unchanged_rejects_unparseable_expected_value() {
     // An unrecognized --expect-unchanged-since value fails before any re-read or
     // write: InputValidation (exit 7), and no GET/PUT is issued.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     forbid_put(&mock).await;
 
     let action = update_action_expect_unchanged(vec![42], "yesterday");
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -1015,7 +1049,7 @@ async fn bug_update_expect_unchanged_rejects_unparseable_expected_value() {
 async fn bug_update_expect_unchanged_errors_when_server_omits_last_change_time() {
     // The re-read returns a bug with no last_change_time: the guard cannot
     // verify, so it fails with DataIntegrity (exit 10) and skips the write.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/42"))
         .respond_with(
@@ -1029,7 +1063,8 @@ async fn bug_update_expect_unchanged_errors_when_server_omits_last_change_time()
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -1047,7 +1082,7 @@ async fn bug_update_expect_unchanged_errors_when_server_last_change_time_is_garb
     // The re-read returns an unparseable last_change_time: the guard cannot key
     // it for comparison, so it fails with DataIntegrity (exit 10), not a false
     // collision and not a silent write.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mock_get_bug_lct(&mock, 42, "not-a-timestamp").await;
     forbid_put(&mock).await;
 
@@ -1055,7 +1090,8 @@ async fn bug_update_expect_unchanged_errors_when_server_last_change_time_is_garb
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -1073,6 +1109,7 @@ async fn bug_update_expect_unchanged_errors_when_server_last_change_time_is_garb
 async fn run_update_dry_run_json(
     action: &BugAction,
     mock: &wiremock::MockServer,
+    config_path: &std::path::Path,
 ) -> serde_json::Value {
     forbid_put(mock).await;
 
@@ -1080,7 +1117,8 @@ async fn run_update_dry_run_json(
     let result = crate::commands::bug::execute(
         action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_dry_run(true),
+            .with_dry_run(true)
+            .with_config_path_override(Some(config_path.to_path_buf())),
         &mut io.writers(),
     )
     .await;
@@ -1092,7 +1130,7 @@ async fn run_update_dry_run_json(
 
 #[tokio::test]
 async fn bug_update_dry_run_makes_no_write_and_marks_payload() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     forbid_put(&mock).await;
 
     let action = make_update_action(vec![42]);
@@ -1100,7 +1138,8 @@ async fn bug_update_dry_run_makes_no_write_and_marks_payload() {
     let result = crate::commands::bug::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_dry_run(true),
+            .with_dry_run(true)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -1117,7 +1156,7 @@ async fn bug_update_dry_run_makes_no_write_and_marks_payload() {
 
 #[tokio::test]
 async fn bug_update_dry_run_json_includes_cleaned_add_and_remove_lists() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     forbid_put(&mock).await;
 
     let action = BugAction::Update(crate::cli::UpdateArgs {
@@ -1132,7 +1171,8 @@ async fn bug_update_dry_run_json_includes_cleaned_add_and_remove_lists() {
     let result = crate::commands::bug::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_dry_run(true),
+            .with_dry_run(true)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -1159,7 +1199,7 @@ async fn bug_update_dry_run_json_includes_cleaned_add_and_remove_lists() {
 
 #[tokio::test]
 async fn bug_update_dry_run_batch_lists_all_ids() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     forbid_put(&mock).await;
 
     let action = make_update_action(vec![1, 2, 3]);
@@ -1167,7 +1207,8 @@ async fn bug_update_dry_run_batch_lists_all_ids() {
     let result = crate::commands::bug::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_dry_run(true),
+            .with_dry_run(true)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -1181,7 +1222,7 @@ async fn bug_update_dry_run_batch_lists_all_ids() {
 
 #[tokio::test]
 async fn bug_update_dry_run_table_prints_human_preview() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     forbid_put(&mock).await;
 
     let action = make_update_action(vec![7, 8]);
@@ -1189,7 +1230,8 @@ async fn bug_update_dry_run_table_prints_human_preview() {
     let result = crate::commands::bug::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
-            .with_dry_run(true),
+            .with_dry_run(true)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -1204,7 +1246,7 @@ async fn bug_update_dry_run_table_prints_human_preview() {
 
 #[tokio::test]
 async fn bug_update_dry_run_still_validates_empty_update() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     forbid_put(&mock).await;
 
     let action = make_empty_update_action(vec![42]);
@@ -1212,7 +1254,8 @@ async fn bug_update_dry_run_still_validates_empty_update() {
     let result = crate::commands::bug::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_dry_run(true),
+            .with_dry_run(true)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -1225,14 +1268,14 @@ async fn bug_update_dry_run_still_validates_empty_update() {
 
 #[tokio::test]
 async fn bug_update_from_json_cli_dupe_of_reaches_dry_run_payload() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let mut action = from_json_update_action(&write_json_file(&tmp, r#"{"id":42}"#));
     let BugAction::Update(args) = &mut action else {
         panic!("expected update action");
     };
     args.dupe_of = Some(77);
 
-    let parsed = run_update_dry_run_json(&action, &mock).await;
+    let parsed = run_update_dry_run_json(&action, &mock, &config_path).await;
 
     assert_eq!(parsed["ids"], serde_json::json!([42]));
     assert_eq!(parsed["changes"]["dupe_of"], 77);
@@ -1240,10 +1283,10 @@ async fn bug_update_from_json_cli_dupe_of_reaches_dry_run_payload() {
 
 #[tokio::test]
 async fn bug_update_from_json_keeps_json_dupe_of_when_cli_omits_it() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let action = from_json_update_action(&write_json_file(&tmp, r#"{"id":42,"dupe_of":55}"#));
 
-    let parsed = run_update_dry_run_json(&action, &mock).await;
+    let parsed = run_update_dry_run_json(&action, &mock, &config_path).await;
 
     assert_eq!(parsed["ids"], serde_json::json!([42]));
     assert_eq!(parsed["changes"]["dupe_of"], 55);
@@ -1251,14 +1294,14 @@ async fn bug_update_from_json_keeps_json_dupe_of_when_cli_omits_it() {
 
 #[tokio::test]
 async fn bug_update_from_json_cli_reset_assigned_to_reaches_dry_run_payload() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let mut action = from_json_update_action(&write_json_file(&tmp, r#"{"id":42}"#));
     let BugAction::Update(args) = &mut action else {
         panic!("expected update action");
     };
     args.reset_assigned_to = true;
 
-    let parsed = run_update_dry_run_json(&action, &mock).await;
+    let parsed = run_update_dry_run_json(&action, &mock, &config_path).await;
 
     assert_eq!(parsed["ids"], serde_json::json!([42]));
     assert_eq!(parsed["changes"]["reset_assigned_to"], true);
@@ -1266,11 +1309,11 @@ async fn bug_update_from_json_cli_reset_assigned_to_reaches_dry_run_payload() {
 
 #[tokio::test]
 async fn bug_update_from_json_keeps_json_reset_assigned_to_when_cli_omits_it() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let json = r#"{"id":42,"reset_assigned_to":true}"#;
     let action = from_json_update_action(&write_json_file(&tmp, json));
 
-    let parsed = run_update_dry_run_json(&action, &mock).await;
+    let parsed = run_update_dry_run_json(&action, &mock, &config_path).await;
 
     assert_eq!(parsed["ids"], serde_json::json!([42]));
     assert_eq!(parsed["changes"]["reset_assigned_to"], true);
@@ -1278,11 +1321,11 @@ async fn bug_update_from_json_keeps_json_reset_assigned_to_when_cli_omits_it() {
 
 #[tokio::test]
 async fn bug_update_from_json_keeps_json_blocks_add_when_cli_omits_it() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let json = r#"{"id":42,"blocks_add":[5,6,7]}"#;
     let action = from_json_update_action(&write_json_file(&tmp, json));
 
-    let parsed = run_update_dry_run_json(&action, &mock).await;
+    let parsed = run_update_dry_run_json(&action, &mock, &config_path).await;
 
     assert_eq!(parsed["ids"], serde_json::json!([42]));
     assert_eq!(
@@ -1293,7 +1336,7 @@ async fn bug_update_from_json_keeps_json_blocks_add_when_cli_omits_it() {
 
 #[tokio::test]
 async fn bug_update_from_json_cli_comment_file_replaces_json_comment() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let comment_path = tmp.path().join("cli-body.txt");
     std::fs::write(&comment_path, "body from file").unwrap();
     let mut action =
@@ -1303,7 +1346,7 @@ async fn bug_update_from_json_cli_comment_file_replaces_json_comment() {
     };
     args.comment_file = Some(comment_path);
 
-    let parsed = run_update_dry_run_json(&action, &mock).await;
+    let parsed = run_update_dry_run_json(&action, &mock, &config_path).await;
 
     assert_eq!(parsed["ids"], serde_json::json!([42]));
     assert_eq!(parsed["changes"]["comment"]["body"], "body from file");
@@ -1311,7 +1354,7 @@ async fn bug_update_from_json_cli_comment_file_replaces_json_comment() {
 
 #[tokio::test]
 async fn bug_update_from_json_cli_keywords_add_replaces_json_keywords_add() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
     let json = r#"{"id":42,"keywords_add":["json-keyword"]}"#;
     let mut action = from_json_update_action(&write_json_file(&tmp, json));
     let BugAction::Update(args) = &mut action else {
@@ -1319,7 +1362,7 @@ async fn bug_update_from_json_cli_keywords_add_replaces_json_keywords_add() {
     };
     args.keywords_add = vec!["cli-keyword".into()];
 
-    let parsed = run_update_dry_run_json(&action, &mock).await;
+    let parsed = run_update_dry_run_json(&action, &mock, &config_path).await;
 
     assert_eq!(parsed["ids"], serde_json::json!([42]));
     assert_eq!(

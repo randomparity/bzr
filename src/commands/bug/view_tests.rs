@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::BugAction;
-use crate::test_helpers::{setup_test_env, write_config_to};
+use crate::test_helpers::{setup_isolated_env, write_config_to};
 use crate::types::OutputFormat;
 
 fn make_view_action(ids: &[&str], permissive: bool) -> BugAction {
@@ -58,7 +58,7 @@ fn api_error_body(code: i64, message: &str) -> serde_json::Value {
 
 #[tokio::test]
 async fn view_single_unchanged_table() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/42"))
         .respond_with(ResponseTemplate::new(200).set_body_json(ok_bug_body(42, "Test bug")))
@@ -69,7 +69,8 @@ async fn view_single_unchanged_table() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -83,7 +84,7 @@ async fn view_single_unchanged_table() {
 
 #[tokio::test]
 async fn view_single_unchanged_json() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/42"))
         .respond_with(ResponseTemplate::new(200).set_body_json(ok_bug_body(42, "Test bug")))
@@ -94,7 +95,8 @@ async fn view_single_unchanged_json() {
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io2.writers(),
     )
     .await;
@@ -109,7 +111,7 @@ async fn view_single_unchanged_json() {
 
 #[tokio::test]
 async fn view_single_json_custom_only_field_omits_forced_id() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/42"))
         .and(query_param("include_fields", "id,cf_release"))
@@ -129,7 +131,8 @@ async fn view_single_json_custom_only_field_omits_forced_id() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -146,7 +149,7 @@ async fn view_single_json_custom_only_field_omits_forced_id() {
 
 #[tokio::test]
 async fn view_single_table_renders_requested_custom_row() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/42"))
         .and(query_param("include_fields", "id,cf_release"))
@@ -166,7 +169,8 @@ async fn view_single_table_renders_requested_custom_row() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -184,7 +188,7 @@ async fn view_single_table_renders_requested_custom_row() {
 
 #[tokio::test]
 async fn view_single_table_warns_for_unknown_field() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/42"))
         .and(query_param("include_fields", "id,sumary"))
@@ -202,7 +206,8 @@ async fn view_single_table_warns_for_unknown_field() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -218,7 +223,7 @@ async fn view_single_table_warns_for_unknown_field() {
 #[tokio::test]
 async fn view_single_failure_propagates() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/999999"))
         .respond_with(
@@ -231,7 +236,8 @@ async fn view_single_failure_propagates() {
     let action = make_view_action(&["999999"], false);
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __cap_io.writers(),
     )
     .await;
@@ -245,7 +251,7 @@ async fn view_single_failure_propagates() {
 
 #[tokio::test]
 async fn view_multi_strict_all_succeed_table() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     for (id, summary) in [(1, "first"), (2, "second"), (3, "third")] {
         Mock::given(method("GET"))
             .and(path(format!("/rest/bug/{id}")))
@@ -258,7 +264,8 @@ async fn view_multi_strict_all_succeed_table() {
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io3.writers(),
     )
     .await;
@@ -273,7 +280,7 @@ async fn view_multi_strict_all_succeed_table() {
 
 #[tokio::test]
 async fn view_multi_strict_failure_emits_no_partial_table() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
         .respond_with(ResponseTemplate::new(200).set_body_json(ok_bug_body(1, "first")))
@@ -294,7 +301,8 @@ async fn view_multi_strict_failure_emits_no_partial_table() {
     let mut __io4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io4.writers(),
     )
     .await;
@@ -310,7 +318,7 @@ async fn view_multi_strict_failure_emits_no_partial_table() {
 
 #[tokio::test]
 async fn view_multi_strict_json_all_succeed_emits_wrapped_shape() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     for (id, summary) in [(1, "first"), (2, "second")] {
         Mock::given(method("GET"))
             .and(path(format!("/rest/bug/{id}")))
@@ -323,7 +331,8 @@ async fn view_multi_strict_json_all_succeed_emits_wrapped_shape() {
     let mut __io5 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io5.writers(),
     )
     .await;
@@ -338,7 +347,7 @@ async fn view_multi_strict_json_all_succeed_emits_wrapped_shape() {
 
 #[tokio::test]
 async fn view_multi_strict_json_projects_custom_fields_inside_wrapper() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     for (id, summary, release) in [(1, "first", "9.6"), (2, "second", "9.7")] {
         Mock::given(method("GET"))
             .and(path(format!("/rest/bug/{id}")))
@@ -365,7 +374,8 @@ async fn view_multi_strict_json_projects_custom_fields_inside_wrapper() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -382,7 +392,7 @@ async fn view_multi_strict_json_projects_custom_fields_inside_wrapper() {
 
 #[tokio::test]
 async fn view_multi_strict_json_failure_emits_no_partial_json() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
         .respond_with(ResponseTemplate::new(200).set_body_json(ok_bug_body(1, "first")))
@@ -400,7 +410,8 @@ async fn view_multi_strict_json_failure_emits_no_partial_json() {
     let mut __io6 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io6.writers(),
     )
     .await;
@@ -417,7 +428,7 @@ async fn view_multi_strict_json_failure_emits_no_partial_json() {
 
 #[tokio::test]
 async fn view_multi_permissive_partial_table() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
         .respond_with(ResponseTemplate::new(200).set_body_json(ok_bug_body(1, "first")))
@@ -440,7 +451,8 @@ async fn view_multi_permissive_partial_table() {
     let mut __io7 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io7.writers(),
     )
     .await;
@@ -463,7 +475,7 @@ async fn view_multi_permissive_partial_table() {
 
 #[tokio::test]
 async fn view_multi_permissive_json_shape() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
         .respond_with(ResponseTemplate::new(200).set_body_json(ok_bug_body(1, "first")))
@@ -481,7 +493,8 @@ async fn view_multi_permissive_json_shape() {
     let mut __io8 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io8.writers(),
     )
     .await;
@@ -504,7 +517,7 @@ async fn view_multi_permissive_json_shape() {
 
 #[tokio::test]
 async fn view_multi_permissive_all_fail_returns_empty_bugs() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     for id in [1_u64, 2, 3] {
         Mock::given(method("GET"))
             .and(path(format!("/rest/bug/{id}")))
@@ -519,7 +532,8 @@ async fn view_multi_permissive_all_fail_returns_empty_bugs() {
     let mut __io9 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io9.writers(),
     )
     .await;
@@ -532,7 +546,7 @@ async fn view_multi_permissive_all_fail_returns_empty_bugs() {
 
 #[tokio::test]
 async fn view_multi_permissive_with_alias_preserves_id_string() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
         .respond_with(ResponseTemplate::new(200).set_body_json(ok_bug_body(1, "first")))
@@ -550,7 +564,8 @@ async fn view_multi_permissive_with_alias_preserves_id_string() {
     let mut __io10 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io10.writers(),
     )
     .await;
@@ -567,12 +582,13 @@ async fn view_multi_permissive_with_alias_preserves_id_string() {
 #[tokio::test]
 async fn view_permissive_single_id_rejected() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = make_view_action(&["42"], true);
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __cap_io.writers(),
     )
     .await;
@@ -591,7 +607,7 @@ async fn view_permissive_single_id_rejected() {
 #[tokio::test]
 async fn view_multi_permissive_transport_error_bails() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
         .respond_with(ResponseTemplate::new(200).set_body_json(ok_bug_body(1, "first")))
@@ -611,7 +627,8 @@ async fn view_multi_permissive_transport_error_bails() {
     let action = make_view_action(&["1", "2", "3"], true);
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __cap_io.writers(),
     )
     .await;
@@ -626,7 +643,7 @@ async fn view_multi_permissive_transport_error_bails() {
 #[tokio::test]
 async fn view_multi_permissive_api_session_wide_bails() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
         .respond_with(ResponseTemplate::new(200).set_body_json(ok_bug_body(1, "first")))
@@ -649,7 +666,8 @@ async fn view_multi_permissive_api_session_wide_bails() {
     let action = make_view_action(&["1", "2", "3"], true);
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __cap_io.writers(),
     )
     .await;
@@ -661,7 +679,7 @@ async fn view_multi_permissive_api_session_wide_bails() {
 
 #[tokio::test]
 async fn view_multi_permissive_api_102_suppressed() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
         .respond_with(ResponseTemplate::new(200).set_body_json(ok_bug_body(1, "first")))
@@ -679,7 +697,8 @@ async fn view_multi_permissive_api_102_suppressed() {
     let mut __io11 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io11.writers(),
     )
     .await;
@@ -693,7 +712,7 @@ async fn view_multi_permissive_api_102_suppressed() {
 #[tokio::test]
 async fn view_multi_permissive_api_410_bails() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
         .respond_with(ResponseTemplate::new(200).set_body_json(ok_bug_body(1, "first")))
@@ -719,7 +738,8 @@ async fn view_multi_permissive_api_410_bails() {
     let action = make_view_action(&["1", "2", "3"], true);
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __cap_io.writers(),
     )
     .await;
@@ -817,10 +837,11 @@ fn emit_web_interactive_failure_falls_back_to_print() {
 
 #[tokio::test]
 async fn resolve_bug_urls_uses_configured_server() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     let ids = vec!["42".to_string(), "99".to_string()];
     let ctx =
-        crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None);
+        crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path));
     let urls = super::resolve_bug_urls(&ids, &ctx).unwrap();
     assert_eq!(urls.len(), 2);
     assert!(urls[0].starts_with(&mock.uri()));
@@ -901,7 +922,7 @@ async fn execute_web_prints_url_when_fd1_not_a_tty() {
         fn close(fd: std::ffi::c_int) -> std::ffi::c_int;
     }
 
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     let action = BugAction::View(crate::cli::ViewArgs {
         ids: vec!["55".to_string()],
         permissive: false,
@@ -922,7 +943,8 @@ async fn execute_web_prints_url_when_fd1_not_a_tty() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -946,7 +968,7 @@ async fn view_multi_permissive_reports_access_reason_not_absence() {
     // The error now survives, and because 102 is a per-bug `Bug.get` code the
     // batch still completes under --permissive — with the server's real reason
     // in `failed[].error` instead of a fabricated absence.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
         .respond_with(ResponseTemplate::new(200).set_body_json(ok_bug_body(1, "visible")))
@@ -967,7 +989,8 @@ async fn view_multi_permissive_reports_access_reason_not_absence() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;

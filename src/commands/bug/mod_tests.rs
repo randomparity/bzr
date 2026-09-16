@@ -4,7 +4,7 @@
 //! (via `execute`-level field-validation behavior).
 
 use crate::cli::BugAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 // ---- capabilities ----
@@ -76,12 +76,13 @@ fn capabilities_are_anonymous_for_adjacency() {
 }
 
 async fn assert_adjacency_rejected_before_connection(ids: Vec<String>) {
-    let (_lock, _tmp) = crate::test_helpers::setup_empty_config_env().await;
+    let (_tmp, config_path) = crate::test_helpers::setup_empty_isolated_env();
     let action = BugAction::Adjacency(crate::cli::AdjacencyArgs { ids });
     let mut io = crate::test_helpers::CapturedIo::new();
     let error = super::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await
@@ -132,7 +133,7 @@ fn bug_column_spec_adjacency_has_no_field_selection_path() {
 
 #[tokio::test]
 async fn bug_column_spec_my_validates_unknown_field_in_table_mode() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = BugAction::My(crate::cli::MyArgs {
         field_args: crate::cli::FieldArgs {
@@ -145,7 +146,8 @@ async fn bug_column_spec_my_validates_unknown_field_in_table_mode() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -172,7 +174,7 @@ async fn bug_column_spec_my_validates_unknown_field_in_table_mode() {
 
 #[tokio::test]
 async fn bug_column_spec_search_validates_unknown_field_in_table_mode() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = BugAction::Search(crate::cli::SearchArgs {
         page_args: crate::cli::PageArgs::default(),
@@ -193,7 +195,8 @@ async fn bug_column_spec_search_validates_unknown_field_in_table_mode() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;

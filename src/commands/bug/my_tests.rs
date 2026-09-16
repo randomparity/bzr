@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::cli::BugAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 async fn mount_whoami(mock: &MockServer) {
@@ -21,7 +21,7 @@ async fn mount_whoami(mock: &MockServer) {
 
 #[tokio::test]
 async fn bug_my_returns_assigned_by_default() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     mount_whoami(&mock).await;
 
@@ -58,7 +58,8 @@ async fn bug_my_returns_assigned_by_default() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -72,7 +73,7 @@ async fn bug_my_returns_assigned_by_default() {
 #[tokio::test]
 async fn bug_my_passes_status_limit_and_field_filters() {
     // status / limit / fields / exclude_fields must reach the search.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_whoami(&mock).await;
 
     Mock::given(method("GET"))
@@ -108,7 +109,8 @@ async fn bug_my_passes_status_limit_and_field_filters() {
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io2.writers(),
     )
     .await;
@@ -118,7 +120,7 @@ async fn bug_my_passes_status_limit_and_field_filters() {
 
 #[tokio::test]
 async fn bug_my_all_passes_shared_filters_to_each_category() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_whoami(&mock).await;
 
     for identity_filter in ["assigned_to", "creator", "cc"] {
@@ -179,7 +181,8 @@ async fn bug_my_all_passes_shared_filters_to_each_category() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -193,7 +196,7 @@ async fn bug_my_all_passes_shared_filters_to_each_category() {
 async fn bug_my_created_only_runs_creator_search_not_assigned() {
     // `--created` (without `--all`) must search by `creator=`, NOT by
     // `assigned_to=` and NOT by `cc=`.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_whoami(&mock).await;
 
     Mock::given(method("GET"))
@@ -221,7 +224,8 @@ async fn bug_my_created_only_runs_creator_search_not_assigned() {
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io3.writers(),
     )
     .await;
@@ -231,7 +235,7 @@ async fn bug_my_created_only_runs_creator_search_not_assigned() {
 
 #[tokio::test]
 async fn bug_my_cc_only_runs_cc_search_not_assigned_or_creator() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     mount_whoami(&mock).await;
 
@@ -260,7 +264,8 @@ async fn bug_my_cc_only_runs_cc_search_not_assigned_or_creator() {
     let mut __io4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io4.writers(),
     )
     .await;
@@ -270,7 +275,7 @@ async fn bug_my_cc_only_runs_cc_search_not_assigned_or_creator() {
 
 #[tokio::test]
 async fn bug_my_all_deduplicates() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_whoami(&mock).await;
 
     // All three searches return the same bug — should appear only once
@@ -306,7 +311,8 @@ async fn bug_my_all_deduplicates() {
     let mut __io5 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io5.writers(),
     )
     .await;
@@ -326,7 +332,7 @@ async fn bug_my_all_deduplicates() {
 // the first page had truncated=false, so `false &= true = false`.
 #[tokio::test]
 async fn bug_my_all_truncated_flag_set_when_any_category_is_truncated() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_whoami(&mock).await;
 
     // assigned_to search: limit=1 → probe asks limit=2 → return 1 bug → NOT truncated
@@ -380,7 +386,8 @@ async fn bug_my_all_truncated_flag_set_when_any_category_is_truncated() {
     let result = crate::commands::bug::execute(
         &action,
         // JSON so truncation note goes to stderr (easy to assert).
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -402,7 +409,7 @@ async fn bug_my_all_truncated_flag_set_when_any_category_is_truncated() {
 
 #[tokio::test]
 async fn bug_my_all_count_reports_distinct_total() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_whoami(&mock).await;
     // All three category searches return the same ids {1,2}; --count must
     // report the distinct total (2), not the sum (6), and must request
@@ -434,7 +441,8 @@ async fn bug_my_all_count_reports_distinct_total() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -452,7 +460,7 @@ async fn bug_my_all_count_reports_distinct_total() {
 // but more importantly the mock with .expect(1) would not fire.
 #[tokio::test]
 async fn bug_my_offset_reaches_server() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_whoami(&mock).await;
 
     Mock::given(method("GET"))
@@ -485,7 +493,8 @@ async fn bug_my_offset_reaches_server() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -499,7 +508,7 @@ async fn bug_my_offset_reaches_server() {
 // matcher does not match → the .expect(1) mock fires 0 times → test fails.
 #[tokio::test]
 async fn bug_my_order_reaches_server() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_whoami(&mock).await;
 
     Mock::given(method("GET"))
@@ -532,7 +541,8 @@ async fn bug_my_order_reaches_server() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
