@@ -2,12 +2,12 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::AttachmentAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 #[tokio::test]
 async fn attachment_view_returns_metadata_without_data() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/attachment/9876"))
@@ -37,7 +37,8 @@ async fn attachment_view_returns_metadata_without_data() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -54,7 +55,7 @@ async fn attachment_view_returns_metadata_without_data() {
 
 #[tokio::test]
 async fn attachment_view_table_renders_metadata() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/attachment/9876"))
@@ -85,7 +86,8 @@ async fn attachment_view_table_renders_metadata() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::attachment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
