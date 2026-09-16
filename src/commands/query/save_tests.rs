@@ -1,15 +1,8 @@
 #![expect(clippy::unwrap_used)]
 
-use std::path::Path;
-
 use crate::cli::{BugActorFilterArgs, BugFilterArgs, QueryAction, SaveArgs, ShowArgs};
-use crate::config::Config;
-use crate::test_helpers::setup_isolated_env;
+use crate::test_helpers::{load_config_at, setup_isolated_env};
 use crate::types::OutputFormat;
-
-fn load_config(config_path: &Path) -> Config {
-    Config::load_at(Some(config_path)).unwrap()
-}
 
 fn save_action(name: &str) -> QueryAction {
     QueryAction::Save(SaveArgs {
@@ -411,7 +404,7 @@ async fn query_save_existing_entry_reports_updated() {
     assert_eq!(parsed["name"], "existing");
     assert_eq!(parsed["action"], "updated");
 
-    let config = load_config(&config_path);
+    let config = load_config_at(&config_path);
     let saved = &config.queries["existing"];
     assert_eq!(saved.quicksearch.as_deref(), Some("updated"));
     assert_eq!(saved.limit, Some(5));
@@ -438,7 +431,7 @@ async fn query_save_from_url() {
     let _output = __io_a17.out_str().to_string();
     assert!(result.is_ok(), "query save --from-url failed: {result:?}");
 
-    let config = load_config(&config_path);
+    let config = load_config_at(&config_path);
     let saved = &config.queries["url-query"];
     assert_eq!(saved.kind(), crate::types::QueryKind::Url);
     assert_eq!(saved.product, vec!["TestProduct"]);
@@ -543,7 +536,7 @@ async fn query_save_stores_canonical_date_forms() {
     let _ = __io8.out_str().to_string();
     result.unwrap();
 
-    let cfg = load_config(&config_path);
+    let cfg = load_config_at(&config_path);
     let q = cfg.queries.get("recent").unwrap();
     assert_eq!(q.creation_time.as_deref(), Some("2026-04-01T00:00:00Z"));
     assert_eq!(q.last_change_time.as_deref(), Some("2026-04-15T12:00:00Z"));
@@ -597,7 +590,7 @@ async fn query_save_accepts_date_only_query() {
     .await;
     let _ = __io9.out_str().to_string();
     result.unwrap();
-    let cfg = load_config(&config_path);
+    let cfg = load_config_at(&config_path);
     assert!(cfg.queries.contains_key("date-only"));
 }
 
@@ -648,7 +641,7 @@ async fn query_save_persists_158_field_filters() {
     let _output = __io_a18.out_str().to_string();
     assert!(result.is_ok(), "save failed: {result:?}");
 
-    let cfg = load_config(&config_path);
+    let cfg = load_config_at(&config_path);
     let q = cfg.queries.get("field-filters").unwrap();
     assert_eq!(q.whiteboard, vec!["needs-review"]);
     assert_eq!(q.target_milestone, vec!["5.0"]);
@@ -732,7 +725,7 @@ async fn query_save_persists_explicit_sort() {
     .await
     .unwrap();
 
-    let config = load_config(&config_path);
+    let config = load_config_at(&config_path);
     let saved = config.queries.get("order-persist").unwrap();
     assert_eq!(
         saved.order.as_deref(),

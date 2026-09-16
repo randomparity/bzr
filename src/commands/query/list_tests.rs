@@ -1,15 +1,8 @@
 #![expect(clippy::unwrap_used)]
 
-use std::path::Path;
-
 use crate::cli::{BugActorFilterArgs, BugFilterArgs, QueryAction, SaveArgs};
-use crate::config::Config;
-use crate::test_helpers::setup_isolated_env;
+use crate::test_helpers::{load_config_at, setup_isolated_env};
 use crate::types::OutputFormat;
-
-fn load_config(config_path: &Path) -> Config {
-    Config::load_at(Some(config_path)).unwrap()
-}
 
 fn save_action(name: &str) -> QueryAction {
     QueryAction::Save(SaveArgs {
@@ -133,7 +126,7 @@ async fn query_list_table_sorts_entries_by_name() {
     let _ = __io7.out_str().to_string();
     assert!(result.is_ok());
 
-    let config = load_config(&config_path);
+    let config = load_config_at(&config_path);
     let mut names: Vec<&str> = config.queries.keys().map(String::as_str).collect();
     names.sort_unstable();
     assert_eq!(names, vec!["aaa", "zzz"]);
