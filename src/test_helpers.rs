@@ -183,12 +183,22 @@ pub async fn setup_empty_config_env() -> (tokio::sync::MutexGuard<'static, ()>, 
 /// Keep the returned `TempDir` alive for the test: dropping it removes the
 /// root out from under the path.
 ///
+/// The root is hardened to `0700` on unix for the same reason
+/// [`write_config_to`] hardens the one it writes into: a shared `/tmp` on a CI
+/// runner would otherwise leave it listable by every other local user.
+///
 /// # Panics
 ///
 /// Panics if the temp directory cannot be created.
 #[expect(clippy::unwrap_used)]
 pub fn setup_empty_isolated_env() -> (tempfile::TempDir, std::path::PathBuf) {
     let tmp = tempfile::TempDir::new().unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        std::fs::set_permissions(tmp.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
     let config_path = tmp.path().join("bzr").join("config.toml");
     (tmp, config_path)
 }
@@ -403,6 +413,11 @@ pub async fn seed_keyring_secret(server: &str, secret: &str) {
 /// Seed a keyring-backed secret for `server` against an explicit config path
 /// (ADR-0002), storing it under the caller-supplied keychain `service`.
 ///
+/// The caller must have installed the test store with
+/// `keyring::install_test_store()` first. Without it `ensure_default_store`
+/// registers the *platform-native* keychain, and this helper writes the test
+/// secret into the developer's own keychain, where it persists after the run.
+///
 /// # The `install_test_store` seam
 ///
 /// Two process-global facts sit under this helper, and the explicit config path
@@ -464,8 +479,11 @@ async fn seed_keyring_secret_inner(
     service: Option<&str>,
 ) {
     let mut io = CapturedIo::new();
-    // SAFETY: Serialized via ENV_LOCK, held by the caller's setup or taken by
-    // `seed_keyring_secret_at`.
+    // SAFETY: Serialized by ENV_LOCK against the other ENV_LOCK participants —
+    // held by the caller's setup, or taken by `seed_keyring_secret_at`. That is
+    // the whole of what the lock buys: it does not order this write against a
+    // `getenv` from a lock-free parallel test (libc reads `TMPDIR` for one), and
+    // that invariant is open and owned by #831.
     unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", secret) };
     let result = crate::commands::config::execute(
         &crate::cli::ConfigAction::SetKeyring {
