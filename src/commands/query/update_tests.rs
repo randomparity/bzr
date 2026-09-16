@@ -5,13 +5,8 @@ use std::path::Path;
 use crate::cli::{
     BugActorFilterArgs, BugFilterArgs, QueryAction, QueryUpdateArgs, SaveArgs, ShowArgs,
 };
-use crate::config::Config;
-use crate::test_helpers::setup_isolated_env;
+use crate::test_helpers::{load_config_at, setup_isolated_env};
 use crate::types::OutputFormat;
-
-fn load_config(config_path: &Path) -> Config {
-    Config::load_at(Some(config_path)).unwrap()
-}
 
 fn save_action(name: &str) -> QueryAction {
     QueryAction::Save(SaveArgs {
@@ -297,7 +292,7 @@ async fn query_update_replaces_filter_keeps_rest() {
     }
     run_q(&a, &config_path).await.unwrap();
 
-    let config = load_config(&config_path);
+    let config = load_config_at(&config_path);
     let q = &config.queries["q"];
     assert_eq!(q.status, vec!["ASSIGNED".to_string()]);
     assert_eq!(q.product, vec!["Firefox".to_string()]); // untouched
@@ -368,7 +363,7 @@ async fn query_update_replaces_limit() {
     }
     run_q(&a, &config_path).await.unwrap();
 
-    assert_eq!(load_config(&config_path).queries["q"].limit, Some(100));
+    assert_eq!(load_config_at(&config_path).queries["q"].limit, Some(100));
 }
 
 #[tokio::test]
@@ -382,7 +377,7 @@ async fn query_update_clear_resets_filter() {
     }
     run_q(&a, &config_path).await.unwrap();
 
-    let config = load_config(&config_path);
+    let config = load_config_at(&config_path);
     assert!(config.queries["q"].status.is_empty());
     assert_eq!(config.queries["q"].product, vec!["Firefox".to_string()]);
 }
@@ -456,7 +451,7 @@ async fn query_update_clear_wins_over_set() {
     }
     run_q(&a, &config_path).await.unwrap();
     // status was both set and cleared -> cleared.
-    assert!(load_config(&config_path).queries["q"].status.is_empty());
+    assert!(load_config_at(&config_path).queries["q"].status.is_empty());
 }
 
 #[tokio::test]
@@ -478,7 +473,7 @@ async fn query_update_sets_dates_and_sort() {
     }
     run_q(&a, &config_path).await.unwrap();
 
-    let config = load_config(&config_path);
+    let config = load_config_at(&config_path);
     let q = &config.queries["q"];
     assert!(q.creation_time.is_some());
     assert!(q.last_change_time.is_some());
@@ -524,7 +519,7 @@ async fn query_update_from_url_replaces_existing_query() {
 
     run_q(&update, &config_path).await.unwrap();
 
-    let config = load_config(&config_path);
+    let config = load_config_at(&config_path);
     let q = &config.queries["web"];
     assert_eq!(q.kind(), crate::types::QueryKind::Url);
     assert_eq!(q.product, vec!["NewProduct"]);
@@ -568,7 +563,7 @@ async fn query_update_only_product_is_a_change() {
     }
     run_q(&a, &config_path).await.unwrap(); // must NOT fail with "no changes"
 
-    let config = load_config(&config_path);
+    let config = load_config_at(&config_path);
     assert_eq!(
         config.queries["q"].product,
         vec!["Thunderbird".to_string()],
@@ -589,7 +584,7 @@ async fn query_update_only_component_is_a_change() {
     }
     run_q(&a, &config_path).await.unwrap();
 
-    let config = load_config(&config_path);
+    let config = load_config_at(&config_path);
     assert_eq!(
         config.queries["q"].component,
         vec!["General".to_string()],

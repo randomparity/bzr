@@ -8,17 +8,9 @@ use wiremock::{Mock, ResponseTemplate};
 use crate::cli::{
     BugActorFilterArgs, BugFilterArgs, QueryAction, QueryRunFilterArgs, RunArgs, SaveArgs,
 };
-use crate::config::Config;
 use crate::error::Result;
-use crate::test_helpers::setup_isolated_env;
+use crate::test_helpers::{setup_isolated_env, update_config_at};
 use crate::types::OutputFormat;
-
-fn update_config(
-    config_path: &Path,
-    mutator: impl FnOnce(&mut Config) -> Result<()>,
-) -> Result<Config> {
-    Config::update_locked_at(Some(config_path), mutator)
-}
 
 fn save_action(name: &str) -> QueryAction {
     QueryAction::Save(SaveArgs {
@@ -363,7 +355,7 @@ async fn query_run_count_rejects_offset_and_paginate() {
 #[tokio::test]
 async fn query_run_rejects_saved_zero_limit_with_url_offset_before_search() {
     let (mock, _tmp, config_path) = setup_isolated_env().await;
-    update_config(&config_path, |config| {
+    update_config_at(&config_path, |config| {
         config.queries.insert(
             "invalid-window-test".into(),
             crate::types::SavedQuery {
@@ -406,7 +398,7 @@ async fn query_run_rejects_saved_zero_limit_with_url_offset_before_search() {
 async fn query_run_count_ignores_saved_url_offset() {
     let (mock, _tmp, config_path) = setup_isolated_env().await;
 
-    update_config(&config_path, |config| {
+    update_config_at(&config_path, |config| {
         config.queries.insert(
             "count-offset-test".into(),
             crate::types::SavedQuery {
@@ -635,7 +627,7 @@ async fn query_run_with_server_override() {
     assert!(result.is_ok());
 
     // Patch the saved query to have a different server
-    update_config(&config_path, |config| {
+    update_config_at(&config_path, |config| {
         let query = config.queries.get_mut("server-test").unwrap();
         query.server = Some("other-server".into());
         Ok(())
@@ -697,7 +689,7 @@ async fn query_run_rejects_malformed_created_since_override() {
     let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     // Pre-seed a saved query so the not-found branch doesn't fire first.
-    update_config(&config_path, move |c| {
+    update_config_at(&config_path, move |c| {
         c.queries.insert(
             "recent".into(),
             crate::types::SavedQuery {
@@ -1019,7 +1011,7 @@ async fn query_run_applies_default_order_even_when_raw_params_present() {
     // Directly insert a saved query that carries a raw_param that is NOT
     // "order" (so it exercises the `k == "order"` check), has no structured
     // `order`, and has no explicit sort_args set.
-    update_config(&config_path, |config| {
+    update_config_at(&config_path, |config| {
         config.queries.insert(
             "raw-param-test".into(),
             crate::types::SavedQuery {
