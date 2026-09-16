@@ -925,7 +925,7 @@ fn permissive_view_action(ids: &[&str]) -> crate::cli::BugAction {
 /// error would never exercise the exit-0 path.
 #[tokio::test]
 async fn relayed_per_resource_refusal_makes_permissive_view_exit_zero_not_four() {
-    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    let (mock, _tmp, config_path) = crate::test_helpers::setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
         .respond_with(ResponseTemplate::new(200).set_body_json(view_ok_bug_body(1, "first")))
@@ -950,7 +950,8 @@ async fn relayed_per_resource_refusal_makes_permissive_view_exit_zero_not_four()
             None,
             crate::types::OutputFormat::Json,
             None,
-        ),
+        )
+        .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -972,7 +973,7 @@ async fn relayed_per_resource_refusal_makes_permissive_view_exit_zero_not_four()
 /// rather than discovered.
 #[tokio::test]
 async fn relayed_non_suppressible_code_makes_permissive_view_exit_four_not_zero() {
-    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    let (mock, _tmp, config_path) = crate::test_helpers::setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
         .respond_with(ResponseTemplate::new(200).set_body_json(view_ok_bug_body(1, "first")))
@@ -1000,7 +1001,8 @@ async fn relayed_non_suppressible_code_makes_permissive_view_exit_four_not_zero(
             None,
             crate::types::OutputFormat::Json,
             None,
-        ),
+        )
+        .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
