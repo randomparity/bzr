@@ -4,6 +4,13 @@
 - Date: 2026-06-23
 - ADR: [0002](../../adr/0002-test-config-isolation-over-env-lock.md)
 
+> **Partly superseded (2026-09-16, issue #857).** Where this spec keeps
+> `ENV_LOCK` for the self-signed TLS group because those tests "must use
+> `https://localhost:{port}` to match the cert SAN", that is no longer true or
+> prescriptive: the SAN and the URL were moved to `127.0.0.1`, the group takes
+> no lock, and ADR-0002's 2026-09-16 amendment retires the libc-name-resolution
+> category outright. The rest of this dated record stands as written.
+
 ## Problem
 
 Desloppify flags many async tests that hold a `tokio::sync::Mutex` guard
