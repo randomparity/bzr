@@ -437,9 +437,9 @@ pub async fn seed_keyring_secret(server: &str, secret: &str) {
 ///    one set up by [`setup_empty_config_env`] or [`setup_test_env`]):
 ///    `ENV_LOCK` is not reentrant, so such a test would deadlock. It calls
 ///    [`seed_keyring_secret`] instead. The acquisition below is wrapped in a
-///    30-second timeout so that mistake panics with a message naming it,
-///    rather than hanging the suite with no failing test name — a hang this
-///    repository has learned is expensive to attribute.
+///    timeout so that mistake panics with a message naming it, rather than
+///    hanging the suite with no failing test name — a hang this repository has
+///    learned is expensive to attribute. See `# Panics` for the bound.
 ///
 /// 2. **The test credential store is shared and never reset.**
 ///    `keyring::install_test_store` memoizes one `OnceLock` store for the whole
