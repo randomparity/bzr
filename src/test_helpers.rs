@@ -1,6 +1,11 @@
 //! Shared test utilities used by both unit tests (`src/`) and integration tests (`tests/`).
 //!
-//! Tests that set `XDG_CONFIG_HOME` must hold `ENV_LOCK` to avoid races.
+//! Tests select a throwaway config by explicit path, not by environment
+//! (ADR-0002): [`setup_isolated_env`] and [`setup_empty_isolated_env`] return a
+//! path to hand to `CommandContext::with_config_path_override` or `--config`.
+//! No helper here mutates `XDG_CONFIG_HOME`. A test still needs `ENV_LOCK` only
+//! when it mutates a process-global variable in its own body — see the retained
+//! categories in ADR-0002.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
@@ -87,26 +92,7 @@ pub fn init_temp_root() {
     });
 }
 
-/// Acquire `ENV_LOCK`, start a mock server, create a temp dir, and configure it.
-/// Returns the guard, mock server, and temp dir (all must stay alive for the test).
-///
-/// # Panics
-///
-/// Panics if the temp directory cannot be created.
-#[expect(clippy::unwrap_used)]
-pub async fn setup_test_env() -> (
-    tokio::sync::MutexGuard<'static, ()>,
-    wiremock::MockServer,
-    tempfile::TempDir,
-) {
-    let lock = super::ENV_LOCK.lock().await;
-    let mock = wiremock::MockServer::start().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    setup_config(&tmp, &mock.uri());
-    (lock, mock, tmp)
-}
-
-/// The TOML body shared by `setup_config` and `setup_isolated_env`: one
+/// The TOML body used by [`setup_isolated_env`]: one
 /// `[servers.test]` server with a literal api key and cached auth/API mode, so
 /// connect takes the cached path without re-detecting. The `auth_method_source`
 /// stamp is what makes the cached auth trustworthy (ADR-0066); without it every
@@ -128,8 +114,8 @@ api_mode = "rest"
 }
 
 /// Write `contents` to `<tmp>/bzr/config.toml`, hardening permissions on unix,
-/// and return the config file path. Unlike `setup_config`, this performs **no**
-/// process-environment mutation: pass the returned path to
+/// and return the config file path. This performs **no** process-environment
+/// mutation: pass the returned path to
 /// `CommandContext::with_config_path_override` (or the `--config` flag) so config
 /// resolution never consults `XDG_CONFIG_HOME`, and the test needs no `ENV_LOCK`.
 ///
@@ -153,23 +139,11 @@ pub fn write_config_to(tmp: &tempfile::TempDir, contents: &str) -> std::path::Pa
     config_path
 }
 
-/// Write a test config file to the given temp directory and point
-/// `XDG_CONFIG_HOME` at it. Caller must hold `ENV_LOCK`.
-///
-/// # Panics
-///
-/// Panics if the config directory or file cannot be created.
-pub fn setup_config(tmp: &tempfile::TempDir, server_url: &str) {
-    write_config_to(tmp, &default_test_config(server_url));
-    // SAFETY: Tests are serialized via ENV_LOCK; no other threads read this var concurrently.
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
-}
-
-/// Lock-free analogue of `setup_test_env`: start a mock server, write the default
-/// `[servers.test]` config to an isolated temp path, and return the path. The
-/// test selects this config by passing the path to
-/// `CommandContext::with_config_path_override` (or `--config`), so it mutates no
-/// process environment, acquires no `ENV_LOCK`, and runs in parallel.
+/// Start a mock server, write the default `[servers.test]` config to an
+/// isolated temp path, and return the path. The test selects this config by
+/// passing the path to `CommandContext::with_config_path_override` (or
+/// `--config`), so it mutates no process environment, acquires no `ENV_LOCK`,
+/// and runs in parallel.
 ///
 /// # Panics
 ///
@@ -183,33 +157,14 @@ pub async fn setup_isolated_env() -> (wiremock::MockServer, tempfile::TempDir, s
     (mock, tmp, config_path)
 }
 
-/// Acquire `ENV_LOCK` and point `XDG_CONFIG_HOME` at an empty temp dir (no
-/// config written). Use this to exercise paths that must fail *before* config
+/// Create an isolated temp root and return the config path *inside* it without
+/// writing the file. Use this to exercise paths that must fail *before* config
 /// load / network connect: a missing config makes any `connect_and_configure`
 /// fail, so a test that still expects a local validation/IO error proves that
-/// error wins the ordering race.
-///
-/// # Panics
-///
-/// Panics if the temp directory cannot be created.
-#[expect(clippy::unwrap_used)]
-pub async fn setup_empty_config_env() -> (tokio::sync::MutexGuard<'static, ()>, tempfile::TempDir) {
-    let lock = super::ENV_LOCK.lock().await;
-    let tmp = tempfile::TempDir::new().unwrap();
-    // SAFETY: Tests that mutate process environment hold ENV_LOCK.
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
-    (lock, tmp)
-}
-
-/// Lock-free analogue of [`setup_empty_config_env`]: create an isolated temp
-/// root and return the config path *inside* it without writing the file. The
-/// returned path is exactly what `Config::path_at(None)` would resolve to with
-/// `XDG_CONFIG_HOME` pointed at that root, so the "config is missing" premise
-/// the locking helper establishes is unchanged — only the selection mechanism
-/// differs (ADR-0002). Pass the path to
+/// error wins the ordering race. Pass the path to
 /// `CommandContext::with_config_path_override` (or `--config`); the test
 /// mutates no process environment, acquires no `ENV_LOCK`, and runs in
-/// parallel.
+/// parallel (ADR-0002).
 ///
 /// Keep the returned `TempDir` alive for the test: dropping it removes the
 /// root out from under the path.
@@ -239,33 +194,8 @@ pub fn setup_empty_isolated_env() -> (tempfile::TempDir, std::path::PathBuf) {
 //
 // Shared by the per-leaf `config/*_tests.rs` siblings. Config commands are
 // local-only (no network client), so these helpers never start a mock
-// server; they drive `config::execute` against an XDG root pointed at a
-// temp dir by `setup_empty_config_env`.
-
-/// Path to the config file under the active XDG test root.
-///
-/// This helper has no `_at` companion, deliberately: `Config::path_at(Some(p))`
-/// returns `p` unchanged, so an explicit-path form would be the identity
-/// function. A test on the explicit-path side already holds its config path —
-/// the one [`setup_empty_isolated_env`] or [`setup_isolated_env`] returned —
-/// and passes that where an ambient-root test calls this.
-///
-/// # Panics
-///
-/// Panics if the config path cannot be resolved.
-#[expect(clippy::unwrap_used)]
-pub fn config_path() -> std::path::PathBuf {
-    crate::config::Config::path_at(None).unwrap()
-}
-
-/// Load and validate the config under the active test root.
-///
-/// # Panics
-///
-/// Panics if the config cannot be loaded or fails validation.
-pub fn load_config() -> crate::config::Config {
-    load_config_at(&config_path())
-}
+// server; they drive `config::execute` against the explicit config path the
+// test was handed by `setup_empty_isolated_env` or `setup_isolated_env`.
 
 /// Load and validate the config at an explicit path (ADR-0002). Consults no
 /// environment variable, so the caller needs no `ENV_LOCK`.
@@ -278,18 +208,9 @@ pub fn load_config_at(config_path: &std::path::Path) -> crate::config::Config {
     crate::config::Config::load_at(Some(config_path)).unwrap()
 }
 
-/// Load the config *without* validation — for asserting on-disk states the
-/// validator rejects, such as the credential-less server `unset-keyring`
-/// leaves behind.
-///
-/// # Panics
-///
-/// Panics if the config file cannot be read or parsed.
-pub fn load_config_unvalidated() -> crate::config::Config {
-    load_config_unvalidated_at(&config_path())
-}
-
-/// Load the config at an explicit path *without* validation (ADR-0002).
+/// Load the config at an explicit path *without* validation (ADR-0002) — for
+/// asserting on-disk states the validator rejects, such as the credential-less
+/// server `unset-keyring` leaves behind.
 ///
 /// # Panics
 ///
@@ -300,26 +221,12 @@ pub fn load_config_unvalidated_at(config_path: &std::path::Path) -> crate::confi
     toml::from_str(&content).unwrap()
 }
 
-/// Apply a validated mutation to the config under the active test root.
-pub fn update_config(
-    mutator: impl FnOnce(&mut crate::config::Config) -> crate::error::Result<()>,
-) -> crate::error::Result<crate::config::Config> {
-    update_config_at(&config_path(), mutator)
-}
-
 /// Apply a validated mutation to the config at an explicit path (ADR-0002).
 pub fn update_config_at(
     config_path: &std::path::Path,
     mutator: impl FnOnce(&mut crate::config::Config) -> crate::error::Result<()>,
 ) -> crate::error::Result<crate::config::Config> {
     crate::config::Config::update_locked_at(Some(config_path), mutator)
-}
-
-/// Apply a mutation *without* whole-config validation.
-pub fn update_config_without_validation(
-    mutator: impl FnOnce(&mut crate::config::Config) -> crate::error::Result<()>,
-) -> crate::error::Result<crate::config::Config> {
-    update_config_without_validation_at(&config_path(), mutator)
 }
 
 /// Apply a mutation at an explicit path *without* whole-config validation
@@ -329,15 +236,6 @@ pub fn update_config_without_validation_at(
     mutator: impl FnOnce(&mut crate::config::Config) -> crate::error::Result<()>,
 ) -> crate::error::Result<crate::config::Config> {
     crate::config::Config::update_locked_without_validation_at(Some(config_path), mutator)
-}
-
-/// Seed an inline-API-key server via `config set-server`.
-///
-/// # Panics
-///
-/// Panics if the `set-server` command returns an error.
-pub async fn seed_inline_server(name: &str, url: &str, api_key: &str) {
-    seed_inline_server_at(&config_path(), name, url, api_key).await;
 }
 
 /// Seed an inline-API-key server via `config set-server` against an explicit
@@ -416,20 +314,6 @@ pub(crate) async fn run_config_action_json_at(
     json_envelope_data(io.out_str())
 }
 
-/// Seed a keyring-backed secret for `server` by priming the
-/// `BZR_KEYRING_TEST_SECRET` test hook and running `set-keyring`. The caller
-/// must already hold `ENV_LOCK` (via `setup_empty_config_env`) and have
-/// installed the test store with `keyring::install_test_store()`. A test that
-/// selects its config by explicit path uses [`seed_keyring_secret_at`] instead.
-///
-/// # Panics
-///
-/// Panics if the `set-keyring` command returns an error.
-#[cfg(feature = "keyring")]
-pub async fn seed_keyring_secret(server: &str, secret: &str) {
-    seed_keyring_secret_inner(&config_path(), server, secret, None).await;
-}
-
 /// Seed a keyring-backed secret for `server` against an explicit config path
 /// (ADR-0002), storing it under the caller-supplied keychain `service`.
 ///
@@ -453,13 +337,14 @@ pub async fn seed_keyring_secret(server: &str, secret: &str) {
 ///    mutation — exactly the category ADR-0002 retains `ENV_LOCK` for. This
 ///    helper therefore takes `ENV_LOCK` itself, for the set/run/unset window
 ///    only, instead of asking a lock-free caller to hold it across its awaits.
-///    **Do not call this from a test that already holds `ENV_LOCK`** (that is,
-///    one set up by [`setup_empty_config_env`] or [`setup_test_env`]):
-///    `ENV_LOCK` is not reentrant, so such a test would deadlock. It calls
-///    [`seed_keyring_secret`] instead. The acquisition below is wrapped in a
-///    timeout so that mistake panics with a message naming it, rather than
-///    hanging the suite with no failing test name — a hang this repository has
-///    learned is expensive to attribute. See `# Panics` for the bound.
+///    **Do not call this from a test that already holds `ENV_LOCK`** — one of
+///    the retained env-mutating tests that acquires the guard in its own body:
+///    `ENV_LOCK` is not reentrant, so such a test would deadlock. It seeds the
+///    store inline instead, under the guard it already holds. No test does this
+///    today; the acquisition below is wrapped in a timeout so that the mistake
+///    panics with a message naming it, rather than hanging the suite with no
+///    failing test name — a hang this repository has learned is expensive to
+///    attribute. See `# Panics` for the bound.
 ///
 /// 2. **The test credential store is shared and never reset.**
 ///    `keyring::install_test_store` memoizes one `OnceLock` store for the whole
@@ -479,15 +364,16 @@ pub async fn seed_keyring_secret(server: &str, secret: &str) {
 /// Panics if the `set-keyring` command returns an error, or if `ENV_LOCK` is
 /// still held after five minutes — see the deadlock note above.
 ///
-/// That bound is deliberately far above any honest wait rather than tight.
-/// `setup_test_env` hands its guard back to the caller, so an `ENV_LOCK`
-/// critical section is a whole test body — mock server round-trips included —
-/// and hundreds of tests queue behind the same mutex. The bound only has to
-/// separate "queued" from "parked forever", and the entire unit arm runs in
-/// about 200 seconds, so no honest queue reaches five minutes.
+/// That bound is deliberately far above any honest wait rather than tight. It
+/// only has to separate "queued" from "parked forever". Since the ADR-0002
+/// migration completed there is no helper that hands the guard back to a
+/// caller, so a critical section is one test's own env-mutating window rather
+/// than a whole test body, and the retained holders are few enough that no
+/// honest queue approaches five minutes. Deadlock, by contrast, never clears —
+/// so any wait near the bound is the mistake above, not contention.
 #[cfg(test)]
 #[cfg(feature = "keyring")]
-#[expect(clippy::expect_used)]
+#[expect(clippy::expect_used, clippy::unwrap_used)]
 pub async fn seed_keyring_secret_at(
     config_path: &std::path::Path,
     server: &str,
@@ -498,32 +384,13 @@ pub async fn seed_keyring_secret_at(
         .await
         .expect(
             "seed_keyring_secret_at timed out taking ENV_LOCK. Either it was called from a test \
-         that already holds the guard (setup_test_env / setup_empty_config_env) — such a test \
-         must call seed_keyring_secret instead — or an ENV_LOCK holder stalled",
+         that already holds the guard — ENV_LOCK is not reentrant, so such a test must seed the \
+         store inline under the guard it holds — or an ENV_LOCK holder stalled",
         );
-    seed_keyring_secret_inner(config_path, server, secret, Some(service)).await;
-}
-
-/// The body shared by [`seed_keyring_secret`] and [`seed_keyring_secret_at`].
-/// Mutates `BZR_KEYRING_TEST_SECRET` and does **not** lock: the caller owns
-/// `ENV_LOCK`, whether it holds it (the ambient form) or takes it (the
-/// explicit-path form).
-///
-/// # Panics
-///
-/// Panics if the `set-keyring` command returns an error.
-#[cfg(feature = "keyring")]
-#[expect(clippy::unwrap_used)]
-async fn seed_keyring_secret_inner(
-    config_path: &std::path::Path,
-    server: &str,
-    secret: &str,
-    service: Option<&str>,
-) {
     let mut io = CapturedIo::new();
     // SAFETY: Serialized by ENV_LOCK against the other ENV_LOCK participants —
-    // held by the caller's setup, or taken by `seed_keyring_secret_at` — and
-    // ordered against every `std::env` reader by std's own env lock.
+    // the guard taken above is held for this whole window — and ordered against
+    // every `std::env` reader by std's own env lock.
     //
     // An earlier version of this comment cited a `TMPDIR` read by a lock-free
     // parallel test as an open hazard owned by #831. That was wrong, and #831
@@ -537,7 +404,7 @@ async fn seed_keyring_secret_inner(
     let result = crate::commands::config::execute(
         &crate::cli::ConfigAction::SetKeyring {
             name: server.into(),
-            service: service.map(str::to_owned),
+            service: Some(service.to_owned()),
             account: None,
         },
         &json_context(config_path),

@@ -42,7 +42,8 @@ url = "{server_url}"
 async fn connect_client_returns_client() {
     let (mock, _tmp, config_path) = setup_isolated_env().await;
 
-    // whoami endpoint used by auth detection (already cached in setup_config)
+    // whoami endpoint used by auth detection (already cached in the config
+    // `setup_isolated_env` writes)
     Mock::given(method("GET"))
         .and(path("/rest/whoami"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
