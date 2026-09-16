@@ -5,7 +5,7 @@ use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::{ComponentAction, ProjectionArgs};
 use crate::error::BzrError;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 fn view_with(projection: ProjectionArgs) -> ComponentAction {
@@ -44,7 +44,7 @@ async fn mount_product_with_components(mock: &wiremock::MockServer) {
 
 #[tokio::test]
 async fn component_view_returns_one_component() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_product_with_components(&mock).await;
 
     let action = ComponentAction::View {
@@ -55,7 +55,8 @@ async fn component_view_returns_one_component() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -67,7 +68,7 @@ async fn component_view_returns_one_component() {
 
 #[tokio::test]
 async fn component_view_unknown_name_is_not_found() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_product_with_components(&mock).await;
 
     let action = ComponentAction::View {
@@ -78,7 +79,8 @@ async fn component_view_unknown_name_is_not_found() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -93,7 +95,7 @@ async fn component_view_unknown_name_is_not_found() {
 
 #[tokio::test]
 async fn component_view_json_fields_projects_to_named_keys() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_product_with_components(&mock).await;
 
     let action = view_with(ProjectionArgs {
@@ -103,7 +105,8 @@ async fn component_view_json_fields_projects_to_named_keys() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -115,7 +118,7 @@ async fn component_view_json_fields_projects_to_named_keys() {
 
 #[tokio::test]
 async fn component_view_json_unknown_field_exits_7() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = view_with(ProjectionArgs {
         fields: Some("nam".into()),
@@ -124,7 +127,8 @@ async fn component_view_json_unknown_field_exits_7() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::component::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
