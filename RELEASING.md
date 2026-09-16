@@ -102,61 +102,19 @@ This is the only surface that sees the `github-actions` ecosystem, the only one 
 reads `fuzz/Cargo.lock` (the `fuzz/` package is excluded from the cargo workspace), and
 the only one carrying GitHub Advisory Database entries that have no RustSec equivalent.
 
-*Does not cover:* reachability. Alerts match lockfile entries, not the resolved build
-graph, so a crate that `Cargo.lock` pins but that nothing activates on any target still
-alerts. For a Cargo-ecosystem alert against the root `Cargo.lock`, establish what the
-crate actually reaches before deciding whether it blocks the tag. Run three probes:
+*Does not cover:* reachability. Alerts match lockfile entries rather than the resolved
+build graph, so a crate that `Cargo.lock` pins but that nothing activates on any target
+still alerts — an open alert is not by itself evidence that a released artifact contains
+the crate. Nor does an alert say which manifest it came from unless you read it: that is
+the `manifest_path` column projected above, and it is what tells a `fuzz/Cargo.lock`
+alert apart from a `Cargo.lock` one. Fuzz targets are not released artifacts.
 
-```bash
-cargo tree --workspace --target all --edges normal,build -i CRATE-NAME  # A
-cargo tree --workspace --target all -i CRATE-NAME                       # B
-grep -q '^name = "CRATE-NAME"$' Cargo.lock                              # L
-```
-
-**Judge A and B by whether they printed anything on stdout, never by their exit status.**
-Cargo writes `warning: nothing to print.` to *stderr*, so an empty result still looks
-like success; and the exit code answers a different question than the one being asked
-here. Read the three together:
-
-| A | B | L | What it means | Tag |
-|---|---|---|---|---|
-| tree | — | — | Reaches a released artifact | **Blocks** |
-| empty | tree | — | Dev-only; nothing released contains it | Does not block |
-| empty | empty | yes | Pinned in `Cargo.lock`, activated by nothing | Does not block |
-| empty | empty | no | Not in the lockfile at all | Not applicable |
-
-`--workspace` is not optional. Without it `cargo tree -i` resolves only the root package
-`bzr`, so a crate reached solely through `xtask` — `roff` and `clap_mangen` today — is
-reported as an unknown package specification rather than as a dependency. `xtask`
-generates the man pages on the release runner (`release.yml`) and those pages are copied
-into the published archives, so its dependencies reach the release and belong in row one.
-
-`--edges normal,build` keeps build-dependencies while excluding dev-dependencies. That
-distinction is the point of row one: `cc` is linked into nothing, but it is a
-build-dependency of `ring`, which `bzr` links through `rustls` and `reqwest`, so it
-compiles its own output into every released binary and runs on the release runner. Do not
-narrow this to `--edges normal`, which hides exactly that case.
-
-Row two is decided by A and B, not by reading edge-group headers. One `cargo tree -i`
-output can carry several headers at different depths — `wiremock` prints an unlabeled
-(normal) group *and* a `[dev-dependencies]` group, because its normal edge is reachable
-only through the dev path that activates `test-helpers` — so "the tree mentions
-`[dev-dependencies]`" proves nothing on its own.
-
-Row four is where the remaining two boundaries live:
-
-- **A `github-actions` alert** has no `cargo tree` equivalent at all. Judge it by whether
-  the workflow runs in the release path (`release.yml`, `publish-crates.yml`) or only in
-  CI.
-- **A `fuzz/Cargo.lock` alert** never blocks a tag, because fuzz targets are not released
-  artifacts — not because the probes found nothing. Do not reach for
-  `--manifest-path fuzz/Cargo.toml` to confirm it: `fuzz/Cargo.lock` is tracked and stale,
-  so cargo either refuses under `--locked` or rewrites it, dirtying the checkout you are
-  about to tag.
-
-A row-three result still needs a recorded disposition, not silence: the crate is pinned in
-the lockfile and a reader of `Cargo.lock` can see it, so say in the release notes that it
-is unreachable rather than leaving the alert unexplained.
+Deciding what a given alerted crate actually reaches is a separate judgement, and this
+document does not specify one. It depends on at least dependency kind, package set,
+released target set, and lockfile membership versus resolved-graph activation, and
+getting any of those wrong produces a confidently wrong answer in either direction.
+Until that triage is written down, record the reasoning you actually used for any alert
+you decide not to act on, so the next operator can check it.
 
 If the alerts query returns `403` with `Dependabot alerts are disabled for this
 repository` — GitHub's message for a repository with the setting off — confirm the
@@ -194,8 +152,8 @@ surface 2 has an open alert naming a crate that `Cargo.lock` pins — when nothi
 target actually reaches that crate, for instance because the optional feature that would
 pull it is never activated. The advisory can be in RustSec and cargo-deny still stay
 silent, so read this as a graph-versus-lockfile difference rather than a
-database-coverage gap. The disagreement is expected rather than a fault in either tool,
-and the two `cargo tree` commands above are what resolve it.
+database-coverage gap. The disagreement is expected rather than a fault in either tool:
+the two are answering different questions, and neither answer is the whole picture.
 
 ### Release-body assessment
 
