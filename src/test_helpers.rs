@@ -417,6 +417,9 @@ pub async fn seed_keyring_secret(server: &str, secret: &str) {
 /// `keyring::install_test_store()` first. Without it `ensure_default_store`
 /// registers the *platform-native* keychain, and this helper writes the test
 /// secret into the developer's own keychain, where it persists after the run.
+/// That is why this helper is `#[cfg(test)]` and not merely feature-gated:
+/// `install_test_store` is `#[cfg(test)]` too, so the gate makes the
+/// precondition satisfiable wherever the helper compiles at all.
 ///
 /// # The `install_test_store` seam
 ///
@@ -454,10 +457,15 @@ pub async fn seed_keyring_secret(server: &str, secret: &str) {
 /// # Panics
 ///
 /// Panics if the `set-keyring` command returns an error, or if `ENV_LOCK` is
-/// still held after 30 seconds — see the deadlock note above. Every genuine
-/// `ENV_LOCK` critical section is a handful of local config writes, so the
-/// timeout cannot fire on ordinary contention; it exists only to turn the
-/// reentrant-call mistake into a named failure instead of a hung suite.
+/// still held after five minutes — see the deadlock note above.
+///
+/// That bound is deliberately far above any honest wait rather than tight.
+/// `setup_test_env` hands its guard back to the caller, so an `ENV_LOCK`
+/// critical section is a whole test body — mock server round-trips included —
+/// and hundreds of tests queue behind the same mutex. The bound only has to
+/// separate "queued" from "parked forever", and the entire unit arm runs in
+/// about 200 seconds, so no honest queue reaches five minutes.
+#[cfg(test)]
 #[cfg(feature = "keyring")]
 #[expect(clippy::expect_used)]
 pub async fn seed_keyring_secret_at(
@@ -466,16 +474,13 @@ pub async fn seed_keyring_secret_at(
     secret: &str,
     service: &str,
 ) {
-    let _lock = tokio::time::timeout(
-        std::time::Duration::from_secs(30),
-        super::ENV_LOCK.lock(),
-    )
-    .await
-    .expect(
-        "seed_keyring_secret_at timed out taking ENV_LOCK; it was almost certainly called from \
-         a test that already holds the guard (setup_test_env / setup_empty_config_env) — such a \
-         test must call seed_keyring_secret instead",
-    );
+    let _lock = tokio::time::timeout(std::time::Duration::from_secs(300), super::ENV_LOCK.lock())
+        .await
+        .expect(
+            "seed_keyring_secret_at timed out taking ENV_LOCK. Either it was called from a test \
+         that already holds the guard (setup_test_env / setup_empty_config_env) — such a test \
+         must call seed_keyring_secret instead — or an ENV_LOCK holder stalled",
+        );
     seed_keyring_secret_inner(config_path, server, secret, Some(service)).await;
 }
 
