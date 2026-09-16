@@ -12,11 +12,26 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::Mutex;
 
-/// Serializes the tests in this binary. One test mutates the process
-/// environment (`set_var`) while the other spawns a child that inherits
-/// (reads) the environment — running them concurrently would be a data race
-/// on `environ`. Both tests hold this for their whole body.
+/// Serializes the tests in this binary. Each spawns a helper process and then
+/// waits on a filesystem rendezvous with a fixed retry budget, so running them
+/// concurrently makes them compete for the same cores and time each other out.
+///
+/// This is *not* protection against a data race on `environ`, which an earlier
+/// version of this comment claimed: no test here mutates the environment any
+/// more, and `std::process::Command` takes std's own env read lock around
+/// fork/exec and `posix_spawn` regardless, so a spawn is ordered against
+/// `std::env::set_var` without help from this mutex.
 static SERIAL: Mutex<()> = Mutex::new(());
+
+/// Take [`SERIAL`] for the calling test, and pin this binary's `tempfile` root
+/// on the way in. `override_temp_dir` is per process, so each test binary
+/// installs its own; see `bzr::test_helpers::init_temp_root`.
+fn serial() -> std::sync::MutexGuard<'static, ()> {
+    bzr::test_helpers::init_temp_root();
+    SERIAL
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 
 fn wait_for(path: &Path) {
     for _ in 0..500 {
@@ -42,9 +57,7 @@ fn wait_for_or_stop(path: &Path, child: &mut std::process::Child) {
 
 #[test]
 fn second_process_holding_the_lock_blocks_try_lock() {
-    let _serial = SERIAL
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _serial = serial();
     let dir = tempfile::TempDir::new().unwrap();
     let lock_path = dir.path().join("config.lock");
     let ready = dir.path().join("ready");
@@ -88,13 +101,12 @@ fn update_locked_waits_for_a_held_lock_then_completes() {
     use std::sync::mpsc;
     use std::time::Duration;
 
-    let _serial = SERIAL
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _serial = serial();
     let dir = tempfile::TempDir::new().unwrap();
-    // Point Config at this dir; pre-create the `bzr` subdir so the helper can
-    // create `config.lock` there before any `update_locked` call resolves it.
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", dir.path()) };
+    // Pre-create the `bzr` subdir so the helper can create `config.lock` there
+    // before any `update_locked` call resolves it. Both this process and the
+    // helper address that lock by explicit path — `update_locked_at(Some(_))`
+    // below, argv for the helper — so no environment variable selects it.
     let cfg_dir = dir.path().join("bzr");
     std::fs::create_dir_all(&cfg_dir).unwrap();
     #[cfg(unix)]
@@ -151,9 +163,7 @@ fn update_locked_waits_for_a_held_lock_then_completes() {
 
 #[test]
 fn skills_mode_requires_exactly_destination_ready_and_release_arguments() {
-    let _serial = SERIAL
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _serial = serial();
     let helper = env!("CARGO_BIN_EXE_bzr_lock_helper");
     let status = Command::new(helper)
         .args(["skills", "/tmp/destination", "/tmp/ready"])
@@ -165,9 +175,7 @@ fn skills_mode_requires_exactly_destination_ready_and_release_arguments() {
 
 #[test]
 fn real_skills_install_refuses_a_helper_held_destination_lock() {
-    let _serial = SERIAL
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _serial = serial();
     let project = tempfile::TempDir::new().unwrap();
     let destination = project.path().join(".agents/skills");
     std::fs::create_dir_all(&destination).unwrap();
@@ -204,9 +212,7 @@ fn real_skills_install_refuses_a_helper_held_destination_lock() {
 
 #[test]
 fn skills_mode_timeout_exits_nonzero_and_removes_its_lock() {
-    let _serial = SERIAL
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _serial = serial();
     let project = tempfile::TempDir::new().unwrap();
     let destination = project.path().join("skills");
     std::fs::create_dir(&destination).unwrap();
