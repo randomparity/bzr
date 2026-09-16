@@ -104,41 +104,67 @@ the only one carrying GitHub Advisory Database entries that have no RustSec equi
 
 *Does not cover:* reachability. Alerts match lockfile entries, not the resolved build
 graph, so a crate that `Cargo.lock` pins but that no feature activates on any target
-still alerts. Before treating an alert as a release blocker, confirm the crate is
-actually built:
+still alerts. For a Cargo-ecosystem alert against the root `Cargo.lock`, establish what
+the crate actually reaches before treating it as a release blocker. That takes both
+commands, because they answer different questions:
 
 ```bash
-cargo tree --target all --edges normal -i CRATE-NAME
+cargo tree --target all --edges normal -i CRATE-NAME  # linked into the binary?
+cargo tree --target all -i CRATE-NAME                 # present at all, by which edge?
 ```
 
-A printed tree means the crate ships. `warning: nothing to print.` with no tree means no
-released artifact contains it; the alert is still worth clearing, but it does not block
-the tag. This command exits 0 either way, so read its output rather than its exit status.
+Read them together:
 
-`--edges normal` is load-bearing: without it `cargo tree` also prints dev- and
-build-dependency edges, and neither is linked into a released binary. An alert on a
-test-only crate would otherwise print a tree under `[dev-dependencies]` and read as
-shipping.
+- **A tree from the first** — the crate is linked into a released binary. Blocks the tag.
+- **Nothing from the first, a tree under `[build-dependencies]` in the second** — the
+  crate runs on the release runner and can compile its own output into the binary, so
+  treat it as blocking unless you establish otherwise. `cc` reaches the release exactly
+  this way, as a build-dependency of `ring`, which `bzr` links through `rustls` and
+  `reqwest`.
+- **Nothing from the first, a tree only under `[dev-dependencies]` in the second** —
+  test-only, and no released artifact contains it.
+- **Nothing from either** — not in this workspace's graph at all. Read the two boundaries
+  below before concluding anything from that.
 
-The command resolves this workspace's graph only, so it cannot answer a
-`fuzz/Cargo.lock` alert: `fuzz/` is excluded from the workspace, and a fuzz-only crate
-prints nothing here whether or not the fuzz targets build it. Fuzz alerts never block a
-tag because fuzz targets are not released artifacts — not because the command found
-nothing. Do not reach for `--manifest-path fuzz/Cargo.toml` to check: `fuzz/Cargo.lock`
-is tracked and stale, so cargo either refuses under `--locked` or rewrites it, dirtying
-the checkout you are about to tag.
+`--edges normal` is what separates the first question from the second: on its own
+`cargo tree` also prints dev- and build-dependency edges, so a test-only crate reads as
+shipping. It does not follow that everything `--edges normal` hides is absent from the
+release — that is the build-dependency case above, and it is why the second command is
+not optional.
+
+Two inputs make these commands say nothing useful, and neither is evidence the crate is
+absent:
+
+- **A name that is not in the root `Cargo.lock`** — including every `github-actions`
+  package and any crate that exists only in `fuzz/Cargo.lock`. Cargo errors with
+  `package ID specification ... did not match any packages` and **exits 101**, printing
+  nothing on stdout. For a crate that *is* in `Cargo.lock` both commands exit 0 whether
+  or not they print a tree, so read their output rather than their exit status — but do
+  not read that 101 as an empty result.
+- **A `github-actions` alert**, which has no `cargo tree` equivalent at all. Judge it by
+  whether the workflow runs in the release path (`release.yml`, `publish-crates.yml`) or
+  only in CI.
+
+A `fuzz/Cargo.lock` alert never blocks a tag because fuzz targets are not released
+artifacts — not because the command found nothing. Do not reach for
+`--manifest-path fuzz/Cargo.toml` to confirm it: `fuzz/Cargo.lock` is tracked and stale,
+so cargo either refuses under `--locked` or rewrites it, dirtying the checkout you are
+about to tag.
 
 If the alerts query returns `403` with `Dependabot alerts are disabled for this
-repository`, the repository setting is off — this is not a token-scope failure, and
-re-running with a broader token will not help. Confirm the setting directly:
+repository` — GitHub's message for a repository with the setting off — confirm the
+setting directly:
 
 ```bash
 gh api repos/randomparity/bzr/vulnerability-alerts
 ```
 
-`204 No Content` means alerts are enabled; any other status means they are not. Enabling
-them is a repository-settings change that needs admin on the repo and cannot be done from
-a pull request. The advisory review is not complete while this surface is unreadable.
+`204 No Content` means alerts are enabled. A `404` means **either** that they are disabled
+**or** that your token lacks admin on the repository: this endpoint requires admin, so a
+404 on its own does not say which. If you do not hold admin, ask someone who does rather
+than treating the review as blocked. Enabling alerts is a repository-settings change that
+needs admin and cannot be done from a pull request. The advisory review is not complete
+while this surface is genuinely unreadable.
 
 **3. `cargo deny check advisories` — RustSec, Cargo tree only.**
 
@@ -152,10 +178,15 @@ to `main`; running it here confirms the release commit specifically.
 
 *Does not cover:* anything outside this workspace's Cargo graph. The `github-actions`
 ecosystem is invisible to it, `fuzz/` is excluded from the workspace, and an Advisory
-Database entry with no RustSec ID has nothing to match against. Because it resolves the
-graph instead of reading the lockfile, it can exit 0 while surface 2 has an open alert
-naming a crate in `Cargo.lock`. That disagreement is expected rather than a fault in
-either tool, and `cargo tree --target all --edges normal -i` above is what resolves it.
+Database entry with no RustSec ID has nothing to match against.
+
+It also resolves the graph instead of reading the lockfile, so it can exit 0 while
+surface 2 has an open alert naming a crate that `Cargo.lock` pins — when nothing on any
+target actually reaches that crate, for instance because the optional feature that would
+pull it is never activated. The advisory can be in RustSec and cargo-deny still stay
+silent, so read this as a graph-versus-lockfile difference rather than a
+database-coverage gap. The disagreement is expected rather than a fault in either tool,
+and the two `cargo tree` commands above are what resolve it.
 
 Use this template when no publicly identified runtime vulnerability in `bzr`
 was fixed:
