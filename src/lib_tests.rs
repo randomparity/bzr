@@ -111,6 +111,11 @@ async fn dispatch_routes_local_query_commands() {
 
 #[tokio::test]
 async fn dispatch_applies_config_flag_without_global_override() {
+    // Retains ENV_LOCK (ADR-0002): this test asserts that `--config` wins over
+    // `XDG_CONFIG_HOME`, so setting both *is* the subject and there is no
+    // explicit-path-only form of it. The lock orders this test against the
+    // other ENV_LOCK participants; std's own env lock orders these writes
+    // against every `std::env` reader.
     let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
     let xdg_home = tmp.path().join("xdg");
@@ -135,7 +140,10 @@ api_key = "secret"
         std::fs::set_permissions(&explicit_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
         std::fs::set_permissions(&explicit_config, std::fs::Permissions::from_mode(0o600)).unwrap();
     }
-    // SAFETY: tests that mutate process environment hold ENV_LOCK.
+    // SAFETY: ordered against the other ENV_LOCK participants by the guard at
+    // the top of this test, and against every `std::env` reader by std's own
+    // env lock. No libc-side reader of these two variables runs in this
+    // process.
     unsafe {
         std::env::remove_var("BZR_CONFIG");
         std::env::set_var("XDG_CONFIG_HOME", xdg_home);
@@ -693,11 +701,20 @@ async fn assert_self_signed_inline_server_info_succeeds(
     expected_requests: usize,
     build_tls_args: impl FnOnce(&SelfSignedBugzillaServer, &tempfile::TempDir) -> Vec<String>,
 ) {
-    // Retains ENV_LOCK: this connects to https://localhost (to match the cert
-    // SAN), so it runs libc getaddrinfo("localhost"), which reads env outside
-    // Rust's serialized env lock. The lock keeps that C-side getenv from racing a
-    // concurrent set_var in another test. Config is selected by explicit
-    // --config (no XDG_CONFIG_HOME mutation).
+    // Retains ENV_LOCK (ADR-0002), and is the only reason the lock still buys
+    // anything beyond ordering writers against each other. This connects to
+    // https://localhost (to match the cert SAN), so it runs libc
+    // getaddrinfo("localhost"), which reads the environment *outside* std's env
+    // lock — the one category std's `set_var` contract does not cover. Taking
+    // the lock here is what orders that C-side getenv against the retained
+    // `set_var`s in other tests. Config is selected by explicit --config; no
+    // XDG_CONFIG_HOME mutation happens here.
+    //
+    // Nothing enforces the pairing. A future test that resolves a hostname
+    // without taking this lock reintroduces the race silently, and no lint,
+    // guardrail or CI job detects it. A test that connects only to a numeric
+    // address takes the numeric fast path, reads no env via libc, and needs no
+    // lock — which is why every other test in this file has none.
     let _lock = ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
     let config_path = tmp.path().join("bzr").join("config.toml");
