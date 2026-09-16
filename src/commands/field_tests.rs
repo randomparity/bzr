@@ -4,6 +4,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::{FieldAction, ProjectionArgs};
+use crate::error::BzrError;
 use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
@@ -159,6 +160,7 @@ async fn field_list_http_500_returns_error() {
     Mock::given(method("GET"))
         .and(path("/rest/field/bug/bug%5Fstatus"))
         .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+        .expect(1)
         .mount(&mock)
         .await;
 
@@ -173,7 +175,10 @@ async fn field_list_http_500_returns_error() {
         &mut __cap_io.writers(),
     )
     .await;
-    assert!(result.is_err());
+    assert!(
+        matches!(&result, Err(BzrError::HttpStatus { status: 500, .. })),
+        "expected the mounted plain-text HTTP 500 to surface as BzrError::HttpStatus, got: {result:?}"
+    );
 }
 
 #[tokio::test]
