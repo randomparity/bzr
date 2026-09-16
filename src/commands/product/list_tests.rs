@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::{ProductAction, ProjectionArgs};
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::{OutputFormat, ProductListType};
 
 async fn mount_one_product(mock: &wiremock::MockServer) {
@@ -31,7 +31,7 @@ fn list_with(projection: ProjectionArgs) -> ProductAction {
 
 #[tokio::test]
 async fn product_list_returns_products() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/product_accessible"))
@@ -58,7 +58,8 @@ async fn product_list_returns_products() {
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a1.writers(),
     )
     .await;
@@ -71,7 +72,7 @@ async fn product_list_returns_products() {
 #[tokio::test]
 async fn product_list_http_500_returns_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/product_accessible"))
@@ -85,7 +86,8 @@ async fn product_list_http_500_returns_error() {
     };
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -99,7 +101,7 @@ async fn product_list_http_500_returns_error() {
 
 #[tokio::test]
 async fn product_list_json_fields_projects_to_named_keys() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_one_product(&mock).await;
 
     let action = list_with(ProjectionArgs {
@@ -109,7 +111,8 @@ async fn product_list_json_fields_projects_to_named_keys() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -121,7 +124,7 @@ async fn product_list_json_fields_projects_to_named_keys() {
 
 #[tokio::test]
 async fn product_list_json_unknown_field_exits_7() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = list_with(ProjectionArgs {
         fields: Some("nam".into()),
@@ -130,7 +133,8 @@ async fn product_list_json_unknown_field_exits_7() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -140,7 +144,7 @@ async fn product_list_json_unknown_field_exits_7() {
 
 #[tokio::test]
 async fn product_list_table_fields_is_noop_with_warning() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_one_product(&mock).await;
 
     let action = list_with(ProjectionArgs {
@@ -150,7 +154,8 @@ async fn product_list_table_fields_is_noop_with_warning() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::product::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;

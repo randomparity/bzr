@@ -1,19 +1,14 @@
 #![expect(clippy::unwrap_used)]
 
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::cli::{TemplateAction, TemplateFields, TemplateUpdateArgs};
 use crate::config::Config;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
-fn current_config_path() -> PathBuf {
-    Config::path_at(None).unwrap()
-}
-
-fn load_config() -> Config {
-    let path = current_config_path();
-    Config::load_at(Some(&path)).unwrap()
+fn load_config(config_path: &Path) -> Config {
+    Config::load_at(Some(config_path)).unwrap()
 }
 
 fn save_action(name: &str) -> TemplateAction {
@@ -52,11 +47,12 @@ fn update_action(
     })
 }
 
-async fn run(action: &TemplateAction) -> crate::error::Result<String> {
+async fn run(action: &TemplateAction, config_path: &Path) -> crate::error::Result<String> {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::template::execute(
         action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.to_path_buf())),
         &mut io.writers(),
     )
     .await;
@@ -65,22 +61,17 @@ async fn run(action: &TemplateAction) -> crate::error::Result<String> {
 
 #[tokio::test]
 async fn template_update_merges_field() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run(&save_action("t")).await.unwrap(); // product + component + priority
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run(&save_action("t"), &config_path).await.unwrap(); // product + component + priority
 
-    run(&update_action(
-        "t",
-        None,
-        None,
-        None,
-        None,
-        Some("blocker"),
-        &[],
-    ))
+    run(
+        &update_action("t", None, None, None, None, Some("blocker"), &[]),
+        &config_path,
+    )
     .await
     .unwrap();
 
-    let config = load_config();
+    let config = load_config(&config_path);
     let t = &config.templates["t"];
     assert_eq!(t.severity.as_deref(), Some("blocker"));
     // Untouched fields are preserved.
@@ -90,22 +81,17 @@ async fn template_update_merges_field() {
 
 #[tokio::test]
 async fn template_update_clear_resets_field() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run(&save_action("t")).await.unwrap();
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run(&save_action("t"), &config_path).await.unwrap();
 
-    run(&update_action(
-        "t",
-        None,
-        None,
-        None,
-        None,
-        None,
-        &["priority"],
-    ))
+    run(
+        &update_action("t", None, None, None, None, None, &["priority"]),
+        &config_path,
+    )
     .await
     .unwrap();
 
-    let config = load_config();
+    let config = load_config(&config_path);
     assert!(config.templates["t"].priority.is_none());
     assert_eq!(
         config.templates["t"].product.as_deref(),
@@ -115,28 +101,31 @@ async fn template_update_clear_resets_field() {
 
 #[tokio::test]
 async fn template_update_merges_and_clears_create_metadata_fields() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run(&save_action("routing")).await.unwrap();
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run(&save_action("routing"), &config_path).await.unwrap();
 
-    run(&TemplateAction::Update(TemplateUpdateArgs {
-        name: "routing".into(),
-        fields: TemplateFields {
-            url: Some("https://example.com/updated".into()),
-            whiteboard: Some("needs-routing".into()),
-            target_milestone: Some("M2".into()),
-            deadline: Some("2026-12-31".into()),
-            cc: vec!["cc@example.com".into()],
-            keywords: vec!["regression".into()],
-            groups: vec!["security".into()],
-            flag: vec!["review+".into()],
-            ..Default::default()
-        },
-        clear: vec![],
-    }))
+    run(
+        &TemplateAction::Update(TemplateUpdateArgs {
+            name: "routing".into(),
+            fields: TemplateFields {
+                url: Some("https://example.com/updated".into()),
+                whiteboard: Some("needs-routing".into()),
+                target_milestone: Some("M2".into()),
+                deadline: Some("2026-12-31".into()),
+                cc: vec!["cc@example.com".into()],
+                keywords: vec!["regression".into()],
+                groups: vec!["security".into()],
+                flag: vec!["review+".into()],
+                ..Default::default()
+            },
+            clear: vec![],
+        }),
+        &config_path,
+    )
     .await
     .unwrap();
 
-    let config = load_config();
+    let config = load_config(&config_path);
     let t = &config.templates["routing"];
     assert_eq!(t.url.as_deref(), Some("https://example.com/updated"));
     assert_eq!(t.whiteboard.as_deref(), Some("needs-routing"));
@@ -147,24 +136,27 @@ async fn template_update_merges_and_clears_create_metadata_fields() {
     assert_eq!(t.groups, vec!["security"]);
     assert_eq!(t.flags, vec!["review+"]);
 
-    run(&TemplateAction::Update(TemplateUpdateArgs {
-        name: "routing".into(),
-        fields: TemplateFields::default(),
-        clear: vec![
-            "url".into(),
-            "whiteboard".into(),
-            "target-milestone".into(),
-            "deadline".into(),
-            "cc".into(),
-            "keywords".into(),
-            "groups".into(),
-            "flags".into(),
-        ],
-    }))
+    run(
+        &TemplateAction::Update(TemplateUpdateArgs {
+            name: "routing".into(),
+            fields: TemplateFields::default(),
+            clear: vec![
+                "url".into(),
+                "whiteboard".into(),
+                "target-milestone".into(),
+                "deadline".into(),
+                "cc".into(),
+                "keywords".into(),
+                "groups".into(),
+                "flags".into(),
+            ],
+        }),
+        &config_path,
+    )
     .await
     .unwrap();
 
-    let config = load_config();
+    let config = load_config(&config_path);
     let t = &config.templates["routing"];
     assert!(t.url.is_none());
     assert!(t.whiteboard.is_none());
@@ -179,16 +171,11 @@ async fn template_update_merges_and_clears_create_metadata_fields() {
 
 #[tokio::test]
 async fn template_update_unknown_template_errors() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    let err = run(&update_action(
-        "missing",
-        Some("X"),
-        None,
-        None,
-        None,
-        None,
-        &[],
-    ))
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    let err = run(
+        &update_action("missing", Some("X"), None, None, None, None, &[]),
+        &config_path,
+    )
     .await
     .unwrap_err();
     assert!(err.to_string().contains("template 'missing' not found"));
@@ -196,27 +183,25 @@ async fn template_update_unknown_template_errors() {
 
 #[tokio::test]
 async fn template_update_requires_a_change() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run(&save_action("t")).await.unwrap();
-    let err = run(&update_action("t", None, None, None, None, None, &[]))
-        .await
-        .unwrap_err();
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run(&save_action("t"), &config_path).await.unwrap();
+    let err = run(
+        &update_action("t", None, None, None, None, None, &[]),
+        &config_path,
+    )
+    .await
+    .unwrap_err();
     assert!(err.to_string().contains("no changes"));
 }
 
 #[tokio::test]
 async fn template_update_unknown_clear_field_errors() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run(&save_action("t")).await.unwrap();
-    let err = run(&update_action(
-        "t",
-        None,
-        None,
-        None,
-        None,
-        None,
-        &["bogus"],
-    ))
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run(&save_action("t"), &config_path).await.unwrap();
+    let err = run(
+        &update_action("t", None, None, None, None, None, &["bogus"]),
+        &config_path,
+    )
     .await
     .unwrap_err();
     assert!(err.to_string().contains("unknown --clear field"));
@@ -224,17 +209,20 @@ async fn template_update_unknown_clear_field_errors() {
 
 #[tokio::test]
 async fn template_update_clearing_all_fields_rejected() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run(&save_action("t")).await.unwrap(); // product, component, priority set
-    let err = run(&update_action(
-        "t",
-        None,
-        None,
-        None,
-        None,
-        None,
-        &["product", "component", "priority"],
-    ))
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run(&save_action("t"), &config_path).await.unwrap(); // product, component, priority set
+    let err = run(
+        &update_action(
+            "t",
+            None,
+            None,
+            None,
+            None,
+            None,
+            &["product", "component", "priority"],
+        ),
+        &config_path,
+    )
     .await
     .unwrap_err();
     assert!(err.to_string().contains("at least one field"));
@@ -242,11 +230,11 @@ async fn template_update_clearing_all_fields_rejected() {
 
 #[tokio::test]
 async fn template_update_clear_wins_over_set() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run(&save_action("t")).await.unwrap(); // product + component + priority
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run(&save_action("t"), &config_path).await.unwrap(); // product + component + priority
 
     // Set and clear the same field in one call: clear wins.
     let a = update_action("t", None, None, None, None, Some("blocker"), &["severity"]);
-    run(&a).await.unwrap();
-    assert!(load_config().templates["t"].severity.is_none());
+    run(&a, &config_path).await.unwrap();
+    assert!(load_config(&config_path).templates["t"].severity.is_none());
 }

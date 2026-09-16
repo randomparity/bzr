@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::{GroupAction, ProjectionArgs};
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 async fn mount_one_member(mock: &wiremock::MockServer) {
@@ -31,7 +31,7 @@ fn list_with(details: bool, projection: ProjectionArgs) -> GroupAction {
 #[tokio::test]
 async fn group_list_users_returns_members() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/user"))
@@ -51,7 +51,8 @@ async fn group_list_users_returns_members() {
     };
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -61,7 +62,7 @@ async fn group_list_users_returns_members() {
 #[tokio::test]
 async fn group_list_users_with_details() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/user"))
@@ -80,7 +81,8 @@ async fn group_list_users_with_details() {
     };
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -93,7 +95,7 @@ async fn group_list_users_with_details() {
 #[tokio::test]
 async fn group_list_users_http_500_returns_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/user"))
@@ -108,7 +110,8 @@ async fn group_list_users_http_500_returns_error() {
     };
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -122,7 +125,7 @@ async fn group_list_users_http_500_returns_error() {
 
 #[tokio::test]
 async fn group_list_users_json_fields_projects_to_named_keys() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_one_member(&mock).await;
 
     let action = list_with(
@@ -135,7 +138,8 @@ async fn group_list_users_json_fields_projects_to_named_keys() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -147,7 +151,7 @@ async fn group_list_users_json_fields_projects_to_named_keys() {
 
 #[tokio::test]
 async fn group_list_users_details_json_fields_still_projects() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_one_member(&mock).await;
 
     let action = list_with(
@@ -160,7 +164,8 @@ async fn group_list_users_details_json_fields_still_projects() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -172,7 +177,7 @@ async fn group_list_users_details_json_fields_still_projects() {
 
 #[tokio::test]
 async fn group_list_users_ndjson_fields_projects_each_line() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_one_member(&mock).await;
 
     let action = list_with(
@@ -189,7 +194,8 @@ async fn group_list_users_ndjson_fields_projects_each_line() {
             None,
             OutputFormat::Ndjson,
             None,
-        ),
+        )
+        .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -199,7 +205,7 @@ async fn group_list_users_ndjson_fields_projects_each_line() {
 
 #[tokio::test]
 async fn group_list_users_json_unknown_field_exits_7() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = list_with(
         false,
@@ -211,7 +217,8 @@ async fn group_list_users_json_unknown_field_exits_7() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -221,7 +228,7 @@ async fn group_list_users_json_unknown_field_exits_7() {
 
 #[tokio::test]
 async fn group_list_users_table_fields_is_noop_with_warning() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_one_member(&mock).await;
 
     let action = list_with(
@@ -234,7 +241,8 @@ async fn group_list_users_table_fields_is_noop_with_warning() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
