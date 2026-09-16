@@ -8,11 +8,21 @@ use crate::commands::config::execute;
 use crate::commands::runtime::invocation::CommandContext;
 use crate::config::ServerConfig;
 use crate::test_helpers::{
-    config_path, load_config, seed_inline_server, setup_empty_config_env,
-    update_config_without_validation, CapturedIo,
+    load_config_at, seed_inline_server_at, setup_empty_isolated_env,
+    update_config_without_validation_at, CapturedIo,
 };
 use crate::types::output::OutputFormat;
 use crate::types::transport::AuthMethod;
+
+use std::path::Path;
+
+/// A command context pinned to an explicit config path, so config resolution
+/// never consults `XDG_CONFIG_HOME` and the test needs no `ENV_LOCK`
+/// (ADR-0002).
+fn ctx_at(config_path: &Path, format: OutputFormat) -> CommandContext {
+    CommandContext::new(None, format, None)
+        .with_config_path_override(Some(config_path.to_path_buf()))
+}
 
 /// Owned, all-defaulted view of the `SetServer` operands so each test can
 /// override only the fields it cares about via `..Default::default()` (the
@@ -59,7 +69,7 @@ impl Sv {
 
 #[tokio::test]
 async fn first_set_server_auto_sets_default() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     let mut io = CapturedIo::new();
     let action = Sv {
         api_key: Some("first-key-1234567890".into()),
@@ -68,13 +78,13 @@ async fn first_set_server_auto_sets_default() {
     .into_action();
     execute(
         &action,
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await
     .unwrap();
 
-    let config = load_config();
+    let config = load_config_at(&config_path);
     assert_eq!(config.default_server.as_deref(), Some("first"));
     assert!(config.servers.contains_key("first"));
 
@@ -87,16 +97,23 @@ async fn first_set_server_auto_sets_default() {
 
 #[tokio::test]
 async fn second_set_server_does_not_override_default() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    seed_inline_server("first", "https://first.example.com", "first-key-1234567890").await;
-    seed_inline_server(
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    seed_inline_server_at(
+        &config_path,
+        "first",
+        "https://first.example.com",
+        "first-key-1234567890",
+    )
+    .await;
+    seed_inline_server_at(
+        &config_path,
         "second",
         "https://second.example.com",
         "second-key-1234567890",
     )
     .await;
 
-    let config = load_config();
+    let config = load_config_at(&config_path);
     assert_eq!(
         config.default_server.as_deref(),
         Some("first"),
@@ -107,12 +124,12 @@ async fn second_set_server_does_not_override_default() {
 
 #[tokio::test]
 async fn set_server_update_preserves_existing_default() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     for (name, url) in [
         ("first", "https://first.example.com"),
         ("second", "https://second.example.com"),
     ] {
-        seed_inline_server(name, url, &format!("{name}-key-1234567890")).await;
+        seed_inline_server_at(&config_path, name, url, &format!("{name}-key-1234567890")).await;
     }
 
     let mut io = CapturedIo::new();
@@ -126,7 +143,7 @@ async fn set_server_update_preserves_existing_default() {
     .into_action();
     execute(
         &action,
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await
@@ -136,7 +153,7 @@ async fn set_server_update_preserves_existing_default() {
     assert_eq!(parsed["name"], "second");
     assert_eq!(parsed["action"], "updated");
 
-    let config = load_config();
+    let config = load_config_at(&config_path);
     assert_eq!(config.default_server.as_deref(), Some("first"));
     let server = &config.servers["second"];
     assert_eq!(server.url, "https://updated.example.com");
@@ -156,10 +173,16 @@ async fn set_server_update_preserves_existing_default() {
 async fn set_server_without_auth_method_leaves_the_provenance_stamp_unset() {
     // Without the flag there is no pin to record, and no detection has run, so
     // the entry must stay unstamped and let the first connect detect and stamp.
-    let (_lock, _tmp) = setup_empty_config_env().await;
-    seed_inline_server("plain", "https://plain.example.com", "plain-key-1234567890").await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    seed_inline_server_at(
+        &config_path,
+        "plain",
+        "https://plain.example.com",
+        "plain-key-1234567890",
+    )
+    .await;
 
-    let server = &load_config().servers["plain"];
+    let server = &load_config_at(&config_path).servers["plain"];
     assert_eq!(server.auth_method, None);
     assert_eq!(server.auth_method_source, None);
     assert!(!server.auth_method_is_trusted());
@@ -167,7 +190,7 @@ async fn set_server_without_auth_method_leaves_the_provenance_stamp_unset() {
 
 #[tokio::test]
 async fn set_server_with_env_var_persists_env_source() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     let mut io = CapturedIo::new();
     let action = Sv {
         api_key_env: Some("BZR_API_KEY".into()),
@@ -176,13 +199,13 @@ async fn set_server_with_env_var_persists_env_source() {
     .into_action();
     execute(
         &action,
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await
     .unwrap();
 
-    let config = load_config();
+    let config = load_config_at(&config_path);
     let server = &config.servers["prod"];
     assert_eq!(server.api_key, None);
     assert_eq!(server.api_key_env.as_deref(), Some("BZR_API_KEY"));
@@ -190,17 +213,17 @@ async fn set_server_with_env_var_persists_env_source() {
 
 #[tokio::test]
 async fn set_server_allows_url_without_api_key_source() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     let mut io = CapturedIo::new();
     let result = execute(
         &Sv::new("public", "https://public.example.com").into_action(),
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;
 
     assert!(result.is_ok(), "set-server failed: {result:?}");
-    let config = load_config();
+    let config = load_config_at(&config_path);
     let server = &config.servers["public"];
     assert!(server.api_key.is_none());
     assert!(server.api_key_env.is_none());
@@ -210,7 +233,7 @@ async fn set_server_allows_url_without_api_key_source() {
 
 #[tokio::test]
 async fn set_server_rejects_both_api_key_and_env() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     let mut io = CapturedIo::new();
     let action = Sv {
         api_key: Some("inline-secret".into()),
@@ -220,7 +243,7 @@ async fn set_server_rejects_both_api_key_and_env() {
     .into_action();
     let result = execute(
         &action,
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;
@@ -232,12 +255,12 @@ async fn set_server_rejects_both_api_key_and_env() {
     ));
     assert!(err.to_string().contains("at most one"));
     // Nothing was written for the rejected server.
-    assert!(!config_path().exists() || !load_config().servers.contains_key("dual"));
+    assert!(!config_path.exists() || !load_config_at(&config_path).servers.contains_key("dual"));
 }
 
 #[tokio::test]
 async fn set_server_table_output_reports_human_summary() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     let mut io = CapturedIo::new();
     let action = Sv {
         api_key: Some("inline-secret-key".into()),
@@ -246,7 +269,7 @@ async fn set_server_table_output_reports_human_summary() {
     .into_action();
     execute(
         &action,
-        &CommandContext::new(None, OutputFormat::Table, None),
+        &ctx_at(&config_path, OutputFormat::Table),
         &mut io.writers(),
     )
     .await
@@ -261,7 +284,7 @@ async fn set_server_table_output_reports_human_summary() {
 
 #[tokio::test]
 async fn set_server_tls_pin_clear_missing_server_errors() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     let mut io = CapturedIo::new();
     let action = Sv {
         tls_pin_clear: true,
@@ -270,7 +293,7 @@ async fn set_server_tls_pin_clear_missing_server_errors() {
     .into_action();
     let result = execute(
         &action,
-        &CommandContext::new(None, OutputFormat::Json, None),
+        &ctx_at(&config_path, OutputFormat::Json),
         &mut io.writers(),
     )
     .await;
@@ -282,10 +305,10 @@ async fn set_server_tls_pin_clear_missing_server_errors() {
 
 #[tokio::test]
 async fn set_server_tls_pin_clear_removes_pin_fields() {
-    let (_lock, _tmp) = setup_empty_config_env().await;
+    let (_tmp, config_path) = setup_empty_isolated_env();
     // Seed a server that already carries a certificate pin, bypassing the
     // interactive `--tls-pin-now` probe.
-    update_config_without_validation(|config| {
+    update_config_without_validation_at(&config_path, |config| {
         config.servers.insert(
             "pinned".into(),
             ServerConfig {
@@ -309,7 +332,7 @@ async fn set_server_tls_pin_clear_removes_pin_fields() {
     .into_action();
     execute(
         &action,
-        &CommandContext::new(None, OutputFormat::Table, None),
+        &ctx_at(&config_path, OutputFormat::Table),
         &mut io.writers(),
     )
     .await
@@ -318,7 +341,7 @@ async fn set_server_tls_pin_clear_removes_pin_fields() {
     assert!(io
         .err_str()
         .contains("Certificate pin cleared for server 'pinned'."));
-    let server = &load_config().servers["pinned"];
+    let server = &load_config_at(&config_path).servers["pinned"];
     assert!(server.tls_pin_sha256.is_none());
     assert!(server.tls_pin_issuer.is_none());
 }
