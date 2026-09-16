@@ -131,12 +131,18 @@ fn build_editor_template(
 /// which is what activates the `$EDITOR` flow.
 ///
 /// The terminal check and the reader are parameters rather than ambient
-/// process state so tests can drive every branch without reading the test
-/// harness's own stdin. A harness that supplies an open pipe never reaches
-/// EOF, so an ambient read blocks forever with no timeout and no diagnostic
-/// (#817). [`resolve_description`] supplies the real process values, mirroring
-/// the `should_prompt` / `read_yes_no` split in
+/// process state so the flag-omitted stdin fallback can be driven from a unit
+/// test without reading the test harness's own stdin. A harness that supplies
+/// an open pipe never reaches EOF, so an ambient read blocks forever with no
+/// timeout and no diagnostic (#817). [`resolve_description`] supplies the real
+/// process values, mirroring the `should_prompt` / `read_yes_no` split in
 /// `crate::commands::runtime::interaction::confirm`.
+///
+/// The seam covers that fallback only. `--description -` and
+/// `--description-file -` resolve to `BodySource::Stdin` and deliberately read
+/// process stdin inside `materialize_body_source`, ignoring `reader`, so those
+/// two arms must not be driven from a unit test whose harness stdin may be an
+/// open pipe.
 fn resolve_description_from(
     description: Option<&str>,
     description_file: Option<&std::path::Path>,

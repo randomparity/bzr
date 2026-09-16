@@ -954,9 +954,18 @@ fn install_fake_editor() -> std::path::PathBuf {
 /// directly asserts the TTY branch in every environment; the execute-level
 /// version of this test could only run at a real terminal and so, under CI,
 /// `/dev/null`, or any pipe, returned at its guard having asserted nothing
-/// (#817). The editor invocation itself is covered by
+/// (#817). `run_editor_flow` itself and the buffer it renders stay covered by
 /// `run_editor_flow_returns_parsed_editor_output` and the
 /// `build_editor_template_*` tests.
+///
+/// What the retirement does leave uncovered is `handle`'s wiring around them --
+/// `editor_flow_active = resolved_description.is_none()`, the call into
+/// `run_editor_flow`, and the assignment of the parsed summary and description.
+/// The retired test only ever entered that branch at a real terminal, so CI and
+/// every piped run already missed it; the residue is the local-at-a-TTY case.
+/// Closing it needs `handle` to take the same `(is_tty, reader)` parameters,
+/// which is the `CommandContext` seam issue #817 deferred by name -- that
+/// deferral owns this gap.
 #[test]
 fn resolve_description_at_a_tty_selects_the_editor_flow() {
     let mut reader = std::io::Cursor::new(Vec::new());
@@ -1008,18 +1017,21 @@ fn resolve_description_prefers_an_explicit_flag_over_the_pipe() {
     );
 }
 
-/// A template's `description` only ever pre-fills the `$EDITOR` buffer; it is
-/// never merged into the description that goes on the wire. Outside the editor
-/// flow the resolved description therefore has to be the explicit one, with
-/// the template body absent from the request.
+/// An explicit `--description` beats a template that carries a `description`
+/// body: the request must contain the explicit text and nothing from the
+/// template, whose body only ever pre-fills the `$EDITOR` buffer.
 ///
-/// This used to assert the same property by supplying no description source at
-/// all and expecting the empty-stdin `InputValidation`, which made the test
-/// read the harness's ambient stdin and block forever on an unclosed pipe
-/// (#817). The empty-pipe branch is now covered directly by
-/// `resolve_description_rejects_an_empty_pipe`.
+/// This test was previously named for the template *fallback* property and
+/// asserted it by supplying no description source at all, expecting the
+/// empty-stdin `InputValidation` -- which made it read the harness's ambient
+/// stdin and block forever on an unclosed pipe (#817). That assertion never
+/// reached the fallback either, because the error fires inside
+/// `resolve_description` before `handle` consults the template, so the name
+/// promised more than any version of the test checked. The empty-pipe branch
+/// is now covered directly by `resolve_description_rejects_an_empty_pipe`, and
+/// the name here states what this test actually proves.
 #[tokio::test]
-async fn bug_create_template_description_does_not_fall_back_outside_editor_flow() {
+async fn bug_create_explicit_description_wins_over_template_body() {
     let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     // Pre-populate a template that has a description body.
