@@ -68,7 +68,7 @@ pub(crate) fn classify_body_source(
 
 /// Read everything from `reader` into a `String`, mapping I/O failures
 /// (including non-UTF-8 input) to a `BzrError`.
-pub(super) fn read_to_string_from(
+pub(crate) fn read_to_string_from(
     reader: &mut impl std::io::Read,
     context: impl fmt::Display,
 ) -> Result<String> {
