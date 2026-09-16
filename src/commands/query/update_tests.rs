@@ -1,21 +1,16 @@
 #![expect(clippy::unwrap_used)]
 
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::cli::{
     BugActorFilterArgs, BugFilterArgs, QueryAction, QueryUpdateArgs, SaveArgs, ShowArgs,
 };
 use crate::config::Config;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
-fn current_config_path() -> PathBuf {
-    Config::path_at(None).unwrap()
-}
-
-fn load_config() -> Config {
-    let path = current_config_path();
-    Config::load_at(Some(&path)).unwrap()
+fn load_config(config_path: &Path) -> Config {
+    Config::load_at(Some(config_path)).unwrap()
 }
 
 fn save_action(name: &str) -> QueryAction {
@@ -195,21 +190,27 @@ fn empty_update(name: &str) -> QueryAction {
     })
 }
 
-async fn run_q(action: &QueryAction) -> crate::error::Result<()> {
+async fn run_q(action: &QueryAction, config_path: &Path) -> crate::error::Result<()> {
     let mut io = crate::test_helpers::CapturedIo::new();
     crate::commands::query::execute(
         action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.to_path_buf())),
         &mut io.writers(),
     )
     .await
 }
 
-async fn run_action_output(action: &QueryAction, format: OutputFormat) -> String {
+async fn run_action_output(
+    action: &QueryAction,
+    format: OutputFormat,
+    config_path: &Path,
+) -> String {
     let mut io = crate::test_helpers::CapturedIo::new();
     crate::commands::query::execute(
         action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, format, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, format, None)
+            .with_config_path_override(Some(config_path.to_path_buf())),
         &mut io.writers(),
     )
     .await
@@ -217,10 +218,11 @@ async fn run_action_output(action: &QueryAction, format: OutputFormat) -> String
     io.out_str().to_string()
 }
 
-async fn show_query_json(name: &str) -> serde_json::Value {
+async fn show_query_json(name: &str, config_path: &Path) -> serde_json::Value {
     let output = run_action_output(
         &QueryAction::Show(ShowArgs { name: name.into() }),
         OutputFormat::Json,
+        config_path,
     )
     .await;
     crate::test_helpers::json_envelope_data(&output)
@@ -286,16 +288,16 @@ fn clear_query_field_handles_every_name() {
 
 #[tokio::test]
 async fn query_update_replaces_filter_keeps_rest() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run_q(&save_action("q")).await.unwrap(); // product=Firefox, status=NEW, limit=25
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run_q(&save_action("q"), &config_path).await.unwrap(); // product=Firefox, status=NEW, limit=25
 
     let mut a = empty_update("q");
     if let QueryAction::Update(QueryUpdateArgs { filters, .. }) = &mut a {
         filters.status = vec!["ASSIGNED".into()];
     }
-    run_q(&a).await.unwrap();
+    run_q(&a, &config_path).await.unwrap();
 
-    let config = load_config();
+    let config = load_config(&config_path);
     let q = &config.queries["q"];
     assert_eq!(q.status, vec!["ASSIGNED".to_string()]);
     assert_eq!(q.product, vec!["Firefox".to_string()]); // untouched
@@ -304,19 +306,19 @@ async fn query_update_replaces_filter_keeps_rest() {
 
 #[tokio::test]
 async fn query_update_search_reports_effective_search_kind() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run_q(&save_action("q")).await.unwrap();
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run_q(&save_action("q"), &config_path).await.unwrap();
 
     let mut update = empty_update("q");
     if let QueryAction::Update(QueryUpdateArgs { search, .. }) = &mut update {
         *search = Some("crash in tab".into());
     }
-    run_q(&update).await.unwrap();
+    run_q(&update, &config_path).await.unwrap();
 
-    let shown = show_query_json("q").await;
+    let shown = show_query_json("q", &config_path).await;
     assert_eq!(shown["kind"], "search");
 
-    let listed = run_action_output(&QueryAction::List, OutputFormat::Table).await;
+    let listed = run_action_output(&QueryAction::List, OutputFormat::Table, &config_path).await;
     assert!(
         listed.contains("q (kind=search"),
         "expected query list to report search kind, got: {listed:?}"
@@ -325,27 +327,30 @@ async fn query_update_search_reports_effective_search_kind() {
 
 #[tokio::test]
 async fn query_update_clear_search_reports_effective_list_kind() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run_q(&empty_save_action("q", Some("crash in tab".into())))
-        .await
-        .unwrap();
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run_q(
+        &empty_save_action("q", Some("crash in tab".into())),
+        &config_path,
+    )
+    .await
+    .unwrap();
 
     let mut add_filter = empty_update("q");
     if let QueryAction::Update(QueryUpdateArgs { filters, .. }) = &mut add_filter {
         filters.product = vec!["Firefox".into()];
     }
-    run_q(&add_filter).await.unwrap();
+    run_q(&add_filter, &config_path).await.unwrap();
 
     let mut clear_search = empty_update("q");
     if let QueryAction::Update(QueryUpdateArgs { clear, .. }) = &mut clear_search {
         *clear = vec!["search".into()];
     }
-    run_q(&clear_search).await.unwrap();
+    run_q(&clear_search, &config_path).await.unwrap();
 
-    let shown = show_query_json("q").await;
+    let shown = show_query_json("q", &config_path).await;
     assert_eq!(shown["kind"], "list");
 
-    let listed = run_action_output(&QueryAction::List, OutputFormat::Table).await;
+    let listed = run_action_output(&QueryAction::List, OutputFormat::Table, &config_path).await;
     assert!(
         listed.contains("q (kind=list"),
         "expected query list to report list kind, got: {listed:?}"
@@ -354,69 +359,69 @@ async fn query_update_clear_search_reports_effective_list_kind() {
 
 #[tokio::test]
 async fn query_update_replaces_limit() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run_q(&save_action("q")).await.unwrap();
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run_q(&save_action("q"), &config_path).await.unwrap();
 
     let mut a = empty_update("q");
     if let QueryAction::Update(QueryUpdateArgs { limit, .. }) = &mut a {
         *limit = Some(100);
     }
-    run_q(&a).await.unwrap();
+    run_q(&a, &config_path).await.unwrap();
 
-    assert_eq!(load_config().queries["q"].limit, Some(100));
+    assert_eq!(load_config(&config_path).queries["q"].limit, Some(100));
 }
 
 #[tokio::test]
 async fn query_update_clear_resets_filter() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run_q(&save_action("q")).await.unwrap();
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run_q(&save_action("q"), &config_path).await.unwrap();
 
     let mut a = empty_update("q");
     if let QueryAction::Update(QueryUpdateArgs { clear, .. }) = &mut a {
         *clear = vec!["status".into()];
     }
-    run_q(&a).await.unwrap();
+    run_q(&a, &config_path).await.unwrap();
 
-    let config = load_config();
+    let config = load_config(&config_path);
     assert!(config.queries["q"].status.is_empty());
     assert_eq!(config.queries["q"].product, vec!["Firefox".to_string()]);
 }
 
 #[tokio::test]
 async fn query_update_unknown_query_errors() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
     let mut a = empty_update("missing");
     if let QueryAction::Update(QueryUpdateArgs { filters, .. }) = &mut a {
         filters.status = vec!["NEW".into()];
     }
-    let err = run_q(&a).await.unwrap_err();
+    let err = run_q(&a, &config_path).await.unwrap_err();
     assert!(err.to_string().contains("query 'missing' not found"));
 }
 
 #[tokio::test]
 async fn query_update_requires_a_change() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run_q(&save_action("q")).await.unwrap();
-    let err = run_q(&empty_update("q")).await.unwrap_err();
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run_q(&save_action("q"), &config_path).await.unwrap();
+    let err = run_q(&empty_update("q"), &config_path).await.unwrap_err();
     assert!(err.to_string().contains("no changes"));
 }
 
 #[tokio::test]
 async fn query_update_unknown_clear_field_errors() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run_q(&save_action("q")).await.unwrap();
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run_q(&save_action("q"), &config_path).await.unwrap();
     let mut a = empty_update("q");
     if let QueryAction::Update(QueryUpdateArgs { clear, .. }) = &mut a {
         *clear = vec!["bogus".into()];
     }
-    let err = run_q(&a).await.unwrap_err();
+    let err = run_q(&a, &config_path).await.unwrap_err();
     assert!(err.to_string().contains("unknown --clear field"));
 }
 
 #[tokio::test]
 async fn query_update_clearing_all_filters_rejected() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run_q(&product_save_action("q", "Firefox", 10))
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run_q(&product_save_action("q", "Firefox", 10), &config_path)
         .await
         .unwrap(); // only product
 
@@ -424,40 +429,40 @@ async fn query_update_clearing_all_filters_rejected() {
     if let QueryAction::Update(QueryUpdateArgs { clear, .. }) = &mut a {
         *clear = vec!["product".into()];
     }
-    let err = run_q(&a).await.unwrap_err();
+    let err = run_q(&a, &config_path).await.unwrap_err();
     assert!(err.to_string().contains("at least one filter"));
 }
 
 #[tokio::test]
 async fn query_update_bad_date_errors() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run_q(&save_action("q")).await.unwrap();
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run_q(&save_action("q"), &config_path).await.unwrap();
     let mut a = empty_update("q");
     if let QueryAction::Update(QueryUpdateArgs { created_since, .. }) = &mut a {
         *created_since = Some("not-a-date".into());
     }
-    assert!(run_q(&a).await.is_err());
+    assert!(run_q(&a, &config_path).await.is_err());
 }
 
 #[tokio::test]
 async fn query_update_clear_wins_over_set() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run_q(&save_action("q")).await.unwrap(); // product=Firefox, status=NEW
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run_q(&save_action("q"), &config_path).await.unwrap(); // product=Firefox, status=NEW
 
     let mut a = empty_update("q");
     if let QueryAction::Update(QueryUpdateArgs { filters, clear, .. }) = &mut a {
         filters.status = vec!["ASSIGNED".into()];
         *clear = vec!["status".into()];
     }
-    run_q(&a).await.unwrap();
+    run_q(&a, &config_path).await.unwrap();
     // status was both set and cleared -> cleared.
-    assert!(load_config().queries["q"].status.is_empty());
+    assert!(load_config(&config_path).queries["q"].status.is_empty());
 }
 
 #[tokio::test]
 async fn query_update_sets_dates_and_sort() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run_q(&save_action("q")).await.unwrap();
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run_q(&save_action("q"), &config_path).await.unwrap();
 
     let mut a = empty_update("q");
     if let QueryAction::Update(QueryUpdateArgs {
@@ -471,9 +476,9 @@ async fn query_update_sets_dates_and_sort() {
         *changed_since = Some("2026-03-02".into());
         sort_args.sort = Some("priority".into());
     }
-    run_q(&a).await.unwrap();
+    run_q(&a, &config_path).await.unwrap();
 
-    let config = load_config();
+    let config = load_config(&config_path);
     let q = &config.queries["q"];
     assert!(q.creation_time.is_some());
     assert!(q.last_change_time.is_some());
@@ -482,12 +487,14 @@ async fn query_update_sets_dates_and_sort() {
 
 #[tokio::test]
 async fn query_update_from_url_replaces_existing_query() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     let original_url = format!(
         "{}/buglist.cgi?product=OldProduct&bug_status=NEW&f1=old&o1=substring&v1=stale&limit=25",
         mock.uri()
     );
-    run_q(&url_save_action("web", original_url)).await.unwrap();
+    run_q(&url_save_action("web", original_url), &config_path)
+        .await
+        .unwrap();
 
     let refreshed_url = format!(
         "{}/buglist.cgi?product=NewProduct&bug_status=ASSIGNED&priority=P1\
@@ -515,9 +522,9 @@ async fn query_update_from_url_replaces_existing_query() {
         sort_args.sort = Some("priority".into());
     }
 
-    run_q(&update).await.unwrap();
+    run_q(&update, &config_path).await.unwrap();
 
-    let config = load_config();
+    let config = load_config(&config_path);
     let q = &config.queries["web"];
     assert_eq!(q.kind(), crate::types::QueryKind::Url);
     assert_eq!(q.product, vec!["NewProduct"]);
@@ -552,16 +559,16 @@ async fn query_update_only_product_is_a_change() {
     // the product line would keep `changed` false and the update would be
     // rejected as "no changes". product/component are the only merge_vec fields
     // without a sole-field update test, so this closes that coverage gap.
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run_q(&save_action("q")).await.unwrap(); // product=Firefox, status=NEW
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run_q(&save_action("q"), &config_path).await.unwrap(); // product=Firefox, status=NEW
 
     let mut a = empty_update("q");
     if let QueryAction::Update(QueryUpdateArgs { filters, .. }) = &mut a {
         filters.product = vec!["Thunderbird".into()];
     }
-    run_q(&a).await.unwrap(); // must NOT fail with "no changes"
+    run_q(&a, &config_path).await.unwrap(); // must NOT fail with "no changes"
 
-    let config = load_config();
+    let config = load_config(&config_path);
     assert_eq!(
         config.queries["q"].product,
         vec!["Thunderbird".to_string()],
@@ -573,16 +580,16 @@ async fn query_update_only_product_is_a_change() {
 async fn query_update_only_component_is_a_change() {
     // Companion to the product case: a sole --component update must also count
     // as a change. The `&=` mutant on the component line would swallow it.
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    run_q(&save_action("q")).await.unwrap();
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    run_q(&save_action("q"), &config_path).await.unwrap();
 
     let mut a = empty_update("q");
     if let QueryAction::Update(QueryUpdateArgs { filters, .. }) = &mut a {
         filters.component = vec!["General".into()];
     }
-    run_q(&a).await.unwrap();
+    run_q(&a, &config_path).await.unwrap();
 
-    let config = load_config();
+    let config = load_config(&config_path);
     assert_eq!(
         config.queries["q"].component,
         vec!["General".to_string()],
