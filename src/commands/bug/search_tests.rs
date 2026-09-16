@@ -4,18 +4,8 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::BugAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::{load_config_at, setup_isolated_env};
 use crate::types::OutputFormat;
-use std::path::PathBuf;
-
-fn current_config_path() -> PathBuf {
-    crate::config::Config::path_at(None).unwrap()
-}
-
-fn load_config() -> crate::config::Config {
-    let path = current_config_path();
-    crate::config::Config::load_at(Some(&path)).unwrap()
-}
 
 fn from_url_action(url: String, save_as: Option<String>) -> BugAction {
     BugAction::Search(crate::cli::SearchArgs {
@@ -37,7 +27,7 @@ fn from_url_action(url: String, save_as: Option<String>) -> BugAction {
 
 #[tokio::test]
 async fn handle_search_from_url_executes() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -58,7 +48,8 @@ async fn handle_search_from_url_executes() {
 
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -195,7 +186,7 @@ async fn from_url_matching_inline_server_works_without_config() {
 
 #[tokio::test]
 async fn handle_search_from_url_with_custom_fields_emits_custom_field() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -219,7 +210,8 @@ async fn handle_search_from_url_with_custom_fields_emits_custom_field() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -233,7 +225,7 @@ async fn handle_search_from_url_with_custom_fields_emits_custom_field() {
 
 #[tokio::test]
 async fn handle_search_from_url_fields_drive_output_projection() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -253,7 +245,8 @@ async fn handle_search_from_url_fields_drive_output_projection() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -267,7 +260,7 @@ async fn handle_search_from_url_fields_drive_output_projection() {
 
 #[tokio::test]
 async fn handle_search_from_url_does_not_infer_custom_fields_from_columnlist() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     let default_fields = concat!(
         "id,summary,status,resolution,dupe_of,product,component,version,",
         "assigned_to,priority,severity,creation_time,last_change_time,creator,",
@@ -295,7 +288,8 @@ async fn handle_search_from_url_does_not_infer_custom_fields_from_columnlist() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -311,7 +305,7 @@ async fn handle_search_from_url_preserves_url_limit_when_cli_unset() {
     // URL specifies limit=10 and CLI passes nothing — the URL limit
     // must reach the server unchanged, not be overwritten by the
     // 50-default.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -329,7 +323,8 @@ async fn handle_search_from_url_preserves_url_limit_when_cli_unset() {
 
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io2.writers(),
     )
     .await;
@@ -345,7 +340,7 @@ async fn handle_search_from_url_preserves_url_limit_when_cli_unset() {
 async fn handle_search_quicksearch_passes_limit_and_field_filters() {
     // Non-from-url path: limit / fields / exclude_fields from the
     // CLI must reach the server.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -376,7 +371,8 @@ async fn handle_search_quicksearch_passes_limit_and_field_filters() {
     let mut __io3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io3.writers(),
     )
     .await;
@@ -389,7 +385,7 @@ async fn handle_search_quicksearch_passes_limit_and_field_filters() {
 
 #[tokio::test]
 async fn handle_search_from_url_passes_raw_params() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     // Wiremock matcher verifying raw params appear in the request
     Mock::given(method("GET"))
@@ -413,7 +409,8 @@ async fn handle_search_from_url_passes_raw_params() {
 
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io4.writers(),
     )
     .await;
@@ -427,7 +424,7 @@ async fn handle_search_from_url_passes_raw_params() {
 
 #[tokio::test]
 async fn handle_search_from_url_saves_query() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -443,7 +440,8 @@ async fn handle_search_from_url_saves_query() {
 
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io5.writers(),
     )
     .await;
@@ -451,7 +449,7 @@ async fn handle_search_from_url_saves_query() {
     let _output = __io5.out_str().to_string();
     assert!(result.is_ok(), "from-url save failed: {result:?}");
 
-    let config = load_config();
+    let config = load_config_at(&config_path);
     let saved = config.queries.get("my-query").unwrap();
     assert_eq!(saved.kind(), crate::types::QueryKind::Url);
     assert_eq!(saved.product, vec!["TestProduct"]);
@@ -460,7 +458,7 @@ async fn handle_search_from_url_saves_query() {
 
 #[tokio::test]
 async fn handle_search_from_url_auto_names_from_known_name() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -475,7 +473,8 @@ async fn handle_search_from_url_auto_names_from_known_name() {
     let mut __io6 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io6.writers(),
     )
     .await;
@@ -485,7 +484,7 @@ async fn handle_search_from_url_auto_names_from_known_name() {
         "auto-name from known_name failed: {result:?}"
     );
 
-    let config = load_config();
+    let config = load_config_at(&config_path);
     assert!(
         config.queries.contains_key("my saved search"),
         "query should be saved as 'my saved search'"
@@ -494,7 +493,7 @@ async fn handle_search_from_url_auto_names_from_known_name() {
 
 #[tokio::test]
 async fn handle_search_save_as_no_name_no_known_name_errors() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = from_url_action(
         "https://bugzilla.example.com/buglist.cgi?product=Firefox".into(),
@@ -503,7 +502,8 @@ async fn handle_search_save_as_no_name_no_known_name_errors() {
     let mut __io7 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io7.writers(),
     )
     .await;
@@ -518,7 +518,7 @@ async fn handle_search_save_as_no_name_no_known_name_errors() {
 
 #[tokio::test]
 async fn bug_search_quicksearch_sends_default_order() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
         .and(query_param("order", "bug_id"))
@@ -545,7 +545,8 @@ async fn bug_search_quicksearch_sends_default_order() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -554,7 +555,7 @@ async fn bug_search_quicksearch_sends_default_order() {
 
 #[tokio::test]
 async fn bug_search_from_url_sort_overrides_url_order() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
         .and(query_param("order", "priority DESC, bug_id"))
@@ -572,7 +573,8 @@ async fn bug_search_from_url_sort_overrides_url_order() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -584,7 +586,7 @@ async fn bug_search_from_url_sort_overrides_url_order() {
 
 #[tokio::test]
 async fn handle_search_count_emits_count_object() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     // Quicksearch + --count: requests id-only fields and limit=0, reports count.
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -616,7 +618,8 @@ async fn handle_search_count_emits_count_object() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -629,7 +632,7 @@ async fn handle_search_count_emits_count_object() {
 async fn from_url_offset_in_url_is_overridden_by_cli_offset_not_duplicated() {
     // A URL carrying its own offset=10 plus an explicit --offset 5 must send a
     // single offset=5 (CLI wins), never two conflicting offset params.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"bugs": []})))
@@ -652,7 +655,8 @@ async fn from_url_offset_in_url_is_overridden_by_cli_offset_not_duplicated() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -682,7 +686,7 @@ async fn from_url_offset_in_url_is_overridden_by_cli_offset_not_duplicated() {
 // the server sees limit=51 rather than the CLI-specified 3+1=4.
 #[tokio::test]
 async fn build_params_from_url_cli_limit_overrides_default() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     // URL has no limit; CLI passes --limit 3 → probe sends limit=4 (3+1)
     Mock::given(method("GET"))
@@ -703,7 +707,8 @@ async fn build_params_from_url_cli_limit_overrides_default() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -721,7 +726,7 @@ async fn build_params_from_url_cli_limit_overrides_default() {
 // → the wiremock matcher doesn't match → test fails.
 #[tokio::test]
 async fn build_params_from_url_exclude_fields_reaches_server() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -741,7 +746,8 @@ async fn build_params_from_url_exclude_fields_reaches_server() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -755,7 +761,7 @@ async fn paginate_with_progress_streams_page_and_done_on_stderr() {
     // event per request and a terminal done on stderr, while stdout stays a
     // clean JSON document. Guards execution.rs's `ctx.progress()` wiring, which
     // functional tier 138a exercises only via `bug list` (a different caller).
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     // Page size 2; a short page is followed by the empty terminal request.
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -789,7 +795,8 @@ async fn paginate_with_progress_streams_page_and_done_on_stderr() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let ctx =
         crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_progress(Some(crate::types::ProgressFormat::Ndjson));
+            .with_progress(Some(crate::types::ProgressFormat::Ndjson))
+            .with_config_path_override(Some(config_path));
     let result = crate::commands::bug::execute(&action, &ctx, &mut io.writers()).await;
     assert!(result.is_ok(), "{result:?}");
 
@@ -817,7 +824,7 @@ async fn paginate_with_progress_streams_page_and_done_on_stderr() {
 async fn from_url_offset_with_paginate_sends_single_offset_per_page() {
     // `--from-url …&offset=10 --paginate` must not leave the URL's offset in
     // raw_params: every page request carries exactly one (loop-managed) offset.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     // Page size 2: a short first page is followed by an empty request.
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -850,7 +857,8 @@ async fn from_url_offset_with_paginate_sends_single_offset_per_page() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -896,11 +904,12 @@ async fn mount_extensions(mock: &wiremock::MockServer, names: &[&str]) {
         .await;
 }
 
-async fn run_action(action: &BugAction) -> crate::error::Result<()> {
+async fn run_action(action: &BugAction, config_path: &std::path::Path) -> crate::error::Result<()> {
     let mut io = crate::test_helpers::CapturedIo::new();
     crate::commands::bug::execute(
         action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.to_path_buf())),
         &mut io.writers(),
     )
     .await
@@ -908,7 +917,7 @@ async fn run_action(action: &BugAction) -> crate::error::Result<()> {
 
 #[tokio::test]
 async fn handle_search_saved_search_passes_saved_search_and_sharer() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_extensions(&mock, &["RedHat"]).await;
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -919,7 +928,11 @@ async fn handle_search_saved_search_passes_saved_search_and_sharer() {
         .mount(&mock)
         .await;
 
-    let result = run_action(&saved_search_action("team list", Some(112_233))).await;
+    let result = run_action(
+        &saved_search_action("team list", Some(112_233)),
+        &config_path,
+    )
+    .await;
     assert!(result.is_ok(), "{result:?}");
 }
 
@@ -927,7 +940,7 @@ async fn handle_search_saved_search_passes_saved_search_and_sharer() {
 /// proves bzr never asked the server to run the search.
 #[tokio::test]
 async fn handle_search_saved_search_refuses_without_the_extension() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_extensions(&mock, &["Voting"]).await;
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -936,7 +949,7 @@ async fn handle_search_saved_search_refuses_without_the_extension() {
         .mount(&mock)
         .await;
 
-    let err = run_action(&saved_search_action("team list", None))
+    let err = run_action(&saved_search_action("team list", None), &config_path)
         .await
         .expect_err("a server without the extension must be refused");
     assert_eq!(err.exit_code(), 15);
@@ -945,7 +958,7 @@ async fn handle_search_saved_search_refuses_without_the_extension() {
 
 #[tokio::test]
 async fn handle_search_without_a_query_source_names_all_three() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
     let action = BugAction::Search(crate::cli::SearchArgs {
         page_args: crate::cli::PageArgs::default(),
         query: None,
@@ -962,7 +975,7 @@ async fn handle_search_without_a_query_source_names_all_three() {
         count: false,
     });
 
-    let err = run_action(&action)
+    let err = run_action(&action, &config_path)
         .await
         .expect_err("no query source must fail input validation");
     let message = err.to_string();
@@ -976,7 +989,7 @@ async fn handle_search_without_a_query_source_names_all_three() {
 /// before any request: the `.expect(0)` mounts are what prove that.
 #[tokio::test]
 async fn handle_search_rejects_an_empty_saved_search_name() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/extensions"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -993,7 +1006,7 @@ async fn handle_search_rejects_an_empty_saved_search_name() {
         .await;
 
     for name in ["", "   "] {
-        let err = run_action(&saved_search_action(name, None))
+        let err = run_action(&saved_search_action(name, None), &config_path)
             .await
             .expect_err("an empty saved-search name must be rejected");
         assert_eq!(err.exit_code(), 7, "name {name:?}");
