@@ -1,19 +1,14 @@
 #![expect(clippy::unwrap_used)]
 
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::cli::{BugActorFilterArgs, BugFilterArgs, QueryAction, SaveArgs, ShowArgs};
 use crate::config::Config;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
-fn current_config_path() -> PathBuf {
-    Config::path_at(None).unwrap()
-}
-
-fn load_config() -> Config {
-    let path = current_config_path();
-    Config::load_at(Some(&path)).unwrap()
+fn load_config(config_path: &Path) -> Config {
+    Config::load_at(Some(config_path)).unwrap()
 }
 
 fn save_action(name: &str) -> QueryAction {
@@ -159,13 +154,14 @@ fn url_save_action(name: &str, url: String) -> QueryAction {
 
 #[tokio::test]
 async fn query_save_and_show() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = save_action("test-q");
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::query::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a1.writers(),
     )
     .await;
@@ -178,7 +174,8 @@ async fn query_save_and_show() {
     let mut __io_a2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::query::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a2.writers(),
     )
     .await;
@@ -194,7 +191,7 @@ async fn query_save_and_show() {
 async fn query_save_persists_every_field() {
     // Every Save-action field must round-trip into the persisted
     // SavedQuery and be visible in `query show`.
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = QueryAction::Save(SaveArgs {
         name: "comprehensive".into(),
@@ -231,7 +228,8 @@ async fn query_save_persists_every_field() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::query::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io.writers(),
     )
     .await;
@@ -244,7 +242,8 @@ async fn query_save_persists_every_field() {
     let mut __io_a3 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::query::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a3.writers(),
     )
     .await;
@@ -265,13 +264,14 @@ async fn query_save_persists_every_field() {
 
 #[tokio::test]
 async fn query_save_search_kind() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = empty_save_action("crashes", Some("crash in tab".into()));
     let mut __io_a4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::query::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a4.writers(),
     )
     .await;
@@ -284,7 +284,8 @@ async fn query_save_search_kind() {
     let mut __io_a5 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::query::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a5.writers(),
     )
     .await;
@@ -298,12 +299,13 @@ async fn query_save_search_kind() {
 #[tokio::test]
 async fn query_save_requires_filter() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = empty_save_action("empty", None);
     let result = crate::commands::query::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -317,7 +319,7 @@ async fn query_save_requires_filter() {
 
 #[tokio::test]
 async fn query_save_existing_entry_reports_updated() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let save_action = QueryAction::Save(SaveArgs {
         name: "existing".into(),
@@ -354,7 +356,8 @@ async fn query_save_existing_entry_reports_updated() {
     let mut __io_a11 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::query::execute(
         &save_action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a11.writers(),
     )
     .await;
@@ -396,7 +399,8 @@ async fn query_save_existing_entry_reports_updated() {
     let mut __io4 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::query::execute(
         &update_action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io4.writers(),
     )
     .await;
@@ -407,7 +411,7 @@ async fn query_save_existing_entry_reports_updated() {
     assert_eq!(parsed["name"], "existing");
     assert_eq!(parsed["action"], "updated");
 
-    let config = load_config();
+    let config = load_config(&config_path);
     let saved = &config.queries["existing"];
     assert_eq!(saved.quicksearch.as_deref(), Some("updated"));
     assert_eq!(saved.limit, Some(5));
@@ -416,7 +420,7 @@ async fn query_save_existing_entry_reports_updated() {
 
 #[tokio::test]
 async fn query_save_from_url() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     let server_url = mock.uri();
     let url = format!(
@@ -426,14 +430,15 @@ async fn query_save_from_url() {
     let mut __io_a17 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::query::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a17.writers(),
     )
     .await;
     let _output = __io_a17.out_str().to_string();
     assert!(result.is_ok(), "query save --from-url failed: {result:?}");
 
-    let config = load_config();
+    let config = load_config(&config_path);
     let saved = &config.queries["url-query"];
     assert_eq!(saved.kind(), crate::types::QueryKind::Url);
     assert_eq!(saved.product, vec!["TestProduct"]);
@@ -444,7 +449,7 @@ async fn query_save_from_url() {
 #[tokio::test]
 async fn query_save_rejects_malformed_created_since() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = QueryAction::Save(SaveArgs {
         name: "bad".into(),
@@ -481,7 +486,8 @@ async fn query_save_rejects_malformed_created_since() {
 
     let result = crate::commands::query::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -492,7 +498,7 @@ async fn query_save_rejects_malformed_created_since() {
 
 #[tokio::test]
 async fn query_save_stores_canonical_date_forms() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = QueryAction::Save(SaveArgs {
         name: "recent".into(),
@@ -529,14 +535,15 @@ async fn query_save_stores_canonical_date_forms() {
     let mut __io8 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::query::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io8.writers(),
     )
     .await;
     let _ = __io8.out_str().to_string();
     result.unwrap();
 
-    let cfg = load_config();
+    let cfg = load_config(&config_path);
     let q = cfg.queries.get("recent").unwrap();
     assert_eq!(q.creation_time.as_deref(), Some("2026-04-01T00:00:00Z"));
     assert_eq!(q.last_change_time.as_deref(), Some("2026-04-15T12:00:00Z"));
@@ -546,7 +553,7 @@ async fn query_save_stores_canonical_date_forms() {
 async fn query_save_accepts_date_only_query() {
     // SavedQuery::has_filters() must recognize date-only queries so the
     // "query must have at least one filter set" rejection does not fire.
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = QueryAction::Save(SaveArgs {
         name: "date-only".into(),
@@ -583,19 +590,20 @@ async fn query_save_accepts_date_only_query() {
     let mut __io9 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::query::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io9.writers(),
     )
     .await;
     let _ = __io9.out_str().to_string();
     result.unwrap();
-    let cfg = load_config();
+    let cfg = load_config(&config_path);
     assert!(cfg.queries.contains_key("date-only"));
 }
 
 #[tokio::test]
 async fn query_save_persists_158_field_filters() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = QueryAction::Save(SaveArgs {
         name: "field-filters".into(),
@@ -632,14 +640,15 @@ async fn query_save_persists_158_field_filters() {
     let mut __io_a18 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::query::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a18.writers(),
     )
     .await;
     let _output = __io_a18.out_str().to_string();
     assert!(result.is_ok(), "save failed: {result:?}");
 
-    let cfg = load_config();
+    let cfg = load_config(&config_path);
     let q = cfg.queries.get("field-filters").unwrap();
     assert_eq!(q.whiteboard, vec!["needs-review"]);
     assert_eq!(q.target_milestone, vec!["5.0"]);
@@ -657,7 +666,7 @@ async fn query_save_accepts_whiteboard_only_filter() {
     // ONLY filter is one of the 8 new fields. Otherwise saving such
     // a query would fail with "query must have at least one filter
     // set".
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = QueryAction::Save(SaveArgs {
         name: "wb-only".into(),
@@ -694,7 +703,8 @@ async fn query_save_accepts_whiteboard_only_filter() {
     let mut __io_a19 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::query::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a19.writers(),
     )
     .await;
@@ -707,7 +717,7 @@ async fn query_save_accepts_whiteboard_only_filter() {
 
 #[tokio::test]
 async fn query_save_persists_explicit_sort() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
     let mut save = product_save_action("order-persist", "TestProduct", 10);
     if let QueryAction::Save(SaveArgs { sort_args, .. }) = &mut save {
         sort_args.sort = Some("last_change_time".to_string());
@@ -715,13 +725,14 @@ async fn query_save_persists_explicit_sort() {
     }
     crate::commands::query::execute(
         &save,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut crate::test_helpers::CapturedIo::new().writers(),
     )
     .await
     .unwrap();
 
-    let config = load_config();
+    let config = load_config(&config_path);
     let saved = config.queries.get("order-persist").unwrap();
     assert_eq!(
         saved.order.as_deref(),

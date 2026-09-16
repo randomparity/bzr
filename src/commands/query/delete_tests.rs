@@ -1,7 +1,7 @@
 #![expect(clippy::unwrap_used)]
 
 use crate::cli::{BugActorFilterArgs, BugFilterArgs, DeleteArgs, QueryAction, SaveArgs, ShowArgs};
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 /// Build a Save action for a single-product query with no status filters.
@@ -43,14 +43,15 @@ fn product_save_action(name: &str, product: &str, limit: u32) -> QueryAction {
 #[tokio::test]
 async fn query_delete_unknown_errors() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = QueryAction::Delete(DeleteArgs {
         name: "nonexistent".into(),
     });
     let result = crate::commands::query::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -65,13 +66,14 @@ async fn query_delete_unknown_errors() {
 #[tokio::test]
 async fn query_delete_removes_saved_query() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let save_action = product_save_action("delete-me", "Firefox", 1);
     let mut __io_a12 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::query::execute(
         &save_action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a12.writers(),
     )
     .await;
@@ -84,7 +86,8 @@ async fn query_delete_removes_saved_query() {
     let mut __io5 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::query::execute(
         &delete_action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io5.writers(),
     )
     .await;
@@ -98,7 +101,8 @@ async fn query_delete_removes_saved_query() {
     });
     let err = crate::commands::query::execute(
         &show_action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await
