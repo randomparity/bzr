@@ -432,8 +432,11 @@ pub async fn seed_keyring_secret(server: &str, secret: &str) {
 ///    only, instead of asking a lock-free caller to hold it across its awaits.
 ///    **Do not call this from a test that already holds `ENV_LOCK`** (that is,
 ///    one set up by [`setup_empty_config_env`] or [`setup_test_env`]):
-///    `ENV_LOCK` is not reentrant and the test would deadlock. Such a test
-///    calls [`seed_keyring_secret`] instead.
+///    `ENV_LOCK` is not reentrant, so such a test would deadlock. It calls
+///    [`seed_keyring_secret`] instead. The acquisition below is wrapped in a
+///    30-second timeout so that mistake panics with a message naming it,
+///    rather than hanging the suite with no failing test name — a hang this
+///    repository has learned is expensive to attribute.
 ///
 /// 2. **The test credential store is shared and never reset.**
 ///    `keyring::install_test_store` memoizes one `OnceLock` store for the whole
@@ -450,15 +453,29 @@ pub async fn seed_keyring_secret(server: &str, secret: &str) {
 ///
 /// # Panics
 ///
-/// Panics if the `set-keyring` command returns an error.
+/// Panics if the `set-keyring` command returns an error, or if `ENV_LOCK` is
+/// still held after 30 seconds — see the deadlock note above. Every genuine
+/// `ENV_LOCK` critical section is a handful of local config writes, so the
+/// timeout cannot fire on ordinary contention; it exists only to turn the
+/// reentrant-call mistake into a named failure instead of a hung suite.
 #[cfg(feature = "keyring")]
+#[expect(clippy::expect_used)]
 pub async fn seed_keyring_secret_at(
     config_path: &std::path::Path,
     server: &str,
     secret: &str,
     service: &str,
 ) {
-    let _lock = super::ENV_LOCK.lock().await;
+    let _lock = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        super::ENV_LOCK.lock(),
+    )
+    .await
+    .expect(
+        "seed_keyring_secret_at timed out taking ENV_LOCK; it was almost certainly called from \
+         a test that already holds the guard (setup_test_env / setup_empty_config_env) — such a \
+         test must call seed_keyring_secret instead",
+    );
     seed_keyring_secret_inner(config_path, server, secret, Some(service)).await;
 }
 
