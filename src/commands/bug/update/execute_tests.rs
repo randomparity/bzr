@@ -8,7 +8,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::commands::runtime::invocation::CommandContext;
-use crate::test_helpers::{setup_test_env, CapturedIo};
+use crate::test_helpers::{setup_isolated_env, CapturedIo};
 use crate::types::bug::{CommentUpdate, UpdateBugParams};
 use crate::types::comment::Comment;
 use crate::types::OutputFormat;
@@ -69,7 +69,7 @@ async fn mock_bug_comment(mock: &wiremock::MockServer, bug_id: u64, comment_id: 
 
 #[tokio::test]
 async fn apply_checked_connected_dry_run_skips_expect_unchanged_get() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .respond_with(ResponseTemplate::new(500).set_body_string("unexpected get"))
         .expect(0)
@@ -85,7 +85,7 @@ async fn apply_checked_connected_dry_run_skips_expect_unchanged_get() {
         },
         expect_unchanged_since: Some("2026-06-19T12:00:00Z"),
     };
-    let ctx = CommandContext::new(None, OutputFormat::Json, None).with_dry_run(true);
+    let ctx = ctx_with_config(&config_path).with_dry_run(true);
     let mut io = CapturedIo::new();
 
     let result = apply_checked_connected(&client, request, &ctx, &mut io.writers()).await;
@@ -134,7 +134,7 @@ async fn apply_checked_dry_run_skips_connection_setup() {
 async fn apply_checked_connected_runs_guard_before_any_write() {
     // The guard re-reads bug 42 and sees a newer last_change_time than the
     // caller expected: the write must be refused before any PUT.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mock_get_bug_lct(&mock, 42, "2026-06-19T12:00:00Z").await;
     forbid_put(&mock).await;
     let client = crate::client::test_helpers::test_client(&mock.uri());
@@ -146,7 +146,7 @@ async fn apply_checked_connected_runs_guard_before_any_write() {
         },
         expect_unchanged_since: Some("2026-06-19T10:00:00Z"),
     };
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = ctx_with_config(&config_path);
     let mut io = CapturedIo::new();
 
     let result = apply_checked_connected(&client, request, &ctx, &mut io.writers()).await;
@@ -162,7 +162,7 @@ async fn apply_checked_connected_runs_guard_before_any_write() {
 #[tokio::test]
 async fn apply_checked_connected_writes_when_guard_passes() {
     // The guard re-read matches the expected timestamp, so the write proceeds.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mock_get_bug_lct(&mock, 42, "2026-06-19T12:00:00Z").await;
     mock_put_bug_ok(&mock, 42).await;
     let client = crate::client::test_helpers::test_client(&mock.uri());
@@ -174,7 +174,7 @@ async fn apply_checked_connected_writes_when_guard_passes() {
         },
         expect_unchanged_since: Some("2026-06-19T12:00:00Z"),
     };
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = ctx_with_config(&config_path);
     let mut io = CapturedIo::new();
 
     let result = apply_checked_connected(&client, request, &ctx, &mut io.writers()).await;
@@ -202,7 +202,7 @@ async fn single_update_tags_the_posted_comment_after_a_bug_update_that_ignores_t
     // Bug.update's `comment_tags` parameter is not reliably honored (issue
     // #672), so this must tag the comment via a follow-up GET + PUT
     // regardless of whether the update response acknowledged the tags.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mock_put_bug_ok(&mock, 42).await;
     mock_bug_comment(&mock, 42, 900, "tagged comment").await;
     Mock::given(method("PUT"))
@@ -217,7 +217,7 @@ async fn single_update_tags_the_posted_comment_after_a_bug_update_that_ignores_t
         params: params_with_comment_tags("tagged comment", &["triaged"]),
         expect_unchanged_since: None,
     };
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = ctx_with_config(&config_path);
     let mut io = CapturedIo::new();
 
     let result = apply_checked_connected(&client, request, &ctx, &mut io.writers()).await;
@@ -229,7 +229,7 @@ async fn single_update_tags_the_posted_comment_after_a_bug_update_that_ignores_t
 
 #[tokio::test]
 async fn single_update_tag_lookup_failure_fails_the_update_and_warns_against_retry() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mock_put_bug_ok(&mock, 42).await;
     // The comment GET returns nothing at all: there is no comment to tag.
     Mock::given(method("GET"))
@@ -246,7 +246,7 @@ async fn single_update_tag_lookup_failure_fails_the_update_and_warns_against_ret
         params: params_with_comment_tags("tagged comment", &["triaged"]),
         expect_unchanged_since: None,
     };
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = ctx_with_config(&config_path);
     let mut io = CapturedIo::new();
 
     let err = apply_checked_connected(&client, request, &ctx, &mut io.writers())
@@ -267,7 +267,7 @@ async fn single_update_tags_the_comment_with_the_highest_count_ignoring_stale_te
     // byte-for-byte (e.g. trailing whitespace stripped), so matching by
     // text is unreliable. The tagging step must select the comment with the
     // highest `count` regardless of what its text looks like.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mock_put_bug_ok(&mock, 42).await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/42/comment"))
@@ -295,7 +295,7 @@ async fn single_update_tags_the_comment_with_the_highest_count_ignoring_stale_te
         params: params_with_comment_tags("tagged comment", &["triaged"]),
         expect_unchanged_since: None,
     };
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = ctx_with_config(&config_path);
     let mut io = CapturedIo::new();
 
     let result = apply_checked_connected(&client, request, &ctx, &mut io.writers()).await;
@@ -305,7 +305,7 @@ async fn single_update_tags_the_comment_with_the_highest_count_ignoring_stale_te
 
 #[tokio::test]
 async fn batch_update_tag_failure_reports_that_id_as_failed() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mock_put_bug_ok(&mock, 1).await;
     mock_put_bug_ok(&mock, 2).await;
     mock_bug_comment(&mock, 1, 901, "tagged comment").await;
@@ -329,7 +329,7 @@ async fn batch_update_tag_failure_reports_that_id_as_failed() {
         params: params_with_comment_tags("tagged comment", &["triaged"]),
         expect_unchanged_since: None,
     };
-    let ctx = CommandContext::new(None, OutputFormat::Json, None).with_assume_yes(true);
+    let ctx = ctx_with_config(&config_path).with_assume_yes(true);
     let mut io = CapturedIo::new();
 
     let err = apply_checked_connected(&client, request, &ctx, &mut io.writers())
@@ -481,7 +481,7 @@ fn params_with_extra(key: &str, value: &str) -> UpdateBugParams {
 /// still report exit 7 while the request had already gone out.
 #[tokio::test]
 async fn apply_checked_connected_refuses_an_undeclared_field_before_any_write() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mock_field_catalogue(&mock, &["whiteboard"]).await;
     forbid_put(&mock).await;
     let client = crate::client::test_helpers::test_client(&mock.uri());
@@ -490,7 +490,7 @@ async fn apply_checked_connected_refuses_an_undeclared_field_before_any_write() 
         params: params_with_extra("cf_relase", "9.6"),
         expect_unchanged_since: None,
     };
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = ctx_with_config(&config_path);
     let mut io = CapturedIo::new();
 
     let err = apply_checked_connected(&client, request, &ctx, &mut io.writers())
@@ -504,7 +504,7 @@ async fn apply_checked_connected_refuses_an_undeclared_field_before_any_write() 
 
 #[tokio::test]
 async fn apply_checked_connected_sends_a_declared_extra_field() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mock_field_catalogue(&mock, &["whiteboard", "cf_release"]).await;
     mock_put_bug_ok(&mock, 42).await;
     let client = crate::client::test_helpers::test_client(&mock.uri());
@@ -513,7 +513,7 @@ async fn apply_checked_connected_sends_a_declared_extra_field() {
         params: params_with_extra("cf_release", "9.6"),
         expect_unchanged_since: None,
     };
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = ctx_with_config(&config_path);
     let mut io = CapturedIo::new();
 
     apply_checked_connected(&client, request, &ctx, &mut io.writers())
@@ -541,7 +541,7 @@ async fn apply_checked_connected_sends_a_declared_extra_field() {
 /// failure so it is never confused with the exit-7 undeclared-field refusal.
 #[tokio::test]
 async fn apply_checked_connected_refuses_when_the_catalogue_probe_fails() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/field/bug"))
         .respond_with(ResponseTemplate::new(503).set_body_string("upstream unavailable"))
@@ -554,7 +554,7 @@ async fn apply_checked_connected_refuses_when_the_catalogue_probe_fails() {
         params: params_with_extra("cf_release", "9.6"),
         expect_unchanged_since: None,
     };
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = ctx_with_config(&config_path);
     let mut io = CapturedIo::new();
 
     let err = apply_checked_connected(&client, request, &ctx, &mut io.writers())
@@ -574,7 +574,7 @@ async fn apply_checked_connected_refuses_when_the_catalogue_probe_fails() {
 /// gain a round trip.
 #[tokio::test]
 async fn apply_checked_connected_without_extra_fields_never_probes_the_catalogue() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/field/bug"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"fields": []})))
@@ -591,7 +591,7 @@ async fn apply_checked_connected_without_extra_fields_never_probes_the_catalogue
         },
         expect_unchanged_since: None,
     };
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = ctx_with_config(&config_path);
     let mut io = CapturedIo::new();
 
     apply_checked_connected(&client, request, &ctx, &mut io.writers())
