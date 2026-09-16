@@ -1,12 +1,15 @@
 //! Integration tests that exercise command dispatch end-to-end
 //! with a wiremock server and real config file.
 //!
-//! These tests are serialized via a mutex because they set the
-//! process-global `XDG_CONFIG_HOME` environment variable.
+//! Most tests select their throwaway config by passing its path to the
+//! `--config` global flag, so they mutate no process environment and run in
+//! parallel (ADR-0002). The handful that must exercise environment-based
+//! config resolution still set the process-global `XDG_CONFIG_HOME` and are
+//! serialized behind `ENV_LOCK`.
 
 #![expect(clippy::unwrap_used, clippy::expect_used)]
 
-use bzr::test_helpers::{setup_test_env, write_config_to, HasBooleanChartTriples};
+use bzr::test_helpers::{setup_isolated_env, write_config_to, HasBooleanChartTriples};
 use bzr::ENV_LOCK;
 
 use clap::Parser;
@@ -26,7 +29,7 @@ fn types_root_reexports_column_spec() {
 
 #[tokio::test]
 async fn bug_list_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -39,7 +42,8 @@ async fn bug_list_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(None, &["bzr", "bug", "list"]).await;
+    let (result, output) =
+        dispatch_cli_with_output(Some(&config_path), &["bzr", "bug", "list"]).await;
     assert!(result.is_ok(), "bug list should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["id"], 1);
@@ -53,7 +57,7 @@ async fn bug_list_changed_since_canonicalizes_bare_date_on_wire() {
     // to `T00:00:00Z` by the time the REST request hits the server. Failing
     // this test means either the validator dropped the canonicalization
     // step or the encoder forgot to forward `last_change_time`.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -65,7 +69,7 @@ async fn bug_list_changed_since_canonicalizes_bare_date_on_wire() {
         .await;
 
     let (result, _output) = dispatch_cli_with_output(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "bug",
@@ -89,7 +93,7 @@ async fn bug_list_changed_since_canonicalizes_bare_date_on_wire() {
 
 #[tokio::test]
 async fn bug_view_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42"))
@@ -100,7 +104,8 @@ async fn bug_view_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(None, &["bzr", "bug", "view", "42"]).await;
+    let (result, output) =
+        dispatch_cli_with_output(Some(&config_path), &["bzr", "bug", "view", "42"]).await;
     assert!(result.is_ok(), "bug view should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 42);
@@ -112,7 +117,7 @@ async fn bug_view_integration() {
 /// the string `cc` list instead of failing with exit 8.
 #[tokio::test]
 async fn bug_view_integration_cc_objects() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42"))
@@ -135,7 +140,8 @@ async fn bug_view_integration_cc_objects() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(None, &["bzr", "bug", "view", "42"]).await;
+    let (result, output) =
+        dispatch_cli_with_output(Some(&config_path), &["bzr", "bug", "view", "42"]).await;
     assert!(
         result.is_ok(),
         "RH-shaped bug view should succeed: {result:?}"
@@ -151,7 +157,7 @@ async fn bug_view_integration_cc_objects() {
 
 #[tokio::test]
 async fn bug_search_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -163,7 +169,8 @@ async fn bug_search_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(None, &["bzr", "bug", "search", "crash"]).await;
+    let (result, output) =
+        dispatch_cli_with_output(Some(&config_path), &["bzr", "bug", "search", "crash"]).await;
     assert!(result.is_ok(), "bug search should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["id"], 99);
@@ -172,7 +179,7 @@ async fn bug_search_integration() {
 
 #[tokio::test]
 async fn bug_create_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/bug"))
@@ -182,7 +189,7 @@ async fn bug_create_integration() {
         .await;
 
     let (result, output) = dispatch_cli_with_output(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "bug",
@@ -209,7 +216,7 @@ async fn bug_create_integration() {
 
 #[tokio::test]
 async fn comment_list_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42/comment"))
@@ -226,7 +233,8 @@ async fn comment_list_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(None, &["bzr", "comment", "list", "42"]).await;
+    let (result, output) =
+        dispatch_cli_with_output(Some(&config_path), &["bzr", "comment", "list", "42"]).await;
     assert!(result.is_ok(), "comment list should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["id"], 1);
@@ -235,7 +243,7 @@ async fn comment_list_integration() {
 
 #[tokio::test]
 async fn comment_add_body_file_posts_file_contents() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/bug/7/comment"))
@@ -251,7 +259,7 @@ async fn comment_add_body_file_posts_file_contents() {
 
     let file_arg = file.to_str().unwrap();
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &["bzr", "comment", "add", "7", "--body-file", file_arg],
     )
     .await;
@@ -284,7 +292,7 @@ async fn comment_add_body_and_body_file_conflict() {
 
 #[tokio::test]
 async fn whoami_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/whoami"))
@@ -297,7 +305,7 @@ async fn whoami_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(None, &["bzr", "whoami"]).await;
+    let (result, output) = dispatch_cli_with_output(Some(&config_path), &["bzr", "whoami"]).await;
     assert!(result.is_ok(), "whoami should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "admin@example.com");
@@ -308,7 +316,7 @@ async fn whoami_integration() {
 
 #[tokio::test]
 async fn product_list_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/product_accessible"))
@@ -328,7 +336,8 @@ async fn product_list_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(None, &["bzr", "product", "list"]).await;
+    let (result, output) =
+        dispatch_cli_with_output(Some(&config_path), &["bzr", "product", "list"]).await;
     assert!(result.is_ok(), "product list should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["name"], "Firefox");
@@ -338,7 +347,7 @@ async fn product_list_integration() {
 
 #[tokio::test]
 async fn server_info_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/version"))
@@ -357,7 +366,8 @@ async fn server_info_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(None, &["bzr", "server", "info"]).await;
+    let (result, output) =
+        dispatch_cli_with_output(Some(&config_path), &["bzr", "server", "info"]).await;
     assert!(result.is_ok(), "server info should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["version"], "5.1.2");
@@ -367,7 +377,7 @@ async fn server_info_integration() {
 
 #[tokio::test]
 async fn field_list_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/field/bug/bug%5Fstatus"))
@@ -385,7 +395,7 @@ async fn field_list_integration() {
         .await;
 
     let (result, output) =
-        dispatch_cli_with_output(None, &["bzr", "field", "list", "status"]).await;
+        dispatch_cli_with_output(Some(&config_path), &["bzr", "field", "list", "status"]).await;
     assert!(result.is_ok(), "field list should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["name"], "NEW");
@@ -395,7 +405,7 @@ async fn field_list_integration() {
 
 #[tokio::test]
 async fn classification_view_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/classification/Unclassified"))
@@ -412,8 +422,11 @@ async fn classification_view_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) =
-        dispatch_cli_with_output(None, &["bzr", "classification", "view", "Unclassified"]).await;
+    let (result, output) = dispatch_cli_with_output(
+        Some(&config_path),
+        &["bzr", "classification", "view", "Unclassified"],
+    )
+    .await;
     assert!(
         result.is_ok(),
         "classification view should succeed: {result:?}"
@@ -426,7 +439,7 @@ async fn classification_view_integration() {
 
 #[tokio::test]
 async fn user_search_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/user"))
@@ -444,7 +457,7 @@ async fn user_search_integration() {
         .await;
 
     let (result, output) =
-        dispatch_cli_with_output(None, &["bzr", "user", "search", "alice"]).await;
+        dispatch_cli_with_output(Some(&config_path), &["bzr", "user", "search", "alice"]).await;
     assert!(result.is_ok(), "user search should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["name"], "alice@example.com");
@@ -455,7 +468,7 @@ async fn user_search_integration() {
 
 #[tokio::test]
 async fn group_view_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/group"))
@@ -473,7 +486,8 @@ async fn group_view_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(None, &["bzr", "group", "view", "admin"]).await;
+    let (result, output) =
+        dispatch_cli_with_output(Some(&config_path), &["bzr", "group", "view", "admin"]).await;
     assert!(result.is_ok(), "group view should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "admin");
@@ -484,7 +498,7 @@ async fn group_view_integration() {
 
 #[tokio::test]
 async fn component_create_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/component"))
@@ -494,7 +508,7 @@ async fn component_create_integration() {
         .await;
 
     let (result, output) = dispatch_cli_with_output(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "component",
@@ -522,7 +536,7 @@ async fn component_create_integration() {
 
 #[tokio::test]
 async fn attachment_list_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42/attachment"))
@@ -543,7 +557,7 @@ async fn attachment_list_integration() {
         .await;
 
     let (result, output) =
-        dispatch_cli_with_output(None, &["bzr", "attachment", "list", "42"]).await;
+        dispatch_cli_with_output(Some(&config_path), &["bzr", "attachment", "list", "42"]).await;
     assert!(result.is_ok(), "attachment list should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["file_name"], "patch.diff");
@@ -576,9 +590,13 @@ api_key = "key-1234567890"
 
 #[tokio::test]
 async fn command_with_unknown_server_returns_error() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
-    let result = dispatch_cli(None, &["bzr", "--server", "nonexistent", "bug", "list"]).await;
+    let result = dispatch_cli(
+        Some(&config_path),
+        &["bzr", "--server", "nonexistent", "bug", "list"],
+    )
+    .await;
     assert!(result.is_err(), "should fail with unknown server");
 }
 
@@ -586,7 +604,7 @@ async fn command_with_unknown_server_returns_error() {
 
 #[tokio::test]
 async fn api_error_propagates() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/99999"))
@@ -599,7 +617,7 @@ async fn api_error_propagates() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(None, &["bzr", "bug", "view", "99999"]).await;
+    let result = dispatch_cli(Some(&config_path), &["bzr", "bug", "view", "99999"]).await;
     assert!(result.is_err(), "should propagate API error");
 }
 
@@ -607,7 +625,7 @@ async fn api_error_propagates() {
 
 #[tokio::test]
 async fn bug_history_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42/history"))
@@ -637,7 +655,8 @@ async fn bug_history_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(None, &["bzr", "bug", "history", "42"]).await;
+    let (result, output) =
+        dispatch_cli_with_output(Some(&config_path), &["bzr", "bug", "history", "42"]).await;
     assert!(result.is_ok(), "bug history should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     // Flattened change records (ADR 0008): one record per changed field.
@@ -655,7 +674,7 @@ async fn bug_history_integration() {
 async fn bug_update_integration() {
     use wiremock::matchers::body_partial_json;
 
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/bug/42"))
@@ -673,7 +692,7 @@ async fn bug_update_integration() {
         .await;
 
     let (result, output) = dispatch_cli_with_output(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "bug",
@@ -706,7 +725,7 @@ async fn bug_update_integration() {
 async fn bug_update_scalar_parity_fields_integration() {
     use wiremock::matchers::body_partial_json;
 
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/bug/42"))
@@ -729,7 +748,7 @@ async fn bug_update_scalar_parity_fields_integration() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "bug",
@@ -762,7 +781,7 @@ async fn bug_update_scalar_parity_fields_integration() {
 async fn bug_update_with_comment_integration() {
     use wiremock::matchers::body_partial_json;
 
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/bug/42"))
@@ -782,7 +801,7 @@ async fn bug_update_with_comment_integration() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "bug",
@@ -808,7 +827,7 @@ async fn bug_update_with_comment_integration() {
 
 #[tokio::test]
 async fn comment_add_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/bug/42/comment"))
@@ -818,7 +837,7 @@ async fn comment_add_integration() {
         .await;
 
     let (result, output) = dispatch_cli_with_output(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "comment",
@@ -838,7 +857,7 @@ async fn comment_add_integration() {
 
 #[tokio::test]
 async fn comment_tag_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/bug/comment/100/tags"))
@@ -847,7 +866,11 @@ async fn comment_tag_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(None, &["bzr", "comment", "tag", "100", "--add", "spam"]).await;
+    let result = dispatch_cli(
+        Some(&config_path),
+        &["bzr", "comment", "tag", "100", "--add", "spam"],
+    )
+    .await;
     assert!(result.is_ok(), "comment tag should succeed: {result:?}");
 }
 
@@ -855,7 +878,7 @@ async fn comment_tag_integration() {
 
 #[tokio::test]
 async fn comment_search_tags_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/comment/tags/spam"))
@@ -864,7 +887,11 @@ async fn comment_search_tags_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(None, &["bzr", "comment", "search-tags", "spam"]).await;
+    let result = dispatch_cli(
+        Some(&config_path),
+        &["bzr", "comment", "search-tags", "spam"],
+    )
+    .await;
     assert!(
         result.is_ok(),
         "comment search-tags should succeed: {result:?}"
@@ -875,7 +902,7 @@ async fn comment_search_tags_integration() {
 
 #[tokio::test]
 async fn attachment_download_integration() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/attachment/99"))
@@ -899,7 +926,7 @@ async fn attachment_download_integration() {
     let out_path = tmp.path().join("downloaded.txt");
     let out_arg = out_path.to_str().unwrap();
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &["bzr", "attachment", "download", "99", "--out", out_arg],
     )
     .await;
@@ -914,7 +941,7 @@ async fn attachment_download_integration() {
 
 #[tokio::test]
 async fn attachment_download_bulk_per_bug_integration() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/77/attachment"))
@@ -967,7 +994,7 @@ async fn attachment_download_bulk_per_bug_integration() {
 
     let out_dir = tmp.path().to_str().unwrap();
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "attachment",
@@ -997,7 +1024,7 @@ async fn attachment_download_bulk_per_bug_integration() {
 
 #[tokio::test]
 async fn attachment_upload_integration() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     // Create a temporary file to upload
     let upload_file = tmp.path().join("upload.txt");
@@ -1012,7 +1039,7 @@ async fn attachment_upload_integration() {
 
     let file_arg = upload_file.to_str().unwrap();
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "attachment",
@@ -1035,7 +1062,7 @@ async fn attachment_upload_integration() {
 #[tokio::test]
 async fn attachment_upload_with_comment_integration() {
     use wiremock::matchers::body_string_contains;
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     let upload_file = tmp.path().join("upload.txt");
     std::fs::write(&upload_file, "test content").unwrap();
@@ -1052,7 +1079,7 @@ async fn attachment_upload_with_comment_integration() {
 
     let file_arg = upload_file.to_str().unwrap();
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "attachment",
@@ -1077,7 +1104,7 @@ async fn attachment_upload_with_comment_integration() {
 #[tokio::test]
 async fn attachment_upload_with_is_patch_integration() {
     use wiremock::matchers::body_string_contains;
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     let upload_file = tmp.path().join("fix.patch");
     std::fs::write(&upload_file, "diff --git a/x b/x").unwrap();
@@ -1093,7 +1120,7 @@ async fn attachment_upload_with_is_patch_integration() {
 
     let file_arg = upload_file.to_str().unwrap();
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "attachment",
@@ -1115,7 +1142,7 @@ async fn attachment_upload_with_is_patch_integration() {
 #[tokio::test]
 async fn attachment_upload_with_comment_private_integration() {
     use wiremock::matchers::body_string_contains;
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     let upload_file = tmp.path().join("upload.txt");
     std::fs::write(&upload_file, "test content").unwrap();
@@ -1154,7 +1181,7 @@ async fn attachment_upload_with_comment_private_integration() {
 
     let file_arg = upload_file.to_str().unwrap();
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "attachment",
@@ -1179,7 +1206,7 @@ async fn attachment_upload_with_comment_private_integration() {
 
 #[tokio::test]
 async fn attachment_list_returns_is_patch_field_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42/attachment"))
@@ -1203,7 +1230,7 @@ async fn attachment_list_returns_is_patch_field_integration() {
         .await;
 
     let (result, output) =
-        dispatch_cli_with_output(None, &["bzr", "attachment", "list", "42"]).await;
+        dispatch_cli_with_output(Some(&config_path), &["bzr", "attachment", "list", "42"]).await;
     assert!(result.is_ok(), "list should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["is_patch"], true);
@@ -1213,7 +1240,7 @@ async fn attachment_list_returns_is_patch_field_integration() {
 
 #[tokio::test]
 async fn attachment_update_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/bug/attachment/99"))
@@ -1225,7 +1252,7 @@ async fn attachment_update_integration() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "attachment",
@@ -1246,7 +1273,7 @@ async fn attachment_update_integration() {
 
 #[tokio::test]
 async fn product_view_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/product"))
@@ -1260,7 +1287,7 @@ async fn product_view_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(None, &["bzr", "product", "view", "Firefox"]).await;
+    let result = dispatch_cli(Some(&config_path), &["bzr", "product", "view", "Firefox"]).await;
     assert!(result.is_ok(), "product view should succeed: {result:?}");
 }
 
@@ -1268,7 +1295,7 @@ async fn product_view_integration() {
 
 #[tokio::test]
 async fn product_create_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/product"))
@@ -1278,7 +1305,7 @@ async fn product_create_integration() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "product",
@@ -1301,7 +1328,7 @@ async fn product_create_integration() {
 
 #[tokio::test]
 async fn product_update_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/product/Firefox"))
@@ -1313,7 +1340,7 @@ async fn product_update_integration() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "product",
@@ -1331,7 +1358,7 @@ async fn product_update_integration() {
 
 #[tokio::test]
 async fn user_create_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/user"))
@@ -1341,7 +1368,7 @@ async fn user_create_integration() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "user",
@@ -1360,7 +1387,7 @@ async fn user_create_integration() {
 
 #[tokio::test]
 async fn user_update_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/user/alice%40example%2Ecom"))
@@ -1372,7 +1399,7 @@ async fn user_update_integration() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "user",
@@ -1390,7 +1417,7 @@ async fn user_update_integration() {
 
 #[tokio::test]
 async fn group_create_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/group"))
@@ -1400,7 +1427,7 @@ async fn group_create_integration() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "group",
@@ -1421,7 +1448,7 @@ async fn group_create_integration() {
 
 #[tokio::test]
 async fn group_update_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/group/testers"))
@@ -1433,7 +1460,7 @@ async fn group_update_integration() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "group",
@@ -1451,7 +1478,7 @@ async fn group_update_integration() {
 
 #[tokio::test]
 async fn group_add_user_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/user/alice%40example%2Ecom"))
@@ -1463,7 +1490,7 @@ async fn group_add_user_integration() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "group",
@@ -1482,7 +1509,7 @@ async fn group_add_user_integration() {
 
 #[tokio::test]
 async fn group_remove_user_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/user/alice%40example%2Ecom"))
@@ -1494,7 +1521,7 @@ async fn group_remove_user_integration() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "group",
@@ -1516,7 +1543,7 @@ async fn group_remove_user_integration() {
 
 #[tokio::test]
 async fn group_list_users_integration() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/user"))
@@ -1533,7 +1560,11 @@ async fn group_list_users_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(None, &["bzr", "group", "list-users", "--group", "admin"]).await;
+    let result = dispatch_cli(
+        Some(&config_path),
+        &["bzr", "group", "list-users", "--group", "admin"],
+    )
+    .await;
     assert!(
         result.is_ok(),
         "group list-users should succeed: {result:?}"
@@ -1656,7 +1687,7 @@ async fn dispatch_cli_with_io(
 
 #[tokio::test]
 async fn e2e_bug_list_via_cli_args() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -1668,7 +1699,7 @@ async fn e2e_bug_list_via_cli_args() {
         .await;
 
     let (result, output) = dispatch_cli_with_output(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "--server",
@@ -1688,7 +1719,7 @@ async fn e2e_bug_list_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_bug_view_via_cli_args() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42"))
@@ -1700,7 +1731,7 @@ async fn e2e_bug_view_via_cli_args() {
         .await;
 
     let (result, output) = dispatch_cli_with_output(
-        None,
+        Some(&config_path),
         &["bzr", "--server", "test", "--json", "bug", "view", "42"],
     )
     .await;
@@ -1712,7 +1743,7 @@ async fn e2e_bug_view_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_whoami_via_cli_args() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/whoami"))
@@ -1725,8 +1756,11 @@ async fn e2e_whoami_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let (result, output) =
-        dispatch_cli_with_output(None, &["bzr", "--server", "test", "--json", "whoami"]).await;
+    let (result, output) = dispatch_cli_with_output(
+        Some(&config_path),
+        &["bzr", "--server", "test", "--json", "whoami"],
+    )
+    .await;
     assert!(result.is_ok(), "e2e whoami: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "admin@example.com");
@@ -1795,9 +1829,9 @@ async fn e2e_inline_server_bug_view_without_config() {
 
 #[tokio::test]
 async fn e2e_config_show_via_cli_args() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
-    let result = dispatch_cli(None, &["bzr", "--json", "config", "show"]).await;
+    let result = dispatch_cli(Some(&config_path), &["bzr", "--json", "config", "show"]).await;
     assert!(result.is_ok(), "e2e config show: {result:?}");
 }
 
@@ -1853,7 +1887,7 @@ async fn e2e_skills_install_ignores_malformed_config_and_needs_no_server() {
 
 #[tokio::test]
 async fn e2e_server_info_via_cli_args() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/version"))
@@ -1873,7 +1907,7 @@ async fn e2e_server_info_via_cli_args() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &["bzr", "--server", "test", "--json", "server", "info"],
     )
     .await;
@@ -1886,7 +1920,7 @@ async fn e2e_server_info_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_comment_list_via_cli_args() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42/comment"))
@@ -1904,7 +1938,7 @@ async fn e2e_comment_list_via_cli_args() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &["bzr", "--server", "test", "--json", "comment", "list", "42"],
     )
     .await;
@@ -1913,7 +1947,7 @@ async fn e2e_comment_list_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_attachment_list_via_cli_args() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42/attachment"))
@@ -1934,7 +1968,7 @@ async fn e2e_attachment_list_via_cli_args() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "--server",
@@ -1951,7 +1985,7 @@ async fn e2e_attachment_list_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_product_view_via_cli_args() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/product"))
@@ -1966,7 +2000,7 @@ async fn e2e_product_view_via_cli_args() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr", "--server", "test", "--json", "product", "view", "Firefox",
         ],
@@ -1977,7 +2011,7 @@ async fn e2e_product_view_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_field_list_via_cli_args() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/field/bug/bug%5Fstatus"))
@@ -1994,7 +2028,7 @@ async fn e2e_field_list_via_cli_args() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr", "--server", "test", "--json", "field", "list", "status",
         ],
@@ -2005,7 +2039,7 @@ async fn e2e_field_list_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_user_search_via_cli_args() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/user"))
@@ -2023,7 +2057,7 @@ async fn e2e_user_search_via_cli_args() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr", "--server", "test", "--json", "user", "search", "alice",
         ],
@@ -2034,7 +2068,7 @@ async fn e2e_user_search_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_group_view_via_cli_args() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/group"))
@@ -2053,7 +2087,7 @@ async fn e2e_group_view_via_cli_args() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr", "--server", "test", "--json", "group", "view", "admin",
         ],
@@ -2064,7 +2098,7 @@ async fn e2e_group_view_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_classification_view_via_cli_args() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/classification/Unclassified"))
@@ -2082,7 +2116,7 @@ async fn e2e_classification_view_via_cli_args() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "--server",
@@ -2099,7 +2133,7 @@ async fn e2e_classification_view_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_component_create_via_cli_args() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/component"))
@@ -2109,7 +2143,7 @@ async fn e2e_component_create_via_cli_args() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "--server",
@@ -2133,17 +2167,17 @@ async fn e2e_component_create_via_cli_args() {
 
 #[tokio::test]
 async fn e2e_template_list_via_cli_args() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
-    let result = dispatch_cli(None, &["bzr", "--json", "template", "list"]).await;
+    let result = dispatch_cli(Some(&config_path), &["bzr", "--json", "template", "list"]).await;
     assert!(result.is_ok(), "e2e template list: {result:?}");
 }
 
 #[tokio::test]
 async fn e2e_query_list_via_cli_args() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
-    let result = dispatch_cli(None, &["bzr", "--json", "query", "list"]).await;
+    let result = dispatch_cli(Some(&config_path), &["bzr", "--json", "query", "list"]).await;
     assert!(result.is_ok(), "e2e query list: {result:?}");
 }
 
@@ -2185,7 +2219,7 @@ async fn bug_list_issue_158_mixed_positive_and_negation_reaches_wire() {
     // (notequals), --whiteboard '!wip' (notsubstring) all reach the
     // wire correctly. Exercises the full pipeline:
     // BugAction → SearchParams → REST encoder → wiremock.
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -2200,7 +2234,7 @@ async fn bug_list_issue_158_mixed_positive_and_negation_reaches_wire() {
         .await;
 
     let result = dispatch_cli(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "bug",
@@ -2343,10 +2377,10 @@ fn json_keys(value: &serde_json::Value) -> Vec<&str> {
 /// I/O — measured against the full field universe, not the table defaults.
 #[tokio::test]
 async fn e2e_bug_list_json_all_unknown_fields_exits_7() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let (result, _out, _err) = dispatch_cli_with_io(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "--server",
@@ -2374,7 +2408,7 @@ async fn e2e_bug_list_json_all_unknown_fields_exits_7() {
 /// the known fields.
 #[tokio::test]
 async fn e2e_bug_list_json_partial_unknown_warns_and_projects() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -2386,7 +2420,7 @@ async fn e2e_bug_list_json_partial_unknown_warns_and_projects() {
         .await;
 
     let (result, out, err) = dispatch_cli_with_io(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "--server",
@@ -2419,7 +2453,7 @@ async fn e2e_bug_list_json_partial_unknown_warns_and_projects() {
 /// server and emitted when Bugzilla returns it.
 #[tokio::test]
 async fn e2e_bug_list_json_custom_field_is_emitted() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -2432,7 +2466,7 @@ async fn e2e_bug_list_json_custom_field_is_emitted() {
         .await;
 
     let (result, out, err) = dispatch_cli_with_io(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "--server",
@@ -2462,7 +2496,7 @@ async fn e2e_bug_list_json_custom_field_is_emitted() {
 /// `{}` object, and a stderr warning so the typo isn't silent.
 #[tokio::test]
 async fn e2e_bug_view_json_all_unknown_is_lenient_with_warning() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42"))
@@ -2474,7 +2508,7 @@ async fn e2e_bug_view_json_all_unknown_is_lenient_with_warning() {
         .await;
 
     let (result, out, err) = dispatch_cli_with_io(
-        None,
+        Some(&config_path),
         &[
             "bzr", "--server", "test", "--json", "bug", "view", "42", "--fields", "sumary",
         ],
@@ -2497,7 +2531,7 @@ async fn e2e_bug_view_json_all_unknown_is_lenient_with_warning() {
 /// fields.
 #[tokio::test]
 async fn e2e_bug_view_json_single_trims_object() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42"))
@@ -2509,7 +2543,7 @@ async fn e2e_bug_view_json_single_trims_object() {
         .await;
 
     let (result, out, _err) = dispatch_cli_with_io(
-        None,
+        Some(&config_path),
         &[
             "bzr", "--server", "test", "--json", "bug", "view", "42", "--fields", "summary",
         ],
@@ -2529,7 +2563,7 @@ async fn e2e_bug_view_json_single_trims_object() {
 /// while the `{"bugs": [...], "failed": [...]}` wrapper stays intact.
 #[tokio::test]
 async fn e2e_multi_bug_view_json_trims_bugs_keeps_wrapper() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/1"))
@@ -2547,7 +2581,7 @@ async fn e2e_multi_bug_view_json_trims_bugs_keeps_wrapper() {
         .await;
 
     let (result, out, _err) = dispatch_cli_with_io(
-        None,
+        Some(&config_path),
         &[
             "bzr", "--server", "test", "--json", "bug", "view", "1", "2", "--fields", "summary",
         ],
@@ -2576,7 +2610,7 @@ async fn e2e_multi_bug_view_json_trims_bugs_keeps_wrapper() {
 #[tokio::test]
 async fn e2e_bug_list_json_exclude_id_drops_key_but_parses() {
     use wiremock::matchers::query_param_is_missing;
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -2589,7 +2623,7 @@ async fn e2e_bug_list_json_exclude_id_drops_key_but_parses() {
         .await;
 
     let (result, out, _err) = dispatch_cli_with_io(
-        None,
+        Some(&config_path),
         &[
             "bzr",
             "--server",
@@ -2674,7 +2708,7 @@ fn assert_single_envelope(raw: &str) {
 /// local `schema` list — carries exactly one versioned envelope.
 #[tokio::test]
 async fn json_output_carries_exactly_one_envelope() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug"))
@@ -2702,7 +2736,7 @@ async fn json_output_carries_exactly_one_envelope() {
         vec!["bzr", "comment", "add", "1", "--body", "hi"],
         vec!["bzr", "schema"],
     ] {
-        let (result, output) = dispatch_cli_with_output(None, &args).await;
+        let (result, output) = dispatch_cli_with_output(Some(&config_path), &args).await;
         assert!(result.is_ok(), "{args:?} should succeed: {result:?}");
         assert_single_envelope(&output);
     }
