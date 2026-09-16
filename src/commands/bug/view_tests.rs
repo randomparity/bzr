@@ -853,29 +853,34 @@ async fn resolve_bug_urls_uses_configured_server() {
 async fn resolve_bug_urls_works_without_credentials() {
     // A server with a URL but no api_key/env/keyring fails config loading.
     // validation; `--web` only needs the URL, so it must still resolve.
-    let _lock = crate::ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
-    write_config_to(
+    let config_path = write_config_to(
         &tmp,
         "default_server = \"nocreds\"\n\n[servers.nocreds]\nurl = \"https://bz.example.com\"\n",
     );
-    // SAFETY: ENV_LOCK serializes env access across tests.
-    unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
     let ids = vec!["7".to_string()];
     let ctx =
-        crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None);
+        crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path));
     let urls = super::resolve_bug_urls(&ids, &ctx).unwrap();
     assert_eq!(urls, vec!["https://bz.example.com/show_bug.cgi?id=7"]);
 }
 
 #[tokio::test]
 async fn has_display_respects_display_env() {
+    // Retains ENV_LOCK (ADR-0002): `DISPLAY`/`WAYLAND_DISPLAY` resolution *is*
+    // this test's subject, so there is no explicit-path form of it. The lock
+    // orders this test against the other ENV_LOCK participants and nothing
+    // else; it does not order it against a lock-free parallel test. That is
+    // sound here because `has_display` reads these vars through `std::env`,
+    // which carries its own reader/writer ordering.
     let _lock = crate::ENV_LOCK.lock().await;
     let saved_display = std::env::var_os("DISPLAY");
     let saved_wayland = std::env::var_os("WAYLAND_DISPLAY");
 
-    // SAFETY: ENV_LOCK serializes env access across tests.
+    // SAFETY: ordered against the other ENV_LOCK participants by the guard
+    // above, and against every `std::env` reader by std's own env lock.
     unsafe {
         std::env::set_var("DISPLAY", ":0");
         std::env::remove_var("WAYLAND_DISPLAY");
