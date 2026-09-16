@@ -99,7 +99,6 @@ pub async fn setup_test_env() -> (
     wiremock::MockServer,
     tempfile::TempDir,
 ) {
-    init_temp_root();
     let lock = super::ENV_LOCK.lock().await;
     let mock = wiremock::MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
@@ -195,7 +194,6 @@ pub async fn setup_isolated_env() -> (wiremock::MockServer, tempfile::TempDir, s
 /// Panics if the temp directory cannot be created.
 #[expect(clippy::unwrap_used)]
 pub async fn setup_empty_config_env() -> (tokio::sync::MutexGuard<'static, ()>, tempfile::TempDir) {
-    init_temp_root();
     let lock = super::ENV_LOCK.lock().await;
     let tmp = tempfile::TempDir::new().unwrap();
     // SAFETY: Tests that mutate process environment hold ENV_LOCK.
