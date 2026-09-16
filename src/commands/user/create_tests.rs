@@ -4,7 +4,7 @@ use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::UserAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
@@ -15,7 +15,7 @@ fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
 
 #[tokio::test]
 async fn user_create_sends_post() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/user"))
@@ -34,7 +34,8 @@ async fn user_create_sends_post() {
     let mut __io_a2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a2.writers(),
     )
     .await;
@@ -47,7 +48,7 @@ async fn user_create_sends_post() {
 
 #[tokio::test]
 async fn user_create_dry_run_makes_no_write_and_marks_payload() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/user"))
@@ -67,6 +68,7 @@ async fn user_create_dry_run_makes_no_write_and_marks_payload() {
     let result = crate::commands::user::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone()))
             .with_dry_run(true),
         &mut io.writers(),
     )
@@ -83,7 +85,7 @@ async fn user_create_dry_run_makes_no_write_and_marks_payload() {
 
 #[tokio::test]
 async fn user_create_from_json_sends_merged_body() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("POST"))
         .and(path("/rest/user"))
@@ -109,7 +111,8 @@ async fn user_create_from_json_sends_merged_body() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -121,7 +124,7 @@ async fn user_create_from_json_sends_merged_body() {
 
 #[tokio::test]
 async fn user_from_json_rejects_unknown_field() {
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_mock, tmp, config_path) = setup_isolated_env().await;
     let json = r#"{"email":"new@test.com","bogus":true}"#;
     let action = UserAction::Create {
         from_json: Some(write_json_file(&tmp, json)),
@@ -133,7 +136,8 @@ async fn user_from_json_rejects_unknown_field() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -147,7 +151,7 @@ async fn user_from_json_rejects_unknown_field() {
 
 #[tokio::test]
 async fn user_from_json_rejects_array_shape() {
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_mock, tmp, config_path) = setup_isolated_env().await;
     let action = UserAction::Create {
         from_json: Some(write_json_file(&tmp, "[]")),
         email: None,
@@ -158,7 +162,8 @@ async fn user_from_json_rejects_array_shape() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
