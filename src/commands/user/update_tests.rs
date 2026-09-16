@@ -4,7 +4,7 @@ use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::UserAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
@@ -53,7 +53,7 @@ fn resolve_login_denied_text_unset_returns_none() {
 #[tokio::test]
 async fn update_user_disable_login_sends_denied_text() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/user/alice%40test%2Ecom"))
@@ -72,7 +72,8 @@ async fn update_user_disable_login_sends_denied_text() {
     };
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -85,7 +86,7 @@ async fn update_user_disable_login_sends_denied_text() {
 #[tokio::test]
 async fn update_user_enable_login_sends_empty_denied_text() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/user/bob%40test%2Ecom"))
@@ -104,7 +105,8 @@ async fn update_user_enable_login_sends_empty_denied_text() {
     };
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -116,7 +118,7 @@ async fn update_user_enable_login_sends_empty_denied_text() {
 
 #[tokio::test]
 async fn user_update_dry_run_makes_no_write_and_marks_payload() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/user/alice%40test%2Ecom"))
@@ -137,6 +139,7 @@ async fn user_update_dry_run_makes_no_write_and_marks_payload() {
     let result = crate::commands::user::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone()))
             .with_dry_run(true),
         &mut io.writers(),
     )
@@ -157,7 +160,7 @@ async fn user_update_dry_run_makes_no_write_and_marks_payload() {
 
 #[tokio::test]
 async fn user_update_from_json_uses_json_target() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/user/alice%40test%2Ecom"))
@@ -184,7 +187,8 @@ async fn user_update_from_json_uses_json_target() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -194,7 +198,7 @@ async fn user_update_from_json_uses_json_target() {
 
 #[tokio::test]
 async fn user_update_from_json_cli_disable_login_overrides_json_denied_text() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/user/alice%40test%2Ecom"))
@@ -219,7 +223,8 @@ async fn user_update_from_json_cli_disable_login_overrides_json_denied_text() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -232,7 +237,7 @@ async fn user_update_from_json_cli_disable_login_overrides_json_denied_text() {
 
 #[tokio::test]
 async fn user_update_from_json_rejects_positional_and_json_target() {
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_mock, tmp, config_path) = setup_isolated_env().await;
     let json = r#"{"user":"alice@test.com","real_name":"Alice"}"#;
     let action = UserAction::Update {
         from_json: Some(write_json_file(&tmp, json)),
@@ -245,7 +250,8 @@ async fn user_update_from_json_rejects_positional_and_json_target() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -259,7 +265,7 @@ async fn user_update_from_json_rejects_positional_and_json_target() {
 
 #[tokio::test]
 async fn user_update_without_fields_is_rejected() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
     let action = UserAction::Update {
         from_json: None,
         user: Some("alice@test.com".to_string()),
@@ -271,7 +277,8 @@ async fn user_update_without_fields_is_rejected() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::user::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
