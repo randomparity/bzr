@@ -5,7 +5,7 @@ use wiremock::{Mock, ResponseTemplate};
 
 use super::{resolve_optional_clone_field, resolve_required_clone_field};
 use crate::cli::BugAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 #[test]
@@ -71,7 +71,7 @@ fn clone_args(id: &str) -> crate::cli::CloneArgs {
 
 #[tokio::test]
 async fn bug_clone_copies_fields() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     // Mock get_bug
     Mock::given(method("GET"))
@@ -150,7 +150,8 @@ async fn bug_clone_copies_fields() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -163,7 +164,7 @@ async fn bug_clone_copies_fields() {
 
 #[tokio::test]
 async fn bug_clone_reports_id_when_comment_post_fails() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/100"))
@@ -213,7 +214,8 @@ async fn bug_clone_reports_id_when_comment_post_fails() {
     let mut __io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io.writers(),
     )
     .await;
@@ -241,7 +243,7 @@ async fn bug_clone_reports_id_when_comment_post_fails() {
 
 #[tokio::test]
 async fn bug_clone_no_comment_skips_comment() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/100"))
@@ -300,7 +302,8 @@ async fn bug_clone_no_comment_skips_comment() {
     let mut __io2 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::bug::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io2.writers(),
     )
     .await;
@@ -310,7 +313,7 @@ async fn bug_clone_no_comment_skips_comment() {
 
 #[tokio::test]
 async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     // Source fetch (GET) is allowed in a dry run; it builds the would-be payload.
     Mock::given(method("GET"))
@@ -364,7 +367,8 @@ async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
     let result = crate::commands::bug::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_dry_run(true),
+            .with_dry_run(true)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -401,7 +405,7 @@ async fn bug_clone_dry_run_reads_source_but_creates_nothing() {
 
 #[tokio::test]
 async fn bug_clone_dry_run_links_blocks_and_depends_on_to_source() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/100"))
@@ -447,7 +451,8 @@ async fn bug_clone_dry_run_links_blocks_and_depends_on_to_source() {
     let result = crate::commands::bug::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_dry_run(true),
+            .with_dry_run(true)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -461,7 +466,7 @@ async fn bug_clone_dry_run_links_blocks_and_depends_on_to_source() {
 
 #[tokio::test]
 async fn bug_clone_dry_run_applies_create_metadata_overrides() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/100"))
@@ -516,7 +521,8 @@ async fn bug_clone_dry_run_applies_create_metadata_overrides() {
     let result = crate::commands::bug::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_dry_run(true),
+            .with_dry_run(true)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;

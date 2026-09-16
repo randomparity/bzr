@@ -42,7 +42,7 @@ fn plain(
 
 #[tokio::test]
 async fn batch_create_emits_batch_then_done() {
-    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    let (mock, _tmp, config_path) = crate::test_helpers::setup_isolated_env().await;
     Mock::given(method("POST"))
         .and(path("/rest/bug"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 1})))
@@ -50,7 +50,8 @@ async fn batch_create_emits_batch_then_done() {
         .await;
     let prepared = vec![plain(sample_create_params()), plain(sample_create_params())];
     let ctx = CommandContext::new(None, OutputFormat::Json, None)
-        .with_progress(Some(ProgressFormat::Ndjson));
+        .with_progress(Some(ProgressFormat::Ndjson))
+        .with_config_path_override(Some(config_path));
     let mut io = crate::test_helpers::CapturedIo::new();
     super::create_batch_from_json(prepared, &ctx, &mut io.writers())
         .await
@@ -67,7 +68,7 @@ async fn batch_create_emits_batch_then_done() {
 
 #[tokio::test]
 async fn batch_create_partial_failure_emits_no_done() {
-    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    let (mock, _tmp, config_path) = crate::test_helpers::setup_isolated_env().await;
     // First POST succeeds (single use); the second falls through to a 500.
     Mock::given(method("POST"))
         .and(path("/rest/bug"))
@@ -82,7 +83,8 @@ async fn batch_create_partial_failure_emits_no_done() {
         .await;
     let prepared = vec![plain(sample_create_params()), plain(sample_create_params())];
     let ctx = CommandContext::new(None, OutputFormat::Json, None)
-        .with_progress(Some(ProgressFormat::Ndjson));
+        .with_progress(Some(ProgressFormat::Ndjson))
+        .with_config_path_override(Some(config_path));
     let mut io = crate::test_helpers::CapturedIo::new();
     let res = super::create_batch_from_json(prepared, &ctx, &mut io.writers()).await;
     assert!(res.is_err(), "partial failure exits non-zero");
@@ -399,7 +401,7 @@ async fn array_sub_step_failure_suppresses_done_event() {
     // sub-step failure (bug created, comment POST fails) — a different code path
     // from a create failure. Mirror batch_create_partial_failure_emits_no_done
     // but fail the comment, not the create.
-    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    let (mock, _tmp, config_path) = crate::test_helpers::setup_isolated_env().await;
     Mock::given(method("POST"))
         .and(path("/rest/bug"))
         .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 20})))
@@ -431,7 +433,8 @@ async fn array_sub_step_failure_suppresses_done_event() {
         ),
     ];
     let ctx = CommandContext::new(None, OutputFormat::Json, None)
-        .with_progress(Some(ProgressFormat::Ndjson));
+        .with_progress(Some(ProgressFormat::Ndjson))
+        .with_config_path_override(Some(config_path));
     let mut io = crate::test_helpers::CapturedIo::new();
     let res = super::create_batch_from_json(prepared, &ctx, &mut io.writers()).await;
     assert!(res.is_err(), "sub-step failure exits non-zero");
@@ -448,7 +451,7 @@ async fn array_sub_step_failure_suppresses_done_event() {
 
 #[tokio::test]
 async fn array_one_good_one_failing_comment_exits_11() {
-    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    let (mock, _tmp, config_path) = crate::test_helpers::setup_isolated_env().await;
     Mock::given(method("POST"))
         .and(path("/rest/bug"))
         .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"id": 10})))
@@ -479,7 +482,8 @@ async fn array_one_good_one_failing_comment_exits_11() {
             },
         ),
     ];
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = CommandContext::new(None, OutputFormat::Json, None)
+        .with_config_path_override(Some(config_path));
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = super::create_batch_from_json(prepared, &ctx, &mut io.writers())
         .await
@@ -527,7 +531,7 @@ fn from_json_args(path: &str) -> crate::cli::CreateArgs {
 
 #[tokio::test]
 async fn array_with_bad_attachment_file_creates_nothing() {
-    let (_lock, mock, tmp) = crate::test_helpers::setup_test_env().await;
+    let (mock, tmp, config_path) = crate::test_helpers::setup_isolated_env().await;
     // Any create POST is a failure: phase-1 validation must abort first.
     Mock::given(method("POST"))
         .and(path("/rest/bug"))
@@ -544,7 +548,8 @@ async fn array_with_bad_attachment_file_creates_nothing() {
     let json_path = tmp.path().join("batch.json");
     std::fs::write(&json_path, payload).unwrap();
     let args = from_json_args(json_path.to_str().unwrap());
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = CommandContext::new(None, OutputFormat::Json, None)
+        .with_config_path_override(Some(config_path));
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = super::handle(&args, json_path.to_str().unwrap(), &ctx, &mut io.writers())
         .await
