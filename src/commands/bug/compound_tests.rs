@@ -87,14 +87,15 @@ async fn mock_create(mock: &wiremock::MockServer, id: u64) {
 
 #[tokio::test]
 async fn create_then_comment_500_exits_11() {
-    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    let (mock, _tmp, config_path) = crate::test_helpers::setup_isolated_env().await;
     mock_create(&mock, 42).await;
     Mock::given(method("POST"))
         .and(path("/rest/bug/42/comment"))
         .respond_with(ResponseTemplate::new(500))
         .mount(&mock)
         .await;
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = CommandContext::new(None, OutputFormat::Json, None)
+        .with_config_path_override(Some(config_path));
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = create_with_sub_steps(
         &sample_params(),
@@ -122,14 +123,15 @@ async fn create_then_comment_500_exits_11() {
 
 #[tokio::test]
 async fn full_success_emits_plain_action_result() {
-    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    let (mock, _tmp, config_path) = crate::test_helpers::setup_isolated_env().await;
     mock_create(&mock, 7).await;
     Mock::given(method("POST"))
         .and(path("/rest/bug/7/comment"))
         .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({ "id": 100 })))
         .mount(&mock)
         .await;
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = CommandContext::new(None, OutputFormat::Json, None)
+        .with_config_path_override(Some(config_path));
     let mut io = crate::test_helpers::CapturedIo::new();
     create_with_sub_steps(
         &sample_params(),
@@ -173,7 +175,7 @@ async fn mock_description_comment(mock: &wiremock::MockServer, bug_id: u64, comm
 
 #[tokio::test]
 async fn comment_tags_tag_the_description_comment() {
-    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    let (mock, _tmp, config_path) = crate::test_helpers::setup_isolated_env().await;
     mock_create(&mock, 5).await;
     mock_description_comment(&mock, 5, 200).await;
     Mock::given(method("PUT"))
@@ -185,7 +187,8 @@ async fn comment_tags_tag_the_description_comment() {
         .expect(1)
         .mount(&mock)
         .await;
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = CommandContext::new(None, OutputFormat::Json, None)
+        .with_config_path_override(Some(config_path));
     let mut io = crate::test_helpers::CapturedIo::new();
     create_with_sub_steps(
         &sample_params(),
@@ -203,7 +206,7 @@ async fn comment_tags_tag_the_description_comment() {
 
 #[tokio::test]
 async fn comment_tags_put_failure_exits_11_naming_the_step() {
-    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    let (mock, _tmp, config_path) = crate::test_helpers::setup_isolated_env().await;
     mock_create(&mock, 6).await;
     mock_description_comment(&mock, 6, 201).await;
     Mock::given(method("PUT"))
@@ -211,7 +214,8 @@ async fn comment_tags_put_failure_exits_11_naming_the_step() {
         .respond_with(ResponseTemplate::new(500))
         .mount(&mock)
         .await;
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = CommandContext::new(None, OutputFormat::Json, None)
+        .with_config_path_override(Some(config_path));
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = create_with_sub_steps(
         &sample_params(),
@@ -230,7 +234,7 @@ async fn comment_tags_put_failure_exits_11_naming_the_step() {
 
 #[tokio::test]
 async fn attachment_500_exits_11_naming_the_file() {
-    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    let (mock, _tmp, config_path) = crate::test_helpers::setup_isolated_env().await;
     mock_create(&mock, 9).await;
     Mock::given(method("POST"))
         .and(path("/rest/bug/9/attachment"))
@@ -242,7 +246,8 @@ async fn attachment_500_exits_11_naming_the_file() {
         attachments: vec![attachment("trace.log")],
         comment_tags: vec![],
     };
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = CommandContext::new(None, OutputFormat::Json, None)
+        .with_config_path_override(Some(config_path));
     let mut io = crate::test_helpers::CapturedIo::new();
     let err = create_with_sub_steps(&sample_params(), plan, &ctx, &mut io.writers())
         .await
@@ -261,9 +266,11 @@ async fn attachment_500_exits_11_naming_the_file() {
 
 #[tokio::test]
 async fn dry_run_makes_no_network_calls_and_previews_sub_steps() {
-    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    let (mock, _tmp, config_path) = crate::test_helpers::setup_isolated_env().await;
     // No mocks mounted: any request would 404 and surface as an error.
-    let ctx = CommandContext::new(None, OutputFormat::Json, None).with_dry_run(true);
+    let ctx = CommandContext::new(None, OutputFormat::Json, None)
+        .with_dry_run(true)
+        .with_config_path_override(Some(config_path));
     let plan = CompoundPlan {
         comment: Some(AddCommentParams {
             text: "preview note".into(),

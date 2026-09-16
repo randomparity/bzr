@@ -22,7 +22,7 @@ fn sample_update_request(id: u64) -> JsonUpdateRequest {
 
 #[tokio::test]
 async fn batch_update_emits_batch_then_done() {
-    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    let (mock, _tmp, config_path) = crate::test_helpers::setup_isolated_env().await;
     for id in [1u64, 2] {
         Mock::given(method("PUT"))
             .and(path(format!("/rest/bug/{id}")))
@@ -35,7 +35,8 @@ async fn batch_update_emits_batch_then_done() {
     }
     let requests = vec![sample_update_request(1), sample_update_request(2)];
     let ctx = CommandContext::new(None, OutputFormat::Json, None)
-        .with_progress(Some(ProgressFormat::Ndjson));
+        .with_progress(Some(ProgressFormat::Ndjson))
+        .with_config_path_override(Some(config_path));
     let mut io = crate::test_helpers::CapturedIo::new();
     super::update_many_from_json(&requests, &ctx, &mut io.writers())
         .await
@@ -52,7 +53,7 @@ async fn batch_update_emits_batch_then_done() {
 
 #[tokio::test]
 async fn batch_update_partial_failure_emits_no_done() {
-    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    let (mock, _tmp, config_path) = crate::test_helpers::setup_isolated_env().await;
     Mock::given(method("PUT"))
         .and(path("/rest/bug/1"))
         .respond_with(
@@ -68,7 +69,8 @@ async fn batch_update_partial_failure_emits_no_done() {
         .await;
     let requests = vec![sample_update_request(1), sample_update_request(2)];
     let ctx = CommandContext::new(None, OutputFormat::Json, None)
-        .with_progress(Some(ProgressFormat::Ndjson));
+        .with_progress(Some(ProgressFormat::Ndjson))
+        .with_config_path_override(Some(config_path));
     let mut io = crate::test_helpers::CapturedIo::new();
     let res = super::update_many_from_json(&requests, &ctx, &mut io.writers()).await;
     assert!(res.is_err(), "partial failure exits non-zero");
@@ -105,7 +107,7 @@ fn sample_update_request_with_comment_tags(id: u64, tags: &[&str]) -> JsonUpdate
 /// while the CLI-flag and single-object JSON forms both apply it.
 #[tokio::test]
 async fn batch_update_array_form_applies_comment_tags() {
-    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    let (mock, _tmp, config_path) = crate::test_helpers::setup_isolated_env().await;
     Mock::given(method("PUT"))
         .and(path("/rest/bug/1"))
         .respond_with(
@@ -132,7 +134,8 @@ async fn batch_update_array_form_applies_comment_tags() {
         .mount(&mock)
         .await;
     let requests = vec![sample_update_request_with_comment_tags(1, &["triaged"])];
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = CommandContext::new(None, OutputFormat::Json, None)
+        .with_config_path_override(Some(config_path));
     let mut io = crate::test_helpers::CapturedIo::new();
 
     let result = super::update_many_from_json(&requests, &ctx, &mut io.writers()).await;
@@ -142,7 +145,7 @@ async fn batch_update_array_form_applies_comment_tags() {
 
 #[tokio::test]
 async fn batch_update_array_form_tag_failure_marks_the_comment_tags_step() {
-    let (_lock, mock, _tmp) = crate::test_helpers::setup_test_env().await;
+    let (mock, _tmp, config_path) = crate::test_helpers::setup_isolated_env().await;
     Mock::given(method("PUT"))
         .and(path("/rest/bug/1"))
         .respond_with(
@@ -160,7 +163,8 @@ async fn batch_update_array_form_tag_failure_marks_the_comment_tags_step() {
         .mount(&mock)
         .await;
     let requests = vec![sample_update_request_with_comment_tags(1, &["triaged"])];
-    let ctx = CommandContext::new(None, OutputFormat::Json, None);
+    let ctx = CommandContext::new(None, OutputFormat::Json, None)
+        .with_config_path_override(Some(config_path));
     let mut io = crate::test_helpers::CapturedIo::new();
 
     let result = super::update_many_from_json(&requests, &ctx, &mut io.writers()).await;
