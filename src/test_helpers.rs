@@ -57,6 +57,36 @@ impl TracingCapture {
     }
 }
 
+/// Pin `tempfile`'s default temp root for this test process, once, so that
+/// creating a temp directory stops consulting the environment (ADR-0002).
+///
+/// `tempfile` otherwise resolves its default root per creation, via
+/// `std::env::temp_dir` → `std::env::var_os("TMPDIR")`. That read is already
+/// ordered against `std::env::set_var` by std's own env lock, so this is
+/// **defence in depth, not the repair of a live race** — it removes the
+/// dependency on that std implementation detail rather than fixing a bug. The
+/// root is still taken from `std::env::temp_dir()`, but exactly once per
+/// process instead of once per temp directory, and test files keep landing
+/// where they always have.
+///
+/// Two limits, both deliberate:
+///
+/// - `tempfile::env::override_temp_dir` is a one-shot `OnceCell`: the first
+///   call in the process wins and later ones report the existing root. This
+///   installs on first use rather than at process start, because a Rust test
+///   binary has no pre-`main` hook without a new dependency. A test that builds
+///   a `tempfile::TempDir` directly, before any helper here has run, still
+///   performs one `TMPDIR` read — and most test files do build them directly.
+/// - It is per process, so each test binary installs its own.
+pub fn init_temp_root() {
+    static INIT: OnceLock<()> = OnceLock::new();
+    INIT.get_or_init(|| {
+        // `Err` means another caller won the race. It resolved the same
+        // `std::env::temp_dir()` we would have, so there is nothing to reconcile.
+        let _ = tempfile::env::override_temp_dir(&std::env::temp_dir());
+    });
+}
+
 /// Acquire `ENV_LOCK`, start a mock server, create a temp dir, and configure it.
 /// Returns the guard, mock server, and temp dir (all must stay alive for the test).
 ///
@@ -71,6 +101,7 @@ pub async fn setup_test_env() -> (
 ) {
     let lock = super::ENV_LOCK.lock().await;
     let mock = wiremock::MockServer::start().await;
+    init_temp_root();
     let tmp = tempfile::TempDir::new().unwrap();
     setup_config(&tmp, &mock.uri());
     (lock, mock, tmp)
@@ -147,6 +178,7 @@ pub fn setup_config(tmp: &tempfile::TempDir, server_url: &str) {
 #[expect(clippy::unwrap_used)]
 pub async fn setup_isolated_env() -> (wiremock::MockServer, tempfile::TempDir, std::path::PathBuf) {
     let mock = wiremock::MockServer::start().await;
+    init_temp_root();
     let tmp = tempfile::TempDir::new().unwrap();
     let config_path = write_config_to(&tmp, &default_test_config(&mock.uri()));
     (mock, tmp, config_path)
@@ -164,6 +196,7 @@ pub async fn setup_isolated_env() -> (wiremock::MockServer, tempfile::TempDir, s
 #[expect(clippy::unwrap_used)]
 pub async fn setup_empty_config_env() -> (tokio::sync::MutexGuard<'static, ()>, tempfile::TempDir) {
     let lock = super::ENV_LOCK.lock().await;
+    init_temp_root();
     let tmp = tempfile::TempDir::new().unwrap();
     // SAFETY: Tests that mutate process environment hold ENV_LOCK.
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
@@ -192,6 +225,7 @@ pub async fn setup_empty_config_env() -> (tokio::sync::MutexGuard<'static, ()>, 
 /// Panics if the temp directory cannot be created.
 #[expect(clippy::unwrap_used)]
 pub fn setup_empty_isolated_env() -> (tempfile::TempDir, std::path::PathBuf) {
+    init_temp_root();
     let tmp = tempfile::TempDir::new().unwrap();
     #[cfg(unix)]
     {
@@ -502,10 +536,17 @@ async fn seed_keyring_secret_inner(
 ) {
     let mut io = CapturedIo::new();
     // SAFETY: Serialized by ENV_LOCK against the other ENV_LOCK participants —
-    // held by the caller's setup, or taken by `seed_keyring_secret_at`. That is
-    // the whole of what the lock buys: it does not order this write against a
-    // `getenv` from a lock-free parallel test (libc reads `TMPDIR` for one), and
-    // that invariant is open and owned by #831.
+    // held by the caller's setup, or taken by `seed_keyring_secret_at` — and
+    // ordered against every `std::env` reader by std's own env lock.
+    //
+    // An earlier version of this comment cited a `TMPDIR` read by a lock-free
+    // parallel test as an open hazard owned by #831. That was wrong, and #831
+    // resolved it by refuting it: `tempfile` reaches `TMPDIR` through
+    // `std::env::temp_dir` -> `std::env::var_os`, which takes the read half of
+    // the same lock `set_var` takes the write half of, so it is ordered. The
+    // reads `set_var`'s contract does *not* cover are the ones that bypass
+    // `std::env` entirely — libc `getaddrinfo` being the only one this process
+    // performs. See the ADR-0002 amendment.
     unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", secret) };
     let result = crate::commands::config::execute(
         &crate::cli::ConfigAction::SetKeyring {
