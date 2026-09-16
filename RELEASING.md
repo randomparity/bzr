@@ -61,7 +61,7 @@ Before pushing the tag, review the canonical
 inventory. That inventory is authoritative for the project-vulnerability marker below,
 but it is not the only advisory surface, and none of the three surfaces in
 [Advisory surfaces to review](#advisory-surfaces-to-review) subsumes another — read
-all three. The generated release section carries the following whole-line marker,
+all three. The generated release section carries the whole-line marker below,
 which is validated before publication. A dependency update
 belongs under a separate dependency heading or explicitly says it is
 dependency-only; it never replaces the project-vulnerability assessment.
@@ -81,14 +81,15 @@ gh api repos/randomparity/bzr/security-advisories \
 ```
 
 This is the canonical inventory for the `Security assessment:` marker: it lists the
-advisories this project has published about `bzr`. Empty output is the normal case and
+advisories this project has recorded about `bzr`. Empty output is the normal case and
 is what supports the no-vulnerability template.
 
 *Does not cover:* dependencies, in any ecosystem. It also does not cover a `bzr`
-vulnerability that is known but not yet published, so an empty list is evidence about
-disclosure, not about whether a fix in this range was security relevant. The
-generator's commit-subject check (`fix(security)`, `feat(security)`, `RUSTSEC-`,
-`CVE-`) is the backstop for that case.
+vulnerability that nobody has entered here, so an empty list is evidence about what has
+been recorded, not about whether a fix in this range was security relevant. Read the
+second column rather than assuming every row is published. The generator's
+commit-subject check (`fix(security)`, `feat(security)`, `RUSTSEC-`, `CVE-`) is the
+backstop for a fix that never became an advisory.
 
 **2. Dependabot alerts — GitHub Advisory Database, every ecosystem.**
 
@@ -107,13 +108,25 @@ still alerts. Before treating an alert as a release blocker, confirm the crate i
 actually built:
 
 ```bash
-cargo tree --target all -i CRATE-NAME
+cargo tree --target all --edges normal -i CRATE-NAME
 ```
 
-A printed tree means the crate ships. `warning: nothing to print.` with no tree means
-it is in no dependency graph on any target, so the shipped binary does not contain it;
-the alert is still worth clearing, but it does not block the tag. Note that this
-command exits 0 either way, so read its output rather than its exit status.
+A printed tree means the crate ships. `warning: nothing to print.` with no tree means no
+released artifact contains it; the alert is still worth clearing, but it does not block
+the tag. This command exits 0 either way, so read its output rather than its exit status.
+
+`--edges normal` is load-bearing: without it `cargo tree` also prints dev- and
+build-dependency edges, and neither is linked into a released binary. An alert on a
+test-only crate would otherwise print a tree under `[dev-dependencies]` and read as
+shipping.
+
+The command resolves this workspace's graph only, so it cannot answer a
+`fuzz/Cargo.lock` alert: `fuzz/` is excluded from the workspace, and a fuzz-only crate
+prints nothing here whether or not the fuzz targets build it. Fuzz alerts never block a
+tag because fuzz targets are not released artifacts — not because the command found
+nothing. Do not reach for `--manifest-path fuzz/Cargo.toml` to check: `fuzz/Cargo.lock`
+is tracked and stale, so cargo either refuses under `--locked` or rewrites it, dirtying
+the checkout you are about to tag.
 
 If the alerts query returns `403` with `Dependabot alerts are disabled for this
 repository`, the repository setting is off — this is not a token-scope failure, and
@@ -123,9 +136,9 @@ re-running with a broader token will not help. Confirm the setting directly:
 gh api repos/randomparity/bzr/vulnerability-alerts
 ```
 
-`204 No Content` means alerts are enabled; `404` means they are disabled. Enabling them
-is a repository-settings change that needs admin on the repo and cannot be done from a
-pull request. The advisory review is not complete while this surface is unreadable.
+`204 No Content` means alerts are enabled; any other status means they are not. Enabling
+them is a repository-settings change that needs admin on the repo and cannot be done from
+a pull request. The advisory review is not complete while this surface is unreadable.
 
 **3. `cargo deny check advisories` — RustSec, Cargo tree only.**
 
@@ -142,7 +155,7 @@ ecosystem is invisible to it, `fuzz/` is excluded from the workspace, and an Adv
 Database entry with no RustSec ID has nothing to match against. Because it resolves the
 graph instead of reading the lockfile, it can exit 0 while surface 2 has an open alert
 naming a crate in `Cargo.lock`. That disagreement is expected rather than a fault in
-either tool, and `cargo tree --target all -i` above is what resolves it.
+either tool, and `cargo tree --target all --edges normal -i` above is what resolves it.
 
 Use this template when no publicly identified runtime vulnerability in `bzr`
 was fixed:
