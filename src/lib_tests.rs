@@ -767,7 +767,16 @@ fn spawn_self_signed_bugzilla_server(expected_requests: usize) -> SelfSignedBugz
     let port = listener.local_addr().unwrap().port();
     let handle = std::thread::spawn(move || {
         let config = Arc::new(config);
-        let deadline = Instant::now() + Duration::from_secs(5);
+        // Hang guard, not a timing assumption: this is the total budget for all
+        // `expected_requests` accepts, and it starts here — before the client has
+        // parsed argv, loaded config, resolved auth and built its rustls stack. On
+        // success the thread serves every request and exits long before this fires,
+        // so the value only costs wall-clock when the client is genuinely broken.
+        // It must stay far above any plausible scheduling delay: when it expires,
+        // `accept_until` returns Err and this thread returns, dropping the listener
+        // it owns and closing the port, so a late connect is refused rather than
+        // served. Do not tighten it to "about how long a connect should take".
+        let deadline = Instant::now() + Duration::from_secs(120);
         for _ in 0..expected_requests {
             let Ok(tcp) = accept_until(&listener, deadline) else {
                 return;
