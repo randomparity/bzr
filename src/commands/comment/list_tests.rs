@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::{CommentAction, ProjectionArgs};
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 async fn mount_one_comment(mock: &wiremock::MockServer) {
@@ -32,7 +32,7 @@ fn list_with(projection: ProjectionArgs) -> CommentAction {
 
 #[tokio::test]
 async fn comment_list_returns_comments() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42/comment"))
@@ -63,7 +63,8 @@ async fn comment_list_returns_comments() {
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::comment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __io_a1.writers(),
     )
     .await;
@@ -78,7 +79,7 @@ async fn comment_list_returns_comments() {
 #[tokio::test]
 async fn comment_list_http_500_returns_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/bug/42/comment"))
@@ -94,7 +95,8 @@ async fn comment_list_http_500_returns_error() {
     };
     let result = crate::commands::comment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __cap_io.writers(),
     )
     .await;
@@ -109,7 +111,7 @@ async fn comment_list_http_500_returns_error() {
 #[tokio::test]
 async fn comment_list_rejects_malformed_since_with_exit_code_7() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = CommentAction::List {
         bug_ids: vec![42],
@@ -119,7 +121,8 @@ async fn comment_list_rejects_malformed_since_with_exit_code_7() {
     };
     let result = crate::commands::comment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut __cap_io.writers(),
     )
     .await;
@@ -135,7 +138,7 @@ async fn comment_list_rejects_malformed_since_with_exit_code_7() {
 
 #[tokio::test]
 async fn comment_list_json_fields_projects_to_named_keys() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_one_comment(&mock).await;
 
     let action = list_with(ProjectionArgs {
@@ -145,7 +148,8 @@ async fn comment_list_json_fields_projects_to_named_keys() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::comment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -161,7 +165,7 @@ async fn comment_list_json_fields_projects_to_named_keys() {
 
 #[tokio::test]
 async fn comment_list_ndjson_fields_projects_each_line() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_one_comment(&mock).await;
 
     let action = list_with(ProjectionArgs {
@@ -175,7 +179,8 @@ async fn comment_list_ndjson_fields_projects_each_line() {
             None,
             OutputFormat::Ndjson,
             None,
-        ),
+        )
+        .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -185,7 +190,7 @@ async fn comment_list_ndjson_fields_projects_each_line() {
 
 #[tokio::test]
 async fn comment_list_json_unknown_field_exits_7() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = list_with(ProjectionArgs {
         fields: Some("creatorx".into()),
@@ -194,7 +199,8 @@ async fn comment_list_json_unknown_field_exits_7() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::comment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -207,7 +213,7 @@ async fn comment_list_json_unknown_field_exits_7() {
 
 #[tokio::test]
 async fn comment_list_table_fields_is_noop_with_warning() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_one_comment(&mock).await;
 
     let action = list_with(ProjectionArgs {
@@ -217,7 +223,8 @@ async fn comment_list_table_fields_is_noop_with_warning() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::comment::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Table, None)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -279,16 +286,18 @@ fn multi(bug_ids: Vec<u64>, permissive: bool) -> CommentAction {
 /// `api` selects the transport. The handler builds its own client through
 /// `connect_and_configure`, so a constructed `BugzillaClient` has nowhere to
 /// go — `CommandContext::new`'s third argument is the only injection point, and
-/// it overrides the `api_mode = "rest"` that `setup_test_env` writes.
+/// it overrides the `api_mode = "rest"` that `setup_isolated_env` writes.
 async fn run_with_api(
     action: &CommentAction,
     format: OutputFormat,
     api: Option<crate::types::ApiMode>,
+    config_path: std::path::PathBuf,
 ) -> (crate::error::Result<()>, String, String) {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::comment::execute(
         action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, format, api),
+        &crate::commands::runtime::invocation::CommandContext::new(None, format, api)
+            .with_config_path_override(Some(config_path)),
         &mut io.writers(),
     )
     .await;
@@ -298,17 +307,19 @@ async fn run_with_api(
 async fn run(
     action: &CommentAction,
     format: OutputFormat,
+    config_path: std::path::PathBuf,
 ) -> (crate::error::Result<()>, String, String) {
-    run_with_api(action, format, None).await
+    run_with_api(action, format, None, config_path).await
 }
 
 #[tokio::test]
 async fn multi_id_json_is_one_flat_array_in_argument_order() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_comment_for(&mock, 42, "first").await;
     mount_comment_for(&mock, 43, "second").await;
 
-    let (result, out, _err) = run(&multi(vec![43, 42], false), OutputFormat::Json).await;
+    let (result, out, _err) =
+        run(&multi(vec![43, 42], false), OutputFormat::Json, config_path).await;
     assert!(result.is_ok());
     let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&out);
     assert_eq!(parsed.as_array().unwrap().len(), 2);
@@ -318,10 +329,10 @@ async fn multi_id_json_is_one_flat_array_in_argument_order() {
 
 #[tokio::test]
 async fn single_id_json_stays_a_bare_array_with_no_header() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_comment_for(&mock, 42, "only").await;
 
-    let (result, out, _err) = run(&multi(vec![42], false), OutputFormat::Json).await;
+    let (result, out, _err) = run(&multi(vec![42], false), OutputFormat::Json, config_path).await;
     assert!(result.is_ok());
     assert!(
         !out.contains("Bug #"),
@@ -333,10 +344,10 @@ async fn single_id_json_stays_a_bare_array_with_no_header() {
 
 #[tokio::test]
 async fn single_id_table_has_no_bug_header() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_comment_for(&mock, 42, "only").await;
 
-    let (result, out, _err) = run(&multi(vec![42], false), OutputFormat::Table).await;
+    let (result, out, _err) = run(&multi(vec![42], false), OutputFormat::Table, config_path).await;
     assert!(result.is_ok());
     assert!(out.contains("only"));
     assert!(
@@ -349,7 +360,7 @@ async fn single_id_table_has_no_bug_header() {
 /// from `null` to the requested ID on a flat-envelope server.
 #[tokio::test]
 async fn single_id_flat_envelope_backfills_bug_id_in_json() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/42/comment"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -362,7 +373,7 @@ async fn single_id_flat_envelope_backfills_bug_id_in_json() {
         .mount(&mock)
         .await;
 
-    let (result, out, _err) = run(&multi(vec![42], false), OutputFormat::Json).await;
+    let (result, out, _err) = run(&multi(vec![42], false), OutputFormat::Json, config_path).await;
     assert!(result.is_ok());
     let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&out);
     assert_eq!(parsed[0]["bug_id"], 42);
@@ -370,11 +381,16 @@ async fn single_id_flat_envelope_backfills_bug_id_in_json() {
 
 #[tokio::test]
 async fn multi_id_table_writes_one_header_per_bug() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_comment_for(&mock, 42, "first").await;
     mount_comment_for(&mock, 43, "second").await;
 
-    let (result, out, _err) = run(&multi(vec![42, 43], false), OutputFormat::Table).await;
+    let (result, out, _err) = run(
+        &multi(vec![42, 43], false),
+        OutputFormat::Table,
+        config_path,
+    )
+    .await;
     assert!(result.is_ok());
     assert!(out.contains("Bug #42"), "missing header for 42: {out}");
     assert!(out.contains("Bug #43"), "missing header for 43: {out}");
@@ -386,11 +402,11 @@ async fn multi_id_table_writes_one_header_per_bug() {
 
 #[tokio::test]
 async fn permissive_skips_a_missing_bug_and_exits_zero() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_comment_for(&mock, 42, "first").await;
     mount_missing_bug(&mock, 99).await;
 
-    let (result, out, err) = run(&multi(vec![42, 99], true), OutputFormat::Json).await;
+    let (result, out, err) = run(&multi(vec![42, 99], true), OutputFormat::Json, config_path).await;
     assert!(result.is_ok(), "permissive must not fail the call");
     let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&out);
     assert_eq!(parsed.as_array().unwrap().len(), 1);
@@ -403,11 +419,11 @@ async fn permissive_skips_a_missing_bug_and_exits_zero() {
 
 #[tokio::test]
 async fn permissive_with_every_bug_failing_emits_an_empty_array() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_missing_bug(&mock, 98).await;
     mount_missing_bug(&mock, 99).await;
 
-    let (result, out, err) = run(&multi(vec![98, 99], true), OutputFormat::Json).await;
+    let (result, out, err) = run(&multi(vec![98, 99], true), OutputFormat::Json, config_path).await;
     assert!(result.is_ok());
     let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&out);
     assert!(parsed.as_array().unwrap().is_empty());
@@ -418,11 +434,16 @@ async fn permissive_with_every_bug_failing_emits_an_empty_array() {
 /// stdout — there is no `data: []` marker for a consumer to read.
 #[tokio::test]
 async fn permissive_with_every_bug_failing_emits_empty_stdout_in_ndjson() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_missing_bug(&mock, 98).await;
     mount_missing_bug(&mock, 99).await;
 
-    let (result, out, err) = run(&multi(vec![98, 99], true), OutputFormat::Ndjson).await;
+    let (result, out, err) = run(
+        &multi(vec![98, 99], true),
+        OutputFormat::Ndjson,
+        config_path,
+    )
+    .await;
     assert!(result.is_ok());
     assert!(
         out.is_empty(),
@@ -439,11 +460,12 @@ async fn permissive_with_every_bug_failing_emits_empty_stdout_in_ndjson() {
 
 #[tokio::test]
 async fn permissive_with_every_bug_failing_prints_no_comments_in_table() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_missing_bug(&mock, 98).await;
     mount_missing_bug(&mock, 99).await;
 
-    let (result, out, _err) = run(&multi(vec![98, 99], true), OutputFormat::Table).await;
+    let (result, out, _err) =
+        run(&multi(vec![98, 99], true), OutputFormat::Table, config_path).await;
     assert!(result.is_ok());
     assert_eq!(out.trim(), "No comments.");
     assert!(!out.contains("Bug #"));
@@ -452,7 +474,7 @@ async fn permissive_with_every_bug_failing_prints_no_comments_in_table() {
 /// `HttpStatus` is not per-resource, so `--permissive` must not swallow it.
 #[tokio::test]
 async fn permissive_still_aborts_on_a_plain_text_404() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_comment_for(&mock, 42, "first").await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/99/comment"))
@@ -460,43 +482,50 @@ async fn permissive_still_aborts_on_a_plain_text_404() {
         .mount(&mock)
         .await;
 
-    let (result, _out, _err) = run(&multi(vec![42, 99], true), OutputFormat::Json).await;
+    let (result, _out, _err) =
+        run(&multi(vec![42, 99], true), OutputFormat::Json, config_path).await;
     assert!(result.is_err());
 }
 
 #[tokio::test]
 async fn without_permissive_a_missing_bug_aborts_with_no_partial_json() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_comment_for(&mock, 42, "first").await;
     mount_missing_bug(&mock, 99).await;
 
-    let (result, out, _err) = run(&multi(vec![42, 99], false), OutputFormat::Json).await;
+    let (result, out, _err) =
+        run(&multi(vec![42, 99], false), OutputFormat::Json, config_path).await;
     assert!(result.is_err());
     assert!(out.is_empty(), "no partial JSON may be written: {out}");
 }
 
 #[tokio::test]
 async fn permissive_with_one_id_exits_7_before_any_request() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
-    let (result, out, _err) = run(&multi(vec![42], true), OutputFormat::Json).await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+    let (result, out, _err) = run(&multi(vec![42], true), OutputFormat::Json, config_path).await;
     assert_eq!(result.unwrap_err().exit_code(), 7);
     assert!(out.is_empty());
 }
 
 #[tokio::test]
 async fn multi_id_ndjson_emits_one_line_per_comment_across_bugs() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_comment_for(&mock, 42, "first").await;
     mount_comment_for(&mock, 43, "second").await;
 
-    let (result, out, _err) = run(&multi(vec![42, 43], false), OutputFormat::Ndjson).await;
+    let (result, out, _err) = run(
+        &multi(vec![42, 43], false),
+        OutputFormat::Ndjson,
+        config_path,
+    )
+    .await;
     assert!(result.is_ok());
     assert_eq!(out.trim().lines().count(), 2);
 }
 
 #[tokio::test]
 async fn multi_id_fields_projection_keeps_bug_id() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_comment_for(&mock, 42, "first").await;
     mount_comment_for(&mock, 43, "second").await;
 
@@ -509,7 +538,7 @@ async fn multi_id_fields_projection_keeps_bug_id() {
             exclude_fields: None,
         },
     };
-    let (result, out, err) = run(&action, OutputFormat::Json).await;
+    let (result, out, err) = run(&action, OutputFormat::Json, config_path).await;
     assert!(result.is_ok());
     let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&out);
     for row in parsed.as_array().unwrap() {
@@ -522,7 +551,7 @@ async fn multi_id_fields_projection_keeps_bug_id() {
 
 #[tokio::test]
 async fn multi_id_exclude_fields_cannot_drop_bug_id() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_comment_for(&mock, 42, "first").await;
     mount_comment_for(&mock, 43, "second").await;
 
@@ -535,7 +564,7 @@ async fn multi_id_exclude_fields_cannot_drop_bug_id() {
             exclude_fields: Some("bug_id".into()),
         },
     };
-    let (result, out, err) = run(&action, OutputFormat::Json).await;
+    let (result, out, err) = run(&action, OutputFormat::Json, config_path).await;
     assert!(result.is_ok());
     let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&out);
     for row in parsed.as_array().unwrap() {
@@ -547,7 +576,7 @@ async fn multi_id_exclude_fields_cannot_drop_bug_id() {
 /// The override is multi-ID only: one bug's comments need no attribution field.
 #[tokio::test]
 async fn single_id_fields_projection_is_not_overridden() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_comment_for(&mock, 42, "only").await;
 
     let action = CommentAction::List {
@@ -559,7 +588,7 @@ async fn single_id_fields_projection_is_not_overridden() {
             exclude_fields: None,
         },
     };
-    let (result, out, err) = run(&action, OutputFormat::Json).await;
+    let (result, out, err) = run(&action, OutputFormat::Json, config_path).await;
     assert!(result.is_ok());
     let parsed: serde_json::Value = crate::test_helpers::json_envelope_data(&out);
     assert_eq!(parsed[0].as_object().unwrap().len(), 1);
@@ -570,7 +599,7 @@ async fn single_id_fields_projection_is_not_overridden() {
 /// which is what distinguishes an empty thread from a skipped bug in table mode.
 #[tokio::test]
 async fn multi_id_bug_with_no_comments_gets_header_and_no_comments_line() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_comment_for(&mock, 42, "first").await;
     Mock::given(method("GET"))
         .and(path("/rest/bug/43/comment"))
@@ -580,7 +609,12 @@ async fn multi_id_bug_with_no_comments_gets_header_and_no_comments_line() {
         .mount(&mock)
         .await;
 
-    let (result, out, _err) = run(&multi(vec![42, 43], false), OutputFormat::Table).await;
+    let (result, out, _err) = run(
+        &multi(vec![42, 43], false),
+        OutputFormat::Table,
+        config_path,
+    )
+    .await;
     assert!(result.is_ok());
     assert!(out.contains("Bug #43"), "missing header for 43: {out}");
     assert!(
@@ -597,7 +631,7 @@ async fn multi_id_bug_with_no_comments_gets_header_and_no_comments_line() {
 async fn multi_id_since_applies_to_every_bug() {
     use wiremock::matchers::query_param;
 
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     for bug in [42_u64, 43] {
         Mock::given(method("GET"))
             .and(path(format!("/rest/bug/{bug}/comment")))
@@ -619,7 +653,7 @@ async fn multi_id_since_applies_to_every_bug() {
         since: Some("2025-01-01".into()),
         projection: ProjectionArgs::default(),
     };
-    let (result, _out, _err) = run(&action, OutputFormat::Json).await;
+    let (result, _out, _err) = run(&action, OutputFormat::Json, config_path).await;
     assert!(result.is_ok());
     // Both `.expect(1)` mocks are verified when `mock` drops.
 }
@@ -655,13 +689,14 @@ async fn mount_xmlrpc_bug_42_only(mock: &wiremock::MockServer) {
 
 #[tokio::test]
 async fn xmlrpc_multi_id_missing_bugs_key_aborts() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_xmlrpc_bug_42_only(&mock).await;
 
     let (result, _out, _err) = run_with_api(
         &multi(vec![42, 43], false),
         OutputFormat::Json,
         Some(crate::types::ApiMode::XmlRpc),
+        config_path,
     )
     .await;
     let err = result.unwrap_err();
@@ -673,13 +708,14 @@ async fn xmlrpc_multi_id_missing_bugs_key_aborts() {
 
 #[tokio::test]
 async fn xmlrpc_multi_id_missing_bugs_key_is_skipped_under_permissive() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_xmlrpc_bug_42_only(&mock).await;
 
     let (result, out, err) = run_with_api(
         &multi(vec![42, 43], true),
         OutputFormat::Json,
         Some(crate::types::ApiMode::XmlRpc),
+        config_path,
     )
     .await;
     assert!(result.is_ok());
