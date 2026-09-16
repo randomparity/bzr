@@ -4,7 +4,7 @@ use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::GroupAction;
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
@@ -16,7 +16,7 @@ fn write_json_file(tmp: &tempfile::TempDir, json: &str) -> String {
 #[tokio::test]
 async fn group_update_sends_put() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/group/admin"))
@@ -36,7 +36,8 @@ async fn group_update_sends_put() {
     };
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -45,7 +46,7 @@ async fn group_update_sends_put() {
 
 #[tokio::test]
 async fn group_update_from_json_uses_json_target() {
-    let (_lock, mock, tmp) = setup_test_env().await;
+    let (mock, tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/group/admin"))
@@ -71,7 +72,8 @@ async fn group_update_from_json_uses_json_target() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -81,7 +83,7 @@ async fn group_update_from_json_uses_json_target() {
 
 #[tokio::test]
 async fn group_update_from_json_rejects_positional_and_json_target() {
-    let (_lock, _mock, tmp) = setup_test_env().await;
+    let (_mock, tmp, config_path) = setup_isolated_env().await;
 
     let json = r#"{"group":"admin","description":"Updated"}"#;
     let action = GroupAction::Update {
@@ -93,7 +95,8 @@ async fn group_update_from_json_rejects_positional_and_json_target() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -107,7 +110,7 @@ async fn group_update_from_json_rejects_positional_and_json_target() {
 
 #[tokio::test]
 async fn group_update_dry_run_makes_no_write_and_marks_payload() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("PUT"))
         .and(path("/rest/group/admin"))
@@ -129,6 +132,7 @@ async fn group_update_dry_run_makes_no_write_and_marks_payload() {
     let result = crate::commands::group::execute(
         &action,
         &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone()))
             .with_dry_run(true),
         &mut io.writers(),
     )
@@ -145,7 +149,7 @@ async fn group_update_dry_run_makes_no_write_and_marks_payload() {
 
 #[tokio::test]
 async fn group_update_without_fields_is_rejected() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
     let action = GroupAction::Update {
         from_json: None,
         group: Some("admin".into()),
@@ -155,7 +159,8 @@ async fn group_update_without_fields_is_rejected() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
