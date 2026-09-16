@@ -123,9 +123,11 @@ around fork/exec and around `posix_spawn`
 What genuinely races is a reader called from C, which std names explicitly:
 `getaddrinfo` via `ToSocketAddrs`. This ADR already identified it.
 
-These citations are to pinned dependencies — the toolchain in
-`rust-toolchain.toml` and the exact `tempfile` version in `Cargo.toml`. Bumping
-either is what invalidates this section, not a change to the test tree.
+These citations are to pinned dependencies: the toolchain pinned by
+`rust-toolchain.toml` (1.89.0) and `tempfile = "=3.27.0"` in `Cargo.toml`.
+**When this section eventually goes stale, those two files are what to re-check
+— not the test tree.** Bumping either can change the reasoning; adding, moving
+or deleting tests cannot.
 
 ### Decision
 
@@ -162,15 +164,19 @@ Retained categories, superseding the three this ADR originally listed:
   `getaddrinfo` reads the environment outside std's lock. A test that connects
   only to a numeric address takes the numeric fast path and needs no lock.
 
-This amendment publishes **no count of the retained set, deliberately.** A
-count inside an ADR is a measurement with a shelf life embedded in an artifact
-that has none, and this campaign has now had three measured claims falsified by
-a sibling merge with no diff to signal it. Worse, the obvious predicate —
-`git grep 'ENV_LOCK\.\(blocking_\)\?lock()' -- src tests` — sees explicit
-acquisitions only. A test can hold the lock *implicitly* through a helper that
-takes it on the caller's behalf, so converting such a helper into explicit
-per-test acquisitions makes the count rise while the risk falls. A reader given
-only the number draws the opposite conclusion from the truth.
+This amendment publishes **no count of the retained set, deliberately**, and the
+reason is stronger than staleness. The obvious predicate —
+`git grep 'ENV_LOCK\.\(blocking_\)\?lock()' -- src tests` — sees *explicit*
+acquisitions only, and a test can hold the lock implicitly through a helper that
+takes it on the caller's behalf.
+
+The measured case: PR #828 deleted all sixteen `setup_test_env` call sites in
+`src/commands/runtime/shared/capability_tests.rs`, every one of them an implicit
+`ENV_LOCK` holder. That predicate returned **47 before and 47 after** — not a
+small change, no change at all. A "down to N acquisitions" criterion would have
+been satisfied identically by doing that work and by skipping it, which is the
+cleanest available demonstration that the integer does not measure the property
+anyone cares about. Anyone can re-check it in one command at `874461c2`.
 
 To re-derive the set at any commit: run that predicate, add the helpers that
 take the lock on a caller's behalf, and classify every hit against the three
