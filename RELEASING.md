@@ -87,9 +87,13 @@ is what supports the no-vulnerability template.
 *Does not cover:* dependencies, in any ecosystem. It also does not cover a `bzr`
 vulnerability that nobody has entered here, so an empty list is evidence about what has
 been recorded, not about whether a fix in this range was security relevant. Read the
-second column rather than assuming every row is published. The generator's
-commit-subject check (`fix(security)`, `feat(security)`, `RUSTSEC-`, `CVE-`) is the
-backstop for a fix that never became an advisory.
+second column rather than assuming every row is published. It also does not cover what
+your credentials cannot see: the endpoint returns what your access permits, and a
+permission-limited read is indistinguishable from a genuinely empty inventory, so confirm
+you are reading it as an account that can see this repository's advisories before taking
+empty as evidence. The generator's commit-subject check (`fix(security)`,
+`feat(security)`, `RUSTSEC-`, `CVE-`) is the backstop for a fix that never became an
+advisory.
 
 **2. Dependabot alerts — GitHub Advisory Database, every ecosystem.**
 
@@ -113,8 +117,9 @@ Deciding what a given alerted crate actually reaches is a separate judgement, an
 document does not specify one. It depends on at least dependency kind, package set,
 released target set, and lockfile membership versus resolved-graph activation, and
 getting any of those wrong produces a confidently wrong answer in either direction.
-Until that triage is written down, record the reasoning you actually used for any alert
-you decide not to act on, so the next operator can check it.
+Until that triage is written down, record the reasoning you actually used — in the
+release-preparation PR body, or as the dismissal comment on the alert itself — for any
+alert you decide not to act on, so the next operator can check it.
 
 If the alerts query returns `403` with `Dependabot alerts are disabled for this
 repository` — GitHub's message for a repository with the setting off — confirm the
@@ -125,9 +130,11 @@ gh api repos/randomparity/bzr/vulnerability-alerts -i | head -1
 ```
 
 The `-i` is required: without it this endpoint prints nothing at all on success, and the
-status you need to read never appears. `HTTP/2.0 204 No Content` means alerts are enabled.
-A `404` means **either** that they are disabled **or** that your token lacks admin on the
-repository — this endpoint requires admin, so a 404 on its own does not say which. If you
+status you need to read never appears. A **`204 No Content`** status means alerts are
+enabled — the `HTTP/2.0` or `HTTP/1.1` prefix is the negotiated protocol version and means
+nothing here. A `404` means **either** that they are disabled **or** that your token lacks
+admin on the repository — this endpoint requires admin, so a 404 alone does not say
+which. If you
 do not hold admin, ask someone who does rather than treating the review as blocked.
 Enabling alerts is a repository-settings change that needs admin and cannot be done from a
 pull request. The advisory review is not complete while this surface is genuinely
@@ -139,9 +146,11 @@ unreadable.
 cargo deny check advisories
 ```
 
-Checks the resolved Cargo dependency graph against the RustSec advisory database.
-`dependency-policy.yml` already runs `cargo deny check` on every push and pull request
-to `main`; running it here confirms the release commit specifically.
+Checks the resolved Cargo dependency graph against the RustSec advisory database. Install
+it with `cargo install cargo-deny --locked` if it is not already on the host; `deny.toml`
+uses `[advisories] version = 2`. `dependency-policy.yml` already runs `cargo deny check`
+on every push and pull request to `main`; running it here confirms the release commit
+specifically.
 
 *Does not cover:* anything outside this workspace's Cargo graph. The `github-actions`
 ecosystem is invisible to it, `fuzz/` is excluded from the workspace, and an Advisory
@@ -294,7 +303,8 @@ git tag -a vX.Y.Z -m "bzr vX.Y.Z"
 9. Refresh the advisory inventory — re-run all three surfaces in
     [Advisory surfaces to review](#advisory-surfaces-to-review) — then run the
     generated-note and security-assessment validation command above.
-    Resolve any result before continuing. If correcting the release-preparation
+    Resolve any validator result before continuing; an open Dependabot alert is handled
+    per the judgement note in that section, not by this step. If correcting the release-preparation
     changes moves the release commit, delete the unpublished local tag and create
     it again on the corrected merge commit.
 
