@@ -701,21 +701,13 @@ async fn assert_self_signed_inline_server_info_succeeds(
     expected_requests: usize,
     build_tls_args: impl FnOnce(&SelfSignedBugzillaServer, &tempfile::TempDir) -> Vec<String>,
 ) {
-    // Retains ENV_LOCK (ADR-0002), and is the only reason the lock still buys
-    // anything beyond ordering writers against each other. This connects to
-    // https://localhost (to match the cert SAN), so it runs libc
-    // getaddrinfo("localhost"), which reads the environment *outside* std's env
-    // lock — the one category std's `set_var` contract does not cover. Taking
-    // the lock here is what orders that C-side getenv against the retained
-    // `set_var`s in other tests. Config is selected by explicit --config; no
-    // XDG_CONFIG_HOME mutation happens here.
-    //
-    // Nothing enforces the pairing. A future test that resolves a hostname
-    // without taking this lock reintroduces the race silently, and no lint,
-    // guardrail or CI job detects it. A test that connects only to a numeric
-    // address takes the numeric fast path, reads no env via libc, and needs no
-    // lock — which is why every other test in this file has none.
-    let _lock = ENV_LOCK.lock().await;
+    // No ENV_LOCK (ADR-0002). This connects to https://127.0.0.1, a numeric
+    // address, so no libc `getaddrinfo` runs and nothing here reads the
+    // environment outside std's own env lock. Config is selected by explicit
+    // --config; no XDG_CONFIG_HOME mutation happens here. Keep the cert SAN,
+    // the listener bind address and this URL on the same numeric address: a
+    // hostname in any of the three reintroduces the resolver, and with it the
+    // unenforced lock pairing ADR-0002 removed.
     let tmp = tempfile::TempDir::new().unwrap();
     let config_path = tmp.path().join("bzr").join("config.toml");
 
@@ -765,7 +757,7 @@ struct SelfSignedBugzillaServer {
 }
 
 fn spawn_self_signed_bugzilla_server(expected_requests: usize) -> SelfSignedBugzillaServer {
-    let params = rcgen::CertificateParams::new(vec!["localhost".to_owned()]).unwrap();
+    let params = rcgen::CertificateParams::new(vec!["127.0.0.1".to_owned()]).unwrap();
     let key_pair = rcgen::KeyPair::generate().unwrap();
     let cert = params.self_signed(&key_pair).unwrap();
     let cert_der_bytes = cert.der().to_vec();
@@ -812,7 +804,7 @@ fn spawn_self_signed_bugzilla_server(expected_requests: usize) -> SelfSignedBugz
     });
 
     SelfSignedBugzillaServer {
-        url: format!("https://localhost:{port}"),
+        url: format!("https://127.0.0.1:{port}"),
         pin_sha256,
         ca_pem,
         handle,
