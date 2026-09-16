@@ -125,9 +125,29 @@ fn build_editor_template(
     buf
 }
 
-fn resolve_description(
+/// Resolve the bug description from `--description` / `--description-file`,
+/// falling back to piped input read from `reader` when stdin is not a
+/// terminal. `Ok(None)` means no source supplied at an interactive terminal,
+/// which is what activates the `$EDITOR` flow.
+///
+/// The terminal check and the reader are parameters rather than ambient
+/// process state so the flag-omitted stdin fallback can be driven from a unit
+/// test without reading the test harness's own stdin. A harness that supplies
+/// an open pipe never reaches EOF, so an ambient read blocks forever with no
+/// timeout and no diagnostic (#817). [`resolve_description`] supplies the real
+/// process values, mirroring the `should_prompt` / `read_yes_no` split in
+/// `crate::commands::runtime::interaction::confirm`.
+///
+/// The seam covers that fallback only. `--description -` and
+/// `--description-file -` resolve to `BodySource::Stdin` and deliberately read
+/// process stdin inside `materialize_body_source`, ignoring `reader`, so those
+/// two arms must not be driven from a unit test whose harness stdin may be an
+/// open pipe.
+fn resolve_description_from(
     description: Option<&str>,
     description_file: Option<&std::path::Path>,
+    stdin_is_tty: bool,
+    reader: &mut impl std::io::Read,
 ) -> Result<Option<String>> {
     let explicit = crate::commands::runtime::shared::materialize_body_source(
         crate::commands::runtime::shared::classify_body_source(
@@ -141,8 +161,9 @@ fn resolve_description(
     if explicit.is_some() {
         return Ok(explicit);
     }
-    if !std::io::stdin().is_terminal() {
-        let buf = crate::commands::runtime::shared::read_stdin_to_string(
+    if !stdin_is_tty {
+        let buf = crate::commands::runtime::shared::read_to_string_from(
+            reader,
             "read bug description from stdin",
         )?;
         if buf.trim().is_empty() {
@@ -153,6 +174,23 @@ fn resolve_description(
         return Ok(Some(buf));
     }
     Ok(None)
+}
+
+/// Wire the real process stdin into [`resolve_description_from`]. `Stdin`
+/// itself is passed rather than a `StdinLock`, so the lock is taken inside
+/// the read and only on the branch that reads -- the same single
+/// `lock().read_to_string(..)` call the shared `read_stdin_to_string` helper
+/// makes.
+fn resolve_description(
+    description: Option<&str>,
+    description_file: Option<&std::path::Path>,
+) -> Result<Option<String>> {
+    resolve_description_from(
+        description,
+        description_file,
+        std::io::stdin().is_terminal(),
+        &mut std::io::stdin(),
+    )
 }
 
 /// Validate `--comment-tag` values against the resolved description.

@@ -9,7 +9,7 @@ mod merge;
 pub(crate) use body_source::{
     classify_body_source, materialize_body_source, materialize_comment_body,
     materialize_optional_comment_body, read_file_with_context, read_stdin_to_string,
-    CommentBodyRequirement,
+    read_to_string_from, CommentBodyRequirement,
 };
 pub(crate) use capability::{
     require_server_capability, EXTERNAL_BUGS_EXTENSION, RED_HAT_EXTENSION,
@@ -21,7 +21,7 @@ pub(crate) use field_catalogue::{
 pub(crate) use merge::{merge_set, merge_vec};
 
 #[cfg(test)]
-use body_source::{read_to_string_from, BodySource};
+use body_source::BodySource;
 
 #[cfg(test)]
 #[path = "mod_tests.rs"]

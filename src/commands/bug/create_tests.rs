@@ -948,157 +948,91 @@ fn install_fake_editor() -> std::path::PathBuf {
     script
 }
 
-fn editor_action_no_summary_no_description() -> BugAction {
-    BugAction::Create(crate::cli::CreateArgs {
-        from_json: None,
-        template: None,
-        product: Some("TestProduct".into()),
-        component: Some("General".into()),
-        summary: None,
-        version: None,
-        description: None,
-        description_file: None,
-        priority: None,
-        severity: None,
-        assignee: None,
-        op_sys: None,
-        platform: None,
-        blocks: vec![],
-        depends_on: vec![],
-        with_comment: None,
-        with_comment_file: None,
-        comment_tag: vec![],
-        with_attachment: vec![],
-        attachment_description: vec![],
-        create_fields: crate::cli::CreateFieldArgs::default(),
-    })
-}
-
-#[tokio::test]
-async fn bug_create_editor_flow_resolves_via_editor_when_stdin_is_tty() {
-    use std::io::IsTerminal;
-
-    if !std::io::stdin().is_terminal() {
-        return;
-    }
-
-    let (mock, _tmp, config_path) = setup_isolated_env().await;
-
-    // ADR-0002 retains ENV_LOCK for tests that mutate process-global
-    // environment state the command under test must observe. Config selection
-    // is on an explicit path, but `run_editor_flow` reads `EDITOR` through
-    // `std::env::var` (src/commands/runtime/interaction/editor.rs), so the
-    // mutation below is still process-global.
-    let _lock = crate::ENV_LOCK.lock().await;
-
-    let script = install_fake_editor();
-    let prev = std::env::var("EDITOR").ok();
-    // SAFETY: this test holds ENV_LOCK (acquired above) for its whole body,
-    // serializing this mutation against every other ENV_LOCK holder.
-    unsafe { std::env::set_var("EDITOR", &script) };
-
-    Mock::given(method("POST"))
-        .and(path("/rest/bug"))
-        .and(body_string_contains("Editor summary"))
-        .and(body_string_contains("Editor description"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 33})))
-        .expect(1)
-        .mount(&mock)
-        .await;
-
-    let mut __io11 = crate::test_helpers::CapturedIo::new();
-
-    let result = crate::commands::bug::execute(
-        &editor_action_no_summary_no_description(),
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_config_path_override(Some(config_path)),
-        &mut __io11.writers(),
-    )
-    .await;
-
-    let _output = __io11.out_str().to_string();
-
-    // SAFETY: still under the ENV_LOCK guard acquired at the top of this test.
-    unsafe {
-        if let Some(p) = prev {
-            std::env::set_var("EDITOR", p);
-        } else {
-            std::env::remove_var("EDITOR");
-        }
-    }
-    let _ = std::fs::remove_file(&script);
-
-    assert!(result.is_ok(), "editor flow should succeed: {result:?}");
-}
-
-/// Deterministic CI counterpart: under cargo test, stdin is piped
-/// (not a TTY), so the editor branch must NOT fire even with an
-/// `$EDITOR` set. The empty piped stdin should hit `InputValidation`
-/// before any HTTP call.
-#[tokio::test]
-async fn bug_create_editor_branch_unreachable_when_stdin_piped() {
-    use std::io::IsTerminal;
-
-    if std::io::stdin().is_terminal() {
-        return;
-    }
-
-    let (mock, _tmp, config_path) = setup_isolated_env().await;
-
-    // ADR-0002 retains ENV_LOCK for tests that mutate process-global
-    // environment state the command under test must observe. Config selection
-    // is on an explicit path, but `run_editor_flow` reads `EDITOR` through
-    // `std::env::var` (src/commands/runtime/interaction/editor.rs), so the
-    // mutation below is still process-global.
-    let _lock = crate::ENV_LOCK.lock().await;
-
-    let script = install_fake_editor();
-    let prev = std::env::var("EDITOR").ok();
-    // SAFETY: this test holds ENV_LOCK (acquired above) for its whole body,
-    // serializing this mutation against every other ENV_LOCK holder.
-    unsafe { std::env::set_var("EDITOR", &script) };
-
-    // No HTTP call expected — empty piped stdin must short-circuit
-    // before the editor branch and before any client request.
-    Mock::given(method("POST"))
-        .and(path("/rest/bug"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 0})))
-        .expect(0)
-        .mount(&mock)
-        .await;
-
-    let mut __io12 = crate::test_helpers::CapturedIo::new();
-
-    let result = crate::commands::bug::execute(
-        &editor_action_no_summary_no_description(),
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
-            .with_config_path_override(Some(config_path)),
-        &mut __io12.writers(),
-    )
-    .await;
-
-    let _output = __io12.out_str().to_string();
-
-    // SAFETY: still under the ENV_LOCK guard acquired at the top of this test.
-    unsafe {
-        if let Some(p) = prev {
-            std::env::set_var("EDITOR", p);
-        } else {
-            std::env::remove_var("EDITOR");
-        }
-    }
-    let _ = std::fs::remove_file(&script);
-
-    let err = result.unwrap_err();
+/// At an interactive terminal with no `--description` / `--description-file`,
+/// description resolution yields `None`, which is what makes
+/// `editor_flow_active` true in `handle`. Driving `resolve_description_from`
+/// directly asserts the TTY branch in every environment; the execute-level
+/// version of this test could only run at a real terminal and so, under CI,
+/// `/dev/null`, or any pipe, returned at its guard having asserted nothing
+/// (#817). `run_editor_flow` itself and the buffer it renders stay covered by
+/// `run_editor_flow_returns_parsed_editor_output` and the
+/// `build_editor_template_*` tests.
+///
+/// What the retirement does leave uncovered is `handle`'s wiring around them --
+/// `editor_flow_active = resolved_description.is_none()`, the call into
+/// `run_editor_flow`, and the assignment of the parsed summary and description.
+/// The retired test only ever entered that branch at a real terminal, so CI and
+/// every piped run already missed it; the residue is the local-at-a-TTY case.
+/// Closing it needs `handle` to take the same `(is_tty, reader)` parameters,
+/// which is the `CommandContext` seam issue #817 deferred by name -- that
+/// deferral owns this gap.
+#[test]
+fn resolve_description_at_a_tty_selects_the_editor_flow() {
+    let mut reader = std::io::Cursor::new(Vec::new());
+    let resolved = super::resolve_description_from(None, None, true, &mut reader).unwrap();
     assert!(
-        matches!(&err, BzrError::InputValidation { message: m, .. } if m.contains("piped stdin")),
-        "expected InputValidation about empty piped stdin, got {err:?}"
+        resolved.is_none(),
+        "no explicit source at a TTY must defer to the editor flow, got {resolved:?}"
     );
 }
 
+/// Piped stdin that carries nothing but whitespace is a usage error, not an
+/// empty description, and it is raised before `handle` builds a client -- so
+/// no HTTP call can occur. The reader is supplied, so this no longer depends
+/// on the test harness's own stdin reaching EOF (#817).
+#[test]
+fn resolve_description_rejects_an_empty_pipe() {
+    for input in ["", "   \n\t\n"] {
+        let mut reader = std::io::Cursor::new(input.as_bytes().to_vec());
+        let err = super::resolve_description_from(None, None, false, &mut reader).unwrap_err();
+        assert!(
+            matches!(&err, BzrError::InputValidation { message: m, .. } if m.contains("piped stdin")),
+            "expected InputValidation about empty piped stdin for {input:?}, got {err:?}"
+        );
+    }
+}
+
+/// A non-empty pipe is the description, verbatim, and it suppresses the
+/// editor flow.
+#[test]
+fn resolve_description_reads_a_non_empty_pipe() {
+    let mut reader = std::io::Cursor::new(b"piped description\n".to_vec());
+    let resolved = super::resolve_description_from(None, None, false, &mut reader).unwrap();
+    assert_eq!(resolved.as_deref(), Some("piped description\n"));
+}
+
+/// An explicit `--description` wins over stdin without the reader being
+/// touched at all: the explicit source short-circuits before the terminal
+/// check, so a blocked or unreadable stdin cannot affect it.
+#[test]
+fn resolve_description_prefers_an_explicit_flag_over_the_pipe() {
+    let mut reader = std::io::Cursor::new(b"from the pipe".to_vec());
+    let resolved =
+        super::resolve_description_from(Some("from the flag"), None, false, &mut reader).unwrap();
+    assert_eq!(resolved.as_deref(), Some("from the flag"));
+    assert_eq!(
+        reader.position(),
+        0,
+        "the explicit flag must short-circuit before stdin is read"
+    );
+}
+
+/// An explicit `--description` beats a template that carries a `description`
+/// body: the request must contain the explicit text and nothing from the
+/// template, whose body only ever pre-fills the `$EDITOR` buffer.
+///
+/// This test was previously named for the template *fallback* property and
+/// asserted it by supplying no description source at all, expecting the
+/// empty-stdin `InputValidation` -- which made it read the harness's ambient
+/// stdin and block forever on an unclosed pipe (#817). That assertion never
+/// reached the fallback either, because the error fires inside
+/// `resolve_description` before `handle` consults the template, so the name
+/// promised more than any version of the test checked. The empty-pipe branch
+/// is now covered directly by `resolve_description_rejects_an_empty_pipe`, and
+/// the name here states what this test actually proves.
 #[tokio::test]
-async fn bug_create_template_description_does_not_fall_back_outside_editor_flow() {
-    let (_mock, _tmp, config_path) = setup_isolated_env().await;
+async fn bug_create_explicit_description_wins_over_template_body() {
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     // Pre-populate a template that has a description body.
     let save = TemplateAction::Save {
@@ -1121,10 +1055,17 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
     let _ = __io13.out_str().to_string();
     assert!(result.is_ok(), "template save failed: {result:?}");
 
-    // Invoke bug create with the template, no other description source,
-    // under cargo's non-TTY stdin: the template description must NOT
-    // be used as a fallback. The empty-stdin branch fires first and
-    // returns InputValidation.
+    // The request must carry the explicit description and nothing from the
+    // template body. A fallback that merged the template description in would
+    // fail the `body_string_contains` matcher and leave `expect(1)` unmet.
+    Mock::given(method("POST"))
+        .and(path("/rest/bug"))
+        .and(body_string_contains("\"description\":\"explicit body\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": 41})))
+        .expect(1)
+        .mount(&mock)
+        .await;
+
     let action = BugAction::Create(crate::cli::CreateArgs {
         from_json: None,
         template: Some("tpl-with-desc".into()),
@@ -1132,7 +1073,7 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
         component: None,
         summary: Some("Bug from template".into()),
         version: None,
-        description: None,
+        description: Some("explicit body".into()),
         description_file: None,
         priority: None,
         severity: None,
@@ -1157,11 +1098,18 @@ async fn bug_create_template_description_does_not_fall_back_outside_editor_flow(
     )
     .await;
     let _output = __io14.out_str().to_string();
-    let err = result.unwrap_err();
     assert!(
-        matches!(&err, BzrError::InputValidation { .. }),
-        "expected InputValidation (template body should not auto-fill outside the editor flow), got {err:?}"
+        result.is_ok(),
+        "explicit --description alongside a template must succeed: {result:?}"
     );
+
+    for request in mock.received_requests().await.unwrap() {
+        let body = String::from_utf8_lossy(&request.body);
+        assert!(
+            !body.contains("template body"),
+            "the template description must not reach the wire, got {body}"
+        );
+    }
 }
 
 #[test]
