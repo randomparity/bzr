@@ -1103,7 +1103,7 @@ async fn bug_create_explicit_description_wins_over_template_body() {
         "explicit --description alongside a template must succeed: {result:?}"
     );
 
-    for request in mock.received_requests().await.unwrap_or_default() {
+    for request in mock.received_requests().await.unwrap() {
         let body = String::from_utf8_lossy(&request.body);
         assert!(
             !body.contains("template body"),
