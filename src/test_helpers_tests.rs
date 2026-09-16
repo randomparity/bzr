@@ -193,26 +193,35 @@ async fn run_config_action_json_at_reports_the_given_path() {
 async fn seed_keyring_secret_at_keys_the_shared_store_by_the_given_service() {
     crate::credentials::keyring::install_test_store();
     let (_tmp, config_path) = setup_empty_isolated_env();
-    seed_inline_server_at(&config_path, "keepme", "https://alpha.example", "key-a").await;
+    // The server name is unique to this test on purpose: the store is
+    // process-global and never reset, so a name another test also seeds (the
+    // `"keepme"` the helper doc names) would give the negative assertion below
+    // a concurrent writer.
+    let server = "seed-at-819";
+    seed_inline_server_at(&config_path, server, "https://alpha.example", "key-a").await;
 
-    seed_keyring_secret_at(&config_path, "keepme", "secret-a", "bzr-test-819").await;
+    seed_keyring_secret_at(&config_path, server, "secret-a", "bzr-test-819").await;
 
     let config = load_config_at(&config_path);
-    let keyring_ref = config.servers["keepme"].api_key_keyring.as_ref().unwrap();
+    let keyring_ref = config.servers[server].api_key_keyring.as_ref().unwrap();
     assert_eq!(keyring_ref.service.as_deref(), Some("bzr-test-819"));
     assert_eq!(
         keyring_ref.account, None,
         "the account still defaults to the server name"
     );
     assert_eq!(
-        crate::credentials::keyring::retrieve("bzr-test-819", "keepme").unwrap(),
+        crate::credentials::keyring::retrieve("bzr-test-819", server).unwrap(),
         "secret-a"
     );
     assert!(
-        crate::credentials::keyring::retrieve("bzr", "keepme").is_err(),
+        crate::credentials::keyring::retrieve("bzr", server).is_err(),
         "the per-test service is what keeps the never-reset STORE map disjoint; \
          a default-'bzr' entry here would mean two tests can still collide"
     );
+    // Read `BZR_KEYRING_TEST_SECRET` under the lock that serializes its
+    // writers: `seed_keyring_secret_at` has already released it, and every
+    // other seeding call site holds it across a whole `config::execute`.
+    let _lock = crate::ENV_LOCK.lock().await;
     assert!(
         std::env::var("BZR_KEYRING_TEST_SECRET").is_err(),
         "the helper must leave no process-global residue behind"
