@@ -39,7 +39,7 @@ async fn bug_list_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&["bzr", "bug", "list"]).await;
+    let (result, output) = dispatch_cli_with_output(None, &["bzr", "bug", "list"]).await;
     assert!(result.is_ok(), "bug list should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["id"], 1);
@@ -64,15 +64,18 @@ async fn bug_list_changed_since_canonicalizes_bare_date_on_wire() {
         .mount(&mock)
         .await;
 
-    let (result, _output) = dispatch_cli_with_output(&[
-        "bzr",
-        "bug",
-        "list",
-        "--product",
-        "Firefox",
-        "--changed-since",
-        "2026-04-01",
-    ])
+    let (result, _output) = dispatch_cli_with_output(
+        None,
+        &[
+            "bzr",
+            "bug",
+            "list",
+            "--product",
+            "Firefox",
+            "--changed-since",
+            "2026-04-01",
+        ],
+    )
     .await;
     assert!(
         result.is_ok(),
@@ -97,7 +100,7 @@ async fn bug_view_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&["bzr", "bug", "view", "42"]).await;
+    let (result, output) = dispatch_cli_with_output(None, &["bzr", "bug", "view", "42"]).await;
     assert!(result.is_ok(), "bug view should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 42);
@@ -132,7 +135,7 @@ async fn bug_view_integration_cc_objects() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&["bzr", "bug", "view", "42"]).await;
+    let (result, output) = dispatch_cli_with_output(None, &["bzr", "bug", "view", "42"]).await;
     assert!(
         result.is_ok(),
         "RH-shaped bug view should succeed: {result:?}"
@@ -160,7 +163,7 @@ async fn bug_search_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&["bzr", "bug", "search", "crash"]).await;
+    let (result, output) = dispatch_cli_with_output(None, &["bzr", "bug", "search", "crash"]).await;
     assert!(result.is_ok(), "bug search should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["id"], 99);
@@ -178,21 +181,24 @@ async fn bug_create_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&[
-        "bzr",
-        "bug",
-        "create",
-        "--product",
-        "TestProduct",
-        "--component",
-        "General",
-        "--summary",
-        "New bug",
-        "--version",
-        "unspecified",
-        "--description",
-        "body",
-    ])
+    let (result, output) = dispatch_cli_with_output(
+        None,
+        &[
+            "bzr",
+            "bug",
+            "create",
+            "--product",
+            "TestProduct",
+            "--component",
+            "General",
+            "--summary",
+            "New bug",
+            "--version",
+            "unspecified",
+            "--description",
+            "body",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "bug create should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
@@ -220,7 +226,7 @@ async fn comment_list_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&["bzr", "comment", "list", "42"]).await;
+    let (result, output) = dispatch_cli_with_output(None, &["bzr", "comment", "list", "42"]).await;
     assert!(result.is_ok(), "comment list should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["id"], 1);
@@ -244,7 +250,11 @@ async fn comment_add_body_file_posts_file_contents() {
     std::fs::write(&file, "comment from a file\n").unwrap();
 
     let file_arg = file.to_str().unwrap();
-    let result = dispatch_cli(&["bzr", "comment", "add", "7", "--body-file", file_arg]).await;
+    let result = dispatch_cli(
+        None,
+        &["bzr", "comment", "add", "7", "--body-file", file_arg],
+    )
+    .await;
     assert!(
         result.is_ok(),
         "comment add --body-file should succeed: {result:?}"
@@ -287,7 +297,7 @@ async fn whoami_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&["bzr", "whoami"]).await;
+    let (result, output) = dispatch_cli_with_output(None, &["bzr", "whoami"]).await;
     assert!(result.is_ok(), "whoami should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "admin@example.com");
@@ -318,7 +328,7 @@ async fn product_list_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&["bzr", "product", "list"]).await;
+    let (result, output) = dispatch_cli_with_output(None, &["bzr", "product", "list"]).await;
     assert!(result.is_ok(), "product list should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["name"], "Firefox");
@@ -347,7 +357,7 @@ async fn server_info_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&["bzr", "server", "info"]).await;
+    let (result, output) = dispatch_cli_with_output(None, &["bzr", "server", "info"]).await;
     assert!(result.is_ok(), "server info should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["version"], "5.1.2");
@@ -374,7 +384,8 @@ async fn field_list_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&["bzr", "field", "list", "status"]).await;
+    let (result, output) =
+        dispatch_cli_with_output(None, &["bzr", "field", "list", "status"]).await;
     assert!(result.is_ok(), "field list should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["name"], "NEW");
@@ -402,7 +413,7 @@ async fn classification_view_integration() {
         .await;
 
     let (result, output) =
-        dispatch_cli_with_output(&["bzr", "classification", "view", "Unclassified"]).await;
+        dispatch_cli_with_output(None, &["bzr", "classification", "view", "Unclassified"]).await;
     assert!(
         result.is_ok(),
         "classification view should succeed: {result:?}"
@@ -432,7 +443,8 @@ async fn user_search_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&["bzr", "user", "search", "alice"]).await;
+    let (result, output) =
+        dispatch_cli_with_output(None, &["bzr", "user", "search", "alice"]).await;
     assert!(result.is_ok(), "user search should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["name"], "alice@example.com");
@@ -461,7 +473,7 @@ async fn group_view_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&["bzr", "group", "view", "admin"]).await;
+    let (result, output) = dispatch_cli_with_output(None, &["bzr", "group", "view", "admin"]).await;
     assert!(result.is_ok(), "group view should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "admin");
@@ -481,19 +493,22 @@ async fn component_create_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&[
-        "bzr",
-        "component",
-        "create",
-        "--product",
-        "TestProduct",
-        "--name",
-        "Backend",
-        "--description",
-        "Backend component",
-        "--default-assignee",
-        "dev@test.com",
-    ])
+    let (result, output) = dispatch_cli_with_output(
+        None,
+        &[
+            "bzr",
+            "component",
+            "create",
+            "--product",
+            "TestProduct",
+            "--name",
+            "Backend",
+            "--description",
+            "Backend component",
+            "--default-assignee",
+            "dev@test.com",
+        ],
+    )
     .await;
     assert!(
         result.is_ok(),
@@ -527,7 +542,8 @@ async fn attachment_list_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&["bzr", "attachment", "list", "42"]).await;
+    let (result, output) =
+        dispatch_cli_with_output(None, &["bzr", "attachment", "list", "42"]).await;
     assert!(result.is_ok(), "attachment list should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["file_name"], "patch.diff");
@@ -552,7 +568,7 @@ api_key = "key-1234567890"
     );
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
-    let result = dispatch_cli(&["bzr", "config", "show"]).await;
+    let result = dispatch_cli(None, &["bzr", "config", "show"]).await;
     assert!(result.is_ok(), "config show should succeed: {result:?}");
 }
 
@@ -562,7 +578,7 @@ api_key = "key-1234567890"
 async fn command_with_unknown_server_returns_error() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let result = dispatch_cli(&["bzr", "--server", "nonexistent", "bug", "list"]).await;
+    let result = dispatch_cli(None, &["bzr", "--server", "nonexistent", "bug", "list"]).await;
     assert!(result.is_err(), "should fail with unknown server");
 }
 
@@ -583,7 +599,7 @@ async fn api_error_propagates() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&["bzr", "bug", "view", "99999"]).await;
+    let result = dispatch_cli(None, &["bzr", "bug", "view", "99999"]).await;
     assert!(result.is_err(), "should propagate API error");
 }
 
@@ -621,7 +637,7 @@ async fn bug_history_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&["bzr", "bug", "history", "42"]).await;
+    let (result, output) = dispatch_cli_with_output(None, &["bzr", "bug", "history", "42"]).await;
     assert!(result.is_ok(), "bug history should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     // Flattened change records (ADR 0008): one record per changed field.
@@ -656,26 +672,29 @@ async fn bug_update_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&[
-        "bzr",
-        "bug",
-        "update",
-        "42",
-        "--status",
-        "RESOLVED",
-        "--resolution",
-        "FIXED",
-        "--keywords-add",
-        "fix-needed",
-        "--keywords-remove",
-        "wontfix",
-        "--cc-add",
-        "alice@example.com",
-        "--groups-remove",
-        "secret",
-        "--see-also-add",
-        "https://example.com/issue/1",
-    ])
+    let (result, output) = dispatch_cli_with_output(
+        None,
+        &[
+            "bzr",
+            "bug",
+            "update",
+            "42",
+            "--status",
+            "RESOLVED",
+            "--resolution",
+            "FIXED",
+            "--keywords-add",
+            "fix-needed",
+            "--keywords-remove",
+            "wontfix",
+            "--cc-add",
+            "alice@example.com",
+            "--groups-remove",
+            "secret",
+            "--see-also-add",
+            "https://example.com/issue/1",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "bug update should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
@@ -709,28 +728,31 @@ async fn bug_update_scalar_parity_fields_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr",
-        "bug",
-        "update",
-        "42",
-        "--alias",
-        "short-name",
-        "--deadline",
-        "2026-12-31",
-        "--estimated-time",
-        "3.5",
-        "--remaining-time",
-        "1.25",
-        "--work-time",
-        "0.5",
-        "--reset-assigned-to",
-        "--reset-qa-contact",
-        "--url",
-        "https://example.com/repro",
-        "--target-milestone",
-        "5.0",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "bug",
+            "update",
+            "42",
+            "--alias",
+            "short-name",
+            "--deadline",
+            "2026-12-31",
+            "--estimated-time",
+            "3.5",
+            "--remaining-time",
+            "1.25",
+            "--work-time",
+            "0.5",
+            "--reset-assigned-to",
+            "--reset-qa-contact",
+            "--url",
+            "https://example.com/repro",
+            "--target-milestone",
+            "5.0",
+        ],
+    )
     .await;
 
     assert!(result.is_ok(), "bug update should succeed: {result:?}");
@@ -759,19 +781,22 @@ async fn bug_update_with_comment_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr",
-        "bug",
-        "update",
-        "42",
-        "--status",
-        "RESOLVED",
-        "--resolution",
-        "FIXED",
-        "--comment",
-        "see #other",
-        "--comment-private",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "bug",
+            "update",
+            "42",
+            "--status",
+            "RESOLVED",
+            "--resolution",
+            "FIXED",
+            "--comment",
+            "see #other",
+            "--comment-private",
+        ],
+    )
     .await;
     assert!(
         result.is_ok(),
@@ -792,14 +817,17 @@ async fn comment_add_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&[
-        "bzr",
-        "comment",
-        "add",
-        "42",
-        "--body",
-        "This is a test comment",
-    ])
+    let (result, output) = dispatch_cli_with_output(
+        None,
+        &[
+            "bzr",
+            "comment",
+            "add",
+            "42",
+            "--body",
+            "This is a test comment",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "comment add should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
@@ -819,7 +847,7 @@ async fn comment_tag_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&["bzr", "comment", "tag", "100", "--add", "spam"]).await;
+    let result = dispatch_cli(None, &["bzr", "comment", "tag", "100", "--add", "spam"]).await;
     assert!(result.is_ok(), "comment tag should succeed: {result:?}");
 }
 
@@ -836,7 +864,7 @@ async fn comment_search_tags_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&["bzr", "comment", "search-tags", "spam"]).await;
+    let result = dispatch_cli(None, &["bzr", "comment", "search-tags", "spam"]).await;
     assert!(
         result.is_ok(),
         "comment search-tags should succeed: {result:?}"
@@ -870,7 +898,11 @@ async fn attachment_download_integration() {
 
     let out_path = tmp.path().join("downloaded.txt");
     let out_arg = out_path.to_str().unwrap();
-    let result = dispatch_cli(&["bzr", "attachment", "download", "99", "--out", out_arg]).await;
+    let result = dispatch_cli(
+        None,
+        &["bzr", "attachment", "download", "99", "--out", out_arg],
+    )
+    .await;
     assert!(
         result.is_ok(),
         "attachment download should succeed: {result:?}"
@@ -934,15 +966,18 @@ async fn attachment_download_bulk_per_bug_integration() {
     }
 
     let out_dir = tmp.path().to_str().unwrap();
-    let result = dispatch_cli(&[
-        "bzr",
-        "attachment",
-        "download",
-        "--bug",
-        "77",
-        "--out-dir",
-        out_dir,
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "attachment",
+            "download",
+            "--bug",
+            "77",
+            "--out-dir",
+            out_dir,
+        ],
+    )
     .await;
     assert!(result.is_ok(), "expected ok: {result:?}");
 
@@ -976,17 +1011,20 @@ async fn attachment_upload_integration() {
         .await;
 
     let file_arg = upload_file.to_str().unwrap();
-    let result = dispatch_cli(&[
-        "bzr",
-        "attachment",
-        "upload",
-        "42",
-        file_arg,
-        "--summary",
-        "Test upload",
-        "--content-type",
-        "text/plain",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "attachment",
+            "upload",
+            "42",
+            file_arg,
+            "--summary",
+            "Test upload",
+            "--content-type",
+            "text/plain",
+        ],
+    )
     .await;
     assert!(
         result.is_ok(),
@@ -1013,19 +1051,22 @@ async fn attachment_upload_with_comment_integration() {
         .await;
 
     let file_arg = upload_file.to_str().unwrap();
-    let result = dispatch_cli(&[
-        "bzr",
-        "attachment",
-        "upload",
-        "42",
-        file_arg,
-        "--summary",
-        "Test upload",
-        "--content-type",
-        "text/plain",
-        "--comment",
-        "see #6789 for context",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "attachment",
+            "upload",
+            "42",
+            file_arg,
+            "--summary",
+            "Test upload",
+            "--content-type",
+            "text/plain",
+            "--comment",
+            "see #6789 for context",
+        ],
+    )
     .await;
     assert!(
         result.is_ok(),
@@ -1051,16 +1092,19 @@ async fn attachment_upload_with_is_patch_integration() {
         .await;
 
     let file_arg = upload_file.to_str().unwrap();
-    let result = dispatch_cli(&[
-        "bzr",
-        "attachment",
-        "upload",
-        "42",
-        file_arg,
-        "--summary",
-        "Test patch",
-        "--patch",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "attachment",
+            "upload",
+            "42",
+            file_arg,
+            "--summary",
+            "Test patch",
+            "--patch",
+        ],
+    )
     .await;
     assert!(
         result.is_ok(),
@@ -1109,20 +1153,23 @@ async fn attachment_upload_with_comment_private_integration() {
         .await;
 
     let file_arg = upload_file.to_str().unwrap();
-    let result = dispatch_cli(&[
-        "bzr",
-        "attachment",
-        "upload",
-        "42",
-        file_arg,
-        "--summary",
-        "test",
-        "--content-type",
-        "text/plain",
-        "--comment",
-        "sensitive",
-        "--comment-private",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "attachment",
+            "upload",
+            "42",
+            file_arg,
+            "--summary",
+            "test",
+            "--content-type",
+            "text/plain",
+            "--comment",
+            "sensitive",
+            "--comment-private",
+        ],
+    )
     .await;
     assert!(
         result.is_ok(),
@@ -1155,7 +1202,8 @@ async fn attachment_list_returns_is_patch_field_integration() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&["bzr", "attachment", "list", "42"]).await;
+    let (result, output) =
+        dispatch_cli_with_output(None, &["bzr", "attachment", "list", "42"]).await;
     assert!(result.is_ok(), "list should succeed: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed[0]["is_patch"], true);
@@ -1176,14 +1224,17 @@ async fn attachment_update_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr",
-        "attachment",
-        "update",
-        "99",
-        "--summary",
-        "Updated summary",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "attachment",
+            "update",
+            "99",
+            "--summary",
+            "Updated summary",
+        ],
+    )
     .await;
     assert!(
         result.is_ok(),
@@ -1209,7 +1260,7 @@ async fn product_view_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&["bzr", "product", "view", "Firefox"]).await;
+    let result = dispatch_cli(None, &["bzr", "product", "view", "Firefox"]).await;
     assert!(result.is_ok(), "product view should succeed: {result:?}");
 }
 
@@ -1226,19 +1277,22 @@ async fn product_create_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr",
-        "product",
-        "create",
-        "--name",
-        "NewProduct",
-        "--description",
-        "A new product",
-        "--version",
-        "1.0",
-        "--is-open",
-        "true",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "product",
+            "create",
+            "--name",
+            "NewProduct",
+            "--description",
+            "A new product",
+            "--version",
+            "1.0",
+            "--is-open",
+            "true",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "product create should succeed: {result:?}");
 }
@@ -1258,14 +1312,17 @@ async fn product_update_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr",
-        "product",
-        "update",
-        "Firefox",
-        "--description",
-        "Updated description",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "product",
+            "update",
+            "Firefox",
+            "--description",
+            "Updated description",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "product update should succeed: {result:?}");
 }
@@ -1283,15 +1340,18 @@ async fn user_create_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr",
-        "user",
-        "create",
-        "--email",
-        "new@example.com",
-        "--full-name",
-        "New User",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "user",
+            "create",
+            "--email",
+            "new@example.com",
+            "--full-name",
+            "New User",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "user create should succeed: {result:?}");
 }
@@ -1311,14 +1371,17 @@ async fn user_update_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr",
-        "user",
-        "update",
-        "alice@example.com",
-        "--real-name",
-        "Alice Updated",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "user",
+            "update",
+            "alice@example.com",
+            "--real-name",
+            "Alice Updated",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "user update should succeed: {result:?}");
 }
@@ -1336,17 +1399,20 @@ async fn group_create_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr",
-        "group",
-        "create",
-        "--name",
-        "testers",
-        "--description",
-        "Tester group",
-        "--is-active",
-        "true",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "group",
+            "create",
+            "--name",
+            "testers",
+            "--description",
+            "Tester group",
+            "--is-active",
+            "true",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "group create should succeed: {result:?}");
 }
@@ -1366,14 +1432,17 @@ async fn group_update_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr",
-        "group",
-        "update",
-        "testers",
-        "--description",
-        "Updated testers",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "group",
+            "update",
+            "testers",
+            "--description",
+            "Updated testers",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "group update should succeed: {result:?}");
 }
@@ -1393,15 +1462,18 @@ async fn group_add_user_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr",
-        "group",
-        "add-user",
-        "--group",
-        "admin",
-        "--user",
-        "alice@example.com",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "group",
+            "add-user",
+            "--group",
+            "admin",
+            "--user",
+            "alice@example.com",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "group add-user should succeed: {result:?}");
 }
@@ -1421,15 +1493,18 @@ async fn group_remove_user_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr",
-        "group",
-        "remove-user",
-        "--group",
-        "admin",
-        "--user",
-        "alice@example.com",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "group",
+            "remove-user",
+            "--group",
+            "admin",
+            "--user",
+            "alice@example.com",
+        ],
+    )
     .await;
     assert!(
         result.is_ok(),
@@ -1458,7 +1533,7 @@ async fn group_list_users_integration() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&["bzr", "group", "list-users", "--group", "admin"]).await;
+    let result = dispatch_cli(None, &["bzr", "group", "list-users", "--group", "admin"]).await;
     assert!(
         result.is_ok(),
         "group list-users should succeed: {result:?}"
@@ -1478,16 +1553,19 @@ async fn config_set_server_integration() {
     );
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
-    let result = dispatch_cli(&[
-        "bzr",
-        "config",
-        "set-server",
-        "staging",
-        "--url",
-        "https://staging.bugzilla.example",
-        "--api-key",
-        "staging-key-abc",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "config",
+            "set-server",
+            "staging",
+            "--url",
+            "https://staging.bugzilla.example",
+            "--api-key",
+            "staging-key-abc",
+        ],
+    )
     .await;
     assert!(
         result.is_ok(),
@@ -1506,7 +1584,7 @@ async fn config_set_default_integration() {
     );
     unsafe { std::env::set_var("XDG_CONFIG_HOME", tmp.path()) };
 
-    let result = dispatch_cli(&["bzr", "config", "set-default", "staging"]).await;
+    let result = dispatch_cli(None, &["bzr", "config", "set-default", "staging"]).await;
     assert!(
         result.is_ok(),
         "config set-default should succeed: {result:?}"
@@ -1518,46 +1596,45 @@ async fn config_set_default_integration() {
 
 /// Parse CLI args and dispatch to the matching command, exercising the same
 /// path as `main.rs::run()`.
-async fn dispatch_cli(args: &[&str]) -> bzr::error::Result<()> {
-    let cli = bzr::cli::Cli::try_parse_from(args)
-        .map_err(|e| bzr::error::BzrError::input(e.to_string()))?;
-
-    let format = if cli.json {
-        bzr::types::OutputFormat::Json
-    } else {
-        cli.output.unwrap_or(bzr::types::OutputFormat::Json)
-    };
-
-    let mut io = bzr::test_helpers::CapturedIo::new();
-    bzr::dispatch(&cli, format, &mut io.writers()).await
+///
+/// `config_path` is the throwaway config this invocation reads and writes. It
+/// is injected as the `--config` global flag, which `Config::path_at` honours
+/// ahead of `BZR_CONFIG` and `XDG_CONFIG_HOME`, so the test mutates no process
+/// environment and needs no `ENV_LOCK` (ADR-0002). The few tests that
+/// deliberately exercise environment-based resolution pass `None` and point
+/// `XDG_CONFIG_HOME` at their own temp root.
+async fn dispatch_cli(
+    config_path: Option<&std::path::Path>,
+    args: &[&str],
+) -> bzr::error::Result<()> {
+    dispatch_cli_with_io(config_path, args).await.0
 }
 
 /// Like [`dispatch_cli`] but returns the captured stdout alongside the result,
 /// for tests that inspect the printed output.
-async fn dispatch_cli_with_output(args: &[&str]) -> (bzr::error::Result<()>, String) {
-    let cli = match bzr::cli::Cli::try_parse_from(args) {
-        Ok(c) => c,
-        Err(e) => {
-            return (
-                Err(bzr::error::BzrError::input(e.to_string())),
-                String::new(),
-            );
-        }
-    };
-    let format = if cli.json {
-        bzr::types::OutputFormat::Json
-    } else {
-        cli.output.unwrap_or(bzr::types::OutputFormat::Json)
-    };
-    let mut io = bzr::test_helpers::CapturedIo::new();
-    let result = bzr::dispatch(&cli, format, &mut io.writers()).await;
-    (result, io.out_str().to_string())
+async fn dispatch_cli_with_output(
+    config_path: Option<&std::path::Path>,
+    args: &[&str],
+) -> (bzr::error::Result<()>, String) {
+    let (result, out, _err) = dispatch_cli_with_io(config_path, args).await;
+    (result, out)
 }
 
 /// Like [`dispatch_cli_with_output`] but also returns captured stderr, for
 /// tests that assert on warnings emitted to stderr.
-async fn dispatch_cli_with_io(args: &[&str]) -> (bzr::error::Result<()>, String, String) {
-    let cli = match bzr::cli::Cli::try_parse_from(args) {
+async fn dispatch_cli_with_io(
+    config_path: Option<&std::path::Path>,
+    args: &[&str],
+) -> (bzr::error::Result<()>, String, String) {
+    let mut argv: Vec<&str> = Vec::with_capacity(args.len() + 2);
+    argv.push(args[0]);
+    if let Some(path) = config_path {
+        argv.push("--config");
+        argv.push(path.to_str().expect("test config path must be UTF-8"));
+    }
+    argv.extend_from_slice(&args[1..]);
+
+    let cli = match bzr::cli::Cli::try_parse_from(&argv) {
         Ok(c) => c,
         Err(e) => {
             return (
@@ -1590,16 +1667,19 @@ async fn e2e_bug_list_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&[
-        "bzr",
-        "--server",
-        "test",
-        "--json",
-        "bug",
-        "list",
-        "--product",
-        "Firefox",
-    ])
+    let (result, output) = dispatch_cli_with_output(
+        None,
+        &[
+            "bzr",
+            "--server",
+            "test",
+            "--json",
+            "bug",
+            "list",
+            "--product",
+            "Firefox",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "e2e bug list: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
@@ -1619,8 +1699,11 @@ async fn e2e_bug_view_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let (result, output) =
-        dispatch_cli_with_output(&["bzr", "--server", "test", "--json", "bug", "view", "42"]).await;
+    let (result, output) = dispatch_cli_with_output(
+        None,
+        &["bzr", "--server", "test", "--json", "bug", "view", "42"],
+    )
+    .await;
     assert!(result.is_ok(), "e2e bug view: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["id"], 42);
@@ -1643,7 +1726,7 @@ async fn e2e_whoami_via_cli_args() {
         .await;
 
     let (result, output) =
-        dispatch_cli_with_output(&["bzr", "--server", "test", "--json", "whoami"]).await;
+        dispatch_cli_with_output(None, &["bzr", "--server", "test", "--json", "whoami"]).await;
     assert!(result.is_ok(), "e2e whoami: {result:?}");
     let parsed = bzr::test_helpers::json_envelope_data(&output);
     assert_eq!(parsed["name"], "admin@example.com");
@@ -1684,17 +1767,20 @@ async fn e2e_inline_server_bug_view_without_config() {
         .mount(&mock)
         .await;
 
-    let (result, output) = dispatch_cli_with_output(&[
-        "bzr",
-        "--server-url",
-        &mock.uri(),
-        "--server-api-key-env",
-        "BZR_E2E_INLINE_KEY",
-        "--json",
-        "bug",
-        "view",
-        "42",
-    ])
+    let (result, output) = dispatch_cli_with_output(
+        None,
+        &[
+            "bzr",
+            "--server-url",
+            &mock.uri(),
+            "--server-api-key-env",
+            "BZR_E2E_INLINE_KEY",
+            "--json",
+            "bug",
+            "view",
+            "42",
+        ],
+    )
     .await;
 
     assert!(result.is_ok(), "inline e2e bug view: {result:?}");
@@ -1711,7 +1797,7 @@ async fn e2e_inline_server_bug_view_without_config() {
 async fn e2e_config_show_via_cli_args() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let result = dispatch_cli(&["bzr", "--json", "config", "show"]).await;
+    let result = dispatch_cli(None, &["bzr", "--json", "config", "show"]).await;
     assert!(result.is_ok(), "e2e config show: {result:?}");
 }
 
@@ -1725,17 +1811,20 @@ async fn e2e_skills_install_ignores_malformed_config_and_needs_no_server() {
     let malformed_bytes = b"not = [valid toml\n";
     std::fs::write(&malformed_config, malformed_bytes).unwrap();
 
-    let (result, output) = dispatch_cli_with_output(&[
-        "bzr",
-        "--config",
-        malformed_config.to_str().unwrap(),
-        "skills",
-        "install",
-        "--agent",
-        "standard",
-        "--project",
-        project.to_str().unwrap(),
-    ])
+    let (result, output) = dispatch_cli_with_output(
+        None,
+        &[
+            "bzr",
+            "--config",
+            malformed_config.to_str().unwrap(),
+            "skills",
+            "install",
+            "--agent",
+            "standard",
+            "--project",
+            project.to_str().unwrap(),
+        ],
+    )
     .await;
 
     assert!(
@@ -1783,7 +1872,11 @@ async fn e2e_server_info_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&["bzr", "--server", "test", "--json", "server", "info"]).await;
+    let result = dispatch_cli(
+        None,
+        &["bzr", "--server", "test", "--json", "server", "info"],
+    )
+    .await;
     assert!(result.is_ok(), "e2e server info: {result:?}");
 }
 
@@ -1810,8 +1903,11 @@ async fn e2e_comment_list_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let result =
-        dispatch_cli(&["bzr", "--server", "test", "--json", "comment", "list", "42"]).await;
+    let result = dispatch_cli(
+        None,
+        &["bzr", "--server", "test", "--json", "comment", "list", "42"],
+    )
+    .await;
     assert!(result.is_ok(), "e2e comment list: {result:?}");
 }
 
@@ -1837,15 +1933,18 @@ async fn e2e_attachment_list_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr",
-        "--server",
-        "test",
-        "--json",
-        "attachment",
-        "list",
-        "42",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "--server",
+            "test",
+            "--json",
+            "attachment",
+            "list",
+            "42",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "e2e attachment list: {result:?}");
 }
@@ -1866,9 +1965,12 @@ async fn e2e_product_view_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr", "--server", "test", "--json", "product", "view", "Firefox",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr", "--server", "test", "--json", "product", "view", "Firefox",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "e2e product view: {result:?}");
 }
@@ -1891,9 +1993,12 @@ async fn e2e_field_list_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr", "--server", "test", "--json", "field", "list", "status",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr", "--server", "test", "--json", "field", "list", "status",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "e2e field list: {result:?}");
 }
@@ -1917,9 +2022,12 @@ async fn e2e_user_search_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr", "--server", "test", "--json", "user", "search", "alice",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr", "--server", "test", "--json", "user", "search", "alice",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "e2e user search: {result:?}");
 }
@@ -1944,9 +2052,12 @@ async fn e2e_group_view_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr", "--server", "test", "--json", "group", "view", "admin",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr", "--server", "test", "--json", "group", "view", "admin",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "e2e group view: {result:?}");
 }
@@ -1970,15 +2081,18 @@ async fn e2e_classification_view_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr",
-        "--server",
-        "test",
-        "--json",
-        "classification",
-        "view",
-        "Unclassified",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "--server",
+            "test",
+            "--json",
+            "classification",
+            "view",
+            "Unclassified",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "e2e classification view: {result:?}");
 }
@@ -1994,22 +2108,25 @@ async fn e2e_component_create_via_cli_args() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr",
-        "--server",
-        "test",
-        "--json",
-        "component",
-        "create",
-        "--product",
-        "TestProduct",
-        "--name",
-        "Backend",
-        "--description",
-        "Backend component",
-        "--default-assignee",
-        "dev@test.com",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "--server",
+            "test",
+            "--json",
+            "component",
+            "create",
+            "--product",
+            "TestProduct",
+            "--name",
+            "Backend",
+            "--description",
+            "Backend component",
+            "--default-assignee",
+            "dev@test.com",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "e2e component create: {result:?}");
 }
@@ -2018,7 +2135,7 @@ async fn e2e_component_create_via_cli_args() {
 async fn e2e_template_list_via_cli_args() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let result = dispatch_cli(&["bzr", "--json", "template", "list"]).await;
+    let result = dispatch_cli(None, &["bzr", "--json", "template", "list"]).await;
     assert!(result.is_ok(), "e2e template list: {result:?}");
 }
 
@@ -2026,7 +2143,7 @@ async fn e2e_template_list_via_cli_args() {
 async fn e2e_query_list_via_cli_args() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let result = dispatch_cli(&["bzr", "--json", "query", "list"]).await;
+    let result = dispatch_cli(None, &["bzr", "--json", "query", "list"]).await;
     assert!(result.is_ok(), "e2e query list: {result:?}");
 }
 
@@ -2082,17 +2199,20 @@ async fn bug_list_issue_158_mixed_positive_and_negation_reaches_wire() {
         .mount(&mock)
         .await;
 
-    let result = dispatch_cli(&[
-        "bzr",
-        "bug",
-        "list",
-        "--product",
-        "P",
-        "--whiteboard",
-        "!wip",
-        "--resolution",
-        "!FIXED",
-    ])
+    let result = dispatch_cli(
+        None,
+        &[
+            "bzr",
+            "bug",
+            "list",
+            "--product",
+            "P",
+            "--whiteboard",
+            "!wip",
+            "--resolution",
+            "!FIXED",
+        ],
+    )
     .await;
     assert!(result.is_ok(), "bug list should succeed: {result:?}");
     // wiremock's `expect(1)` enforces that exactly one request matched
@@ -2225,18 +2345,21 @@ fn json_keys(value: &serde_json::Value) -> Vec<&str> {
 async fn e2e_bug_list_json_all_unknown_fields_exits_7() {
     let (_lock, _mock, _tmp) = setup_test_env().await;
 
-    let (result, _out, _err) = dispatch_cli_with_io(&[
-        "bzr",
-        "--server",
-        "test",
-        "--json",
-        "bug",
-        "list",
-        "--product",
-        "Firefox",
-        "--fields",
-        "not_a_field,also_not_a_field",
-    ])
+    let (result, _out, _err) = dispatch_cli_with_io(
+        None,
+        &[
+            "bzr",
+            "--server",
+            "test",
+            "--json",
+            "bug",
+            "list",
+            "--product",
+            "Firefox",
+            "--fields",
+            "not_a_field,also_not_a_field",
+        ],
+    )
     .await;
 
     let err = result.unwrap_err();
@@ -2262,18 +2385,21 @@ async fn e2e_bug_list_json_partial_unknown_warns_and_projects() {
         .mount(&mock)
         .await;
 
-    let (result, out, err) = dispatch_cli_with_io(&[
-        "bzr",
-        "--server",
-        "test",
-        "--json",
-        "bug",
-        "list",
-        "--product",
-        "Firefox",
-        "--fields",
-        "summary,not_a_field",
-    ])
+    let (result, out, err) = dispatch_cli_with_io(
+        None,
+        &[
+            "bzr",
+            "--server",
+            "test",
+            "--json",
+            "bug",
+            "list",
+            "--product",
+            "Firefox",
+            "--fields",
+            "summary,not_a_field",
+        ],
+    )
     .await;
 
     assert!(result.is_ok(), "partial-unknown should succeed: {result:?}");
@@ -2305,18 +2431,21 @@ async fn e2e_bug_list_json_custom_field_is_emitted() {
         .mount(&mock)
         .await;
 
-    let (result, out, err) = dispatch_cli_with_io(&[
-        "bzr",
-        "--server",
-        "test",
-        "--json",
-        "bug",
-        "list",
-        "--product",
-        "Firefox",
-        "--fields",
-        "cf_release",
-    ])
+    let (result, out, err) = dispatch_cli_with_io(
+        None,
+        &[
+            "bzr",
+            "--server",
+            "test",
+            "--json",
+            "bug",
+            "list",
+            "--product",
+            "Firefox",
+            "--fields",
+            "cf_release",
+        ],
+    )
     .await;
 
     assert!(
@@ -2344,9 +2473,12 @@ async fn e2e_bug_view_json_all_unknown_is_lenient_with_warning() {
         .mount(&mock)
         .await;
 
-    let (result, out, err) = dispatch_cli_with_io(&[
-        "bzr", "--server", "test", "--json", "bug", "view", "42", "--fields", "sumary",
-    ])
+    let (result, out, err) = dispatch_cli_with_io(
+        None,
+        &[
+            "bzr", "--server", "test", "--json", "bug", "view", "42", "--fields", "sumary",
+        ],
+    )
     .await;
 
     assert!(result.is_ok(), "view stays lenient: {result:?}");
@@ -2376,9 +2508,12 @@ async fn e2e_bug_view_json_single_trims_object() {
         .mount(&mock)
         .await;
 
-    let (result, out, _err) = dispatch_cli_with_io(&[
-        "bzr", "--server", "test", "--json", "bug", "view", "42", "--fields", "summary",
-    ])
+    let (result, out, _err) = dispatch_cli_with_io(
+        None,
+        &[
+            "bzr", "--server", "test", "--json", "bug", "view", "42", "--fields", "summary",
+        ],
+    )
     .await;
 
     assert!(result.is_ok(), "single view: {result:?}");
@@ -2411,9 +2546,12 @@ async fn e2e_multi_bug_view_json_trims_bugs_keeps_wrapper() {
         .mount(&mock)
         .await;
 
-    let (result, out, _err) = dispatch_cli_with_io(&[
-        "bzr", "--server", "test", "--json", "bug", "view", "1", "2", "--fields", "summary",
-    ])
+    let (result, out, _err) = dispatch_cli_with_io(
+        None,
+        &[
+            "bzr", "--server", "test", "--json", "bug", "view", "1", "2", "--fields", "summary",
+        ],
+    )
     .await;
 
     assert!(result.is_ok(), "multi view: {result:?}");
@@ -2450,18 +2588,21 @@ async fn e2e_bug_list_json_exclude_id_drops_key_but_parses() {
         .mount(&mock)
         .await;
 
-    let (result, out, _err) = dispatch_cli_with_io(&[
-        "bzr",
-        "--server",
-        "test",
-        "--json",
-        "bug",
-        "list",
-        "--product",
-        "Firefox",
-        "--exclude-fields",
-        "id",
-    ])
+    let (result, out, _err) = dispatch_cli_with_io(
+        None,
+        &[
+            "bzr",
+            "--server",
+            "test",
+            "--json",
+            "bug",
+            "list",
+            "--product",
+            "Firefox",
+            "--exclude-fields",
+            "id",
+        ],
+    )
     .await;
 
     assert!(
@@ -2561,7 +2702,7 @@ async fn json_output_carries_exactly_one_envelope() {
         vec!["bzr", "comment", "add", "1", "--body", "hi"],
         vec!["bzr", "schema"],
     ] {
-        let (result, output) = dispatch_cli_with_output(&args).await;
+        let (result, output) = dispatch_cli_with_output(None, &args).await;
         assert!(result.is_ok(), "{args:?} should succeed: {result:?}");
         assert_single_envelope(&output);
     }
