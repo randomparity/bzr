@@ -4,7 +4,7 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::cli::{GroupAction, ProjectionArgs};
-use crate::test_helpers::setup_test_env;
+use crate::test_helpers::setup_isolated_env;
 use crate::types::OutputFormat;
 
 async fn mount_one_group(mock: &wiremock::MockServer) {
@@ -33,7 +33,7 @@ fn view_with(projection: ProjectionArgs) -> GroupAction {
 
 #[tokio::test]
 async fn group_view_returns_info() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/group"))
@@ -57,7 +57,8 @@ async fn group_view_returns_info() {
     let mut __io_a1 = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __io_a1.writers(),
     )
     .await;
@@ -72,7 +73,7 @@ async fn group_view_returns_info() {
 #[tokio::test]
 async fn group_view_http_500_returns_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/group"))
@@ -86,7 +87,8 @@ async fn group_view_http_500_returns_error() {
     };
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -101,7 +103,7 @@ async fn group_view_http_500_returns_error() {
 #[tokio::test]
 async fn group_view_malformed_json_returns_error() {
     let mut __cap_io = crate::test_helpers::CapturedIo::new();
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
 
     Mock::given(method("GET"))
         .and(path("/rest/group"))
@@ -115,7 +117,8 @@ async fn group_view_malformed_json_returns_error() {
     };
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut __cap_io.writers(),
     )
     .await;
@@ -124,7 +127,7 @@ async fn group_view_malformed_json_returns_error() {
 
 #[tokio::test]
 async fn group_view_json_fields_projects_to_named_keys() {
-    let (_lock, mock, _tmp) = setup_test_env().await;
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
     mount_one_group(&mock).await;
 
     let action = view_with(ProjectionArgs {
@@ -134,7 +137,8 @@ async fn group_view_json_fields_projects_to_named_keys() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
@@ -146,7 +150,7 @@ async fn group_view_json_fields_projects_to_named_keys() {
 
 #[tokio::test]
 async fn group_view_json_unknown_field_exits_7() {
-    let (_lock, _mock, _tmp) = setup_test_env().await;
+    let (_mock, _tmp, config_path) = setup_isolated_env().await;
 
     let action = view_with(ProjectionArgs {
         fields: Some("nam".into()),
@@ -155,7 +159,8 @@ async fn group_view_json_unknown_field_exits_7() {
     let mut io = crate::test_helpers::CapturedIo::new();
     let result = crate::commands::group::execute(
         &action,
-        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None),
+        &crate::commands::runtime::invocation::CommandContext::new(None, OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone())),
         &mut io.writers(),
     )
     .await;
