@@ -245,3 +245,76 @@ It **does not**:
   buys, and it does not address `getaddrinfo` either.
 - **Keep `ENV_LOCK` and document the gap only.** Declined: it leaves in place
   writers whose only effect is to widen the surface being documented.
+
+## Amendment — 2026-09-16 (issue #857)
+
+### Category 3 is retired, not emptied
+
+Retained categories, superseding the two the 2026-09-15 amendment listed:
+
+- a test that mutates a process-global variable **the command under test must
+  observe** — an API-key variable named by `api_key_env` /
+  `--server-api-key-env`, a `BZR_*_TEST_*` hook, `EDITOR`;
+- a test whose subject **is** environment-based resolution — the
+  `Config::path_at` precedence tests, the `DISPLAY`/`WAYLAND_DISPLAY` test.
+
+The third category that amendment listed — a test that triggers **libc name
+resolution** of a hostname — has no members and is **retired**. Both self-signed
+TLS test servers bound a v4-only listener and were reached at
+`https://localhost:{port}` to match a `localhost` cert SAN. #857 moved the SAN
+and the URL to `127.0.0.1`, matching the bind, so both take the numeric fast
+path and call no resolver.
+
+Retiring it rather than recording it as empty is deliberate. An empty category
+invites the next hostname-resolving test to file itself under it and take the
+lock, which is the pairing the 2026-09-15 residual risks called enforced by
+nothing. With the category gone there is nothing for such a test to claim.
+
+The re-derivation rule above is unchanged except in arithmetic: classify every
+hit against **two** categories, not three. A hit matching neither is still a
+defect rather than a retention.
+
+### What this cost, recorded rather than repaired
+
+`rcgen` encodes an IP-shaped SAN as `SanType::IpAddress`, so the one connected
+test that verifies a server name — the `--server-tls-ca-cert` case — now
+exercises rustls's IP-address branch instead of its DNS-name branch. **No
+connected test covers DNS-name verification any more.** Production connections
+to a real Bugzilla host take the DNS branch, so this is a real reduction in
+end-to-end coverage, and it is not repaired here.
+
+What remains is offline and direct: `src/tls/verifier_tests.rs` and
+`src/tls/tofu_tests.rs` build `localhost` certificates and call
+`verify_server_cert` without going through the client stack.
+
+**The project accepts having no end-to-end DNS-SAN test.** Restoring one would
+mean reaching a server by name — this client offers no name-to-address
+override — which reintroduces the resolver this amendment just removed, to cover
+a branch already covered offline. That trade is not worth it. Recording the gap
+is the remedy; a reader deciding otherwise later should reopen this section
+rather than quietly adding a hostname test.
+
+The three other inline-TLS modes were never affected: `PinnedCertVerifier`
+binds `_server_name` and ignores it, so `--server-tls-pin-sha256`,
+`--server-tls-pin-now` and `--server-tls-insecure` never checked a name at all.
+
+### Residual risks, replacing the `getaddrinfo` pairing bullet
+
+The 2026-09-15 bullet said the `getaddrinfo` pairing was enforced by nothing.
+That pairing no longer exists — no test in the cargo test binaries resolves a
+hostname, so there is no lock-ordered C-side env read left to get wrong. What is
+unenforced now is the **precondition**, and it is worse covered than the pairing
+was:
+
+- Nothing detects a new test that reaches a server by hostname instead of a
+  numeric address. Such a test reintroduces the unordered libc `getenv` in one
+  line.
+- **The re-derivation rule does not catch it either.** That rule greps for
+  `ENV_LOCK` acquisitions, so its domain is lock *holders*. It would flag a
+  hostname test that takes the lock — the ordered, safe variant — and is blind
+  to a hostname test that takes none, which is the dangerous one. Nothing at
+  all detects that case: not the rule, not a lint, not CI.
+
+Scope note: "no test resolves a hostname" is a claim about the cargo test
+binaries. The shell-driven functional tier under `tests/functional/` runs the
+real binary against containers and is outside it.

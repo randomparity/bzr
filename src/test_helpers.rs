@@ -399,7 +399,8 @@ pub async fn seed_keyring_secret_at(
     // the same lock `set_var` takes the write half of, so it is ordered. The
     // reads `set_var`'s contract does *not* cover are the ones that bypass
     // `std::env` entirely — libc `getaddrinfo` being the only one this process
-    // performs. See the ADR-0002 amendment.
+    // ever performed, and since #857 it performs none: every test server is
+    // reached at a numeric address. See the ADR-0002 amendment.
     unsafe { std::env::set_var("BZR_KEYRING_TEST_SECRET", secret) };
     let result = crate::commands::config::execute(
         &crate::cli::ConfigAction::SetKeyring {
