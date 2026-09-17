@@ -206,13 +206,13 @@ jobs:
 
       - name: Install cargo-deb
         if: matrix.pkg_deb
-        uses: taiki-e/install-action@d438492cf8a250514fa2d34b30bc3c0dc37c65ff  # v2.87.8
+        uses: taiki-e/install-action@fa23953489c080190314742a9b907f8e97c6767c  # v2.87.10
         with:
           tool: cargo-deb
 
       - name: Install cargo-generate-rpm
         if: matrix.pkg_rpm
-        uses: taiki-e/install-action@d438492cf8a250514fa2d34b30bc3c0dc37c65ff  # v2.87.8
+        uses: taiki-e/install-action@fa23953489c080190314742a9b907f8e97c6767c  # v2.87.10
         with:
           tool: cargo-generate-rpm
 
@@ -379,7 +379,7 @@ jobs:
           cat SHA256SUMS
 
       - name: Install git-cliff
-        uses: taiki-e/install-action@d438492cf8a250514fa2d34b30bc3c0dc37c65ff  # v2.87.8
+        uses: taiki-e/install-action@fa23953489c080190314742a9b907f8e97c6767c  # v2.87.10
         with:
           tool: git-cliff@2.14.1
 
@@ -760,7 +760,7 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6e  # stable
       - name: Install git-cliff
-        uses: taiki-e/install-action@d438492cf8a250514fa2d34b30bc3c0dc37c65ff  # v2.87.8
+        uses: taiki-e/install-action@fa23953489c080190314742a9b907f8e97c6767c  # v2.87.10
         with:
           tool: git-cliff@2.14.1
 
