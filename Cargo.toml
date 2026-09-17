@@ -51,9 +51,9 @@ webpki-roots = "=1.0.9"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = { version = "=1.0.151", features = ["preserve_order"] }
 tokio = { version = "=1.53.1", features = ["macros", "rt", "sync", "time"] }
-toml = "=1.1.5"
+toml = "=1.1.6"
 dirs = "=7.0.0"
-open = "=5.4.3"
+open = "=5.4.4"
 tabled = { version = "=0.22.0", default-features = false, features = ["std"] }
 terminal_size = "=0.4.4"
 thiserror = "=2.0.20"
