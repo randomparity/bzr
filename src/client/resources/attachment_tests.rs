@@ -1147,7 +1147,17 @@ async fn attachment_stream_download_exceeds_structured_body_limit() {
         })))
         .mount(&mock)
         .await;
-    let client = test_client(&mock.uri());
+    let mut client = test_client(&mock.uri());
+    // This >64 MiB fixture must cross the real structured-response limit.
+    // The normal 30s whole-request deadline also includes streaming decode and
+    // staging to disk, which can exceed it under CI load/coverage instrumentation.
+    // Allow 120s here without changing production timeout policy or shrinking
+    // the fixture so far that the buffered-response regression would go undetected.
+    client.http = crate::tls::build_tls_client(
+        &crate::tls::TlsConfig::default(),
+        std::time::Duration::from_secs(120),
+    )
+    .unwrap();
     let result = client.download_attachment(756).await;
     assert!(result.is_ok(), "large attachment must download: {result:?}");
     let (name, mut data) = result.unwrap();
