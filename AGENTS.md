@@ -5,8 +5,8 @@ this repository.
 
 ## What is bzr?
 
-A Rust CLI for interacting with Bugzilla REST API servers. Supports bugs,
-comments, attachments, and multi-server configuration. Inspired by the
+A Rust CLI for interacting with Bugzilla REST and XML-RPC API servers. Supports
+bugs, comments, attachments, and multi-server configuration. Inspired by the
 GitHub CLI (`gh`).
 
 ## Build & Development Commands
@@ -66,6 +66,23 @@ suite). Reserve full `make test` for pre-commit verification. Never invoke
 bare `cargo test`: it prints hundreds of per-test lines that pollute agent
 context and bypasses the quiet default.
 
+Observed local wall-clock timings (2026-09-18; warm build; `/usr/bin/time -p`
+`real` value; individual runs):
+
+| Command | Scope | Wall time |
+| --- | --- | ---: |
+| `cargo test --features test-helpers` | CI-style full suite | 130.81 s |
+| `make test` | Full suite, quiet output | 177.36 s |
+| `make test-verbose` | Full suite, per-test output | 128.13 s |
+| `make test-fast` | 3,215 library tests | 85.28 s |
+| `make test-one T=bug_list_returns_bugs` | One matching test | 20.79 s |
+
+These are current observations, not fixed budgets; filesystem, CPU, and test
+contention affect them. A focused `make test-one` still launches every Cargo
+test target, so a short default tool timeout can be insufficient even for one
+matching test. Use a timeout comfortably above three minutes for the full
+suite and wait for a timed-out run to exit before retrying.
+
 ## Architecture
 
 Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches the
@@ -77,23 +94,26 @@ output.
 
 - **`cli/`** — clap derive structs split into per-resource submodules. `mod.rs`
   defines `Cli`, `Commands`, and re-exports all `*Action` enums. Most resources
-  are single files (`comment.rs`, `attachment.rs`, `config.rs`, `product.rs`,
-  `field.rs`, `user.rs`, `group.rs`, `server.rs`, `classification.rs`,
-  `component.rs`, `template.rs`, `query.rs`, `skills.rs`) each defining one
-  action enum; `bug/` is a directory whose `mod.rs` defines `BugAction` plus
-  shared args, with per-action files (`view.rs`, `create.rs`, `clone.rs`,
-  `adjacency.rs`, `history.rs`, `links.rs`, `list.rs`, `my.rs`, `search.rs`,
-  `update/`, `verbs.rs`). `fields.rs` holds the shared `ProjectionArgs`.
+  are single files (`comment.rs`, `attachment.rs`, `auth.rs`, `config.rs`,
+  `product.rs`, `field.rs`, `user.rs`, `group.rs`, `server.rs`,
+  `classification.rs`, `component.rs`, `template.rs`, `query.rs`,
+  `skills.rs`) each defining one action enum; `bug/` is a directory whose
+  `mod.rs` defines `BugAction` plus shared args, with per-action files
+  (`view.rs`, `create.rs`, `clone.rs`, `adjacency.rs`, `history.rs`,
+  `links.rs`, `list.rs`, `my.rs`, `search.rs`, `tag.rs`, `update.rs`,
+  `external_bug.rs`, `verbs.rs`). `fields.rs` holds the shared
+  `ProjectionArgs`.
 - **`client/`** — `mod.rs` defines `BugzillaClient`,
   `BugzillaClientConfig`, client construction, shared dispatch helpers, and
   cross-resource helpers. `request.rs`, `response.rs`, and `transport.rs` own
   the shared HTTP request/response pipeline. `resources/` is the REST resource
-  layer (`bug.rs`, `attachment.rs`, `comment.rs`, `product.rs`, `user.rs`,
-  `group.rs`, `component.rs`, `classification.rs`, `field.rs`, `server.rs`).
-  `auth/` handles auth detection (split into `whoami.rs` and `valid_login.rs`
-  probing strategies with `mod.rs` as orchestrator). `version.rs` handles
-  version detection and API mode determination. Public data types live in
-  `types/`.
+  layer (`bug.rs`, `bug_adjacency.rs`, `attachment.rs`, `comment.rs`,
+  `product.rs`, `user.rs`, `group.rs`, `component.rs`, `classification.rs`,
+  `field.rs`, `server.rs`). `auth/` handles auth detection (split into
+  `whoami.rs` and `valid_login.rs` probing strategies with `mod.rs` as
+  orchestrator). `version.rs` handles version detection and API mode
+  determination. Public data types live in the top-level `types/` module,
+  not under `client/`.
 - **`tls/`** — TLS client construction and trust policy. `mod.rs` builds the
   reqwest clients used by the connection layer, `fingerprint.rs` formats
   SHA-256 pins, `verifier.rs` enforces pin and issuer checks, and `tofu.rs`
@@ -131,8 +151,11 @@ output.
   `Config`, `Api`, `Io`, `TomlParse`, `TomlSerialize`, `XmlRpc`, `NotFound`,
   `HttpStatus`, `ResponseTooLarge`, `InputValidation`, `Deserialize`, `Auth`, `DataIntegrity`,
   `BatchPartialFailure`, `Keyring`, `PinMismatch`, `IssuerChanged`,
-  `MidAirCollision`, `UnsupportedServerCapability`. Each variant has a distinct `exit_code()` and
-  `error_type()`. `Result<T>` type alias.
+  `MidAirCollision`, `UnsupportedServerCapability`. `exit_code()` and
+  `error_type()` are grouped, not per-variant: `Config`/`TomlParse`/
+  `TomlSerialize` share 3/`config`, `Api`/`XmlRpc` share 4/`api`,
+  `Http`/`HttpStatus` share 5/`http`, and `PinMismatch`/`IssuerChanged`
+  share 13/`tls`; the rest map individually. `Result<T>` type alias.
 - **`output/`** — `mod.rs` is deliberately _not_ a re-export facade: command
   modules import each writer from its owning leaf module so unused facade
   exports don't accumulate as output formats change. `formatting.rs` holds
@@ -143,8 +166,9 @@ output.
   the `Writers` stdout/stderr bundle. Per-resource writers live under
   `output/resources/` (`bug.rs`, `comment.rs`, `attachment.rs`, `product.rs`,
   `classification.rs`, `component.rs`, `user.rs`, `group.rs`, `field.rs`,
-  `server.rs`, `config.rs`, `template.rs`, `query.rs`), each handling one
-  domain type. Uses `tabled` for tables, `colored` for status colors.
+  `server.rs`, `config.rs`, `template.rs`, `query.rs`, `skills.rs`), each
+  handling one domain type. Uses `tabled` for tables, `colored` for status
+  colors.
 - **`commands/`** — Resource command submodules expose async
   `execute(action, &CommandContext, &mut Writers)` entry points (where
   `Writers` bundles stdout/stderr). `lib.rs::dispatch()` builds one
@@ -156,8 +180,9 @@ output.
   output. Larger resources are directories with one file per action
   (`bug/`, `config/`, `user/`, `template/`, `query/`, `product/`, `group/`,
   `component/`, `comment/`, `attachment/`); the rest are flat files
-  (`field.rs`, `classification.rs`, `server.rs`, `completion.rs`, `skills.rs`,
-  `schema.rs`, `whoami.rs`). Local-only commands under `commands/config/` use
+  (`field.rs`, `classification.rs`, `server.rs`, `auth.rs`, `completion.rs`,
+  `skills.rs`, `schema.rs`, `whoami.rs`). Local-only commands under
+  `commands/config/` use
   the same context boundary but do local I/O, while `whoami.rs` has no action
   enum. Cross-cutting command infrastructure lives under `commands/runtime/`:
   `runtime::invocation` owns per-command state, capability policy, and inline
