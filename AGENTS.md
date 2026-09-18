@@ -66,6 +66,23 @@ suite). Reserve full `make test` for pre-commit verification. Never invoke
 bare `cargo test`: it prints hundreds of per-test lines that pollute agent
 context and bypasses the quiet default.
 
+Observed local wall-clock timings (2026-09-18; warm build; `/usr/bin/time -p`
+`real` value; individual runs):
+
+| Command | Scope | Wall time |
+| --- | --- | ---: |
+| `cargo test --features test-helpers` | CI-style full suite | 130.81 s |
+| `make test` | Full suite, quiet output | 177.36 s |
+| `make test-verbose` | Full suite, per-test output | 128.13 s |
+| `make test-fast` | 3,215 library tests | 85.28 s |
+| `make test-one T=bug_list_returns_bugs` | One matching test | 20.79 s |
+
+These are current observations, not fixed budgets; filesystem, CPU, and test
+contention affect them. A focused `make test-one` still launches every Cargo
+test target, so a short default tool timeout can be insufficient even for one
+matching test. Use a timeout comfortably above three minutes for the full
+suite and wait for a timed-out run to exit before retrying.
+
 ## Architecture
 
 Layered CLI pattern: `main.rs` parses args → `lib.rs::dispatch()` matches the
