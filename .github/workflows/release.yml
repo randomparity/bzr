@@ -122,7 +122,7 @@ jobs:
 
       - name: Set up QEMU
         if: matrix.use_qemu
-        uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a  # v4
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4
 
       - name: Install cross
         if: matrix.use_cross
@@ -206,13 +206,13 @@ jobs:
 
       - name: Install cargo-deb
         if: matrix.pkg_deb
-        uses: taiki-e/install-action@fa23953489c080190314742a9b907f8e97c6767c  # v2.87.10
+        uses: taiki-e/install-action@76c2e6406e52637deed7160d77bded76bd83e06e  # v2.87.14
         with:
           tool: cargo-deb
 
       - name: Install cargo-generate-rpm
         if: matrix.pkg_rpm
-        uses: taiki-e/install-action@fa23953489c080190314742a9b907f8e97c6767c  # v2.87.10
+        uses: taiki-e/install-action@76c2e6406e52637deed7160d77bded76bd83e06e  # v2.87.14
         with:
           tool: cargo-generate-rpm
 
@@ -379,7 +379,7 @@ jobs:
           cat SHA256SUMS
 
       - name: Install git-cliff
-        uses: taiki-e/install-action@fa23953489c080190314742a9b907f8e97c6767c  # v2.87.10
+        uses: taiki-e/install-action@76c2e6406e52637deed7160d77bded76bd83e06e  # v2.87.14
         with:
           tool: git-cliff@2.14.1
 
@@ -760,7 +760,7 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6e  # stable
       - name: Install git-cliff
-        uses: taiki-e/install-action@fa23953489c080190314742a9b907f8e97c6767c  # v2.87.10
+        uses: taiki-e/install-action@76c2e6406e52637deed7160d77bded76bd83e06e  # v2.87.14
         with:
           tool: git-cliff@2.14.1
 
