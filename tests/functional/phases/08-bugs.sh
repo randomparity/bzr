@@ -212,17 +212,22 @@ test_begin "bug-alias-see-also-read-projection" "REST/XML-RPC public and authent
 if [[ -n "$BUG1" ]]; then
     _AS_OK=1
     for _AS_API in rest xmlrpc; do
+        case "$_AS_API" in rest) _AS_TRANSPORT=REST ;; xmlrpc) _AS_TRANSPORT=XMLRPC ;; esac
         for _AS_SERVER in test public; do
             run_bzr --api "$_AS_API" --server "$_AS_SERVER" bug view "$BUG1"
             if ! { assert_success && assert_json ".alias == [\"$_AS_ALIAS\"]" true &&
                 assert_json ".see_also == [\"$_AS_URL\"]" true; }; then _AS_OK=0; fi
-            run_bzr --api "$_AS_API" --server "$_AS_SERVER" bug search \
-                --from-url "${BZ_URL}/buglist.cgi?bug_id=${BUG1}" --fields alias,see_also
+            run_bzr -vv --api "$_AS_API" --server "$_AS_SERVER" bug search \
+                "$BUG1" --fields alias,see_also
             if ! { assert_success && assert_json ".[0].alias == [\"$_AS_ALIAS\"]" true &&
                 assert_json ".[0].see_also == [\"$_AS_URL\"]" true &&
                 assert_json '.[0] | keys == ["alias","see_also"]' true; }; then _AS_OK=0; fi
+            if ! observe_bzr_transport || [[ $BZR_TRANSPORT != "$_AS_TRANSPORT" ]]; then
+                test_fail "search did not use the selected transport"
+                _AS_OK=0
+            fi
             run_bzr_raw --output table --api "$_AS_API" --server "$_AS_SERVER" bug search \
-                --from-url "${BZ_URL}/buglist.cgi?bug_id=${BUG1}" --fields alias,see_also
+                "$BUG1" --fields alias,see_also
             if ! { assert_success && assert_stdout_contains "ALIAS" &&
                 assert_stdout_contains "SEE_ALSO" && assert_stdout_contains "$_AS_ALIAS" &&
                 assert_stdout_contains "$_AS_URL"; }; then _AS_OK=0; fi
@@ -250,7 +255,7 @@ if [[ -n "$BUG1" ]]; then
     done
     if [[ $_AS_OK -eq 1 ]]; then test_pass; fi
 else test_skip "no BUG1"; fi
-unset _AS_ALIAS _AS_URL _AS_API _AS_SERVER _AS_OK
+unset _AS_ALIAS _AS_URL _AS_API _AS_SERVER _AS_OK _AS_TRANSPORT
 
 # Personal tags are only mutated through XML-RPC. Exercise the live server's
 # request and response shapes, then prove the tag is projected and searchable.
