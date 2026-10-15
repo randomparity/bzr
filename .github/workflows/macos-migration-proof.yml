@@ -1,0 +1,132 @@
+name: macOS migration proof
+on:
+  push:
+    branches: [feat/macos-runner-884]
+permissions:
+  contents: read
+env:
+  HOMEBREW_NO_AUTO_UPDATE: '1'
+  HOMEBREW_NO_INSTALL_CLEANUP: '1'
+  HOMEBREW_NO_ENV_HINTS: '1'
+jobs:
+  bottle:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6e  # stable
+        with:
+          targets: aarch64-apple-darwin
+      - name: Build and inspect release binary
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '15.0'
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          sw_vers
+          cargo build --release --locked --target aarch64-apple-darwin
+          mkdir -p /tmp/bzr-migration/package /tmp/bzr-migration/proof
+          cp target/aarch64-apple-darwin/release/bzr /tmp/bzr-migration/package/
+          python3 - <<'PY'
+          import re, subprocess
+          binary = '/tmp/bzr-migration/package/bzr'
+          assert subprocess.check_output(['lipo', '-archs', binary], text=True).strip() == 'arm64'
+          build = subprocess.check_output(['xcrun', 'vtool', '-show-build', binary], text=True)
+          print(build)
+          assert re.findall(r'\bminos\s+(\S+)', build) == ['15.0']
+          links = subprocess.check_output(['otool', '-L', binary], text=True)
+          print(links)
+          libraries = [line.strip().split(' (', 1)[0] for line in links.splitlines()[1:]]
+          assert libraries and all(p.startswith(('/usr/lib/', '/System/Library/')) for p in libraries)
+          PY
+          cargo run -p xtask --no-default-features --release --locked -- man --out /tmp/bzr-migration/package/man/man1
+          tar -czf /tmp/bzr-migration/source.tar.gz -C /tmp/bzr-migration/package .
+          git rev-parse HEAD > /tmp/bzr-migration/proof/source-sha.txt
+          /tmp/bzr-migration/package/bzr --version > /tmp/bzr-migration/proof/version.txt
+          shasum -a 256 /tmp/bzr-migration/package/bzr | awk '{print $1}' > /tmp/bzr-migration/proof/binary-sha256.txt
+      - name: Create and merge natural bottle
+        run: |
+          set -euo pipefail
+          brew --version
+          test ! -d "$(brew --cellar)/bzr"
+          brew tap-new bzr-validation/ci
+          export TAP_DIR
+          TAP_DIR="$(brew --repository bzr-validation/ci)"
+          python3 - <<'PY'
+          import hashlib, os, pathlib, tomllib
+          version = tomllib.loads(pathlib.Path('Cargo.toml').read_text())['package']['version']
+          formula = pathlib.Path('homebrew/bzr.rb.template').read_text()
+          formula = formula.replace('{{VERSION}}', version)
+          source = pathlib.Path('/tmp/bzr-migration/source.tar.gz')
+          formula = formula.replace('{{MAC_ARM_SHA}}', hashlib.sha256(source.read_bytes()).hexdigest())
+          for name in ('LINUX_ARM_SHA', 'LINUX_INTEL_SHA', 'SRC_SHA'):
+              formula = formula.replace('{{' + name + '}}', '0' * 64)
+          url = f'https://github.com/randomparity/bzr/releases/download/v{version}/bzr-v{version}-aarch64-apple-darwin.tar.gz'
+          assert url in formula
+          formula = formula.replace(url, source.as_uri())
+          pathlib.Path(os.environ['TAP_DIR'], 'Formula/bzr.rb').write_text(formula)
+          PY
+          brew install --build-bottle bzr-validation/ci/bzr
+          cd /tmp/bzr-migration/proof
+          brew bottle --json --no-rebuild --root-url file:///tmp/bzr-migration/proof bzr-validation/ci/bzr
+          python3 - <<'PY'
+          import json, pathlib
+          files = list(pathlib.Path('.').glob('*.json'))
+          assert len(files) == 1
+          data = json.loads(files[0].read_text())
+          assert list(data) == ['bzr-validation/ci/bzr']
+          tags = data['bzr-validation/ci/bzr']['bottle']['tags']
+          assert list(tags) == ['arm64_sequoia'], tags
+          print('actual bottle tag: arm64_sequoia')
+          for bottle in pathlib.Path('.').glob('bzr--*.bottle.tar.gz'):
+              bottle.rename(bottle.name.replace('--', '-', 1))
+          PY
+          brew trust --formula bzr-validation/ci/bzr
+          brew bottle --merge --write --no-commit ./*.json
+          ruby -c "$TAP_DIR/Formula/bzr.rb"
+          cp "$TAP_DIR/Formula/bzr.rb" .
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
+        with:
+          name: macos-bottle-proof
+          path: /tmp/bzr-migration/proof/*
+          if-no-files-found: error
+  install:
+    needs: bottle
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
+        with:
+          name: macos-bottle-proof
+          path: /tmp/bzr-migration/proof
+      - name: Merge and clean-install the same bottle
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          sw_vers
+          brew --version
+          test ! -d "$(brew --cellar)/bzr"
+          brew tap-new bzr-validation/ci
+          tap_dir="$(brew --repository bzr-validation/ci)"
+          cp /tmp/bzr-migration/proof/bzr.rb "$tap_dir/Formula/bzr.rb"
+          brew trust --formula bzr-validation/ci/bzr
+          cd /tmp/bzr-migration/proof
+          brew bottle --merge --write --no-commit ./*.json
+          brew install bzr-validation/ci/bzr
+          brew test bzr-validation/ci/bzr
+          bzr --version
+          test "$(bzr --version)" = "$(cat version.txt)"
+          test "$(shasum -a 256 "$(brew --prefix bzr)/bin/bzr" | awk '{print $1}')" = "$(cat binary-sha256.txt)"
+          brew info --json=v2 bzr-validation/ci/bzr > installed.json
+          python3 - <<'PY'
+          import json, pathlib
+          installed = json.loads(pathlib.Path('installed.json').read_text())['formulae'][0]['installed']
+          assert len(installed) == 1 and installed[0]['poured_from_bottle'], installed
+          print('verified: normal bottle pour, exact binary SHA256 and version')
+          PY

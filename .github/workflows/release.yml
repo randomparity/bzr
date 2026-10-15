@@ -102,7 +102,7 @@ jobs:
             pkg_deb: false
             pkg_rpm: true
           - target: aarch64-apple-darwin
-            os: macos-14
+            os: macos-15
             use_cross: false
             archive: tar.gz
           - target: x86_64-pc-windows-msvc
@@ -141,6 +141,8 @@ jobs:
 
       - name: Build
         env:
+          # The Apple Silicon release and bottle support Sequoia or newer.
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.target == 'aarch64-apple-darwin' && '15.0' || '' }}
           # pkg-config refuses to cross-compile by default; Cross.toml
           # installs target-arch libdbus via multiarch inside the cross
           # images, and this tells pkg-config to honour the resulting
@@ -608,11 +610,11 @@ jobs:
   # formula. If any leg fails the merge is skipped and the formula stays
   # bottle-less -- i.e. it degrades to today's source/binary-download path.
   #
-  # macOS is bottled on the OLDEST available arm runner (macos-14 / Sonoma)
-  # on purpose: Homebrew's bottle resolution falls back to older macOS tags,
-  # so an arm64_sonoma bottle is also poured on Sequoia/Tahoe, whereas a
-  # bottle built on the newest OS would leave older-OS users on the source
-  # path. Intel macOS is intentionally not bottled (no prebuilt Intel binary).
+  # macOS is bottled on the oldest supported arm runner, macos-15 / Sequoia.
+  # The maintainer explicitly raised the binary/bottle floor in #884 (ADR 0083).
+  # Its natural arm64_sequoia bottle also serves newer macOS; do not retag it
+  # as Sonoma or use a moving macos-latest label. Intel macOS is intentionally
+  # not bottled (no prebuilt Intel binary).
   bottles:
     name: Build bottle (${{ matrix.label }})
     needs: homebrew
@@ -624,7 +626,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-15
             label: arm64 macOS
           - os: ubuntu-latest
             label: x86_64 Linux

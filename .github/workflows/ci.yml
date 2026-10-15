@@ -221,12 +221,12 @@ jobs:
 
   macos-keyring:
     name: macOS keychain
-    # macos-14 is arm64, so aarch64-apple-darwin is native -- no cross needed.
+    # macos-15 is arm64, so aarch64-apple-darwin is native -- no cross needed.
     # This is the only PR job that compiles apple-native-keyring-store (it is
     # cfg(target_os = "macos") behind the default `keyring` feature), and the
     # only one that exercises the Keychain at runtime. Without it, that
     # dependency is first built at release time.
-    runs-on: macos-14
+    runs-on: macos-15
     # A locked keychain makes SecItem calls block on a GUI prompt that will
     # never be answered, so cap the job rather than burn a 6-hour default.
     timeout-minutes: 15
@@ -340,7 +340,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-14, windows-latest]
+        os: [ubuntu-latest, macos-15, windows-latest]
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
