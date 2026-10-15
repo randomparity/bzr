@@ -175,7 +175,8 @@ files; record a positive dependency path with a separate probe before deciding.
   does not establish absence in uninspected profiles or safety of the repository.
 
 For a present result, repeat that profile's Cargo command with `--locked`, the
-same manifest/root/target/features and `--edges normal,build`, replacing flat
+same manifest/root/target/features and the edge set that produced the match
+(including `normal,build,dev` for development-only matches), replacing flat
 formatting with the default tree to trace the path. Add `--invert NAME@VERSION`
 only after establishing membership. Inspect enabled features and the advisory's
 preconditions; record the path and whether exposure is runtime, build-host,
