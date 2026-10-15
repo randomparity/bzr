@@ -128,6 +128,8 @@ fn render_builtin_field(field: BugField, bug: &Bug) -> String {
         BugField::Platform => bug.platform.clone().unwrap_or_default(),
         BugField::Deadline => bug.deadline.clone().unwrap_or_default(),
         BugField::Keywords => bug.keywords.join(", "),
+        BugField::Alias => bug.alias.join(", "),
+        BugField::SeeAlso => bug.see_also.join(", "),
         BugField::Blocks => join_ids(&bug.blocks),
         BugField::DependsOn => join_ids(&bug.depends_on),
         BugField::Cc => bug.cc.join(", "),
@@ -226,6 +228,16 @@ struct BuiltinDetailField {
 }
 
 const BUILTIN_DETAIL_FIELDS: &[BuiltinDetailField] = &[
+    BuiltinDetailField {
+        field: BugField::Alias,
+        label: "Alias",
+        value: DetailValue::StringList(|bug| &bug.alias),
+    },
+    BuiltinDetailField {
+        field: BugField::SeeAlso,
+        label: "See Also",
+        value: DetailValue::StringList(|bug| &bug.see_also),
+    },
     BuiltinDetailField {
         field: BugField::Status,
         label: "Status",

@@ -1076,3 +1076,27 @@ async fn search_bugs_sends_saved_search_and_sharer_id_xmlrpc() {
         "{body}"
     );
 }
+
+#[test]
+fn alias_see_also_xmlrpc_round_trip() {
+    for values in [vec![], vec!["second", "first"]] {
+        let array = Value::Array(values.iter().map(|v| Value::from(*v)).collect());
+        let fields = BTreeMap::from([
+            ("id".into(), Value::Int(42)),
+            ("alias".into(), array.clone()),
+            ("see_also".into(), array),
+        ]);
+        let bug = value_to_bug(&Value::Struct(fields)).unwrap();
+        let output = serde_json::to_value(bug).unwrap();
+        assert_eq!(output.get("alias"), Some(&serde_json::json!(values)));
+        assert_eq!(output.get("see_also"), Some(&serde_json::json!(values)));
+    }
+    let bug = value_to_bug(&Value::Struct(BTreeMap::from([(
+        "id".into(),
+        Value::Int(42),
+    )])))
+    .unwrap();
+    let output = serde_json::to_value(bug).unwrap();
+    assert_eq!(output.get("alias"), Some(&serde_json::json!([])));
+    assert_eq!(output.get("see_also"), Some(&serde_json::json!([])));
+}

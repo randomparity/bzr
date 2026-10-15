@@ -316,7 +316,7 @@ async fn handle_search_from_url_does_not_infer_custom_fields_from_columnlist() {
     let default_fields = concat!(
         "id,summary,status,resolution,dupe_of,product,component,version,",
         "assigned_to,qa_contact,priority,severity,creation_time,last_change_time,creator,",
-        "url,whiteboard,keywords,blocks,depends_on,cc,op_sys,platform,deadline,",
+        "url,whiteboard,keywords,alias,see_also,blocks,depends_on,cc,op_sys,platform,deadline,",
         "target_milestone,flags"
     );
 
