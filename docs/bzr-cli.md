@@ -542,6 +542,7 @@ bzr bug search "kernel panic"
 bzr bug search "ALL kernel panic"                      # include closed/resolved bugs
 bzr bug search "component:NetworkManager priority:high" --limit 10
 bzr bug search "memory leak" --fields id,summary
+bzr bug search "memory leak" --fields id,qa_contact
 bzr bug search "memory leak" --fields id,summary,cf_release
 bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?product=Firefox&bug_status=NEW"
 bzr bug search --from-url "https://bugzilla.example.com/buglist.cgi?product=Firefox&bug_status=NEW" --save-as "my-query"
@@ -696,11 +697,11 @@ table always includes the fixed fields `ID`, `SUMMARY`, `STATUS`, `RESOLUTION`,
 `BLOCKS`, and `DEPENDS ON`; the two adjacency columns are complete,
 comma-separated ID lists.
 
-Under `--json`, the usual `3.0.8` envelope contains a closed result object:
+Under `--json`, the usual `3.0.9` envelope contains a closed result object:
 
 ```json
 {
-  "schema_version": "3.0.8",
+  "schema_version": "3.0.9",
   "data": {
     "requests": [
       {"requested": "00123", "bug_id": 123},
@@ -2767,7 +2768,7 @@ Every pretty `--json` response is wrapped in a stable envelope:
 
 ```json
 {
-  "schema_version": "3.0.8",
+  "schema_version": "3.0.9",
   "data": <the command's payload>
 }
 ```
@@ -2782,7 +2783,7 @@ bzr --json schema | jq -r '.schema_version'   # the contract version itself
 ```
 
 `--json` error output carries the version too, beside an `error` object:
-`{"schema_version":"3.0.8","error":{"type":...,"message":...,"exit_code":...}}`.
+`{"schema_version":"3.0.9","error":{"type":...,"message":...,"exit_code":...}}`.
 
 Two outputs are deliberately **not** enveloped:
 

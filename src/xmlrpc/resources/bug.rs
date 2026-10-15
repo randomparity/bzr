@@ -323,6 +323,7 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         component: get_optional_string_list(m, "component")?,
         version: get_optional_string_list(m, "version")?,
         assigned_to: get_nonempty_str(m, "assigned_to"),
+        qa_contact: get_nonempty_str(m, "qa_contact"),
         priority: get_nonempty_str(m, "priority"),
         severity: get_nonempty_str(m, "severity"),
         creation_time: get_datetime_str(m, "creation_time"),

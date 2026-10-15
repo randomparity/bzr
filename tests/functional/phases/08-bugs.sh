@@ -151,6 +151,55 @@ if [[ -n "$BUG1" ]]; then
     if assert_success && assert_json_exists '.id' && assert_json_exists '.summary'; then test_pass; fi
 else test_skip "no BUG1"; fi
 
+test_begin "bug-qa-contact-fixture" "set populated QA contact for projection"
+if [[ -n "$BUG1" ]]; then
+    run_bzr bug update "$BUG1" --field "qa_contact=$ADMIN_EMAIL"
+    if assert_success; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "bug-search-qa-contact-projection" "from-URL QA contact in REST/XML-RPC table and JSON"
+if [[ -n "$BUG1" ]]; then
+    _QA_OK=1
+    for _QA_API in rest xmlrpc; do
+        for _QA_SERVER in test public; do
+            run_bzr --api "$_QA_API" --server "$_QA_SERVER" bug search \
+                --from-url "${BZ_URL}/buglist.cgi?bug_id=${BUG1}" --fields qa_contact
+            if ! { assert_success &&
+                assert_json '.[0].qa_contact' "$ADMIN_EMAIL" &&
+                assert_json '.[0] | keys == ["qa_contact"]' true; }; then _QA_OK=0; fi
+            run_bzr_raw --output table --api "$_QA_API" --server "$_QA_SERVER" bug search \
+                --from-url "${BZ_URL}/buglist.cgi?bug_id=${BUG1}" --fields qa_contact
+            if ! { assert_success && assert_stdout_contains "QA_CONTACT" &&
+                assert_stdout_contains "admin"; }; then _QA_OK=0; fi
+        done
+    done
+    if [[ $_QA_OK -eq 1 ]]; then test_pass; fi
+    unset _QA_OK _QA_API _QA_SERVER
+else test_skip "no BUG1"; fi
+
+test_begin "bug-view-default-qa-contact" "default REST and XML-RPC view retain QA contact"
+if [[ -n "$BUG1" ]]; then
+    _QA_OK=1
+    for _QA_API in rest xmlrpc; do
+        run_bzr --api "$_QA_API" bug view "$BUG1"
+        if ! { assert_success && assert_json '.qa_contact' "$ADMIN_EMAIL"; }; then _QA_OK=0; fi
+    done
+    if [[ $_QA_OK -eq 1 ]]; then test_pass; fi
+    unset _QA_OK _QA_API
+else test_skip "no BUG1"; fi
+
+test_begin "bug-view-unset-qa-contact" "unset QA contact remains a selectable optional value"
+if [[ -n "$BUG2" ]]; then
+    _QA_OK=1
+    for _QA_API in rest xmlrpc; do
+        run_bzr --api "$_QA_API" --server public bug view "$BUG2" --fields qa_contact
+        if ! { assert_success && assert_json 'keys == ["qa_contact"]' true &&
+            assert_json '.qa_contact == null or .qa_contact == ""' true; }; then _QA_OK=0; fi
+    done
+    if [[ $_QA_OK -eq 1 ]]; then test_pass; fi
+    unset _QA_OK _QA_API
+else test_skip "no BUG2"; fi
+
 # Personal tags are only mutated through XML-RPC. Exercise the live server's
 # request and response shapes, then prove the tag is projected and searchable.
 test_begin "bug-tag-xmlrpc-round-trip" "bug tag XML-RPC mutation, projection, and filtering"

@@ -69,6 +69,10 @@ wait_for_ready() {
             local body
             body=$(curl -s "$url") || body=""
             printf '%s\n' "$body" | python3 -m json.tool 2>/dev/null || printf '%s\n' "$body"
+            # Populated QA-contact read tests require Bugzilla to retain this field.
+            $CONTAINER_RT exec -w /var/www/html/bugzilla "$CONTAINER_NAME" \
+                perl -I. -MBugzilla -MBugzilla::Config -e \
+                'Bugzilla->params->{useqacontact} = 1; Bugzilla::Config::write_params();'
             return 0
         fi
         sleep 1

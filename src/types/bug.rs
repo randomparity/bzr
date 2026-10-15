@@ -31,7 +31,7 @@ pub use search::{
     FIELD_MAPPINGS,
 };
 
-const BUG_BUILT_IN_FIELD_COUNT: usize = 30;
+const BUG_BUILT_IN_FIELD_COUNT: usize = 31;
 
 pub(crate) fn is_dynamic_bug_field(name: &str) -> bool {
     name.starts_with("cf_") || matches!(name, "target_release" | "sub_components")
@@ -60,6 +60,7 @@ pub struct Bug {
     pub component: Option<Vec<String>>,
     pub version: Option<Vec<String>>,
     pub assigned_to: Option<String>,
+    pub qa_contact: Option<String>,
     pub priority: Option<String>,
     pub severity: Option<String>,
     pub creation_time: Option<String>,
@@ -103,6 +104,8 @@ struct BugWire {
     version: Option<Vec<String>>,
     #[serde(default)]
     assigned_to: Option<String>,
+    #[serde(default)]
+    qa_contact: Option<String>,
     #[serde(default)]
     priority: Option<String>,
     #[serde(default)]
@@ -222,6 +225,7 @@ impl From<BugWire> for Bug {
             component: wire.component,
             version: wire.version,
             assigned_to: wire.assigned_to,
+            qa_contact: wire.qa_contact,
             priority: wire.priority,
             severity: wire.severity,
             creation_time: wire.creation_time,
@@ -281,6 +285,7 @@ impl Serialize for Bug {
         map.serialize_entry("component", &self.component)?;
         map.serialize_entry("version", &self.version)?;
         map.serialize_entry("assigned_to", &self.assigned_to)?;
+        map.serialize_entry("qa_contact", &self.qa_contact)?;
         map.serialize_entry("priority", &self.priority)?;
         map.serialize_entry("severity", &self.severity)?;
         map.serialize_entry("creation_time", &self.creation_time)?;

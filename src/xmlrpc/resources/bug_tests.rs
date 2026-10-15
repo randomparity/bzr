@@ -12,6 +12,22 @@ use crate::xmlrpc::protocol::XmlRpcClient;
 use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+#[test]
+fn qa_contact_projection_xmlrpc_preserves_optional_contact() {
+    for contact in [None, Some(""), Some("qa@example.com")] {
+        let mut fields = BTreeMap::from([("id".into(), Value::Int(42))]);
+        if let Some(contact) = contact {
+            fields.insert("qa_contact".into(), Value::String(contact.into()));
+        }
+        let bug = value_to_bug(&Value::Struct(fields)).unwrap();
+        let expected = contact.filter(|value| !value.is_empty());
+        assert_eq!(
+            serde_json::to_value(bug).unwrap().get("qa_contact"),
+            Some(&serde_json::json!(expected))
+        );
+    }
+}
+
 fn test_http_client() -> reqwest::Client {
     reqwest::Client::new()
 }
