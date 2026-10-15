@@ -49,7 +49,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6e  # stable
       - name: Generate manpages
         run: cargo run -p xtask --no-default-features --release --locked -- man --out man/man1
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         with:
           name: bzr-manpages
           path: man/man1/*.1
@@ -171,7 +171,7 @@ jobs:
         shell: bash
 
       - name: Download manpages
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
         with:
           name: bzr-manpages
           path: man/man1
@@ -206,13 +206,13 @@ jobs:
 
       - name: Install cargo-deb
         if: matrix.pkg_deb
-        uses: taiki-e/install-action@76c2e6406e52637deed7160d77bded76bd83e06e  # v2.87.14
+        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad  # v2.87.26
         with:
           tool: cargo-deb
 
       - name: Install cargo-generate-rpm
         if: matrix.pkg_rpm
-        uses: taiki-e/install-action@76c2e6406e52637deed7160d77bded76bd83e06e  # v2.87.14
+        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad  # v2.87.26
         with:
           tool: cargo-generate-rpm
 
@@ -305,7 +305,7 @@ jobs:
           DEST: bzr-${{ github.ref_name }}-${{ matrix.target }}.intoto.jsonl
         run: cp "$BUNDLE_PATH" "$DEST"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         with:
           name: bzr-${{ matrix.target }}
           path: |
@@ -326,7 +326,7 @@ jobs:
           # history including tags must be present.
           fetch-depth: 0
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
         with:
           path: artifacts
           # Match per-target artifacts (e.g. bzr-x86_64-pc-windows-msvc) but
@@ -379,7 +379,7 @@ jobs:
           cat SHA256SUMS
 
       - name: Install git-cliff
-        uses: taiki-e/install-action@76c2e6406e52637deed7160d77bded76bd83e06e  # v2.87.14
+        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad  # v2.87.26
         with:
           tool: git-cliff@2.14.1
 
@@ -666,7 +666,7 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/bottle-json"
           cp ./*.json "$GITHUB_WORKSPACE/bottle-json/"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         with:
           name: bottle-json-${{ matrix.os }}
           path: bottle-json/*.json
@@ -689,7 +689,7 @@ jobs:
         run: echo "/home/linuxbrew/.linuxbrew/bin" >> "$GITHUB_PATH"
 
       - name: Download bottle JSONs
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
         with:
           pattern: bottle-json-*
           path: bottle-json
@@ -760,7 +760,7 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@193d6aa1dbbc28bd2c0a6b0e327cfdce68baaf6e  # stable
       - name: Install git-cliff
-        uses: taiki-e/install-action@76c2e6406e52637deed7160d77bded76bd83e06e  # v2.87.14
+        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad  # v2.87.26
         with:
           tool: git-cliff@2.14.1
 
