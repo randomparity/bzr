@@ -346,6 +346,21 @@ make man    # writes to man/man1/
 
 ### Homebrew tap
 
+Apple Silicon release binaries and Homebrew bottles support **macOS 15
+Sequoia or newer**. Issue #884's explicit maintainer decision raised the
+previous Sonoma floor; see [ADR 0083](docs/adr/0083-macos-sequoia-release-floor.md).
+The build and bottle jobs use the explicit native arm64 `macos-15` runner,
+the oldest supported hosted arm64 runner. The release build sets
+`MACOSX_DEPLOYMENT_TARGET=15.0`; Homebrew generates `arm64_sequoia` naturally.
+Do not retag a newer bottle to claim support for an older OS.
+
+When changing this runner or deployment target, inspect the actual binary
+with `xcrun vtool -show-build` and `otool -L`, then validate bottle creation,
+JSON merge and a clean normal bottle install on the supported floor and a
+newer macOS version. Check the installed version, binary checksum and
+Homebrew's `poured_from_bottle` receipt; a source fallback does not establish
+bottle compatibility. A deployment target alone is not runtime proof.
+
 The `homebrew` job in `release.yml` runs after the `release` job on stable
 (non-prerelease) `v*` tags only (`if: !contains(github.ref_name, '-')`). It:
 
@@ -356,6 +371,10 @@ The `homebrew` job in `release.yml` runs after the `release` job on stable
 - Renders `homebrew/bzr.rb.template` into `Formula/bzr.rb` in
   [`randomparity/homebrew-tap`](https://github.com/randomparity/homebrew-tap)
 - Commits and pushes the bumped formula
+
+The `bottles` job then installs that formula with `--build-bottle`, creates
+the platform bottles and uploads their archives. `bottles-merge` combines
+their JSON into the tap's bottle block. Linux bottle coverage is unchanged.
 
 This job needs a `HOMEBREW_TAP_TOKEN` repo secret — a fine-grained PAT with
 `Contents: Write` on `randomparity/homebrew-tap`. See
