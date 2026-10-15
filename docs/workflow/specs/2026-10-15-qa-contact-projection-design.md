@@ -53,10 +53,14 @@ requested filing a follow-up if another field has the same verified defect.
 ## Threat model
 
 - Boundaries widened: existing server bug-response decoding and CLI projection.
-  No new network route, credential, permission, or mutation boundary.
+  No new production network route, credential, permission, or mutation boundary.
 - Actors: remote server controls returned strings; local operator selects fields.
 - Controls: serde optional-string validation on REST; existing XML-RPC string
   extraction; shared table/detail terminal escaping; ordinary JSON encoding.
+- Fixture administration: the trusted local operator selects the disposable
+  test container. Fixed Perl code enables `useqacontact` through the existing
+  container runtime; no server data enters that code. The parameter persists
+  only in the fixture, whose removal belongs to the existing harness lifecycle.
 - Out of scope: compromised servers lying about identities and existing
   authentication policy; this read-only field does not alter their authority.
 
