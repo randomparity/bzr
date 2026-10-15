@@ -117,6 +117,8 @@ async fn from_url_inline_mismatch_warns_routes_inline_and_saves_configured_serve
     let configured_mock = wiremock::MockServer::start().await;
     let inline_mock = wiremock::MockServer::start().await;
     let tmp = tempfile::TempDir::new().unwrap();
+    // This localhost URL is only compared/imported, never connected to: requests use the
+    // numeric inline mock below. Connecting here would race DNS with environment mutation.
     let configured_url = configured_mock.uri().replace("127.0.0.1", "localhost");
     let config_path = crate::test_helpers::write_config_to(
         &tmp,
