@@ -73,6 +73,14 @@
         "type": "string"
       }
     },
+    "alias": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "see_also": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
     "blocks": {
       "type": "array",
       "items": {

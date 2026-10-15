@@ -1066,3 +1066,12 @@ fn registry_is_sorted_and_unique() {
         "duplicate schema name in registry"
     );
 }
+
+#[test]
+fn alias_see_also_schema() {
+    let schema = schema_for("bug");
+    for field in ["alias", "see_also"] {
+        assert_eq!(schema["properties"][field]["type"], "array");
+        assert_eq!(schema["properties"][field]["items"]["type"], "string");
+    }
+}

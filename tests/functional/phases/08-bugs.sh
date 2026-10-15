@@ -200,6 +200,63 @@ if [[ -n "$BUG2" ]]; then
     unset _QA_OK _QA_API
 else test_skip "no BUG2"; fi
 
+test_begin "bug-alias-see-also-mutation-fixture" "set alias and see-also for read round trips"
+if [[ -n "$BUG1" ]]; then
+    _AS_ALIAS="projection-$BUG1"
+    _AS_URL="https://bugzilla.mozilla.org/show_bug.cgi?id=1"
+    run_bzr --api rest bug update "$BUG1" --alias "$_AS_ALIAS" --see-also-add "$_AS_URL"
+    if assert_success; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "bug-alias-see-also-read-projection" "REST/XML-RPC public and authenticated alias/see-also reads"
+if [[ -n "$BUG1" ]]; then
+    _AS_OK=1
+    for _AS_API in rest xmlrpc; do
+        case "$_AS_API" in rest) _AS_TRANSPORT=REST ;; xmlrpc) _AS_TRANSPORT=XMLRPC ;; esac
+        for _AS_SERVER in test public; do
+            run_bzr --api "$_AS_API" --server "$_AS_SERVER" bug view "$BUG1"
+            if ! { assert_success && assert_json ".alias == [\"$_AS_ALIAS\"]" true &&
+                assert_json ".see_also == [\"$_AS_URL\"]" true; }; then _AS_OK=0; fi
+            run_bzr -vv --api "$_AS_API" --server "$_AS_SERVER" bug search \
+                "$BUG1" --fields alias,see_also
+            if ! { assert_success && assert_json ".[0].alias == [\"$_AS_ALIAS\"]" true &&
+                assert_json ".[0].see_also == [\"$_AS_URL\"]" true &&
+                assert_json '.[0] | keys == ["alias","see_also"]' true; }; then _AS_OK=0; fi
+            if ! observe_bzr_transport || [[ $BZR_TRANSPORT != "$_AS_TRANSPORT" ]]; then
+                test_fail "search did not use the selected transport"
+                _AS_OK=0
+            fi
+            run_bzr_raw --output table --api "$_AS_API" --server "$_AS_SERVER" bug search \
+                "$BUG1" --fields alias,see_also
+            if ! { assert_success && assert_stdout_contains "ALIAS" &&
+                assert_stdout_contains "SEE_ALSO" && assert_stdout_contains "$_AS_ALIAS" &&
+                assert_stdout_contains "$_AS_URL"; }; then _AS_OK=0; fi
+            run_bzr --api "$_AS_API" --server "$_AS_SERVER" bug list --id "$BUG1" \
+                --fields id,alias,see_also --exclude-fields alias,see_also
+            if ! { assert_success && assert_json '.[0] | keys == ["id"]' true; }; then _AS_OK=0; fi
+        done
+    done
+    if [[ $_AS_OK -eq 1 ]]; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "bug-alias-see-also-clear" "clear alias and remove see-also through existing mutations"
+if [[ -n "$BUG1" ]]; then
+    run_bzr --api xmlrpc bug update "$BUG1" --alias "" --see-also-remove "$_AS_URL"
+    if assert_success; then test_pass; fi
+else test_skip "no BUG1"; fi
+
+test_begin "bug-alias-see-also-empty" "empty alias and see-also remain projected arrays"
+if [[ -n "$BUG1" ]]; then
+    _AS_OK=1
+    for _AS_API in rest xmlrpc; do
+        run_bzr --api "$_AS_API" --server public bug view "$BUG1" --fields alias,see_also
+        if ! { assert_success && assert_json '.alias' '[]' && assert_json '.see_also' '[]' &&
+            assert_json 'keys == ["alias","see_also"]' true; }; then _AS_OK=0; fi
+    done
+    if [[ $_AS_OK -eq 1 ]]; then test_pass; fi
+else test_skip "no BUG1"; fi
+unset _AS_ALIAS _AS_URL _AS_API _AS_SERVER _AS_OK _AS_TRANSPORT
+
 # Personal tags are only mutated through XML-RPC. Exercise the live server's
 # request and response shapes, then prove the tag is projected and searchable.
 test_begin "bug-tag-xmlrpc-round-trip" "bug tag XML-RPC mutation, projection, and filtering"

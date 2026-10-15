@@ -332,6 +332,8 @@ fn value_to_bug(val: &Value) -> Result<Bug> {
         url: get_nonempty_str(m, "url"),
         whiteboard: get_nonempty_str(m, "whiteboard"),
         keywords: get_str_array(m, "keywords"),
+        alias: get_str_array(m, "alias"),
+        see_also: get_str_array(m, "see_also"),
         tags: get_str_array(m, "tags"),
         blocks: get_int_array(m, "blocks"),
         depends_on: get_int_array(m, "depends_on"),

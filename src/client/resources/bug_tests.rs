@@ -189,7 +189,7 @@ async fn get_bug_default_fields_include_bug_json_fields() {
         .and(path("/rest/bug/1"))
         .and(query_param(
             "include_fields",
-            "id,summary,status,resolution,dupe_of,product,component,version,assigned_to,qa_contact,priority,severity,creation_time,last_change_time,creator,url,whiteboard,keywords,blocks,depends_on,cc,op_sys,platform,deadline,target_milestone,groups,estimated_time,remaining_time,flags",
+            "id,summary,status,resolution,dupe_of,product,component,version,assigned_to,qa_contact,priority,severity,creation_time,last_change_time,creator,url,whiteboard,keywords,alias,see_also,blocks,depends_on,cc,op_sys,platform,deadline,target_milestone,groups,estimated_time,remaining_time,flags",
         ))
         .respond_with(ResponseTemplate::new(200).set_body_json(
             serde_json::json!({"bugs": [{"id": 1, "summary": "test", "status": "NEW"}]}),
@@ -1749,4 +1749,37 @@ async fn search_bugs_sends_saved_search_and_sharer_id() {
 
     let bugs = client.search_bugs(&params).await.unwrap();
     assert!(bugs.is_empty());
+}
+
+#[tokio::test]
+async fn alias_see_also_default_rest_reads() {
+    let mock = MockServer::start().await;
+    for endpoint in ["/rest/bug/42", "/rest/bug"] {
+        Mock::given(method("GET"))
+            .and(path(endpoint))
+            .and(|request: &wiremock::Request| {
+                request.url.query_pairs().any(|(key, value)| {
+                    key == "include_fields"
+                        && ["alias", "see_also"].iter().all(|field| value.split(',').any(|v| v == *field))
+                })
+            })
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{"id": 42, "alias": ["release"], "see_also": ["https://example.com/bug/1"]}]
+            })))
+            .expect(1)
+            .mount(&mock).await;
+    }
+    let client = test_client(&mock.uri());
+    let bug = client.get_bug("42", None, None).await.unwrap();
+    let bugs = client.search_bugs(&SearchParams::default()).await.unwrap();
+    for output in [
+        serde_json::to_value(bug).unwrap(),
+        serde_json::to_value(&bugs[0]).unwrap(),
+    ] {
+        assert_eq!(output["alias"], serde_json::json!(["release"]));
+        assert_eq!(
+            output["see_also"],
+            serde_json::json!(["https://example.com/bug/1"])
+        );
+    }
 }

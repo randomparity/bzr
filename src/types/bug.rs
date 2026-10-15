@@ -31,7 +31,7 @@ pub use search::{
     FIELD_MAPPINGS,
 };
 
-const BUG_BUILT_IN_FIELD_COUNT: usize = 31;
+const BUG_BUILT_IN_FIELD_COUNT: usize = 33;
 
 pub(crate) fn is_dynamic_bug_field(name: &str) -> bool {
     name.starts_with("cf_") || matches!(name, "target_release" | "sub_components")
@@ -69,6 +69,8 @@ pub struct Bug {
     pub url: Option<String>,
     pub whiteboard: Option<String>,
     pub keywords: Vec<String>,
+    pub alias: Vec<String>,
+    pub see_also: Vec<String>,
     pub tags: Vec<String>,
     pub blocks: Vec<u64>,
     pub depends_on: Vec<u64>,
@@ -122,6 +124,10 @@ struct BugWire {
     whiteboard: Option<String>,
     #[serde(default)]
     keywords: Vec<String>,
+    #[serde(default)]
+    alias: Vec<String>,
+    #[serde(default)]
+    see_also: Vec<String>,
     #[serde(default)]
     tags: Vec<String>,
     #[serde(default)]
@@ -234,6 +240,8 @@ impl From<BugWire> for Bug {
             url: wire.url,
             whiteboard: wire.whiteboard,
             keywords: wire.keywords,
+            alias: wire.alias,
+            see_also: wire.see_also,
             tags: wire.tags,
             blocks: wire.blocks,
             depends_on: wire.depends_on,
@@ -294,6 +302,8 @@ impl Serialize for Bug {
         map.serialize_entry("url", &self.url)?;
         map.serialize_entry("whiteboard", &self.whiteboard)?;
         map.serialize_entry("keywords", &self.keywords)?;
+        map.serialize_entry("alias", &self.alias)?;
+        map.serialize_entry("see_also", &self.see_also)?;
         map.serialize_entry("tags", &self.tags)?;
         map.serialize_entry("blocks", &self.blocks)?;
         map.serialize_entry("depends_on", &self.depends_on)?;
