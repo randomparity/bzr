@@ -3,7 +3,7 @@ RUST_MIN_VERSION := 1.89.0
 BZR_COMPARE_BIN ?= $(CURDIR)/target/release/bzr
 
 .PHONY: setup check-rust ensure-components ensure-coverage-prereqs ensure-mutants-prereq install-hooks \
-        build release test test-verbose test-fast test-one coverage fmt clippy lint check-build-script check-test-layout check-functional-test-ids \
+        check-commit build release test test-verbose test-fast test-one coverage fmt clippy lint check-build-script check-test-layout check-functional-test-ids \
         check-no-spawn check-release-security-notes check-shell clean help man \
         skills-test \
         mutants mutants-fast mutants-list audit-mutant-skips \
@@ -109,6 +109,11 @@ fmt: ## Format source code
 
 clippy: ## Run clippy lints
 	$(CARGO) clippy --all-targets --features test-helpers -- -D warnings
+
+check-commit: ## Check formatting, lint and tests before committing
+	$(CARGO) fmt -- --check
+	$(MAKE) clippy
+	$(MAKE) test
 
 lint: fmt clippy check-build-script check-test-layout check-functional-test-ids check-no-spawn check-release-security-notes check-shell ## Run all linters
 
