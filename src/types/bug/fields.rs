@@ -3,7 +3,7 @@ use std::collections::HashSet;
 /// Stable default field set shared by REST and XML-RPC bug searches.
 pub(crate) const BUG_SEARCH_DEFAULT_FIELDS: &str =
     "id,summary,status,resolution,dupe_of,product,component,version,\
-    assigned_to,priority,severity,creation_time,last_change_time,creator,\
+    assigned_to,qa_contact,priority,severity,creation_time,last_change_time,creator,\
     url,whiteboard,keywords,blocks,depends_on,cc,op_sys,platform,deadline,\
     target_milestone,flags";
 
@@ -32,6 +32,7 @@ pub enum BugField {
     Status,
     Priority,
     AssignedTo,
+    QaContact,
     Summary,
     Severity,
     Product,
@@ -67,6 +68,7 @@ impl BugField {
             BugField::Status => "status",
             BugField::Priority => "priority",
             BugField::AssignedTo => "assigned_to",
+            BugField::QaContact => "qa_contact",
             BugField::Summary => "summary",
             BugField::Severity => "severity",
             BugField::Product => "product",
@@ -102,6 +104,7 @@ impl BugField {
             BugField::Status => &["status"],
             BugField::Priority => &["priority"],
             BugField::AssignedTo => &["assigned_to", "assignee"],
+            BugField::QaContact => &["qa_contact"],
             BugField::Summary => &["summary"],
             BugField::Severity => &["severity"],
             BugField::Product => &["product"],
@@ -137,6 +140,7 @@ impl BugField {
             BugField::Status => "STATUS",
             BugField::Priority => "PRIORITY",
             BugField::AssignedTo => "ASSIGNEE",
+            BugField::QaContact => "QA_CONTACT",
             BugField::Summary => "SUMMARY",
             BugField::Severity => "SEVERITY",
             BugField::Product => "PRODUCT",
@@ -182,6 +186,7 @@ pub const BUG_FIELDS: &[BugField] = &[
     BugField::Status,
     BugField::Priority,
     BugField::AssignedTo,
+    BugField::QaContact,
     BugField::Summary,
     BugField::Severity,
     BugField::Product,

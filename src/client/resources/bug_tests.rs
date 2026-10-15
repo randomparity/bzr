@@ -7,6 +7,37 @@ use super::*;
 use crate::client::test_helpers::{test_client, test_client_hybrid};
 
 #[tokio::test]
+async fn qa_contact_projection_default_rest_reads_request_and_preserve_contact() {
+    let mock = MockServer::start().await;
+    for endpoint in ["/rest/bug/42", "/rest/bug"] {
+        Mock::given(method("GET"))
+            .and(path(endpoint))
+            .and(|request: &wiremock::Request| {
+                request.url.query_pairs().any(|(key, value)| {
+                    key == "include_fields" && value.split(',').any(|f| f == "qa_contact")
+                })
+            })
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "bugs": [{"id": 42, "qa_contact": "qa@example.com"}]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+    }
+    let client = test_client(&mock.uri());
+    let bug = client.get_bug("42", None, None).await.unwrap();
+    assert_eq!(
+        serde_json::to_value(bug).unwrap()["qa_contact"],
+        "qa@example.com"
+    );
+    let bugs = client.search_bugs(&SearchParams::default()).await.unwrap();
+    assert_eq!(
+        serde_json::to_value(&bugs[0]).unwrap()["qa_contact"],
+        "qa@example.com"
+    );
+}
+
+#[tokio::test]
 async fn get_bug_history_returns_entries() {
     let mock = MockServer::start().await;
     Mock::given(method("GET"))
@@ -158,7 +189,7 @@ async fn get_bug_default_fields_include_bug_json_fields() {
         .and(path("/rest/bug/1"))
         .and(query_param(
             "include_fields",
-            "id,summary,status,resolution,dupe_of,product,component,version,assigned_to,priority,severity,creation_time,last_change_time,creator,url,whiteboard,keywords,blocks,depends_on,cc,op_sys,platform,deadline,target_milestone,groups,estimated_time,remaining_time,flags",
+            "id,summary,status,resolution,dupe_of,product,component,version,assigned_to,qa_contact,priority,severity,creation_time,last_change_time,creator,url,whiteboard,keywords,blocks,depends_on,cc,op_sys,platform,deadline,target_milestone,groups,estimated_time,remaining_time,flags",
         ))
         .respond_with(ResponseTemplate::new(200).set_body_json(
             serde_json::json!({"bugs": [{"id": 1, "summary": "test", "status": "NEW"}]}),

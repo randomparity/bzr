@@ -7,6 +7,58 @@ use crate::cli::BugAction;
 use crate::test_helpers::{load_config_at, setup_isolated_env};
 use crate::types::OutputFormat;
 
+#[tokio::test]
+async fn qa_contact_projection_from_url_search_requests_and_renders_contact() {
+    let (mock, _tmp, config_path) = setup_isolated_env().await;
+    Mock::given(method("GET"))
+        .and(path("/rest/bug"))
+        .and(query_param("include_fields", "id,qa_contact"))
+        .and(query_param("product", "TestProduct"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "bugs": [{"id": 42, "qa_contact": "qa@example.com"}]
+        })))
+        .expect(3)
+        .mount(&mock)
+        .await;
+    let mut action = from_url_action(
+        format!("{}/buglist.cgi?product=TestProduct", mock.uri()),
+        None,
+    );
+    if let BugAction::Search(args) = &mut action {
+        args.field_args.fields = Some("qa_contact".into());
+    }
+    for format in [
+        OutputFormat::Table,
+        OutputFormat::Json,
+        OutputFormat::Ndjson,
+    ] {
+        let mut io = crate::test_helpers::CapturedIo::new();
+        let result = crate::commands::bug::execute(
+            &action,
+            &crate::commands::runtime::invocation::CommandContext::new(None, format, None)
+                .with_config_path_override(Some(config_path.clone())),
+            &mut io.writers(),
+        )
+        .await;
+        assert!(result.is_ok(), "QA-contact search failed: {result:?}");
+        assert!(io.err_str().is_empty());
+        match format {
+            OutputFormat::Table => {
+                assert!(io.out_str().contains("QA_CONTACT"));
+                assert!(io.out_str().contains("qa"));
+            }
+            OutputFormat::Json => assert_eq!(
+                crate::test_helpers::json_envelope_data(io.out_str()),
+                serde_json::json!([{"qa_contact": "qa@example.com"}])
+            ),
+            OutputFormat::Ndjson => assert_eq!(
+                serde_json::from_str::<serde_json::Value>(io.out_str()).unwrap(),
+                serde_json::json!({"qa_contact": "qa@example.com"})
+            ),
+        }
+    }
+}
+
 fn from_url_action(url: String, save_as: Option<String>) -> BugAction {
     BugAction::Search(crate::cli::SearchArgs {
         page_args: crate::cli::PageArgs::default(),
@@ -263,7 +315,7 @@ async fn handle_search_from_url_does_not_infer_custom_fields_from_columnlist() {
     let (mock, _tmp, config_path) = setup_isolated_env().await;
     let default_fields = concat!(
         "id,summary,status,resolution,dupe_of,product,component,version,",
-        "assigned_to,priority,severity,creation_time,last_change_time,creator,",
+        "assigned_to,qa_contact,priority,severity,creation_time,last_change_time,creator,",
         "url,whiteboard,keywords,blocks,depends_on,cc,op_sys,platform,deadline,",
         "target_milestone,flags"
     );

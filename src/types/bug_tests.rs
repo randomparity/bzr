@@ -3,6 +3,32 @@
 use super::*;
 
 #[test]
+fn qa_contact_projection_rest_preserves_optional_values() {
+    for contact in [
+        serde_json::json!("qa@example.com"),
+        serde_json::json!(""),
+        serde_json::Value::Null,
+    ] {
+        let bug: Bug = serde_json::from_value(serde_json::json!({
+            "id": 42, "qa_contact": contact
+        }))
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(bug).unwrap().get("qa_contact"),
+            Some(&contact)
+        );
+    }
+    let missing: Bug = serde_json::from_value(serde_json::json!({"id": 42})).unwrap();
+    assert_eq!(
+        serde_json::to_value(missing).unwrap().get("qa_contact"),
+        Some(&serde_json::Value::Null)
+    );
+    assert!(
+        serde_json::from_value::<Bug>(serde_json::json!({"id": 42, "qa_contact": []})).is_err()
+    );
+}
+
+#[test]
 fn bug_deserializes_minimal() {
     let json = r#"{"id": 42}"#;
     let bug: Bug = serde_json::from_str(json).unwrap();

@@ -14,6 +14,14 @@
 use serde_json::{json, Value};
 
 use super::SCHEMAS;
+
+#[test]
+fn qa_contact_projection_schema_declares_nullable_string() {
+    assert_eq!(
+        schema_for("bug")["properties"]["qa_contact"]["type"],
+        json!(["string", "null"])
+    );
+}
 use crate::output::resources::attachment::{
     AttachmentBatchResult, AttachmentDownloadResult, BatchSummary, BugDownloadResult,
     DownloadedFile, TargetStatus,

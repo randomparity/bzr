@@ -112,6 +112,7 @@ fn render_builtin_field(field: BugField, bug: &Bug) -> String {
         BugField::Status => bug.status.clone().unwrap_or_default(),
         BugField::Priority => bug.priority.clone().unwrap_or_default(),
         BugField::AssignedTo => shorten_email(bug.assigned_to.as_deref().unwrap_or("")),
+        BugField::QaContact => shorten_email(bug.qa_contact.as_deref().unwrap_or("")),
         BugField::Summary => truncate(bug.summary.as_deref().unwrap_or(""), SUMMARY_TRUNCATE_WIDTH),
         BugField::Severity => bug.severity.clone().unwrap_or_default(),
         BugField::Product => bug.product.clone().unwrap_or_default(),
@@ -259,6 +260,11 @@ const BUILTIN_DETAIL_FIELDS: &[BuiltinDetailField] = &[
         field: BugField::AssignedTo,
         label: "Assignee",
         value: DetailValue::OptionalText(|bug| bug.assigned_to.as_deref()),
+    },
+    BuiltinDetailField {
+        field: BugField::QaContact,
+        label: "QA Contact",
+        value: DetailValue::OptionalText(|bug| bug.qa_contact.as_deref()),
     },
     BuiltinDetailField {
         field: BugField::Priority,

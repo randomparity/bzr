@@ -43,6 +43,9 @@
     "assigned_to": {
       "type": ["string", "null"]
     },
+    "qa_contact": {
+      "type": ["string", "null"]
+    },
     "priority": {
       "type": ["string", "null"]
     },
