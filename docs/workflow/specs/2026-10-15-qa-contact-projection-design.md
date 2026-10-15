@@ -64,6 +64,18 @@ requested filing a follow-up if another field has the same verified defect.
 - Out of scope: compromised servers lying about identities and existing
   authentication policy; this read-only field does not alter their authority.
 
+## Approved delivery security patch
+
+CI dependency policy exposed unchanged rustls 0.23.45 vulnerabilities
+(RUSTSEC-2026-0346 through RUSTSEC-2026-0349). The operator explicitly
+authorized the minimal security update in this PR on 2026-10-15. Pin 0.23.46
+in Cargo.toml and resolve both root and standalone fuzz lockfiles; preserve
+features, TLS policy, targets and the Rust 1.89 floor (upstream requires 1.71).
+The added boundary is upstream TLS code handling untrusted network input.
+Registry checksums, exact pinning and cargo-deny govern supply-chain intake;
+existing TLS tests and a fresh full functional run exercise integration.
+No application TLS policy or public contract changes are intended.
+
 ## Global Constraints
 
 Rust 1.89.0; current-thread Tokio; no new dependencies; sibling test files;
