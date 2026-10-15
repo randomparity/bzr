@@ -51,6 +51,11 @@ test_begin "server-tls-ca-cert-trusts-the-provided-ca" "--server-tls-ca-cert tru
 run_bzr_raw --json --server-url "$TLS_URL" --server-tls-ca-cert "$TLS_CA_CERT" server info </dev/null
 if assert_success && assert_json_exists '.version'; then test_pass; fi
 
+test_begin "server-tls-ca-cert-verifies-localhost-dns-name" "--server-tls-ca-cert verifies a DNS name"
+run_bzr_raw --json --server-url "https://localhost:${TLS_PORT}" \
+    --server-tls-ca-cert "$TLS_CA_CERT" server info </dev/null
+if assert_success && assert_json_exists '.version'; then test_pass; fi
+
 test_begin "server-tls-pin-sha256-accepts-the-correct-pin" "--server-tls-pin-sha256 accepts the correct pin"
 run_bzr_raw --json --server-url "$TLS_URL" --server-tls-pin-sha256 "$TLS_GOOD_PIN" server info </dev/null
 if assert_success && assert_json_exists '.version'; then test_pass; fi
@@ -107,6 +112,22 @@ if assert_failure &&
     assert_stderr_contains '^  bzr config set-server <NAME> --tls-pin-sha256 <PIN>$' &&
     assert_stderr_not_contains '\\n'; then
     test_pass
+fi
+
+# Keep the chain trusted while changing only the leaf's DNS identity. Connecting
+# to localhost requires no extra DNS alias and keeps resolution out of cargo tests.
+_tls_cleanup
+test_begin "server-tls-ca-cert-rejects-wrong-dns-name" "--server-tls-ca-cert rejects a wrong DNS name"
+if tls_fixture_start "$BZ_PORT" "wrong-name.invalid"; then
+    run_bzr_raw --output table --server-url "https://localhost:${TLS_PORT}" \
+        --server-tls-ca-cert "$TLS_CA_CERT" server info </dev/null
+    if assert_failure &&
+        assert_stderr_contains 'certificate not valid for name' &&
+        assert_stderr_contains 'localhost'; then
+        test_pass
+    fi
+else
+    test_fail "wrong-name TLS reverse proxy did not become ready"
 fi
 
 # Tear down now and restore the runner's plain cleanup trap for later phases.
