@@ -10,15 +10,17 @@ RHBZ_BZR_EXTERNAL_ID="${RHBZ_TOKEN}-bzr-link"
 RHBZ_TRACKER="${RHBZ_TOKEN}-tracker"
 
 rhbz_controls_ready() {
-    local controls_file="$COMPARE_EXCHANGE_DIR/rhbz-controls.sql"
-    local -a controls
+    local controls_file="$COMPARE_EXCHANGE_DIR/rhbz-controls.sql" control
+    local -a controls=()
 
     printf '%s\n' \
         "SELECT p.id FROM components c JOIN products p ON p.id = c.product_id JOIN profiles u ON u.userid = c.initialowner WHERE p.name = '$RHBZ_PRODUCT' AND c.name = '$RHBZ_COMPONENT' AND c.isactive = 1 AND u.login_name = '$COMPARE_ADMIN_EMAIL' LIMIT 1;" \
         "SELECT c.id FROM components c JOIN products p ON p.id = c.product_id JOIN profiles u ON u.userid = c.initialowner WHERE p.name = '$RHBZ_PRODUCT' AND c.name = '$RHBZ_COMPONENT' AND c.isactive = 1 AND u.login_name = '$COMPARE_ADMIN_EMAIL' LIMIT 1;" \
         "SELECT COUNT(DISTINCT g.name) FROM profiles p JOIN user_group_map m ON m.user_id = p.userid JOIN groups g ON g.id = m.group_id WHERE p.login_name = '$COMPARE_ADMIN_EMAIL' AND g.name IN ('editbugs', 'editcomponents');" \
         >"$controls_file"
-    mapfile -t controls < <(run_bugzilla_sql_file "$controls_file" | awk '/^[0-9]+$/')
+    while IFS= read -r control; do
+        controls+=("$control")
+    done < <(run_bugzilla_sql_file "$controls_file" | awk '/^[0-9]+$/')
     [[ ${controls[0]:-} =~ ^[1-9][0-9]*$ && ${controls[1]:-} =~ ^[1-9][0-9]*$ &&
         ${controls[2]:-} == 2 ]] || return 1
     RHBZ_PRODUCT_ID=${controls[0]}
