@@ -30,3 +30,17 @@ jobs:
 
       - name: Check dependency policy
         run: cargo deny check
+
+      # fuzz/ is excluded from the root workspace and has its own lockfile, so
+      # root pin changes leave fuzz/Cargo.lock stale unless it is refreshed.
+      - name: Check fuzz lockfile is in sync
+        run: |
+          if ! cargo metadata --locked --manifest-path fuzz/Cargo.toml --format-version 1 > /dev/null; then
+            echo "::error::fuzz/Cargo.lock is out of sync with the root dependency pins. Fix: cd fuzz && cargo update -p <crate> for each crate named above (not a blanket cargo update)."
+            exit 1
+          fi
+
+      # --allow unmatched-skip: root skip entries (e.g. keyring/dbus) do not
+      # all appear in the fuzz graph; see the fuzz-lock-sync design spec.
+      - name: Check fuzz dependency policy
+        run: cargo deny --manifest-path fuzz/Cargo.toml check --config deny.toml --allow unmatched-skip
