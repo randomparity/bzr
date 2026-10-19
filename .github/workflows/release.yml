@@ -873,7 +873,9 @@ jobs:
           PYEOF
 
       - name: Refresh Cargo.lock
-        run: cargo update -p bzr
+        run: |
+          cargo update -p bzr
+          cargo update -p bzr --manifest-path fuzz/Cargo.toml
 
       - name: Insert generated section into CHANGELOG.md
         env:
@@ -914,6 +916,7 @@ jobs:
           git add \
             Cargo.toml \
             Cargo.lock \
+            fuzz/Cargo.lock \
             CHANGELOG.md \
             agent-skills \
             content
