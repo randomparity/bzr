@@ -162,10 +162,17 @@ if [[ -n "$BUG1" ]]; then
     _QA_OK=1
     for _QA_API in rest xmlrpc; do
         for _QA_SERVER in test public; do
+            _QA_EXPECT="$ADMIN_EMAIL"
+            # bz53 is built from bugzilla/bugzilla master, whose
+            # Bugzilla::Util::email_filter strips the domain from every user
+            # field for logged-out callers, with no param to disable it.
+            if [[ "$_QA_SERVER" == public && "$BZ_VERSION" == bz53 ]]; then
+                _QA_EXPECT="${ADMIN_EMAIL%@*}"
+            fi
             run_bzr --api "$_QA_API" --server "$_QA_SERVER" bug search \
                 --from-url "${BZ_URL}/buglist.cgi?bug_id=${BUG1}" --fields qa_contact
             if ! { assert_success &&
-                assert_json '.[0].qa_contact' "$ADMIN_EMAIL" &&
+                assert_json '.[0].qa_contact' "$_QA_EXPECT" &&
                 assert_json '.[0] | keys == ["qa_contact"]' true; }; then _QA_OK=0; fi
             run_bzr_raw --output table --api "$_QA_API" --server "$_QA_SERVER" bug search \
                 --from-url "${BZ_URL}/buglist.cgi?bug_id=${BUG1}" --fields qa_contact
@@ -174,7 +181,7 @@ if [[ -n "$BUG1" ]]; then
         done
     done
     if [[ $_QA_OK -eq 1 ]]; then test_pass; fi
-    unset _QA_OK _QA_API _QA_SERVER
+    unset _QA_OK _QA_API _QA_SERVER _QA_EXPECT
 else test_skip "no BUG1"; fi
 
 test_begin "bug-view-default-qa-contact" "default REST and XML-RPC view retain QA contact"
