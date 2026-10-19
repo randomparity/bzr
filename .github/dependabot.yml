@@ -26,6 +26,9 @@ updates:
       - dependency-name: "sha2"
         versions: ["0.11.x"]
 
+  # fuzz/deny.exceptions.toml approves libfuzzer-sys's NCSA license for one
+  # exact version, and no CI job runs cargo-deny over fuzz/. A PR bumping
+  # libfuzzer-sys must bump that exception's @version too.
   - package-ecosystem: cargo
     directory: /fuzz
     schedule:
