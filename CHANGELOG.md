@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.10.1] - 2026-10-19
+
+### Security
+
+Security assessment: No publicly identified runtime vulnerabilities in bzr were fixed in this release.
+
+### Fixed
+
+- Preserve QA contact in field projections
+- Update rustls to address security advisories
+- Preserve alias and see-also read fields
+- Rename reserved tracing field message to error_message
 ## [0.10.0] - 2026-09-15
 
 ### Security
