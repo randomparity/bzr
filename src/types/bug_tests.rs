@@ -3,6 +3,32 @@
 use super::*;
 
 #[test]
+fn qa_contact_projection_rest_preserves_optional_values() {
+    for contact in [
+        serde_json::json!("qa@example.com"),
+        serde_json::json!(""),
+        serde_json::Value::Null,
+    ] {
+        let bug: Bug = serde_json::from_value(serde_json::json!({
+            "id": 42, "qa_contact": contact
+        }))
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(bug).unwrap().get("qa_contact"),
+            Some(&contact)
+        );
+    }
+    let missing: Bug = serde_json::from_value(serde_json::json!({"id": 42})).unwrap();
+    assert_eq!(
+        serde_json::to_value(missing).unwrap().get("qa_contact"),
+        Some(&serde_json::Value::Null)
+    );
+    assert!(
+        serde_json::from_value::<Bug>(serde_json::json!({"id": 42, "qa_contact": []})).is_err()
+    );
+}
+
+#[test]
 fn bug_deserializes_minimal() {
     let json = r#"{"id": 42}"#;
     let bug: Bug = serde_json::from_str(json).unwrap();
@@ -436,4 +462,42 @@ fn bug_rejects_cc_object_without_name_or_email() {
         result.is_err(),
         "cc member object with neither name nor email must fail"
     );
+}
+
+#[test]
+fn alias_see_also_model_round_trip() {
+    for values in [
+        serde_json::json!([]),
+        serde_json::json!(["second", "first"]),
+    ] {
+        let bug: Bug = serde_json::from_value(serde_json::json!({
+            "id": 42, "alias": values, "see_also": values
+        }))
+        .unwrap();
+        let output = serde_json::to_value(bug).unwrap();
+        assert_eq!(output.get("alias"), Some(&values));
+        assert_eq!(output.get("see_also"), Some(&values));
+    }
+    let bug: Bug = serde_json::from_value(serde_json::json!({"id": 42})).unwrap();
+    let output = serde_json::to_value(bug).unwrap();
+    assert_eq!(output.get("alias"), Some(&serde_json::json!([])));
+    assert_eq!(output.get("see_also"), Some(&serde_json::json!([])));
+}
+
+#[test]
+fn alias_see_also_rest_rejects_invalid_arrays() {
+    for field in ["alias", "see_also"] {
+        for value in [
+            serde_json::json!("scalar"),
+            serde_json::json!([42]),
+            serde_json::Value::Null,
+        ] {
+            let mut input = serde_json::json!({"id": 42});
+            input[field] = value;
+            assert!(
+                serde_json::from_value::<Bug>(input).is_err(),
+                "accepted {field}"
+            );
+        }
+    }
 }

@@ -3,8 +3,8 @@ use std::collections::HashSet;
 /// Stable default field set shared by REST and XML-RPC bug searches.
 pub(crate) const BUG_SEARCH_DEFAULT_FIELDS: &str =
     "id,summary,status,resolution,dupe_of,product,component,version,\
-    assigned_to,priority,severity,creation_time,last_change_time,creator,\
-    url,whiteboard,keywords,blocks,depends_on,cc,op_sys,platform,deadline,\
+    assigned_to,qa_contact,priority,severity,creation_time,last_change_time,creator,\
+    url,whiteboard,keywords,alias,see_also,blocks,depends_on,cc,op_sys,platform,deadline,\
     target_milestone,flags";
 
 /// Which fields the caller asked to include / exclude, as the raw
@@ -32,6 +32,7 @@ pub enum BugField {
     Status,
     Priority,
     AssignedTo,
+    QaContact,
     Summary,
     Severity,
     Product,
@@ -47,6 +48,8 @@ pub enum BugField {
     Platform,
     Deadline,
     Keywords,
+    Alias,
+    SeeAlso,
     Blocks,
     DependsOn,
     Cc,
@@ -67,6 +70,7 @@ impl BugField {
             BugField::Status => "status",
             BugField::Priority => "priority",
             BugField::AssignedTo => "assigned_to",
+            BugField::QaContact => "qa_contact",
             BugField::Summary => "summary",
             BugField::Severity => "severity",
             BugField::Product => "product",
@@ -82,6 +86,8 @@ impl BugField {
             BugField::Platform => "platform",
             BugField::Deadline => "deadline",
             BugField::Keywords => "keywords",
+            BugField::Alias => "alias",
+            BugField::SeeAlso => "see_also",
             BugField::Blocks => "blocks",
             BugField::DependsOn => "depends_on",
             BugField::Cc => "cc",
@@ -102,6 +108,7 @@ impl BugField {
             BugField::Status => &["status"],
             BugField::Priority => &["priority"],
             BugField::AssignedTo => &["assigned_to", "assignee"],
+            BugField::QaContact => &["qa_contact"],
             BugField::Summary => &["summary"],
             BugField::Severity => &["severity"],
             BugField::Product => &["product"],
@@ -117,6 +124,8 @@ impl BugField {
             BugField::Platform => &["platform"],
             BugField::Deadline => &["deadline"],
             BugField::Keywords => &["keywords"],
+            BugField::Alias => &["alias"],
+            BugField::SeeAlso => &["see_also"],
             BugField::Blocks => &["blocks"],
             BugField::DependsOn => &["depends_on"],
             BugField::Cc => &["cc"],
@@ -137,6 +146,7 @@ impl BugField {
             BugField::Status => "STATUS",
             BugField::Priority => "PRIORITY",
             BugField::AssignedTo => "ASSIGNEE",
+            BugField::QaContact => "QA_CONTACT",
             BugField::Summary => "SUMMARY",
             BugField::Severity => "SEVERITY",
             BugField::Product => "PRODUCT",
@@ -152,6 +162,8 @@ impl BugField {
             BugField::Platform => "PLATFORM",
             BugField::Deadline => "DEADLINE",
             BugField::Keywords => "KEYWORDS",
+            BugField::Alias => "ALIAS",
+            BugField::SeeAlso => "SEE_ALSO",
             BugField::Blocks => "BLOCKS",
             BugField::DependsOn => "DEPENDS_ON",
             BugField::Cc => "CC",
@@ -182,6 +194,7 @@ pub const BUG_FIELDS: &[BugField] = &[
     BugField::Status,
     BugField::Priority,
     BugField::AssignedTo,
+    BugField::QaContact,
     BugField::Summary,
     BugField::Severity,
     BugField::Product,
@@ -197,6 +210,8 @@ pub const BUG_FIELDS: &[BugField] = &[
     BugField::Platform,
     BugField::Deadline,
     BugField::Keywords,
+    BugField::Alias,
+    BugField::SeeAlso,
     BugField::Blocks,
     BugField::DependsOn,
     BugField::Cc,

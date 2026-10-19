@@ -12,6 +12,22 @@ use crate::xmlrpc::protocol::XmlRpcClient;
 use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+#[test]
+fn qa_contact_projection_xmlrpc_preserves_optional_contact() {
+    for contact in [None, Some(""), Some("qa@example.com")] {
+        let mut fields = BTreeMap::from([("id".into(), Value::Int(42))]);
+        if let Some(contact) = contact {
+            fields.insert("qa_contact".into(), Value::String(contact.into()));
+        }
+        let bug = value_to_bug(&Value::Struct(fields)).unwrap();
+        let expected = contact.filter(|value| !value.is_empty());
+        assert_eq!(
+            serde_json::to_value(bug).unwrap().get("qa_contact"),
+            Some(&serde_json::json!(expected))
+        );
+    }
+}
+
 fn test_http_client() -> reqwest::Client {
     reqwest::Client::new()
 }
@@ -1059,4 +1075,28 @@ async fn search_bugs_sends_saved_search_and_sharer_id_xmlrpc() {
         body.contains("<name>sharer_id</name><value><int>112233</int></value>"),
         "{body}"
     );
+}
+
+#[test]
+fn alias_see_also_xmlrpc_round_trip() {
+    for values in [vec![], vec!["second", "first"]] {
+        let array = Value::Array(values.iter().map(|v| Value::from(*v)).collect());
+        let fields = BTreeMap::from([
+            ("id".into(), Value::Int(42)),
+            ("alias".into(), array.clone()),
+            ("see_also".into(), array),
+        ]);
+        let bug = value_to_bug(&Value::Struct(fields)).unwrap();
+        let output = serde_json::to_value(bug).unwrap();
+        assert_eq!(output.get("alias"), Some(&serde_json::json!(values)));
+        assert_eq!(output.get("see_also"), Some(&serde_json::json!(values)));
+    }
+    let bug = value_to_bug(&Value::Struct(BTreeMap::from([(
+        "id".into(),
+        Value::Int(42),
+    )])))
+    .unwrap();
+    let output = serde_json::to_value(bug).unwrap();
+    assert_eq!(output.get("alias"), Some(&serde_json::json!([])));
+    assert_eq!(output.get("see_also"), Some(&serde_json::json!([])));
 }

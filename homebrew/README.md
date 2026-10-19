@@ -1,7 +1,7 @@
 # Homebrew tap
 
 This directory holds the formula template that
-[`.github/workflows/update-homebrew.yml`](../.github/workflows/update-homebrew.yml)
+[`.github/workflows/release.yml`](../.github/workflows/release.yml)
 renders into `Formula/bzr.rb` in the
 [`randomparity/homebrew-tap`](https://github.com/randomparity/homebrew-tap)
 repository on each stable (non-prerelease) `v*` release.
@@ -15,12 +15,18 @@ brew install bzr
 
 Supported pre-built platforms:
 
-- macOS arm64 (Apple Silicon)
+- macOS arm64 (Apple Silicon), macOS 15 Sequoia or newer
 - Linux x86_64 (glibc)
 - Linux aarch64 (glibc)
 
 Intel Mac (`x86_64-apple-darwin`) builds from source via `cargo` and a
 build-time `rust` dep. No prebuilt binary is published for Intel macOS.
+
+The macOS bottle is built on the explicit native arm64 `macos-15` runner
+and receives Homebrew's natural `arm64_sequoia` tag. Newer macOS versions can
+pour that bottle. Sonoma is no longer supported by the prebuilt binary or
+bottled-install contract, following the explicit policy decision in
+[ADR 0083](../docs/adr/0083-macos-sequoia-release-floor.md).
 
 ## One-time tap setup
 
@@ -49,9 +55,11 @@ tap repo and the formula already exist):
 
 3. Create a fine-grained PAT with `Contents: Write` on `randomparity/homebrew-tap`
    and add it to this repo's secrets as `HOMEBREW_TAP_TOKEN`. The
-   `update-homebrew.yml` workflow uses it to push subsequent updates.
+   `release.yml` workflow uses it to push subsequent updates.
 
-After the one-time setup, every stable release auto-bumps the formula.
+After the one-time setup, every stable release auto-bumps the formula. The
+`bottles` job then creates and uploads bottles; `bottles-merge` folds their
+JSON metadata into the formula. A failed bottle leg prevents that merge.
 
 ## Future: homebrew-core
 

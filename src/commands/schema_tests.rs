@@ -14,6 +14,14 @@
 use serde_json::{json, Value};
 
 use super::SCHEMAS;
+
+#[test]
+fn qa_contact_projection_schema_declares_nullable_string() {
+    assert_eq!(
+        schema_for("bug")["properties"]["qa_contact"]["type"],
+        json!(["string", "null"])
+    );
+}
 use crate::output::resources::attachment::{
     AttachmentBatchResult, AttachmentDownloadResult, BatchSummary, BugDownloadResult,
     DownloadedFile, TargetStatus,
@@ -1057,4 +1065,13 @@ fn registry_is_sorted_and_unique() {
         names.len(),
         "duplicate schema name in registry"
     );
+}
+
+#[test]
+fn alias_see_also_schema() {
+    let schema = schema_for("bug");
+    for field in ["alias", "see_also"] {
+        assert_eq!(schema["properties"][field]["type"], "array");
+        assert_eq!(schema["properties"][field]["items"]["type"], "string");
+    }
 }

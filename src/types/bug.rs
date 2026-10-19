@@ -31,7 +31,7 @@ pub use search::{
     FIELD_MAPPINGS,
 };
 
-const BUG_BUILT_IN_FIELD_COUNT: usize = 30;
+const BUG_BUILT_IN_FIELD_COUNT: usize = 33;
 
 pub(crate) fn is_dynamic_bug_field(name: &str) -> bool {
     name.starts_with("cf_") || matches!(name, "target_release" | "sub_components")
@@ -60,6 +60,7 @@ pub struct Bug {
     pub component: Option<Vec<String>>,
     pub version: Option<Vec<String>>,
     pub assigned_to: Option<String>,
+    pub qa_contact: Option<String>,
     pub priority: Option<String>,
     pub severity: Option<String>,
     pub creation_time: Option<String>,
@@ -68,6 +69,8 @@ pub struct Bug {
     pub url: Option<String>,
     pub whiteboard: Option<String>,
     pub keywords: Vec<String>,
+    pub alias: Vec<String>,
+    pub see_also: Vec<String>,
     pub tags: Vec<String>,
     pub blocks: Vec<u64>,
     pub depends_on: Vec<u64>,
@@ -104,6 +107,8 @@ struct BugWire {
     #[serde(default)]
     assigned_to: Option<String>,
     #[serde(default)]
+    qa_contact: Option<String>,
+    #[serde(default)]
     priority: Option<String>,
     #[serde(default)]
     severity: Option<String>,
@@ -119,6 +124,10 @@ struct BugWire {
     whiteboard: Option<String>,
     #[serde(default)]
     keywords: Vec<String>,
+    #[serde(default)]
+    alias: Vec<String>,
+    #[serde(default)]
+    see_also: Vec<String>,
     #[serde(default)]
     tags: Vec<String>,
     #[serde(default)]
@@ -222,6 +231,7 @@ impl From<BugWire> for Bug {
             component: wire.component,
             version: wire.version,
             assigned_to: wire.assigned_to,
+            qa_contact: wire.qa_contact,
             priority: wire.priority,
             severity: wire.severity,
             creation_time: wire.creation_time,
@@ -230,6 +240,8 @@ impl From<BugWire> for Bug {
             url: wire.url,
             whiteboard: wire.whiteboard,
             keywords: wire.keywords,
+            alias: wire.alias,
+            see_also: wire.see_also,
             tags: wire.tags,
             blocks: wire.blocks,
             depends_on: wire.depends_on,
@@ -281,6 +293,7 @@ impl Serialize for Bug {
         map.serialize_entry("component", &self.component)?;
         map.serialize_entry("version", &self.version)?;
         map.serialize_entry("assigned_to", &self.assigned_to)?;
+        map.serialize_entry("qa_contact", &self.qa_contact)?;
         map.serialize_entry("priority", &self.priority)?;
         map.serialize_entry("severity", &self.severity)?;
         map.serialize_entry("creation_time", &self.creation_time)?;
@@ -289,6 +302,8 @@ impl Serialize for Bug {
         map.serialize_entry("url", &self.url)?;
         map.serialize_entry("whiteboard", &self.whiteboard)?;
         map.serialize_entry("keywords", &self.keywords)?;
+        map.serialize_entry("alias", &self.alias)?;
+        map.serialize_entry("see_also", &self.see_also)?;
         map.serialize_entry("tags", &self.tags)?;
         map.serialize_entry("blocks", &self.blocks)?;
         map.serialize_entry("depends_on", &self.depends_on)?;

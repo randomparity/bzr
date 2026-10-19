@@ -26,6 +26,15 @@ if [[ ! -x "$BZR_BIN" ]]; then
     echo "FATAL: bzr binary not found at $BZR_BIN"
     exit 1
 fi
+# Match the installed dependency-analysis phase's release-path proof before fixtures.
+_BUILD_BIN_CANONICAL=$(cd "$(dirname "$BZR_BIN")" && pwd -P)/$(basename "$BZR_BIN")
+if [[ $_BUILD_BIN_CANONICAL != "$REPO_ROOT/target/release/bzr" ]]; then
+    echo "FATAL: selected BZR_BIN '$BZR_BIN' is incompatible with the full functional suite."
+    echo "  Required release path: $REPO_ROOT/target/release/bzr"
+    echo "  Remedy: unset BZR_BIN to build release, or select that pre-built release path."
+    exit 1
+fi
+unset _BUILD_BIN_CANONICAL
 echo "  Binary: $BZR_BIN"
 echo ""
 

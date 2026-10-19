@@ -112,6 +112,7 @@ fn render_builtin_field(field: BugField, bug: &Bug) -> String {
         BugField::Status => bug.status.clone().unwrap_or_default(),
         BugField::Priority => bug.priority.clone().unwrap_or_default(),
         BugField::AssignedTo => shorten_email(bug.assigned_to.as_deref().unwrap_or("")),
+        BugField::QaContact => shorten_email(bug.qa_contact.as_deref().unwrap_or("")),
         BugField::Summary => truncate(bug.summary.as_deref().unwrap_or(""), SUMMARY_TRUNCATE_WIDTH),
         BugField::Severity => bug.severity.clone().unwrap_or_default(),
         BugField::Product => bug.product.clone().unwrap_or_default(),
@@ -127,6 +128,8 @@ fn render_builtin_field(field: BugField, bug: &Bug) -> String {
         BugField::Platform => bug.platform.clone().unwrap_or_default(),
         BugField::Deadline => bug.deadline.clone().unwrap_or_default(),
         BugField::Keywords => bug.keywords.join(", "),
+        BugField::Alias => bug.alias.join(", "),
+        BugField::SeeAlso => bug.see_also.join(", "),
         BugField::Blocks => join_ids(&bug.blocks),
         BugField::DependsOn => join_ids(&bug.depends_on),
         BugField::Cc => bug.cc.join(", "),
@@ -226,6 +229,16 @@ struct BuiltinDetailField {
 
 const BUILTIN_DETAIL_FIELDS: &[BuiltinDetailField] = &[
     BuiltinDetailField {
+        field: BugField::Alias,
+        label: "Alias",
+        value: DetailValue::StringList(|bug| &bug.alias),
+    },
+    BuiltinDetailField {
+        field: BugField::SeeAlso,
+        label: "See Also",
+        value: DetailValue::StringList(|bug| &bug.see_also),
+    },
+    BuiltinDetailField {
         field: BugField::Status,
         label: "Status",
         value: DetailValue::Status,
@@ -259,6 +272,11 @@ const BUILTIN_DETAIL_FIELDS: &[BuiltinDetailField] = &[
         field: BugField::AssignedTo,
         label: "Assignee",
         value: DetailValue::OptionalText(|bug| bug.assigned_to.as_deref()),
+    },
+    BuiltinDetailField {
+        field: BugField::QaContact,
+        label: "QA Contact",
+        value: DetailValue::OptionalText(|bug| bug.qa_contact.as_deref()),
     },
     BuiltinDetailField {
         field: BugField::Priority,

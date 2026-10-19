@@ -64,9 +64,19 @@ tests/functional/setup-bugzilla.sh stop
 | `BZR_FUNC_IMAGE` | `localhost/bzr-func-<version>:latest` | Image name |
 | `BZR_FUNC_TIMEOUT` | `90` (`240` for bz52/bz53) | Health check timeout in seconds |
 | `BZR_FUNC_KEEP` | `(unset)` | Any non-empty value keeps the container after `run-tests.sh` exits instead of reclaiming it |
-| `BZR_BIN` | `target/release/bzr` | Path to pre-built bzr binary (skips cargo build) |
+| `BZR_BIN` | `target/release/bzr` | Pre-built checkout release binary; see path requirement below (skips cargo build) |
 | `BZR_FUNC_TLS_PORT` | `(resolved backend port) + 1000` | Host port the TLS proxy listens on for the ad-hoc TLS phase |
 | `BZR_FUNC_REDHAT_PORT` | `(resolved backend port) + 2000` | Host port for the Red Hat response-shape profile |
+
+The full suite requires the selected binary's directory-canonicalized path to be
+`<checkout>/target/release/bzr`, matching the installed dependency-analysis proof.
+Unset `BZR_BIN` to let the runner build release, or point it to that executable.
+Explicit release paths, paths relative to the invocation directory (such as
+`target/release/bzr`), and directory symlinks to release with basename `bzr` are
+supported. File symlinks at other paths and debug/alternate binaries are rejected
+in phase 00 before the runner's Bugzilla check and test fixtures. The check
+canonicalizes the containing directory, without resolving file-symlink targets.
+Absent or non-executable overrides retain the default release-build fallback.
 
 ## Test Structure
 

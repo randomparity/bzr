@@ -14,8 +14,8 @@ use crate::types::transport::ApiMode;
 
 const BUG_VIEW_DEFAULT_FIELDS: &str =
     "id,summary,status,resolution,dupe_of,product,component,version,\
-    assigned_to,priority,severity,creation_time,last_change_time,creator,\
-    url,whiteboard,keywords,blocks,depends_on,cc,op_sys,platform,deadline,\
+    assigned_to,qa_contact,priority,severity,creation_time,last_change_time,creator,\
+    url,whiteboard,keywords,alias,see_also,blocks,depends_on,cc,op_sys,platform,deadline,\
     target_milestone,groups,estimated_time,remaining_time,flags";
 
 /// Ensure `id` is present in an include list and absent from an exclude list,

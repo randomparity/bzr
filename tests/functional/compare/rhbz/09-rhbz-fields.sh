@@ -20,8 +20,8 @@ RHBZ_FIELDS_BZR_INTERNAL_WHITEBOARD="${RHBZ_FIELDS_TOKEN}-bzr-internal"
 RHBZ_FIELDS_BZR_QA_WHITEBOARD="${RHBZ_FIELDS_TOKEN}-bzr-qa"
 
 rhbz_fields_prepare() {
-    local controls_file="$COMPARE_EXCHANGE_DIR/rhbz-fields-controls.sql"
-    local -a controls
+    local controls_file="$COMPARE_EXCHANGE_DIR/rhbz-fields-controls.sql" control
+    local -a controls=()
 
     [[ ${RHBZ_FIELDS_READY:-0} -eq 1 ]] && return 0
 
@@ -40,7 +40,9 @@ rhbz_fields_prepare() {
         "SELECT id FROM rh_sub_components WHERE name = '$RHBZ_FIELDS_SECOND_SUB_COMPONENT' LIMIT 1;" \
         "SELECT id FROM rh_sub_components WHERE name = '$RHBZ_FIELDS_BZR_SUB_COMPONENT' LIMIT 1;" \
         >"$controls_file"
-    mapfile -t controls < <(run_bugzilla_sql_file "$controls_file" | awk '/^[0-9]+$/')
+    while IFS= read -r control; do
+        controls+=("$control")
+    done < <(run_bugzilla_sql_file "$controls_file" | awk '/^[0-9]+$/')
     [[ ${controls[0]:-} =~ ^[1-9][0-9]*$ && ${controls[1]:-} =~ ^[1-9][0-9]*$ &&
         ${controls[2]:-} == 4 && ${controls[3]:-} =~ ^[1-9][0-9]*$ &&
         ${controls[4]:-} =~ ^[1-9][0-9]*$ && ${controls[5]:-} =~ ^[1-9][0-9]*$ &&

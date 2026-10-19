@@ -19,6 +19,49 @@ fn review_flag(status: &str, requestee: Option<&str>) -> Flag {
     }
 }
 
+#[test]
+fn qa_contact_projection_writers_preserve_value_and_selection() {
+    let bug: Bug = serde_json::from_value(serde_json::json!({
+        "id": 42, "qa_contact": "qa@example.com"
+    }))
+    .unwrap();
+    let spec = ColumnSpec::new(Some("qa_contact"), None);
+    let (table, warnings) = capture_bugs_spec(OutputFormat::Table, &[bug], spec);
+    assert!(table.contains("QA_CONTACT"));
+    assert!(table.contains("qa"));
+    assert!(!table.contains("example.com"));
+    assert!(warnings.is_empty());
+
+    let bug: Bug = serde_json::from_value(serde_json::json!({
+        "id": 42, "qa_contact": "qa@example.com"
+    }))
+    .unwrap();
+    let json = bug_to_json(&bug, spec);
+    assert_eq!(json, serde_json::json!({"qa_contact": "qa@example.com"}));
+    let (ndjson, _) = capture_bugs_spec(OutputFormat::Ndjson, &[bug], spec);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&ndjson).unwrap(),
+        json
+    );
+}
+
+#[test]
+fn qa_contact_projection_detail_and_exclusion_use_shared_registry() {
+    let bug: Bug = serde_json::from_value(serde_json::json!({
+        "id": 42, "qa_contact": "qa\u{1b}[2J@example.com"
+    }))
+    .unwrap();
+    let detail = capture_detail_spec(&bug, ColumnSpec::new(Some("qa_contact"), None));
+    assert!(detail.contains("QA Contact"));
+    assert!(detail.contains("qa\\u{1b}[2J@example.com"));
+    assert!(!detail.contains('\u{1b}'));
+    let excluded = ColumnSpec::new(None, Some("qa_contact"));
+    assert!(!capture_detail_spec(&bug, excluded).contains("QA Contact"));
+    assert!(bug_to_json(&bug, excluded).get("qa_contact").is_none());
+    let (table, _) = capture_bugs_spec(OutputFormat::Table, &[bug], ColumnSpec::default());
+    assert!(!table.contains("QA_CONTACT"));
+}
+
 fn make_bug(id: u64, summary: &str, status: &str) -> Bug {
     Bug {
         id,
@@ -31,6 +74,9 @@ fn make_bug(id: u64, summary: &str, status: &str) -> Bug {
         component: Some(vec!["TestComponent".into()]),
         version: Some(vec!["1.0".into()]),
         assigned_to: Some("dev@example.com".into()),
+        qa_contact: None,
+        alias: vec![],
+        see_also: vec![],
         priority: Some("P1".into()),
         severity: Some("major".into()),
         creation_time: Some("2025-01-15T10:00:00Z".into()),
@@ -851,6 +897,9 @@ fn write_bug_detail_table_shows_dupe_of() {
         component: None,
         version: None,
         assigned_to: None,
+        qa_contact: None,
+        alias: vec![],
+        see_also: vec![],
         priority: None,
         severity: None,
         creation_time: None,
@@ -899,6 +948,9 @@ fn write_bug_detail_table_handles_minimal_bug() {
         component: None,
         version: None,
         assigned_to: None,
+        qa_contact: None,
+        alias: vec![],
+        see_also: vec![],
         priority: None,
         severity: None,
         creation_time: None,
@@ -1133,6 +1185,9 @@ fn sample_bug(id: u64, summary: &str) -> Bug {
         component: None,
         version: None,
         assigned_to: None,
+        qa_contact: None,
+        alias: vec![],
+        see_also: vec![],
         priority: None,
         severity: None,
         creation_time: None,
@@ -1303,7 +1358,7 @@ fn validate_table_columns_ok_for_all_blank_include() {
 /// The serde key sequence of `Bug`, in struct-declaration order. Locks the
 /// `preserve_order` decision (Finding 4) and is the reference for the registry
 /// drift guard (Finding 3).
-const BUG_STRUCT_KEY_ORDER: [&str; 27] = [
+const BUG_STRUCT_KEY_ORDER: [&str; 30] = [
     "id",
     "summary",
     "status",
@@ -1314,6 +1369,7 @@ const BUG_STRUCT_KEY_ORDER: [&str; 27] = [
     "component",
     "version",
     "assigned_to",
+    "qa_contact",
     "priority",
     "severity",
     "creation_time",
@@ -1322,6 +1378,8 @@ const BUG_STRUCT_KEY_ORDER: [&str; 27] = [
     "url",
     "whiteboard",
     "keywords",
+    "alias",
+    "see_also",
     "tags",
     "blocks",
     "depends_on",
@@ -1874,4 +1932,65 @@ fn bug_writers_table_escapes_terminal_controls() {
     let mut buf = Vec::new();
     write_multi_bug_view(&rows, ColumnSpec::default(), &mut buf);
     assert_escaped(&String::from_utf8(buf).unwrap(), "write_multi_bug_view");
+}
+
+#[test]
+fn alias_see_also_projection() {
+    let bug: Bug = serde_json::from_value(serde_json::json!({
+        "id": 42, "alias": ["second", "first"], "see_also": ["https://example.com/bug/1"]
+    }))
+    .unwrap();
+    let spec = ColumnSpec::new(Some("alias,see_also"), None);
+    assert!(validate_table_columns(spec).is_ok());
+    let expected = serde_json::json!({
+        "alias": ["second", "first"], "see_also": ["https://example.com/bug/1"]
+    });
+    assert_eq!(bug_to_json(&bug, spec), expected);
+    let detail = capture_detail_spec(&bug, spec);
+    assert!(detail.contains("Alias"));
+    assert!(detail.contains("See Also"));
+    assert!(detail.contains("second, first"));
+    let (table, warnings) = capture_bugs_spec(OutputFormat::Table, &[bug], spec);
+    assert!(table.contains("ALIAS"));
+    assert!(table.contains("SEE_ALSO"));
+    assert!(table.contains("second, first"));
+    assert!(table.contains("https://example.com/bug/1"));
+    assert!(warnings.is_empty());
+    let mut input = expected.clone();
+    input["id"] = serde_json::json!(42);
+    let bug: Bug = serde_json::from_value(input).unwrap();
+    let (ndjson, _) = capture_bugs_spec(OutputFormat::Ndjson, &[bug], spec);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&ndjson).unwrap(),
+        expected
+    );
+}
+
+#[test]
+fn alias_see_also_empty_exclusion_and_escaping() {
+    let empty: Bug = serde_json::from_value(serde_json::json!({"id": 42})).unwrap();
+    let include = ColumnSpec::new(Some("alias,see_also"), None);
+    assert_eq!(
+        bug_to_json(&empty, include),
+        serde_json::json!({"alias": [], "see_also": []})
+    );
+    assert!(!capture_detail_spec(&empty, include).contains("Alias"));
+    let bug: Bug = serde_json::from_value(serde_json::json!({
+        "id": 42, "alias": ["a\u{1b}[2J"], "see_also": ["b\u{1b}[2J"]
+    }))
+    .unwrap();
+    let detail = capture_detail_spec(&bug, include);
+    assert!(detail.contains("a\\u{1b}[2J"));
+    assert!(detail.contains("b\\u{1b}[2J"));
+    assert!(!detail.contains('\u{1b}'));
+    let exclude = ColumnSpec::new(None, Some("alias,see_also"));
+    assert!(bug_to_json(&bug, exclude).get("alias").is_none());
+    assert!(bug_to_json(&bug, exclude).get("see_also").is_none());
+    let detail = capture_detail_spec(&bug, exclude);
+    assert!(!detail.contains("Alias"));
+    assert!(!detail.contains("See Also"));
+    let (table, _) = capture_bugs_spec(OutputFormat::Table, &[bug], include);
+    assert!(!table.contains('\u{1b}'));
+    assert!(table.contains("a\\u{1b}[2J"));
+    assert!(table.contains("b\\u{1b}[2J"));
 }

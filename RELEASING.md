@@ -111,13 +111,11 @@ the crate. Nor does an alert say which manifest it came from unless you read it:
 the `manifest_path` column projected above, and it is what tells a `fuzz/Cargo.lock`
 alert apart from a `Cargo.lock` one. Fuzz targets are not released artifacts.
 
-Deciding what a given alerted crate actually reaches is a separate judgement, and this
-document does not specify one. It depends on at least dependency kind, package set,
-released target set, and lockfile membership versus resolved-graph activation, and
-getting any of those wrong produces a confidently wrong answer in either direction.
-Until that triage is written down, record the reasoning you actually used — in the
-release-preparation PR body, or as the dismissal comment on the alert itself — for any
-alert you decide not to act on, so the next operator can check it.
+Use the [release advisory reachability triage](docs/release-advisory-triage.md)
+to bound dependency kind, package/features, released targets, and lockfile membership
+versus activation. It includes the `github-actions` CI/build exposure assessment.
+Record the evidence and bounded decision in the release-preparation PR; an unresolved
+probe is not an all-clear and alert dismissal remains a separate operator action.
 
 If the alerts query returns `403` with `Dependabot alerts are disabled for this
 repository` — GitHub's message for a repository with the setting off — confirm the
@@ -141,7 +139,7 @@ unreadable.
 **3. `cargo deny check advisories` — RustSec, Cargo tree only.**
 
 ```bash
-cargo deny check advisories
+cargo deny --locked check advisories
 ```
 
 Checks the resolved Cargo dependency graph against the RustSec advisory database. Install
@@ -348,6 +346,21 @@ make man    # writes to man/man1/
 
 ### Homebrew tap
 
+Apple Silicon release binaries and Homebrew bottles support **macOS 15
+Sequoia or newer**. Issue #884's explicit maintainer decision raised the
+previous Sonoma floor; see [ADR 0083](docs/adr/0083-macos-sequoia-release-floor.md).
+The build and bottle jobs use the explicit native arm64 `macos-15` runner,
+the oldest supported hosted arm64 runner. The release build sets
+`MACOSX_DEPLOYMENT_TARGET=15.0`; Homebrew generates `arm64_sequoia` naturally.
+Do not retag a newer bottle to claim support for an older OS.
+
+When changing this runner or deployment target, inspect the actual binary
+with `xcrun vtool -show-build` and `otool -L`, then validate bottle creation,
+JSON merge and a clean normal bottle install on the supported floor and a
+newer macOS version. Check the installed version, binary checksum and
+Homebrew's `poured_from_bottle` receipt; a source fallback does not establish
+bottle compatibility. A deployment target alone is not runtime proof.
+
 The `homebrew` job in `release.yml` runs after the `release` job on stable
 (non-prerelease) `v*` tags only (`if: !contains(github.ref_name, '-')`). It:
 
@@ -358,6 +371,10 @@ The `homebrew` job in `release.yml` runs after the `release` job on stable
 - Renders `homebrew/bzr.rb.template` into `Formula/bzr.rb` in
   [`randomparity/homebrew-tap`](https://github.com/randomparity/homebrew-tap)
 - Commits and pushes the bumped formula
+
+The `bottles` job then installs that formula with `--build-bottle`, creates
+the platform bottles and uploads their archives. `bottles-merge` combines
+their JSON into the tap's bottle block. Linux bottle coverage is unchanged.
 
 This job needs a `HOMEBREW_TAP_TOKEN` repo secret — a fine-grained PAT with
 `Contents: Write` on `randomparity/homebrew-tap`. See

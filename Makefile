@@ -3,7 +3,7 @@ RUST_MIN_VERSION := 1.89.0
 BZR_COMPARE_BIN ?= $(CURDIR)/target/release/bzr
 
 .PHONY: setup check-rust ensure-components ensure-coverage-prereqs ensure-mutants-prereq install-hooks \
-        build release test test-verbose test-fast test-one coverage fmt clippy lint check-build-script check-test-layout check-functional-test-ids \
+        check-commit build release test test-verbose test-fast test-one coverage fmt clippy lint check-build-script check-test-layout check-functional-test-ids \
         check-no-spawn check-release-security-notes check-shell clean help man \
         skills-test \
         mutants mutants-fast mutants-list audit-mutant-skips \
@@ -110,6 +110,11 @@ fmt: ## Format source code
 clippy: ## Run clippy lints
 	$(CARGO) clippy --all-targets --features test-helpers -- -D warnings
 
+check-commit: ## Check formatting, lint and tests before committing
+	$(CARGO) fmt -- --check
+	$(MAKE) clippy
+	$(MAKE) test
+
 lint: fmt clippy check-build-script check-test-layout check-functional-test-ids check-no-spawn check-release-security-notes check-shell ## Run all linters
 
 check-build-script: ## Run dependency-free build-script validation tests
@@ -142,6 +147,7 @@ check-release-security-notes: ## Validate release-note security assessments
 	bash tools/check-release-security-notes-tests.sh
 
 check-shell: ## Lint shell scripts (shellcheck + shfmt, POSIX and bash)
+	bash tools/functional-build-tests.sh
 	@command -v shellcheck >/dev/null || { echo "ERROR: shellcheck is required for this guard"; echo "  Install: brew install shellcheck  |  apt-get install shellcheck"; exit 1; }
 	@command -v shfmt >/dev/null || { echo "ERROR: shfmt is required for this guard"; echo "  Install: brew install shfmt  |  https://github.com/mvdan/sh/releases"; exit 1; }
 	shellcheck -s sh install.sh tests/installer/smoke.sh

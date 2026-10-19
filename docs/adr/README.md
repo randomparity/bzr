@@ -79,3 +79,5 @@ rejected.
 | [0072](0072-standard-json-bidi-escaping.md) | Standard JSON escapes for bidi controls | Accepted |
 | [0074](0074-catalogue-rhbz-externalbugs-with-real-server-controls.md) | Catalogue RHBZ ExternalBugs with real-server controls | Accepted |
 | [0075](0075-catalogue-rhbz-custom-fields-with-real-server-controls.md) | Catalogue RHBZ custom fields with real-server controls | Accepted |
+| [0080](0080-checkout-credential-persistence.md) | Persist checkout credentials only for Git consumers | Accepted |
+| [0083](0083-macos-sequoia-release-floor.md) | Sequoia floor for macOS release binaries and bottles | Accepted |

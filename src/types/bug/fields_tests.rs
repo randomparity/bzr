@@ -1,6 +1,19 @@
 use super::*;
 
 #[test]
+fn qa_contact_projection_resolves_and_excludes_canonical_field() {
+    let partition = partition_include("QA_CONTACT,qa_contact");
+    assert!(partition.unknown.is_empty());
+    assert_eq!(partition.ordered.len(), 1);
+    assert_eq!(partition.ordered[0].key(), "qa_contact");
+    assert_eq!(partition.ordered[0].header(), "QA_CONTACT");
+    assert!(!field_selected(
+        ColumnSpec::new(Some("qa_contact,id"), Some("qa_contact")),
+        "qa_contact"
+    ));
+}
+
+#[test]
 fn canonical_field_list_translates_aliases() {
     let got = canonical_field_list(Some("assignee,updated,created,reporter,platform"));
 

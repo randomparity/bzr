@@ -43,6 +43,9 @@
     "assigned_to": {
       "type": ["string", "null"]
     },
+    "qa_contact": {
+      "type": ["string", "null"]
+    },
     "priority": {
       "type": ["string", "null"]
     },
@@ -69,6 +72,14 @@
       "items": {
         "type": "string"
       }
+    },
+    "alias": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "see_also": {
+      "type": "array",
+      "items": { "type": "string" }
     },
     "blocks": {
       "type": "array",

@@ -1,0 +1,4 @@
+# libfuzzer-sys bundles libFuzzer under NCSA; keep this approval fuzz-only and version-bound.
+exceptions = [
+    { allow = ["NCSA"], crate = "libfuzzer-sys@0.4.13" },
+]

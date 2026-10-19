@@ -1,5 +1,44 @@
 # Dependency Health Notes
 
+## Cargo Update Review (#889)
+
+The reviewed update selects clap 4.6.7, clap_complete 4.6.11, tokio 1.53.2,
+toml 1.1.7, and thiserror 2.0.21. Their seven transitive version changes are
+clap_builder, clap_derive, thiserror-impl, serde_spanned, toml_datetime,
+toml_parser, and toml_writer. No package names are added to or removed from the lockfile.
+
+It also moves tempfile 3.27.0's existing getrandom edge from 0.3.4 to 0.4.3.
+Version 0.4.3 was already in the lockfile but becomes active in the normal
+dependency graph. This is an intentional, upstream-supported resolution:
+
+- [tempfile's published manifest](https://docs.rs/crate/tempfile/3.27.0/source/Cargo.toml.orig)
+  permits `getrandom >=0.3.0, <0.5` and enables it by default.
+- [getrandom's 0.4 changelog](https://github.com/rust-random/getrandom/blob/v0.4.3/CHANGELOG.md)
+  records the move to Rust 1.85 and edition 2024; bzr keeps its Rust 1.89 floor.
+  Its source retains default backends for the existing Linux, macOS, and
+  Windows release targets, including Linux's older-kernel fallback.
+- tempfile's `src/util.rs::create_helper` still calls `getrandom::u64()` to
+  reseed after repeated filename collisions. Its exclusive creation and
+  cleanup mechanisms are unchanged; no bzr entropy API or fallback is added.
+
+tempfile is a production dependency: attachment streaming calls
+`tempfile::tempfile()` in `src/client/attachment_stream/mod.rs`. It is also used
+by tests. On Linux, successful `O_TMPFILE` creation bypasses filename generation;
+the upstream fallback uses exclusive creation and unlinks the temporary name.
+Do not describe this dependency as test-only or infer RNG-path coverage merely
+from a successful Linux attachment test.
+
+The normal graph retains getrandom 0.2 through older platform/TLS dependencies;
+proptest retains 0.3.4 through rand_core in the development graph. The existing
+duplicate exception is unchanged and `cargo deny check` passes without a new
+exception. Reproduce the distinction with:
+
+```bash
+cargo tree --locked --invert getrandom@0.4.3 --target all --edges normal
+cargo tree --locked --invert getrandom@0.3.4 --target all
+cargo deny check
+```
+
 ## Reqwest TLS Stack
 
 `reqwest` remains pinned to `0.12` for now. The `0.13.3` TLS feature set
