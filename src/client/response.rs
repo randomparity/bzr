@@ -367,7 +367,8 @@ impl BugzillaClient {
         tracing::debug!(
             url,
             code,
-            message = crate::bugzilla_auth::redact_api_key(message.as_deref().unwrap_or("unknown")),
+            error_message =
+                crate::bugzilla_auth::redact_api_key(message.as_deref().unwrap_or("unknown")),
             has_data,
             "error payload in 200 response"
         );
