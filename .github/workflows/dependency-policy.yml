@@ -43,4 +43,4 @@ jobs:
       # --allow unmatched-skip: root skip entries (e.g. keyring/dbus) do not
       # all appear in the fuzz graph; see the fuzz-lock-sync design spec.
       - name: Check fuzz dependency policy
-        run: cargo deny --manifest-path fuzz/Cargo.toml check --config deny.toml --allow unmatched-skip
+        run: cargo deny --manifest-path fuzz/Cargo.toml check --allow unmatched-skip
