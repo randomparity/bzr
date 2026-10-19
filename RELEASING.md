@@ -255,6 +255,9 @@ published the original version.
    Cargo's semver supports prerelease identifiers, and `bzr --version` reads from `Cargo.toml`, so keeping the two aligned means the binary always reports the same string as the tag the user installed. The `installer-smoke` job in `release.yml` validates this on every tag push by comparing the running binary's `--version` output against the Cargo.toml field (substring match — the git-SHA suffix from `build.rs` does not affect it). Prerelease tags are not published to crates.io — `publish-crates.yml`'s `if: !contains(github.ref_name, '-')` gates them out.
 
    Run `cargo build` (or `cargo check`) after the bump so `Cargo.lock` regenerates with the new version.
+   `fuzz/` is outside the workspace and pins `bzr` in its own lockfile, so also run
+   `cargo update -p bzr --manifest-path fuzz/Cargo.toml`; `dependency-policy.yml` fails the
+   PR when `fuzz/Cargo.lock` is out of sync.
 
 2. If `rust-version` changed, update the MSRV badge in `README.md` and the "Requires Rust X+" line in the "From source" install section.
 3. Verify installation docs still match the published crate name. The release workflow
@@ -274,7 +277,7 @@ cargo publish --dry-run
 
 ```bash
 git checkout -b release/vX.Y.Z-prep
-git add Cargo.toml Cargo.lock agent-skills content
+git add Cargo.toml Cargo.lock fuzz/Cargo.lock agent-skills content
 git commit -m "chore: bump version to X.Y.Z"
 git push -u origin release/vX.Y.Z-prep
 ```
@@ -432,7 +435,7 @@ bzr --version
      `0.4.1-dev`). Patch is the safest default; if the next planned
      release is a minor or major bump (e.g. `0.4.0` → `0.5.0-dev`),
      edit the version on the PR before merging.
-   - Refreshes `Cargo.lock` via `cargo update -p bzr`.
+   - Refreshes `Cargo.lock` and `fuzz/Cargo.lock` via `cargo update -p bzr`.
    - Generates the dated release section from conventional commits and inserts it at
      the top of `CHANGELOG.md`.
 
