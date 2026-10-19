@@ -144,6 +144,6 @@ if assert_success; then
     fi
 fi
 run_bzr query delete weekly-status-fixture
-[ "$BZR_EXIT" -eq 0 ] || test_fail "weekly-status fixture query cleanup failed"
+[[ "$BZR_EXIT" -eq 0 ]] || test_fail "weekly-status fixture query cleanup failed"
 
 echo ""

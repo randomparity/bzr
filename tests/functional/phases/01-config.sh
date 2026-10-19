@@ -89,7 +89,7 @@ printf '[https://user:password@third.invalid]\napi_key=ignored\n' >"$_SECTION_CR
 test_begin "config-import-bugzillarc-url-section-credentials" "config import-bugzillarc rejects URL credentials"
 run_bzr --config "$_SECTION_CREDENTIAL_CONFIG" config import-bugzillarc --path "$_SECTION_CREDENTIAL_RC"
 if assert_failure && assert_stderr_contains "must not contain credentials" &&
-    [ ! -e "$_SECTION_CREDENTIAL_CONFIG" ]; then
+    [[ ! -e "$_SECTION_CREDENTIAL_CONFIG" ]]; then
     test_pass
 fi
 rm -rf "$_SECTION_CREDENTIAL_DIR"
