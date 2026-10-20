@@ -13,7 +13,7 @@ updates:
           - "*"
     ignore:
       # The direct dependency can move to base64 0.23 only by adding a second
-      # version: reqwest, wiremock, and rcgen still require base64 0.22.
+      # version: reqwest, hyper-util, and wiremock still require base64 0.22.
       # Revisit when those upstream crates support 0.23.
       - dependency-name: "base64"
         versions: ["0.23.x"]
@@ -27,8 +27,8 @@ updates:
         versions: ["0.11.x"]
 
   # fuzz/deny.exceptions.toml approves libfuzzer-sys's NCSA license for one
-  # exact version, and no CI job runs cargo-deny over fuzz/. A PR bumping
-  # libfuzzer-sys must bump that exception's @version too.
+  # exact version, so a PR bumping libfuzzer-sys must bump that exception's
+  # @version too.
   - package-ecosystem: cargo
     directory: /fuzz
     schedule:
@@ -39,6 +39,14 @@ updates:
       fuzz-dependencies:
         patterns:
           - "*"
+    ignore:
+      # fuzz/ depends on bzr by path, so this entry also rewrites the root
+      # Cargo.toml pins. Mirror the root entry's ignores, or it reintroduces
+      # the duplicate base64 and sha2 stacks they exist to prevent (#909).
+      - dependency-name: "base64"
+        versions: ["0.23.x"]
+      - dependency-name: "sha2"
+        versions: ["0.11.x"]
 
   - package-ecosystem: github-actions
     directory: /
