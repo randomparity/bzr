@@ -21,7 +21,11 @@ bzr bug view 12345 --json | jq -r '.data.summary'
 bzr bug search "crash on boot" --json | jq -r '.data[].id'
 ```
 
-See `reference/json-recipes.md` for extraction patterns.
+An ordinary `|` pipes stdout only; stderr stays separate. Avoid `2>&1` when
+parsing JSON: it mixes warnings and diagnostics into the JSON stream. Keep
+stderr visible or capture it separately for diagnosis; do not discard it.
+See `reference/json-recipes.md` for extraction patterns and the recipe that
+checks bzr's own exit status before parsing.
 
 ## Server access
 
@@ -49,7 +53,9 @@ bzr --server-url https://bugzilla.example.com --server-api-key-env BZR_API_KEY w
 Inline server TLS trust flags are `--server-tls-insecure`,
 `--server-tls-ca-cert <path>`, `--server-tls-pin-sha256 <pin>`, and
 `--server-tls-pin-now`. Named servers use the matching `config set-server`
-`--tls-*` flags. If `whoami` fails, see the `bzr-setup` skill.
+`--tls-*` flags. By default, disabling TLS verification produces a warning on
+each connection; see the `bzr-setup` skill for configuring TLS trust, the
+acknowledgment option, and when `whoami` fails.
 
 ## Command groups
 
@@ -87,6 +93,10 @@ Surface facts agents get wrong:
 - **The bug description isn't a `bug view` field either.** Bugzilla stores it
   as the comment with `count == 0`, not a bug property. Fetch it with
   `bzr comment list 12345 --json | jq -r '.data[] | select(.count==0) | .text'`.
+- **`comment list` has no CLI pagination.** It returns the server-provided
+  comments visible to the caller, optionally filtered by `--since <date>`.
+  It cannot retrieve hidden comments or guarantee completeness beyond what
+  the server returns.
 - **`comment list --json` returns server order, not re-sorted.** The array at
   `.data[]` is ascending `count` — description first (`count == 0`), newest
   last. For the newest comment: `bzr comment list 12345 --json | jq '.data[-1]'`.
