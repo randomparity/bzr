@@ -397,3 +397,49 @@ fn extract_hostname_with_port() {
 fn extract_hostname_returns_raw_on_invalid() {
     assert_eq!(super::extract_hostname("not-a-url"), "not-a-url");
 }
+
+#[test]
+fn tls_insecure_acknowledgment_target_contract() {
+    use crate::commands::runtime::invocation::{CommandContext, InlineServer, InlineTlsOptions};
+    let tmp = tempfile::TempDir::new().unwrap();
+    let config_path = crate::test_helpers::write_config_to(
+        &tmp,
+        r#"
+default_server = "ack"
+[servers.ack]
+url = "https://example.com"
+tls_insecure = true
+tls_insecure_acknowledged = true
+[servers.other]
+url = "https://example.org"
+tls_insecure = true
+"#,
+    );
+    for (name, expected) in [(None, true), (Some("other"), false)] {
+        let ctx = CommandContext::new(name, crate::types::OutputFormat::Json, None)
+            .with_config_path_override(Some(config_path.clone()));
+        assert_eq!(
+            super::resolve_connect_target(&ctx)
+                .unwrap()
+                .tls_insecure_acknowledged,
+            expected
+        );
+    }
+    let inline = InlineServer {
+        url: "https://example.com".into(),
+        api_key_env: None,
+        email: None,
+        tls: InlineTlsOptions {
+            insecure: true,
+            ..InlineTlsOptions::default()
+        },
+    };
+    let ctx = CommandContext::new(None, crate::types::OutputFormat::Json, None)
+        .with_config_path_override(Some(config_path))
+        .with_inline_server(Some(inline));
+    assert!(
+        !super::resolve_connect_target(&ctx)
+            .unwrap()
+            .tls_insecure_acknowledged
+    );
+}

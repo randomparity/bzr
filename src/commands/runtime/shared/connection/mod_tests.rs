@@ -875,3 +875,66 @@ async fn cached_path_skips_probe_when_insecure() {
         "cached path with insecure flag should skip probe"
     );
 }
+
+#[tokio::test]
+async fn tls_insecure_acknowledgment_warning_contract() {
+    for acknowledged in [
+        "",
+        "tls_insecure_acknowledged = false",
+        "tls_insecure_acknowledged = true",
+    ] {
+        let mock = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let config_path = write_config(&tmp, &mock.uri(), &format!(
+            "auth_method = \"header\"\nauth_method_source = \"pinned\"\ntls_insecure = true\n{acknowledged}"
+        ));
+        mount_detection_mocks(&mock).await;
+        let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::DEBUG);
+        super::connect_and_configure(&ctx_at(&config_path, None))
+            .await
+            .unwrap();
+        assert_eq!(
+            load_config(&config_path).servers["test"].tls_insecure_acknowledged,
+            acknowledged.ends_with("true")
+        );
+        let output = capture.output();
+        assert!(
+            output.contains("API key will be sent in plaintext"),
+            "{output}"
+        );
+        assert_eq!(
+            output.contains("TLS certificate verification disabled"),
+            !acknowledged.ends_with("true"),
+            "{output}"
+        );
+        assert!(
+            output.contains("auth_method cached but api_mode missing"),
+            "{output}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn tls_insecure_acknowledgment_anonymous_warning_contract() {
+    for acknowledged in [false, true] {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let config_path = write_credentialless_config(
+            &tmp,
+            "https://example.com",
+            &format!(
+            "api_mode = \"rest\"\ntls_insecure = true\ntls_insecure_acknowledged = {acknowledged}"
+        ),
+        );
+        let (capture, _guard) = crate::test_helpers::TracingCapture::install(tracing::Level::DEBUG);
+        super::connect_and_configure(&ctx_at(&config_path, None))
+            .await
+            .unwrap();
+        let output = capture.output();
+        assert_eq!(
+            output.contains("TLS certificate verification disabled"),
+            !acknowledged,
+            "{output}"
+        );
+        assert!(output.contains("created Bugzilla client"), "{output}");
+    }
+}

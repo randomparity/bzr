@@ -101,6 +101,9 @@ pub struct ServerConfig {
     /// Accept invalid TLS certificates (self-signed, expired, etc.).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tls_insecure: bool,
+    /// Explicitly acknowledge the disabled TLS verification warning.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub tls_insecure_acknowledged: bool,
     /// Path to a PEM-encoded CA certificate for this server.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tls_ca_cert: Option<PathBuf>,
@@ -253,6 +256,11 @@ impl ServerConfig {
     pub fn validate_tls(&self, server_name: &str) -> Result<()> {
         let ctx = |msg: &str| BzrError::config(format!("server '{server_name}': {msg}"));
 
+        if self.tls_insecure_acknowledged && !self.tls_insecure {
+            return Err(ctx(
+                "tls_insecure_acknowledged requires tls_insecure = true",
+            ));
+        }
         if self.tls_insecure && self.tls_ca_cert.is_some() {
             return Err(ctx("tls_insecure and tls_ca_cert are mutually exclusive"));
         }
