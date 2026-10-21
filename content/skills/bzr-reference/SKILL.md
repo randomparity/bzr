@@ -53,9 +53,9 @@ bzr --server-url https://bugzilla.example.com --server-api-key-env BZR_API_KEY w
 Inline server TLS trust flags are `--server-tls-insecure`,
 `--server-tls-ca-cert <path>`, `--server-tls-pin-sha256 <pin>`, and
 `--server-tls-pin-now`. Named servers use the matching `config set-server`
-`--tls-*` flags. Disabling TLS verification produces a warning on each
-connection; see the `bzr-setup` skill for configuring TLS trust, and when
-`whoami` fails.
+`--tls-*` flags. By default, disabling TLS verification produces a warning on
+each connection; see the `bzr-setup` skill for configuring TLS trust, the
+acknowledgment option, and when `whoami` fails.
 
 ## Command groups
 
