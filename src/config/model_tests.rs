@@ -100,3 +100,29 @@ fn from_url_with_env_key_preserves_url_and_env_var() {
     assert_eq!(cfg.url, "https://bugs.example.com");
     assert_eq!(cfg.api_key_env.as_deref(), Some("MY_API_KEY_VAR"));
 }
+
+#[test]
+fn tls_insecure_acknowledgment_model_contract() {
+    for value in [
+        "",
+        "tls_insecure_acknowledged = false",
+        "tls_insecure_acknowledged = true",
+    ] {
+        let source = format!("url = \"https://example.com\"\ntls_insecure = true\n{value}");
+        let server: ServerConfig = toml::from_str(&source).expect("valid server");
+        let serialized = toml::to_string(&server).expect("serialize server");
+        assert_eq!(
+            serialized.contains("tls_insecure_acknowledged = true"),
+            value.ends_with("true")
+        );
+        server.validate_tls("test").expect("valid TLS settings");
+    }
+    let invalid: ServerConfig =
+        toml::from_str("url = \"https://example.com\"\ntls_insecure_acknowledged = true")
+            .expect("valid boolean type");
+    assert!(invalid.validate_tls("test").is_err());
+    assert!(toml::from_str::<ServerConfig>(
+        "url = \"https://example.com\"\ntls_insecure_acknowledged = \"true\""
+    )
+    .is_err());
+}

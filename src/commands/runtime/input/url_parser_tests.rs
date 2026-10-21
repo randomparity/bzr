@@ -23,6 +23,7 @@ fn make_server_config(server_url: &str) -> ServerConfig {
         bug_field_names: None,
         bug_field_names_url: None,
         tls_insecure: false,
+        tls_insecure_acknowledged: false,
         tls_ca_cert: None,
         tls_pin_sha256: None,
         tls_pin_issuer: None,

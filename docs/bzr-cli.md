@@ -261,7 +261,7 @@ bzr [--server <NAME>] [--server-url <URL>] [--server-api-key-env <ENV>] [--serve
 ├── config
 │   ├── import-bugzillarc [--path <FILE>]
 │   ├── set-server <NAME> --url <URL> [--api-key <KEY> | --api-key-env <ENV_VAR>] [--email <EMAIL>] [--auth-method <METHOD>]
-│   │                     [--tls-insecure] [--tls-ca-cert <PATH>] [--tls-pin-sha256 <PIN>] [--tls-pin-now] [--tls-pin-clear]
+│   │                     [--tls-insecure [--tls-insecure-acknowledged]] [--tls-ca-cert <PATH>] [--tls-pin-sha256 <PIN>] [--tls-pin-now] [--tls-pin-clear]
 │   ├── set-keyring <NAME> [--service <S>] [--account <A>]
 │   ├── unset-keyring <NAME>
 │   ├── migrate-to-keyring <NAME> [--service <S>] [--account <A>] --yes
@@ -2173,6 +2173,27 @@ There is no ad-hoc `--tls-pin-clear` equivalent because no pin is stored.
 
 The `--tls-insecure` flag disables TLS certificate verification for the server. Use this for servers with self-signed, expired, or wrong-hostname certificates (e.g. internal Bugzilla instances behind corporate firewalls).
 
+`--tls-insecure-acknowledged` suppresses only that server's disabled-verification
+warning and requires `--tls-insecure`. It does not restore verification or silence
+other diagnostics. The persisted `tls_insecure_acknowledged` boolean defaults to
+false; true without `tls_insecure = true` is invalid configuration. Inline servers
+have no acknowledgment control. Agents must obtain explicit user authorization
+before enabling acknowledgment; repeated warnings or `--yes` are not consent.
+
+`set-server` replaces the complete entry, including credentials and cached settings.
+Resupply the intended URL, credential source and other settings when enabling or
+revoking acknowledgment. For example, after the user authorizes acknowledgment:
+
+```bash
+bzr config set-server my-bz --url https://bugzilla.example.com --api-key-env BZR_API_KEY --tls-insecure --tls-insecure-acknowledged
+# Revoke while retaining the same credential source and insecure trust choice:
+bzr config set-server my-bz --url https://bugzilla.example.com --api-key-env BZR_API_KEY --tls-insecure
+```
+
+For an existing entry, editing only `tls_insecure_acknowledged = true` in
+`config.toml` preserves its other settings; set it to false or remove that key to
+restore the warning. Verify the selected entry has `tls_insecure = true` first.
+
 The first server added is automatically set as the default.
 
 | Option | Required | Description |
@@ -2184,6 +2205,7 @@ The first server added is automatically set as the default.
 | `--email <EMAIL>` | No | Login email for the Bugzilla 5.0/5.2 `whoami` fallback |
 | `--auth-method <METHOD>` | No | Override auto-detected auth method (`header` or `query_param`) |
 | `--tls-insecure` | No | Disable TLS certificate verification (self-signed, expired, wrong hostname) |
+| `--tls-insecure-acknowledged` | No | Suppress this warning; requires `--tls-insecure` and explicit user authorization for agents |
 
 #### TLS Options
 

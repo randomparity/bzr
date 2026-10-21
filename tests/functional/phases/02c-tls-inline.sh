@@ -114,6 +114,62 @@ if assert_failure &&
     test_pass
 fi
 
+# Use a separate saved config so these replacement tests cannot alter later phases.
+_tls_ack_config="${TLS_FIXTURE_DIR}/ack.toml"
+test_begin "saved-tls-default-warning" "saved insecure server warns without acknowledgment"
+run_bzr --config "$_tls_ack_config" config set-server ack --url "$TLS_URL" --tls-insecure
+if assert_success; then
+    run_bzr --config "$_tls_ack_config" --server ack server info </dev/null
+    if assert_success && assert_json_exists '.version' &&
+        assert_stderr_contains 'TLS certificate verification disabled'; then
+        cp "$BZR_STDOUT" "${TLS_FIXTURE_DIR}/default-output.json"
+        test_pass
+    fi
+fi
+
+test_begin "saved-tls-acknowledged-warning" "acknowledgment suppresses only the TLS warning"
+run_bzr --config "$_tls_ack_config" config set-server ack --url "$TLS_URL" \
+    --tls-insecure --tls-insecure-acknowledged
+if assert_success; then
+    run_bzr --config "$_tls_ack_config" --server ack -vv server info </dev/null
+    if assert_success && assert_stderr_not_contains 'TLS certificate verification disabled' &&
+        assert_stderr_contains 'created Bugzilla client'; then
+        if cmp -s "$BZR_STDOUT" "${TLS_FIXTURE_DIR}/default-output.json"; then
+            test_pass
+        else
+            test_fail "acknowledgment changed server info stdout"
+        fi
+    fi
+fi
+
+test_begin "saved-tls-acknowledgment-isolation" "another named server still warns"
+run_bzr --config "$_tls_ack_config" config set-server other --url "$TLS_URL" --tls-insecure
+if assert_success; then
+    run_bzr --config "$_tls_ack_config" --server other server info </dev/null
+    if assert_success && assert_stderr_contains 'TLS certificate verification disabled'; then test_pass; fi
+fi
+
+test_begin "inline-tls-cannot-inherit-acknowledgment" "inline server still warns with acknowledged saved config"
+run_bzr --config "$_tls_ack_config" --server-url "$TLS_URL" --server-tls-insecure server info </dev/null
+if assert_success && assert_stderr_contains 'TLS certificate verification disabled'; then test_pass; fi
+
+test_begin "saved-tls-acknowledgment-revocation" "replacement without acknowledgment restores warning"
+run_bzr --config "$_tls_ack_config" config set-server ack --url "$TLS_URL" --tls-insecure
+if assert_success; then
+    run_bzr --config "$_tls_ack_config" --server ack server info </dev/null
+    if assert_success && assert_stderr_contains 'TLS certificate verification disabled'; then test_pass; fi
+fi
+
+test_begin "credentialed-tls-acknowledgment" "credentialed HTTPS preserves diagnostics and stdout"
+run_bzr --config "$_tls_ack_config" config set-server ack --url "$TLS_URL" \
+    --api-key "$API_KEY" --email "$ADMIN_EMAIL" --tls-insecure --tls-insecure-acknowledged
+if assert_success; then
+    run_bzr --config "$_tls_ack_config" --server ack -vv server info </dev/null
+    if assert_success && assert_json_exists '.version' &&
+        assert_stderr_not_contains 'TLS certificate verification disabled' &&
+        assert_stderr_contains 'created Bugzilla client'; then test_pass; fi
+fi
+
 # Keep the chain trusted while changing only the leaf's DNS identity. Connecting
 # to localhost requires no extra DNS alias and keeps resolution out of cargo tests.
 _tls_cleanup

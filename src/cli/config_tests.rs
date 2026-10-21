@@ -49,6 +49,7 @@ fn parse_config_set_server_minimal_defaults() {
             email,
             auth_method,
             tls_insecure,
+            tls_insecure_acknowledged,
             tls_ca_cert,
             tls_pin_sha256,
             tls_pin_now,
@@ -61,6 +62,7 @@ fn parse_config_set_server_minimal_defaults() {
             assert!(email.is_none());
             assert!(auth_method.is_none());
             assert!(!tls_insecure);
+            assert!(!tls_insecure_acknowledged);
             assert!(tls_ca_cert.is_none());
             assert!(tls_pin_sha256.is_none());
             assert!(!tls_pin_now);
@@ -529,6 +531,32 @@ fn parse_config_rename_server_binds_old_and_new() {
 fn parse_config_rename_server_requires_two_positionals() {
     assert_eq!(
         parse_error_kind(&["bzr", "config", "rename-server", "stage"]),
+        ErrorKind::MissingRequiredArgument
+    );
+}
+
+#[test]
+fn tls_insecure_acknowledgment_cli_contract() {
+    let base = [
+        "bzr",
+        "config",
+        "set-server",
+        "test",
+        "--url",
+        "https://example.com",
+    ];
+    let mut args = base.to_vec();
+    args.extend(["--tls-insecure", "--tls-insecure-acknowledged"]);
+    assert!(Cli::try_parse_from(&args).is_ok());
+    for conflict in ["--tls-pin-now", "--tls-pin-clear"] {
+        let mut conflicting = args.clone();
+        conflicting.push(conflict);
+        assert_eq!(parse_error_kind(&conflicting), ErrorKind::ArgumentConflict);
+    }
+    let mut missing = base.to_vec();
+    missing.push("--tls-insecure-acknowledged");
+    assert_eq!(
+        parse_error_kind(&missing),
         ErrorKind::MissingRequiredArgument
     );
 }

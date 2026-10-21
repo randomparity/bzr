@@ -27,6 +27,10 @@ fn ctx_at(config_path: &Path, format: OutputFormat) -> CommandContext {
 /// Owned, all-defaulted view of the `SetServer` operands so each test can
 /// override only the fields it cares about via `..Default::default()` (the
 /// enum variant itself does not support record-update syntax).
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "mirrors the independent set-server CLI switches"
+)]
 #[derive(Default)]
 struct Sv {
     name: String,
@@ -36,6 +40,7 @@ struct Sv {
     email: Option<String>,
     auth_method: Option<AuthMethod>,
     tls_insecure: bool,
+    tls_insecure_acknowledged: bool,
     tls_pin_sha256: Option<String>,
     tls_pin_now: bool,
     tls_pin_clear: bool,
@@ -59,6 +64,7 @@ impl Sv {
             email: self.email,
             auth_method: self.auth_method,
             tls_insecure: self.tls_insecure,
+            tls_insecure_acknowledged: self.tls_insecure_acknowledged,
             tls_ca_cert: None,
             tls_pin_sha256: self.tls_pin_sha256,
             tls_pin_now: self.tls_pin_now,
@@ -344,4 +350,53 @@ async fn set_server_tls_pin_clear_removes_pin_fields() {
     let server = &load_config_at(&config_path).servers["pinned"];
     assert!(server.tls_pin_sha256.is_none());
     assert!(server.tls_pin_issuer.is_none());
+}
+
+#[tokio::test]
+async fn tls_insecure_acknowledgment_replacement() {
+    let (_tmp, config_path) = setup_empty_isolated_env();
+    seed_inline_server_at(&config_path, "other", "https://example.org", "other-key").await;
+    for acknowledged in [true, false] {
+        let action = Sv {
+            tls_insecure: true,
+            tls_insecure_acknowledged: acknowledged,
+            api_key: Some("test-key".into()),
+            ..Sv::new("test", "https://example.com")
+        }
+        .into_action();
+        execute(
+            &action,
+            &ctx_at(&config_path, OutputFormat::Json),
+            &mut CapturedIo::new().writers(),
+        )
+        .await
+        .unwrap();
+        let config = load_config_at(&config_path);
+        assert_eq!(
+            config.servers["test"].tls_insecure_acknowledged,
+            acknowledged
+        );
+        assert!(config.servers["test"].tls_insecure);
+        assert_eq!(config.servers["test"].api_key.as_deref(), Some("test-key"));
+        assert_eq!(
+            config.servers["other"].api_key.as_deref(),
+            Some("other-key")
+        );
+        assert!(!config.servers["other"].tls_insecure_acknowledged);
+    }
+    let before = std::fs::read(&config_path).unwrap();
+    let invalid = Sv {
+        tls_insecure_acknowledged: true,
+        ..Sv::new("test", "https://example.com")
+    }
+    .into_action();
+    let err = execute(
+        &invalid,
+        &ctx_at(&config_path, OutputFormat::Json),
+        &mut CapturedIo::new().writers(),
+    )
+    .await
+    .unwrap_err();
+    assert!(err.to_string().contains("requires tls_insecure"));
+    assert_eq!(std::fs::read(&config_path).unwrap(), before);
 }

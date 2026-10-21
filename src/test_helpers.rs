@@ -262,6 +262,7 @@ pub async fn seed_inline_server_at(
             email: None,
             auth_method: None,
             tls_insecure: false,
+            tls_insecure_acknowledged: false,
             tls_ca_cert: None,
             tls_pin_sha256: None,
             tls_pin_now: false,

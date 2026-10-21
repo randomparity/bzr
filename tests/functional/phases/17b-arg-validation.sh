@@ -59,6 +59,10 @@ run_bzr --server-url "$BZ_URL" --server-tls-insecure \
     --server-tls-pin-now server info
 if assert_exit_code 2 && assert_stderr_contains "cannot be used with"; then test_pass; fi
 
+test_begin "tls-acknowledgment-requires-insecure" "acknowledgment requires insecure mode"
+run_bzr config set-server ack --url https://example.com --tls-insecure-acknowledged
+if assert_exit_code 2 && assert_stderr_contains 'required'; then test_pass; fi
+
 # `config set-server --tls-pin-clear` only clears the pin (#761); clap
 # rejects every flag the clear path cannot honour.
 test_begin "set-server-pin-clear-api-key-conflict" "set-server --tls-pin-clear + --api-key conflict"

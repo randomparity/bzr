@@ -121,6 +121,7 @@ pub(super) fn server_tls_config(server: &ServerConfig, server_name: &str) -> Tls
 pub(super) struct ConnectTarget {
     pub(super) ctx: ConnectContext,
     pub(super) tls_config: TlsConfig,
+    pub(super) tls_insecure_acknowledged: bool,
     pub(super) cached_auth: Option<AuthMethod>,
     pub(super) cached_mode: Option<ApiMode>,
     pub(super) pin_current_cert: bool,
@@ -184,6 +185,7 @@ fn resolve_inline_target(
     Ok(ConnectTarget {
         ctx,
         tls_config,
+        tls_insecure_acknowledged: false,
         cached_auth: None,
         cached_mode: None,
         pin_current_cert: inline.tls.pin_now,
@@ -230,6 +232,7 @@ fn resolve_config_target(
     Ok(ConnectTarget {
         ctx,
         tls_config,
+        tls_insecure_acknowledged: srv.tls_insecure_acknowledged,
         cached_auth,
         cached_mode: srv.api_mode,
         pin_current_cert: false,
