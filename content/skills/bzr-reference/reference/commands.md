@@ -102,11 +102,15 @@ Operate on bugs.
   reads from stdin.
 
 ## comment
-- `bzr comment list 12345 [--json]`
+- `bzr comment list 12345 [--since <date>] [--json]`
 - `bzr comment list 12345 12346 12347 [--permissive] [--json]`
   - Multi-ID returns one flat array, not a `{bugs, failed}` wrapper — group with
     `jq '.data | group_by(.bug_id)'`. The payload is enveloped, so the array
     lives at `.data`. Single-ID output is unchanged in shape.
+  - No CLI pagination: returns the server-provided comments visible to the
+    caller, optionally filtered by `--since <date>` (ISO 8601 date or datetime).
+    Hidden comments are not accessible through pagination, and the CLI cannot
+    guarantee completeness beyond the server response.
   - No maximum ID count, matching `bug view`.
   - `--permissive` is multi-ID only; missing bugs go to stderr and the exit code
     stays 0. Without it the first failure aborts. `--permissive` with a single
