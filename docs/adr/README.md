@@ -81,3 +81,4 @@ rejected.
 | [0075](0075-catalogue-rhbz-custom-fields-with-real-server-controls.md) | Catalogue RHBZ custom fields with real-server controls | Accepted |
 | [0080](0080-checkout-credential-persistence.md) | Persist checkout credentials only for Git consumers | Accepted |
 | [0083](0083-macos-sequoia-release-floor.md) | Sequoia floor for macOS release binaries and bottles | Accepted |
+| [0084](0084-tls-warning-acknowledgment.md) | Keep insecure-warning acknowledgment in connection policy | Accepted |
