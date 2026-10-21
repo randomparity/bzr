@@ -224,6 +224,7 @@ async fn migrate_to_keyring_from_env_preserves_config() {
             email: None,
             auth_method: None,
             tls_insecure: false,
+            tls_insecure_acknowledged: false,
             tls_ca_cert: None,
             tls_pin_sha256: None,
             tls_pin_now: false,

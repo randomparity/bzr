@@ -7,6 +7,10 @@ use crate::error::Result;
 use crate::output::result_types::{write_result, ConfigResult};
 use crate::output::writers::Writers;
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "mirrors the independent set-server CLI switches"
+)]
 pub(super) struct SetServerArgs<'a> {
     pub(super) name: &'a str,
     pub(super) url: &'a str,
@@ -15,6 +19,7 @@ pub(super) struct SetServerArgs<'a> {
     pub(super) email: Option<&'a str>,
     pub(super) auth_method: Option<crate::types::transport::AuthMethod>,
     pub(super) tls_insecure: bool,
+    pub(super) tls_insecure_acknowledged: bool,
     pub(super) tls_ca_cert: Option<&'a str>,
     pub(super) tls_pin_sha256: Option<&'a str>,
     pub(super) tls_pin_now: bool,
@@ -34,6 +39,7 @@ pub(super) async fn handle(
         email,
         auth_method,
         tls_insecure,
+        tls_insecure_acknowledged,
         tls_ca_cert,
         tls_pin_sha256,
         tls_pin_now,
@@ -76,6 +82,7 @@ pub(super) async fn handle(
         // stamp stays unset and the first connect detects and stamps.
         auth_method_source: auth_method.map(|_| AUTH_METHOD_SOURCE_PINNED.to_owned()),
         tls_insecure,
+        tls_insecure_acknowledged,
         tls_ca_cert: tls_ca_cert.map(PathBuf::from),
         tls_pin_sha256: tls_pin_sha256.map(str::to_owned),
         // Keyring reference, detected settings (api_mode, server_version,

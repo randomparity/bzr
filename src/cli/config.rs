@@ -126,6 +126,15 @@ pub(crate) enum ConfigAction {
             ],
         )]
         tls_insecure: bool,
+        /// Suppress only the disabled TLS verification warning for this server.
+        ///
+        /// Requires --tls-insecure. Agents must obtain explicit user authorization
+        /// before enabling this acknowledgment. Does not restore TLS verification.
+        /// set-server replaces the full entry: resupply credentials and settings.
+        /// Omit this flag on replacement, or set tls_insecure_acknowledged = false
+        /// in config.toml, to restore the warning.
+        #[arg(long, requires = "tls_insecure")]
+        tls_insecure_acknowledged: bool,
         /// Path to a PEM-encoded CA certificate file for this server.
         ///
         /// Adds the given CA to the trust store for this server

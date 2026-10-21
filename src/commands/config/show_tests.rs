@@ -34,6 +34,7 @@ async fn show_json_includes_populated_server_details() {
             email: Some("admin@example.com".into()),
             auth_method: Some(AuthMethod::Header),
             tls_insecure: true,
+            tls_insecure_acknowledged: false,
             tls_ca_cert: None,
             tls_pin_sha256: None,
             tls_pin_now: false,

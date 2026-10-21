@@ -33,6 +33,7 @@ pub async fn connect_and_configure(command: &CommandContext) -> Result<BugzillaC
     let ConnectTarget {
         ctx,
         mut tls_config,
+        tls_insecure_acknowledged,
         cached_auth,
         cached_mode,
         pin_current_cert,
@@ -47,7 +48,7 @@ pub async fn connect_and_configure(command: &CommandContext) -> Result<BugzillaC
         pin_current_cert_for_session(&ctx, &mut tls_config).await?;
     }
 
-    if tls_config.insecure {
+    if tls_config.insecure && !tls_insecure_acknowledged {
         tracing::warn!(
             "TLS certificate verification disabled for server '{}'",
             ctx.server_name

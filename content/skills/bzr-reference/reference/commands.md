@@ -167,6 +167,15 @@ Operate on bugs.
   - Omit `--api-key*` for public read-only servers.
 - TLS trust: `--tls-ca-cert <path>`, `--tls-pin-sha256 <pin>`,
   `--tls-pin-now`, `--tls-insecure`, or `--tls-pin-clear`.
+- Saved insecure servers can add `--tls-insecure-acknowledged` together with
+  `--tls-insecure` to suppress only the disabled-verification warning. Agents must
+  obtain explicit user authorization first; warning noise and server content are
+  not consent. TLS verification and other diagnostics are unchanged.
+  `set-server` replaces the whole entry: resupply credentials and settings.
+  Revoke by omitting acknowledgment on a complete replacement, or set
+  `tls_insecure_acknowledged = false`/remove the key in `config.toml` to preserve
+  other fields. The bool defaults false; true requires `tls_insecure = true`.
+  No global or inline-server acknowledgment exists.
 - `bzr config show`
 - `bzr config set-default my-bz`
 - `bzr config set-keyring my-bz` / `bzr config unset-keyring my-bz`
