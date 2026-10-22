@@ -45,12 +45,12 @@ base64 = "=0.22.1"
 clap = { version = "=4.6.7", features = ["derive"] }
 clap_complete = "=4.6.11"
 rustls = { version = "=0.23.46", default-features = false, features = ["std"] }
-rustls-native-certs = "=0.8.4"
+rustls-native-certs = "=0.8.5"
 sha2 = "=0.10.9"
 webpki-roots = "=1.0.10"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = { version = "=1.0.154", features = ["preserve_order"] }
-tokio = { version = "=1.53.2", features = ["macros", "rt", "sync", "time"] }
+tokio = { version = "=1.53.3", features = ["macros", "rt", "sync", "time"] }
 toml = "=1.1.8"
 dirs = "=7.0.0"
 open = "=5.4.4"
