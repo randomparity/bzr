@@ -63,6 +63,8 @@ CURRENT_TEST_GROUP=""
 FUNC_CONFIG_DIR=$(mktemp -d /tmp/bzr-func-config.XXXXXX)
 FUNC_XDG_ORIG="${XDG_CONFIG_HOME:-}"
 FUNC_HOME_ORIG="${HOME:-}"
+FUNC_XDG_ORIG_SET="${XDG_CONFIG_HOME+x}"
+FUNC_HOME_ORIG_SET="${HOME+x}"
 export XDG_CONFIG_HOME="$FUNC_CONFIG_DIR"
 FUNC_ATTACH_FILE="$FUNC_CONFIG_DIR/attach.txt"
 FUNC_DOWNLOAD_FILE="$FUNC_CONFIG_DIR/downloaded.txt"
@@ -74,16 +76,10 @@ cleanup() {
     _cleanup_tmpfiles
     # Reclaim the container this run used (ADR 0067). Guarded: the script runs
     # under `set -e` and an EXIT trap must not change the run's exit status.
-    # XDG_CONFIG_HOME and HOME are restored because the line above deleted the
-    # directory the isolation redirect points at, phases relocate HOME too, and
-    # the container runtime reads its own config from under both. A caller with
-    # no XDG_CONFIG_HOME gets the empty string, which the XDG spec defines as
-    # equivalent to unset; a caller with no HOME gets the empty string too,
-    # which still beats inheriting a sandbox HOME a phase may have left set.
+    # The runtime needs its original configuration even after isolation is removed.
     if [[ -z "${BZR_FUNC_KEEP:-}" ]]; then
-        XDG_CONFIG_HOME="$FUNC_XDG_ORIG" HOME="$FUNC_HOME_ORIG" \
-            BZR_BZ_VERSION="$BZ_VERSION" \
-            "$SCRIPT_DIR/setup-bugzilla.sh" stop ||
+        BZR_BZ_VERSION="$BZ_VERSION" \
+            with_runtime_environment "$SCRIPT_DIR/setup-bugzilla.sh" stop ||
             echo "WARNING: could not reclaim the Bugzilla container (see above);" \
                 "set BZR_FUNC_KEEP=1 to keep it deliberately." >&2
     fi

@@ -157,8 +157,8 @@ _RH_CONTAINER=$(bugzilla_container_name)
 _RH_FIXTURE="$SCRIPT_DIR/fixtures/redhat-links.cgi"
 _RH_REMOTE=/var/www/html/bugzilla/redhat-links.cgi
 _RH_READY=0
-if "$_RH_RUNTIME" cp "$_RH_FIXTURE" "$_RH_CONTAINER:$_RH_REMOTE" &&
-    "$_RH_RUNTIME" exec "$_RH_CONTAINER" chmod 755 "$_RH_REMOTE"; then
+if with_runtime_environment "$_RH_RUNTIME" cp "$_RH_FIXTURE" "$_RH_CONTAINER:$_RH_REMOTE" &&
+    with_runtime_environment "$_RH_RUNTIME" exec "$_RH_CONTAINER" chmod 755 "$_RH_REMOTE"; then
     _RH_READY=1
 fi
 
@@ -190,7 +190,7 @@ if [[ $_RH_READY -eq 1 ]]; then
 else test_fail "could not install Red Hat response fixture"; fi
 
 if [[ $_RH_READY -eq 1 ]]; then
-    "$_RH_RUNTIME" exec "$_RH_CONTAINER" rm -f "$_RH_REMOTE"
+    with_runtime_environment "$_RH_RUNTIME" exec "$_RH_CONTAINER" rm -f "$_RH_REMOTE"
 fi
 unset _RH_RUNTIME _RH_CONTAINER _RH_FIXTURE _RH_REMOTE _RH_READY
 

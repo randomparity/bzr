@@ -1221,6 +1221,24 @@ assert_schema_list_contains() {
     assert_json_exists "index(\"$name\")"
 }
 
+# Restore runtime configuration without changing the parent bzr sandbox.
+# Consumers without the runner's snapshot keep their current environment.
+with_runtime_environment() (
+    if [[ ${FUNC_HOME_ORIG_SET+x} ]]; then
+        if [[ -n "$FUNC_HOME_ORIG_SET" ]]; then
+            export HOME="$FUNC_HOME_ORIG"
+        else
+            unset HOME
+        fi
+        if [[ -n "$FUNC_XDG_ORIG_SET" ]]; then
+            export XDG_CONFIG_HOME="$FUNC_XDG_ORIG"
+        else
+            unset XDG_CONFIG_HOME
+        fi
+    fi
+    "$@"
+)
+
 # run_bugzilla_sql_file <path> — execute SQL inside the running Bugzilla
 # container. Use this only for fixture capabilities that Bugzilla's public API
 # cannot create, such as flag types and product group controls.
@@ -1230,7 +1248,7 @@ run_bugzilla_sql_file() {
     local container
     runtime=$(container_runtime)
     container=$(bugzilla_container_name)
-    "$runtime" exec -i "$container" mysql -u root bugs <"$sql_file"
+    with_runtime_environment "$runtime" exec -i "$container" mysql -u root bugs <"$sql_file"
 }
 
 # ── Group non-member fixture (issue #617) ────────────────────────────
