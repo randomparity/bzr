@@ -1042,6 +1042,15 @@ fn linux_browser_launchers() {
             true,
             "gio\nopen\nhttps://example.test/show_bug.cgi?id=alias%26value\n",
         ),
+        (
+            "failed-first",
+            vec![("xdg-open", 7), ("gio", 0)],
+            true,
+            concat!(
+                "xdg-open\nhttps://example.test/show_bug.cgi?id=alias%26value\n",
+                "gio\nopen\nhttps://example.test/show_bug.cgi?id=alias%26value\n",
+            ),
+        ),
         ("failed", vec![("xdg-open", 7)], false, ""),
         ("unavailable", vec![], false, ""),
     ] {
