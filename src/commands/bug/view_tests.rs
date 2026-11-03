@@ -1020,3 +1020,102 @@ async fn view_multi_permissive_reports_access_reason_not_absence() {
         "failure must not be reported as absence: {reason}"
     );
 }
+
+// Each opener runs in a fresh process: PATH and desktop variables must not
+// affect other tests, and no installed desktop launcher may escape the fixture.
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_browser_launchers() {
+    use std::os::unix::fs::PermissionsExt;
+    use std::process::Command;
+
+    for (case, launchers, success, expected_log) in [
+        (
+            "handoff",
+            vec![("xdg-open", 0)],
+            true,
+            "xdg-open\nhttps://example.test/show_bug.cgi?id=alias%26value\n",
+        ),
+        (
+            "missing-first",
+            vec![("gio", 0)],
+            true,
+            "gio\nopen\nhttps://example.test/show_bug.cgi?id=alias%26value\n",
+        ),
+        ("failed", vec![("xdg-open", 7)], false, ""),
+        ("unavailable", vec![], false, ""),
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let log = temp.path().join("launch.log");
+        for (launcher, status) in launchers {
+            let path = temp.path().join(launcher);
+            std::fs::write(
+                &path,
+                format!(
+                    "#!/bin/sh\nprintf '%s\\n' '{launcher}' \"$@\" >> \"$BZR_TEST_LAUNCH_LOG\"\nexit {status}\n"
+                ),
+            )
+            .unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                &format!(
+                    "{}::linux_browser_child",
+                    module_path!().split_once("::").unwrap().1
+                ),
+                "--nocapture",
+            ])
+            .env_clear()
+            .env("PATH", temp.path())
+            .env("BZR_TEST_LAUNCH_LOG", &log)
+            .env("BZR_TEST_OPEN_SUCCESS", if success { "1" } else { "0" })
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{case}: child failed:\n{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if success {
+            assert_eq!(
+                std::fs::read_to_string(&log).unwrap(),
+                expected_log,
+                "{case}"
+            );
+        } else if case == "failed" {
+            assert!(std::fs::read_to_string(&log)
+                .unwrap()
+                .starts_with("xdg-open\n"));
+        } else {
+            assert!(!log.exists(), "no launcher should run when PATH is empty");
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_browser_child() {
+    let Ok(success) = std::env::var("BZR_TEST_OPEN_SUCCESS") else {
+        return;
+    };
+    let url = "https://example.test/show_bug.cgi?id=alias%26value";
+    let mut io = crate::test_helpers::CapturedIo::new();
+    super::emit_web(
+        &[url.to_string()],
+        true,
+        |url| open::that(url),
+        &mut io.writers(),
+    );
+    if success == "1" {
+        assert_eq!(io.out_str(), "", "successful handoff must not print a URL");
+        assert_eq!(io.err_str(), "", "successful handoff must not warn");
+    } else {
+        assert_eq!(io.out_str(), format!("{url}\n"));
+        assert!(io
+            .err_str()
+            .starts_with("warning: failed to open browser: "));
+    }
+}
